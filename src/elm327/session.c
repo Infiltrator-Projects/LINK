@@ -141,8 +141,7 @@ void link_elm327_session_deinit(LinkElm327Session *session)
     memset(session, 0, sizeof(*session));
 }
 
-LinkTransportStatus link_elm327_session_connect(
-    LinkElm327Session *session)
+LinkTransportStatus link_elm327_session_connect(LinkElm327Session *session)
 {
     LinkTransportStatus result;
 
@@ -190,8 +189,7 @@ void link_elm327_session_disconnect(LinkElm327Session *session)
     session->transport_status = LINK_TRANSPORT_NOT_CONNECTED;
 }
 
-bool link_elm327_session_is_connected(
-    const LinkElm327Session *session)
+bool link_elm327_session_is_connected(const LinkElm327Session *session)
 {
     if (session == NULL ||
         !link_transport_is_valid(&session->transport)) {
@@ -291,8 +289,7 @@ bool link_elm327_session_cancel(LinkElm327Session *session)
     return true;
 }
 
-void link_elm327_session_mark_resynchronized(
-    LinkElm327Session *session)
+void link_elm327_session_mark_resynchronized(LinkElm327Session *session)
 {
     if (session == NULL ||
         session->status == LINK_ELM327_SESSION_WAITING) {
