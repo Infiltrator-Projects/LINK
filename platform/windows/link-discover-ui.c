@@ -1,14 +1,88 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 /**
  * @file link-discover-ui.c
- * @brief Native Win32 presentation shell for LINK-family Discover products.
+ * @brief Shared native Win32 shell for LINK-family Discover applications.
  *
- * The J2534 transport, safety policy, evidence writer and bounded inventory
- * remain in link-discover.c.  This translation unit deliberately wraps that
- * proven backend rather than copying it: MBLINK, JAGLINK and future product
- * faces therefore share one Windows interaction model while supplying only
- * identity, version, copyright and icon resources.
+ * LINK owns the Windows interaction model. Product repositories provide only
+ * identity, version, copyright, website and the canonical application image.
+ * The J2534 transport, safety classifier, bounded OBD inventory and evidence
+ * writer remain in link-discover.c and are compiled into this shell exactly
+ * once. Keeping presentation and transport in one LINK implementation prevents
+ * MBLINK and JAGLINK from drifting into subtly different diagnostic tools.
+ *
+ * The shell intentionally uses native Win32 controls with Common Controls v6,
+ * Segoe UI typography, DPI-aware layout, a real menu bar and a Task Dialog
+ * About experience. The executable is expected to be self-contained when built
+ * with MSVC; CMake therefore selects the static MSVC runtime for product faces.
  */
+
+#define WIN32_LEAN_AND_MEAN
+#ifndef _WIN32_WINNT
+#define _WIN32_WINNT 0x0601
+#endif
+#include <windows.h>
+#include <commctrl.h>
+#include <shellapi.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <wchar.h>
+
+#ifdef _MSC_VER
+#pragma comment(linker, "\"/manifestdependency:type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")
+#endif
+
+/**
+ * Convert UTF-8 product/status text to UTF-16 before handing it to Windows.
+ *
+ * The original shell mixed UTF-8 source literals with the ANSI Win32 API,
+ * producing mojibake such as "a€”" on normal English Windows installations.
+ * Conversion is centralised here so backend status messages can remain UTF-8
+ * without depending on the machine's active ANSI code page.
+ */
+static int utf8_to_wide(const char *source, wchar_t *destination,
+                        size_t destination_count)
+{
+    int converted;
+
+    if (destination == NULL || destination_count == 0U) {
+        return 0;
+    }
+    destination[0] = L'\0';
+    if (source == NULL) {
+        return 1;
+    }
+
+    converted = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS,
+                                    source, -1, destination,
+                                    (int)destination_count);
+    if (converted == 0) {
+        /* Defensive compatibility path for unexpected legacy ANSI strings. */
+        converted = MultiByteToWideChar(CP_ACP, 0, source, -1, destination,
+                                        (int)destination_count);
+    }
+    return converted != 0;
+}
+
+static BOOL set_window_text_utf8(HWND window, const char *text)
+{
+    wchar_t wide[1024];
+
+    if (!utf8_to_wide(text != NULL ? text : "", wide,
+                      sizeof(wide) / sizeof(wide[0]))) {
+        return FALSE;
+    }
+    return SetWindowTextW(window, wide);
+}
+
+/*
+ * Reuse the proven backend while giving this translation unit ownership of the
+ * visible shell. Renaming the backend entry points avoids duplicate symbols.
+ * SetWindowTextA is redirected only while compiling the backend so its UTF-8
+ * status text is rendered correctly by Windows.
+ */
+#define SetWindowTextA set_window_text_utf8
 #define WinMain link_discover_backend_WinMain
 #define window_proc link_discover_backend_window_proc
 #define create_controls link_discover_backend_create_controls
@@ -16,8 +90,7 @@
 #undef create_controls
 #undef window_proc
 #undef WinMain
-
-#include <shellapi.h>
+#undef SetWindowTextA
 
 #ifndef LINK_PRODUCT_VERSION
 #define LINK_PRODUCT_VERSION "unknown"
@@ -28,6 +101,9 @@
 #ifndef LINK_PRODUCT_SUBTITLE
 #define LINK_PRODUCT_SUBTITLE "Vehicle Diagnostics"
 #endif
+#ifndef LINK_PRODUCT_WEBSITE
+#define LINK_PRODUCT_WEBSITE "https://github.com/The-First-Infiltrator/LINK"
+#endif
 
 #define IDM_FILE_EXPORT 41001
 #define IDM_FILE_EXIT 41002
@@ -37,6 +113,7 @@
 static HWND g_brand_icon;
 static HWND g_brand_title;
 static HWND g_brand_subtitle;
+static HWND g_header_rule;
 static HWND g_connection_group;
 static HWND g_dll_label;
 static HWND g_browse_button;
@@ -50,15 +127,34 @@ static HWND g_add_note_button;
 static HFONT g_ui_font;
 static HFONT g_title_font;
 static HFONT g_subtitle_font;
+static HFONT g_status_font;
 static HICON g_product_icon;
 static BOOL g_product_icon_owned;
 
-/** Create a Segoe UI font using logical pixels so the shell scales with DPI. */
+static int window_dpi(HWND window)
+{
+    HDC dc = GetDC(window);
+    int dpi = 96;
+
+    if (dc != NULL) {
+        dpi = GetDeviceCaps(dc, LOGPIXELSX);
+        ReleaseDC(window, dc);
+    }
+    return dpi > 0 ? dpi : 96;
+}
+
+static int scale_px(HWND window, int logical_pixels)
+{
+    return MulDiv(logical_pixels, window_dpi(window), 96);
+}
+
+/** Create Segoe UI using the window's current logical DPI. */
 static HFONT make_font(HWND window, int point_size, int weight)
 {
     HDC dc = GetDC(window);
     int dpi = dc != NULL ? GetDeviceCaps(dc, LOGPIXELSY) : 96;
     int height = -MulDiv(point_size, dpi, 72);
+
     if (dc != NULL) {
         ReleaseDC(window, dc);
     }
@@ -76,14 +172,14 @@ static void apply_font(HWND control, HFONT font)
 }
 
 /**
- * Load product resource 1 when supplied by the face.  A standard application
- * icon is only a defensive fallback for the generic LINK reference target;
- * released product faces are expected to provide their own resource.
+ * Load resource 1 supplied by the product face. The generic application icon
+ * is a last-resort fallback only; release CI requires product artwork.
  */
 static HICON load_product_icon(HINSTANCE instance)
 {
     HICON icon = (HICON)LoadImageA(instance, MAKEINTRESOURCEA(1), IMAGE_ICON,
                                    64, 64, LR_DEFAULTCOLOR);
+
     if (icon != NULL) {
         g_product_icon_owned = TRUE;
         return icon;
@@ -99,35 +195,104 @@ static HMENU create_main_menu(void)
     HMENU help_menu = CreatePopupMenu();
 
     if (menu == NULL || file_menu == NULL || help_menu == NULL) {
-        if (file_menu != NULL) DestroyMenu(file_menu);
-        if (help_menu != NULL) DestroyMenu(help_menu);
-        if (menu != NULL) DestroyMenu(menu);
+        if (file_menu != NULL) {
+            DestroyMenu(file_menu);
+        }
+        if (help_menu != NULL) {
+            DestroyMenu(help_menu);
+        }
+        if (menu != NULL) {
+            DestroyMenu(menu);
+        }
         return NULL;
     }
 
-    AppendMenuA(file_menu, MF_STRING, IDM_FILE_EXPORT, "&Export evidence...\tCtrl+E");
+    AppendMenuA(file_menu, MF_STRING, IDM_FILE_EXPORT,
+                "&Export evidence...\tCtrl+E");
     AppendMenuA(file_menu, MF_SEPARATOR, 0U, NULL);
     AppendMenuA(file_menu, MF_STRING, IDM_FILE_EXIT, "E&xit");
-    AppendMenuA(help_menu, MF_STRING, IDM_HELP_ABOUT, "&About " LINK_PRODUCT_NAME "...");
+    AppendMenuA(help_menu, MF_STRING, IDM_HELP_ABOUT,
+                "&About " LINK_PRODUCT_NAME "...");
     AppendMenuA(menu, MF_POPUP, (UINT_PTR)file_menu, "&File");
     AppendMenuA(menu, MF_POPUP, (UINT_PTR)help_menu, "&Help");
     return menu;
 }
 
+static HRESULT CALLBACK about_callback(HWND window, UINT notification,
+                                       WPARAM wparam, LPARAM lparam,
+                                       LONG_PTR reference_data)
+{
+    (void)wparam;
+    (void)reference_data;
+
+    if (notification == TDN_HYPERLINK_CLICK && lparam != 0) {
+        (void)ShellExecuteW(window, L"open", (LPCWSTR)lparam,
+                            NULL, NULL, SW_SHOWNORMAL);
+    }
+    return S_OK;
+}
+
+/**
+ * Present the standard LINK-family About experience using Task Dialogs.
+ * TaskDialogIndirect gives the application a current Windows 10/11 visual
+ * treatment while retaining the product icon and platform-native behaviour.
+ */
 static void show_about(void)
 {
-    char details[768];
+    char title_utf8[160];
+    char content_utf8[1024];
+    wchar_t title[160];
+    wchar_t product_name[160];
+    wchar_t content[1024];
+    TASKDIALOGCONFIG config;
+    HRESULT result;
 
-    (void)snprintf(details, sizeof(details),
-                   "Version %s\r\n%s\r\n\r\n"
-                   "OpenPort 2.0 / SAE J2534 read-only discovery and evidence capture.\r\n"
-                   "Unsafe and unknown diagnostic services are denied before transmission.\r\n\r\n"
-                   "%s\r\nGPL-3.0-or-later",
-                   LINK_PRODUCT_VERSION, LINK_PRODUCT_SUBTITLE,
+    (void)snprintf(title_utf8, sizeof(title_utf8),
+                   "About %s Discover", LINK_PRODUCT_NAME);
+    (void)snprintf(content_utf8, sizeof(content_utf8),
+                   "Version %s\n%s\n\n"
+                   "OpenPort 2.0 / SAE J2534 read-only discovery and evidence capture.\n"
+                   "Unsafe and unknown diagnostic services are denied before transmission.\n\n"
+                   "<a href=\"%s\">Project website</a>\n\n"
+                   "%s\nGPL-3.0-or-later",
+                   LINK_PRODUCT_VERSION,
+                   LINK_PRODUCT_SUBTITLE,
+                   LINK_PRODUCT_WEBSITE,
                    LINK_PRODUCT_COPYRIGHT);
-    details[sizeof(details) - 1U] = '\0';
-    (void)ShellAboutA(g_app.window, LINK_PRODUCT_NAME " Discover", details,
-                      g_product_icon);
+    title_utf8[sizeof(title_utf8) - 1U] = '\0';
+    content_utf8[sizeof(content_utf8) - 1U] = '\0';
+
+    if (!utf8_to_wide(title_utf8, title,
+                      sizeof(title) / sizeof(title[0])) ||
+        !utf8_to_wide(LINK_PRODUCT_NAME, product_name,
+                      sizeof(product_name) / sizeof(product_name[0])) ||
+        !utf8_to_wide(content_utf8, content,
+                      sizeof(content) / sizeof(content[0]))) {
+        MessageBoxA(g_app.window, "Unable to prepare About information.",
+                    LINK_PRODUCT_NAME " Discover", MB_OK | MB_ICONERROR);
+        return;
+    }
+
+    memset(&config, 0, sizeof(config));
+    config.cbSize = sizeof(config);
+    config.hwndParent = g_app.window;
+    config.dwFlags = TDF_USE_HICON_MAIN |
+                     TDF_ENABLE_HYPERLINKS |
+                     TDF_POSITION_RELATIVE_TO_WINDOW |
+                     TDF_SIZE_TO_CONTENT;
+    config.dwCommonButtons = TDCBF_CLOSE_BUTTON;
+    config.pszWindowTitle = title;
+    config.pszMainInstruction = product_name;
+    config.pszContent = content;
+    config.hMainIcon = g_product_icon;
+    config.pfCallback = about_callback;
+
+    result = TaskDialogIndirect(&config, NULL, NULL, NULL);
+    if (FAILED(result)) {
+        /* Task Dialogs require Common Controls v6; keep a safe fallback. */
+        (void)MessageBoxW(g_app.window, content, title,
+                          MB_OK | MB_ICONINFORMATION);
+    }
 }
 
 static void browse_for_j2534_dll(void)
@@ -140,7 +305,8 @@ static void browse_for_j2534_dll(void)
     memset(&dialog, 0, sizeof(dialog));
     dialog.lStructSize = sizeof(dialog);
     dialog.hwndOwner = g_app.window;
-    dialog.lpstrFilter = "J2534 DLL (*.dll)\0*.dll\0All files (*.*)\0*.*\0\0";
+    dialog.lpstrFilter =
+        "J2534 DLL (*.dll)\0*.dll\0All files (*.*)\0*.*\0\0";
     dialog.lpstrFile = path;
     dialog.nMaxFile = (DWORD)sizeof(path);
     dialog.lpstrDefExt = "dll";
@@ -151,88 +317,112 @@ static void browse_for_j2534_dll(void)
 }
 
 /**
- * Keep the useful controls fluid when the window grows.  The minimum client
- * area enforced by WM_GETMINMAXINFO protects the diagnostic log and button
- * labels from becoming unusably small.
+ * Reflow the workspace for the current DPI and client size. Fixed minimum
+ * dimensions protect the log and annotation editor from collapsing.
  */
 static void layout_controls(HWND window)
 {
     RECT client;
+    int dpi;
     int width;
     int height;
-    int margin = 18;
+    int margin;
     int content_width;
-    int log_top = 292;
+    int log_top;
     int note_y;
     int log_height;
 
     GetClientRect(window, &client);
+    dpi = window_dpi(window);
     width = client.right - client.left;
     height = client.bottom - client.top;
+    margin = MulDiv(20, dpi, 96);
     content_width = width - (margin * 2);
-    note_y = height - 62;
-    log_height = note_y - log_top - 34;
-    if (log_height < 120) log_height = 120;
+    log_top = MulDiv(300, dpi, 96);
+    note_y = height - MulDiv(66, dpi, 96);
+    log_height = note_y - log_top - MulDiv(36, dpi, 96);
+    if (log_height < MulDiv(120, dpi, 96)) {
+        log_height = MulDiv(120, dpi, 96);
+    }
 
-    MoveWindow(g_brand_icon, margin, 16, 56, 56, TRUE);
-    MoveWindow(g_brand_title, margin + 70, 13, content_width - 70, 34, TRUE);
-    MoveWindow(g_brand_subtitle, margin + 72, 48, content_width - 72, 24, TRUE);
+#define PX(value) MulDiv((value), dpi, 96)
+    MoveWindow(g_brand_icon, margin, PX(18), PX(64), PX(64), TRUE);
+    MoveWindow(g_brand_title, margin + PX(80), PX(14),
+               content_width - PX(80), PX(38), TRUE);
+    MoveWindow(g_brand_subtitle, margin + PX(82), PX(52),
+               content_width - PX(82), PX(24), TRUE);
+    MoveWindow(g_header_rule, margin, PX(88), content_width, PX(2), TRUE);
 
-    MoveWindow(g_connection_group, margin, 88, content_width, 144, TRUE);
-    MoveWindow(g_dll_label, margin + 16, 110, 230, 20, TRUE);
-    MoveWindow(g_app.dll_edit, margin + 16, 134, content_width - 126, 26, TRUE);
-    MoveWindow(g_browse_button, width - margin - 100, 133, 84, 28, TRUE);
+    MoveWindow(g_connection_group, margin, PX(104), content_width, PX(142), TRUE);
+    MoveWindow(g_dll_label, margin + PX(16), PX(127), PX(230), PX(20), TRUE);
+    MoveWindow(g_app.dll_edit, margin + PX(16), PX(151),
+               content_width - PX(126), PX(28), TRUE);
+    MoveWindow(g_browse_button, width - margin - PX(96), PX(150),
+               PX(80), PX(30), TRUE);
 
-    MoveWindow(g_connect_button, margin + 16, 174, 176, 32, TRUE);
-    MoveWindow(g_inventory_button, margin + 202, 174, 198, 32, TRUE);
-    MoveWindow(g_stop_button, margin + 410, 174, 86, 32, TRUE);
-    MoveWindow(g_export_button, margin + 506, 174, 142, 32, TRUE);
+    MoveWindow(g_connect_button, margin + PX(16), PX(193), PX(184), PX(34), TRUE);
+    MoveWindow(g_inventory_button, margin + PX(210), PX(193), PX(204), PX(34), TRUE);
+    MoveWindow(g_stop_button, margin + PX(424), PX(193), PX(86), PX(34), TRUE);
+    MoveWindow(g_export_button, margin + PX(520), PX(193), PX(146), PX(34), TRUE);
 
-    MoveWindow(g_app.status, margin, 244, content_width, 28, TRUE);
-    MoveWindow(g_log_label, margin, 274, 160, 20, TRUE);
+    MoveWindow(g_app.status, margin, PX(258), content_width, PX(30), TRUE);
+    MoveWindow(g_log_label, margin, PX(284), PX(190), PX(20), TRUE);
     MoveWindow(g_app.log, margin, log_top, content_width, log_height, TRUE);
-    MoveWindow(g_note_label, margin, note_y - 22, 160, 20, TRUE);
-    MoveWindow(g_app.note, margin, note_y, content_width - 150, 28, TRUE);
-    MoveWindow(g_add_note_button, width - margin - 140, note_y, 140, 28, TRUE);
+    MoveWindow(g_note_label, margin, note_y - PX(22), PX(190), PX(20), TRUE);
+    MoveWindow(g_app.note, margin, note_y, content_width - PX(154), PX(30), TRUE);
+    MoveWindow(g_add_note_button, width - margin - PX(144), note_y,
+               PX(144), PX(30), TRUE);
+#undef PX
 }
 
-/** Construct the shared, native Windows product shell around the LINK backend. */
+/** Construct the shared native Windows product face around the LINK backend. */
 static void create_controls(HWND window)
 {
     char detected[MAX_PATH] = "";
+    char subtitle[256];
     HINSTANCE instance = (HINSTANCE)GetWindowLongPtrA(window, GWLP_HINSTANCE);
 
     g_ui_font = make_font(window, 9, FW_NORMAL);
-    g_title_font = make_font(window, 20, FW_SEMIBOLD);
+    g_title_font = make_font(window, 22, FW_SEMIBOLD);
     g_subtitle_font = make_font(window, 10, FW_NORMAL);
+    g_status_font = make_font(window, 9, FW_SEMIBOLD);
 
-    g_brand_icon = CreateWindowA("STATIC", "", WS_CHILD | WS_VISIBLE | SS_ICON,
+    g_brand_icon = CreateWindowA("STATIC", "",
+                                 WS_CHILD | WS_VISIBLE | SS_ICON,
                                  0, 0, 0, 0, window, NULL, instance, NULL);
     if (g_product_icon != NULL) {
         SendMessageA(g_brand_icon, STM_SETICON, (WPARAM)g_product_icon, 0U);
     }
-    g_brand_title = CreateWindowA("STATIC", LINK_PRODUCT_NAME,
+
+    g_brand_title = CreateWindowA("STATIC", LINK_PRODUCT_NAME " Discover",
                                    WS_CHILD | WS_VISIBLE | SS_LEFT,
                                    0, 0, 0, 0, window, NULL, instance, NULL);
-    g_brand_subtitle = CreateWindowA("STATIC",
-                                      LINK_PRODUCT_SUBTITLE "  ·  Discover " LINK_PRODUCT_VERSION,
+    (void)snprintf(subtitle, sizeof(subtitle), "%s | Version %s",
+                   LINK_PRODUCT_SUBTITLE, LINK_PRODUCT_VERSION);
+    subtitle[sizeof(subtitle) - 1U] = '\0';
+    g_brand_subtitle = CreateWindowA("STATIC", subtitle,
                                       WS_CHILD | WS_VISIBLE | SS_LEFT,
                                       0, 0, 0, 0, window, NULL, instance, NULL);
+    g_header_rule = CreateWindowA("STATIC", "",
+                                   WS_CHILD | WS_VISIBLE | SS_ETCHEDHORZ,
+                                   0, 0, 0, 0, window, NULL, instance, NULL);
     apply_font(g_brand_title, g_title_font);
     apply_font(g_brand_subtitle, g_subtitle_font);
 
-    g_connection_group = CreateWindowA("BUTTON", "OpenPort / J2534 connection",
+    g_connection_group = CreateWindowA("BUTTON", "Vehicle interface",
                                         WS_CHILD | WS_VISIBLE | BS_GROUPBOX,
                                         0, 0, 0, 0, window, NULL, instance, NULL);
     g_dll_label = CreateWindowA("STATIC", "J2534 FunctionLibrary DLL",
                                 WS_CHILD | WS_VISIBLE | SS_LEFT,
                                 0, 0, 0, 0, window, NULL, instance, NULL);
     g_app.dll_edit = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", "",
-                                     WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL,
+                                     WS_CHILD | WS_VISIBLE | WS_TABSTOP |
+                                         ES_AUTOHSCROLL,
                                      0, 0, 0, 0, window,
                                      (HMENU)(INT_PTR)IDC_DLL, instance, NULL);
     g_browse_button = CreateWindowA("BUTTON", "Browse...",
-                                     WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+                                     WS_CHILD | WS_VISIBLE | WS_TABSTOP |
+                                         BS_PUSHBUTTON,
                                      0, 0, 0, 0, window,
                                      (HMENU)(INT_PTR)IDC_BROWSE, instance, NULL);
 
@@ -244,24 +434,28 @@ static void create_controls(HWND window)
     }
 
     g_connect_button = CreateWindowA("BUTTON", "Connect passive 500 kbit/s",
-                                      WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON,
+                                      WS_CHILD | WS_VISIBLE | WS_TABSTOP |
+                                          BS_DEFPUSHBUTTON,
                                       0, 0, 0, 0, window,
                                       (HMENU)(INT_PTR)IDC_CONNECT, instance, NULL);
     g_inventory_button = CreateWindowA("BUTTON", "Read-only OBD inventory",
-                                        WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+                                        WS_CHILD | WS_VISIBLE | WS_TABSTOP |
+                                            BS_PUSHBUTTON,
                                         0, 0, 0, 0, window,
                                         (HMENU)(INT_PTR)IDC_INVENTORY, instance, NULL);
     g_stop_button = CreateWindowA("BUTTON", "Stop",
-                                   WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+                                   WS_CHILD | WS_VISIBLE | WS_TABSTOP |
+                                       BS_PUSHBUTTON,
                                    0, 0, 0, 0, window,
                                    (HMENU)(INT_PTR)IDC_STOP, instance, NULL);
     g_export_button = CreateWindowA("BUTTON", "Export evidence...",
-                                     WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+                                     WS_CHILD | WS_VISIBLE | WS_TABSTOP |
+                                         BS_PUSHBUTTON,
                                      0, 0, 0, 0, window,
                                      (HMENU)(INT_PTR)IDC_EXPORT, instance, NULL);
 
     g_app.status = CreateWindowExA(WS_EX_CLIENTEDGE, "STATIC",
-                                    "DISCONNECTED — deny-by-default safety policy active",
+                                    "DISCONNECTED - deny-by-default safety policy active",
                                     WS_CHILD | WS_VISIBLE | SS_LEFT | SS_CENTERIMAGE,
                                     0, 0, 0, 0, window,
                                     (HMENU)(INT_PTR)IDC_STATUS, instance, NULL);
@@ -277,11 +471,13 @@ static void create_controls(HWND window)
                                  WS_CHILD | WS_VISIBLE | SS_LEFT,
                                  0, 0, 0, 0, window, NULL, instance, NULL);
     g_app.note = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", "",
-                                 WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL,
+                                 WS_CHILD | WS_VISIBLE | WS_TABSTOP |
+                                     ES_AUTOHSCROLL,
                                  0, 0, 0, 0, window,
                                  (HMENU)(INT_PTR)IDC_NOTE, instance, NULL);
     g_add_note_button = CreateWindowA("BUTTON", "Add annotation",
-                                      WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+                                      WS_CHILD | WS_VISIBLE | WS_TABSTOP |
+                                          BS_PUSHBUTTON,
                                       0, 0, 0, 0, window,
                                       (HMENU)(INT_PTR)IDC_ADDNOTE, instance, NULL);
 
@@ -293,7 +489,7 @@ static void create_controls(HWND window)
     apply_font(g_inventory_button, g_ui_font);
     apply_font(g_stop_button, g_ui_font);
     apply_font(g_export_button, g_ui_font);
-    apply_font(g_app.status, g_ui_font);
+    apply_font(g_app.status, g_status_font);
     apply_font(g_log_label, g_ui_font);
     apply_font(g_app.log, g_ui_font);
     apply_font(g_note_label, g_ui_font);
@@ -301,6 +497,31 @@ static void create_controls(HWND window)
     apply_font(g_add_note_button, g_ui_font);
 
     layout_controls(window);
+}
+
+static void destroy_ui_resources(void)
+{
+    if (g_title_font != NULL) {
+        DeleteObject(g_title_font);
+    }
+    if (g_subtitle_font != NULL) {
+        DeleteObject(g_subtitle_font);
+    }
+    if (g_status_font != NULL) {
+        DeleteObject(g_status_font);
+    }
+    if (g_ui_font != NULL) {
+        DeleteObject(g_ui_font);
+    }
+    g_title_font = NULL;
+    g_subtitle_font = NULL;
+    g_status_font = NULL;
+    g_ui_font = NULL;
+
+    if (g_product_icon_owned && g_product_icon != NULL) {
+        DestroyIcon(g_product_icon);
+    }
+    g_product_icon = NULL;
 }
 
 static LRESULT CALLBACK window_proc(HWND window, UINT message,
@@ -312,12 +533,14 @@ static LRESULT CALLBACK window_proc(HWND window, UINT message,
         create_controls(window);
         return 0;
     case WM_SIZE:
-        layout_controls(window);
+        if (wparam != SIZE_MINIMIZED) {
+            layout_controls(window);
+        }
         return 0;
     case WM_GETMINMAXINFO: {
         MINMAXINFO *limits = (MINMAXINFO *)lparam;
-        limits->ptMinTrackSize.x = 760;
-        limits->ptMinTrackSize.y = 560;
+        limits->ptMinTrackSize.x = scale_px(window, 800);
+        limits->ptMinTrackSize.y = scale_px(window, 610);
         return 0;
     }
     case WM_COMMAND:
@@ -339,16 +562,7 @@ static LRESULT CALLBACK window_proc(HWND window, UINT message,
         }
         break;
     case WM_DESTROY:
-        if (g_title_font != NULL) DeleteObject(g_title_font);
-        if (g_subtitle_font != NULL) DeleteObject(g_subtitle_font);
-        if (g_ui_font != NULL) DeleteObject(g_ui_font);
-        g_title_font = NULL;
-        g_subtitle_font = NULL;
-        g_ui_font = NULL;
-        if (g_product_icon_owned && g_product_icon != NULL) {
-            DestroyIcon(g_product_icon);
-        }
-        g_product_icon = NULL;
+        destroy_ui_resources();
         break;
     default:
         break;
@@ -360,6 +574,7 @@ static LRESULT CALLBACK window_proc(HWND window, UINT message,
 int WINAPI WinMain(HINSTANCE instance, HINSTANCE previous,
                    LPSTR command_line, int show)
 {
+    INITCOMMONCONTROLSEX controls;
     WNDCLASSEXA cls;
     HWND window;
     MSG message;
@@ -367,6 +582,15 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previous,
 
     (void)previous;
     (void)command_line;
+
+    (void)SetProcessDPIAware();
+    memset(&controls, 0, sizeof(controls));
+    controls.dwSize = sizeof(controls);
+    controls.dwICC = ICC_STANDARD_CLASSES | ICC_WIN95_CLASSES;
+    if (!InitCommonControlsEx(&controls)) {
+        return 1;
+    }
+
     memset(&g_app, 0, sizeof(g_app));
     InitializeCriticalSection(&g_app.evidence_lock);
     g_product_icon = load_product_icon(instance);
@@ -382,6 +606,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previous,
     cls.hIconSm = g_product_icon;
     cls.lpszClassName = LINK_PRODUCT_WINDOW_CLASS;
     if (RegisterClassExA(&cls) == 0U) {
+        destroy_ui_resources();
         DeleteCriticalSection(&g_app.evidence_lock);
         return 1;
     }
@@ -389,18 +614,24 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previous,
     menu = create_main_menu();
     window = CreateWindowExA(
         0U, cls.lpszClassName,
-        LINK_PRODUCT_NAME " Discover — OpenPort 2.0 / J2534",
+        LINK_PRODUCT_NAME " Discover - OpenPort 2.0 / J2534",
         WS_OVERLAPPEDWINDOW,
-        CW_USEDEFAULT, CW_USEDEFAULT, 960, 650,
+        CW_USEDEFAULT, CW_USEDEFAULT, 980, 680,
         NULL, menu, instance, NULL);
     if (window == NULL) {
-        if (menu != NULL) DestroyMenu(menu);
+        if (menu != NULL) {
+            DestroyMenu(menu);
+        }
+        destroy_ui_resources();
         DeleteCriticalSection(&g_app.evidence_lock);
         return 1;
     }
 
+    SendMessageA(window, WM_SETICON, ICON_BIG, (LPARAM)g_product_icon);
+    SendMessageA(window, WM_SETICON, ICON_SMALL, (LPARAM)g_product_icon);
     ShowWindow(window, show);
     UpdateWindow(window);
+
     while (GetMessageA(&message, NULL, 0U, 0U) > 0) {
         if ((GetKeyState(VK_CONTROL) & 0x8000) != 0 &&
             message.message == WM_KEYDOWN && message.wParam == 'E') {
