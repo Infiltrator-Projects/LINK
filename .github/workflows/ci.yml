@@ -29,10 +29,28 @@ jobs:
         run: git submodule update --init src/infiltratr-common
 
       - name: Configure
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+        shell: bash
+        run: |
+          extra=()
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            extra+=( -DLINK_BUILD_REFERENCE_PRODUCT_FACES=ON )
+          fi
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release "${extra[@]}"
 
       - name: Build
         run: cmake --build build --config Release --parallel
 
       - name: Test
         run: ctest --test-dir build --build-config Release --output-on-failure
+
+      - name: Verify one scanner source produces both product faces
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $mb = Get-ChildItem -Path build -Recurse -Filter mblink-discover.exe | Select-Object -First 1
+          $jag = Get-ChildItem -Path build -Recurse -Filter jaglink-discover.exe | Select-Object -First 1
+          if (-not $mb) { throw 'mblink-discover.exe was not produced by LINK' }
+          if (-not $jag) { throw 'jaglink-discover.exe was not produced by LINK' }
+          if (-not (Test-Path platform/windows/link-discover.c)) { throw 'shared scanner source is missing' }
+          Write-Host "MBLINK face: $($mb.FullName)"
+          Write-Host "JAGLINK face: $($jag.FullName)"
