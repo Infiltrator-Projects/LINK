@@ -62,7 +62,8 @@ function(link_add_windows_discover target)
             WINDOW_CLASS
             PRODUCT_VERSION
             PRODUCT_COPYRIGHT
-            PRODUCT_SUBTITLE)
+            PRODUCT_SUBTITLE
+            PRODUCT_ICON_PNG)
         cmake_parse_arguments(LINK_FACE "" "${one_value_args}" "" ${ARGN})
         if(LINK_FACE_UNPARSED_ARGUMENTS)
             message(FATAL_ERROR "Unknown link_add_windows_discover arguments: ${LINK_FACE_UNPARSED_ARGUMENTS}")
@@ -96,6 +97,34 @@ function(link_add_windows_discover target)
         LINK_PRODUCT_VERSION="${LINK_FACE_PRODUCT_VERSION}"
         LINK_PRODUCT_COPYRIGHT="${LINK_FACE_PRODUCT_COPYRIGHT}"
         LINK_PRODUCT_SUBTITLE="${LINK_FACE_PRODUCT_SUBTITLE}")
+
+    # A single canonical product image is used on iPhone, Linux and Windows.
+    # Windows Explorer expects an ICO resource, so LINK wraps the PNG bytes in
+    # an ICO container at build time without resampling or maintaining a second
+    # independent artwork file.
+    if(LINK_FACE_PRODUCT_ICON_PNG)
+        if(NOT EXISTS "${LINK_FACE_PRODUCT_ICON_PNG}")
+            message(FATAL_ERROR "PRODUCT_ICON_PNG does not exist: ${LINK_FACE_PRODUCT_ICON_PNG}")
+        endif()
+        find_program(LINK_POWERSHELL_EXECUTABLE NAMES powershell.exe powershell REQUIRED)
+        set(generated_icon "${CMAKE_CURRENT_BINARY_DIR}/${target}-product.ico")
+        set(generated_rc "${CMAKE_CURRENT_BINARY_DIR}/${target}-product.rc")
+        add_custom_command(
+            OUTPUT "${generated_icon}"
+            COMMAND "${LINK_POWERSHELL_EXECUTABLE}" -NoProfile -ExecutionPolicy Bypass
+                -File "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platform/windows/png-to-ico.ps1"
+                -InputPng "${LINK_FACE_PRODUCT_ICON_PNG}"
+                -OutputIco "${generated_icon}"
+            DEPENDS
+                "${LINK_FACE_PRODUCT_ICON_PNG}"
+                "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platform/windows/png-to-ico.ps1"
+            VERBATIM)
+        file(WRITE "${generated_rc}" "1 ICON \"${generated_icon}\"\n")
+        set_source_files_properties("${generated_rc}" PROPERTIES
+            OBJECT_DEPENDS "${generated_icon}")
+        target_sources(${target} PRIVATE "${generated_rc}")
+    endif()
+
     if(MSVC)
         target_compile_options(${target} PRIVATE /W4 /utf-8)
     endif()
