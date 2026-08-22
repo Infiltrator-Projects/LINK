@@ -36,6 +36,24 @@ JAGLINK owns only Jaguar-specific material such as branding, icons, product meta
 
 Everything else belongs here unless Common already provides it: portable diagnostics logic, transports, ELM327, ISO-TP, OBD-II, UDS, telemetry, parameter scheduling, discovery, safety classification, evidence/logging, OpenPort/J2534 support, Linux/Windows/iOS platform glue, shared UI structure, tests, packaging helpers, and release/build machinery.
 
+## One implementation, multiple faces
+
+Product identity must never create a second implementation of shared behaviour.
+
+The current Discover/OpenPort model is the reference pattern:
+
+```text
+LINK Discover + MBLINK face = MBLINK Discover
+LINK Discover + JAGLINK face = JAGLINK Discover
+
+LINK Windows scanner + MBLINK face = mblink-discover.exe
+LINK Windows scanner + JAGLINK face = jaglink-discover.exe
+```
+
+Both Windows executables are built from the same `platform/windows/link-discover.c` and the same `LINK::Core`. Only product-facing identity changes.
+
+See `docs/DISCOVER.md` for the Discover/scanner contract and `docs/PRODUCT_FACES.md` for the general face-only architecture rule.
+
 ## Product model
 
 ```text
