@@ -1,6 +1,6 @@
 # LINK
 
-LINK is the shared C/C++ vehicle-diagnostics and application engine used by MBLINK and JAGLINK. The portable implementation is currently C11; C++ is permitted where it provides a concrete technical benefit.
+LINK is the shared C11 vehicle-diagnostics/application engine used by MBLINK and JAGLINK.
 
 ```text
 Infiltratr Common
@@ -12,7 +12,7 @@ Infiltratr Common
 
 Infiltratr Common owns portable facilities useful outside vehicle diagnostics. LINK owns automotive functionality shared by the products. Product repositories own branding, metadata and genuinely manufacturer-specific behaviour.
 
-## LINK 0.8.1 shared implementation
+## LINK 0.9.0 shared implementation
 
 LINK now owns:
 
@@ -21,29 +21,41 @@ LINK now owns:
 - ELM327 adapter/protocol probing;
 - ELM327-managed ISO 15765 CAN channel;
 - transport-backed ELM327 command session;
+- standard OBD-II request, PID, VIN, readiness and DTC decoding;
+- ISO 14229 UDS request/response, DID and client-state handling;
+- read-only UDS `ReadDTCInformation` helpers;
 - diagnostic workspace model;
 - Classical-CAN ISO-TP;
-- standard SAE OBD-II requests, PID discovery/decoding, readiness, VIN and DTC handling;
-- ISO 14229 UDS request/response, DID and client-state handling;
-- read-only UDS ReadDTCInformation decoding and DTC status helpers;
 - parameter definitions/store/history, scheduler and telemetry/CSV;
+- shared portable diagnostic-flow controller state machine;
 - Discover safety/evidence;
 - Windows OpenPort 2.0/J2534 Discover scanner.
 
-MBLINK and JAGLINK retain product-prefixed source compatibility at their public boundaries, but LINK is the source of truth for every item above. Product repositories must not carry a second implementation of LINK-owned behaviour.
+The diagnostic-flow controller now owns the normal product-neutral sequence:
+
+```text
+ELM init
+  → standard OBD-II PID discovery
+  → optional manufacturer extension hook
+  → optional ELM restore
+  → stored / pending / permanent DTC inventory
+  → live-data scheduler
+  → live PID decode
+```
+
+MBLINK uses the extension hook for its Mercedes-Benz ECU probe. JAGLINK currently skips it. This keeps manufacturer logic above LINK while preventing the Apple, Linux or Windows front ends from reimplementing the generic diagnostic state machine.
+
+The ELM327, OBD-II and UDS migrations preserve the existing product-prefixed public APIs through thin compatibility aliases/wrappers while removing duplicated algorithms from MBLINK and JAGLINK.
 
 ## Remaining migration
 
-1. portable diagnostic-session orchestration currently embedded in Apple controllers;
-2. platform-neutral portions of BLE adapter discovery/recovery, leaving CoreBluetooth as a thin Apple edge;
-3. genuinely shared Linux application structure;
-4. genuinely shared iPhone application model, leaving SwiftUI as presentation only;
-5. packaging/CI/release helpers.
+1. finish moving Apple controller presentation-only glue onto the shared diagnostic-flow API;
+2. move reusable BLE recovery/discovery policy behind a platform-neutral C transport coordinator;
+3. consolidate genuinely shared Linux/iPhone application structure;
+4. consolidate packaging/CI/release helpers.
 
-## Language boundary
+## Engineering rules
 
-Shared application and diagnostic behaviour belongs in C or C++. Objective-C, Swift, Win32 glue, GTK callbacks and other platform-specific code are adapters around the C/C++ engine, not alternate implementations of it. If logic can be expressed without an operating-system UI/framework type, it belongs in the C/C++ layer.
-
-The current portable core remains strict C11. Public APIs document ownership, lifetime, failure behaviour and invariants; source comments explain rationale and non-obvious state-machine constraints without narrating obvious syntax.
+C is the default implementation language; C++ is used where it materially improves a design. Platform-required languages remain narrow UI/interop edges. Shared state machines, protocol decisions, safety policy and diagnostic sequencing belong in C/C++ in LINK, not in Swift, Objective-C, GTK callbacks or Win32 message handlers. Public APIs document ownership, lifetime, failure behaviour and invariants; source comments explain rationale and non-obvious state-machine constraints without narrating obvious syntax.
 
 SPDX-License-Identifier: GPL-3.0-or-later

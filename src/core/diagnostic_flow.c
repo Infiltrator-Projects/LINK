@@ -1,0 +1,527 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+#include "link/diagnostic_flow.h"
+
+#include "infiltratr/core.h"
+
+#include <string.h>
+
+static void flow_clear_action(LinkDiagnosticFlowAction *action)
+{
+    if (action != NULL) {
+        memset(action, 0, sizeof(*action));
+        action->kind = LINK_DIAGNOSTIC_FLOW_ACTION_NONE;
+        action->dtc_kind = LINK_OBD2_DTC_STORED;
+    }
+}
+
+static void flow_clear_event(LinkDiagnosticFlowEvent *event)
+{
+    if (event != NULL) {
+        memset(event, 0, sizeof(*event));
+        event->kind = LINK_DIAGNOSTIC_FLOW_EVENT_NONE;
+        event->dtc_kind = LINK_OBD2_DTC_STORED;
+    }
+}
+
+static LinkDiagnosticFlowResult flow_fail_elm(
+    LinkDiagnosticFlow *flow,
+    LinkElm327Result failure)
+{
+    flow->elm_failure = failure;
+    flow->failure = LINK_DIAGNOSTIC_FLOW_RESULT_ELM_ERROR;
+    flow->stage = LINK_DIAGNOSTIC_FLOW_FAILED;
+    flow->awaiting_response = false;
+    return flow->failure;
+}
+
+static LinkDiagnosticFlowResult flow_fail_obd2(
+    LinkDiagnosticFlow *flow,
+    LinkObd2Result failure)
+{
+    flow->obd2_failure = failure;
+    flow->failure = LINK_DIAGNOSTIC_FLOW_RESULT_OBD2_ERROR;
+    flow->stage = LINK_DIAGNOSTIC_FLOW_FAILED;
+    flow->awaiting_response = false;
+    return flow->failure;
+}
+
+static LinkDiagnosticFlowResult flow_fail_scheduler(
+    LinkDiagnosticFlow *flow,
+    LinkSchedulerResult failure)
+{
+    flow->scheduler_failure = failure;
+    flow->failure = LINK_DIAGNOSTIC_FLOW_RESULT_SCHEDULER_ERROR;
+    flow->stage = LINK_DIAGNOSTIC_FLOW_FAILED;
+    flow->awaiting_response = false;
+    return flow->failure;
+}
+
+static LinkObd2DtcKind flow_stage_dtc_kind(LinkDiagnosticFlowStage stage)
+{
+    switch (stage) {
+    case LINK_DIAGNOSTIC_FLOW_SCANNING_PENDING_DTCS:
+        return LINK_OBD2_DTC_PENDING;
+    case LINK_DIAGNOSTIC_FLOW_SCANNING_PERMANENT_DTCS:
+        return LINK_OBD2_DTC_PERMANENT;
+    case LINK_DIAGNOSTIC_FLOW_SCANNING_STORED_DTCS:
+    default:
+        return LINK_OBD2_DTC_STORED;
+    }
+}
+
+static LinkObd2DtcList *flow_dtc_list(
+    LinkDiagnosticFlow *flow,
+    LinkObd2DtcKind kind)
+{
+    if (flow == NULL) {
+        return NULL;
+    }
+    switch (kind) {
+    case LINK_OBD2_DTC_STORED:
+        return &flow->stored_dtcs;
+    case LINK_OBD2_DTC_PENDING:
+        return &flow->pending_dtcs;
+    case LINK_OBD2_DTC_PERMANENT:
+        return &flow->permanent_dtcs;
+    }
+    return NULL;
+}
+
+static LinkDiagnosticFlowStage flow_next_dtc_stage(LinkObd2DtcKind kind)
+{
+    switch (kind) {
+    case LINK_OBD2_DTC_STORED:
+        return LINK_DIAGNOSTIC_FLOW_SCANNING_PENDING_DTCS;
+    case LINK_OBD2_DTC_PENDING:
+        return LINK_DIAGNOSTIC_FLOW_SCANNING_PERMANENT_DTCS;
+    case LINK_OBD2_DTC_PERMANENT:
+        return LINK_DIAGNOSTIC_FLOW_LIVE;
+    }
+    return LINK_DIAGNOSTIC_FLOW_FAILED;
+}
+
+static LinkDiagnosticFlowResult flow_emit_command(
+    LinkDiagnosticFlow *flow,
+    LinkDiagnosticFlowAction *action,
+    const char *command,
+    uint64_t timeout_ms)
+{
+    if (flow == NULL || action == NULL || command == NULL || command[0] == '\0') {
+        return LINK_DIAGNOSTIC_FLOW_RESULT_INVALID_ARGUMENT;
+    }
+    if (strlen(command) >= sizeof(action->command)) {
+        return flow_fail_elm(flow, LINK_ELM327_RESULT_COMMAND_TOO_LONG);
+    }
+    infiltratr_copy_string(action->command, sizeof(action->command), command);
+    action->kind = LINK_DIAGNOSTIC_FLOW_ACTION_SEND_COMMAND;
+    action->timeout_ms = timeout_ms;
+    flow->awaiting_response = true;
+    return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
+}
+
+const char *link_diagnostic_flow_result_name(LinkDiagnosticFlowResult result)
+{
+    switch (result) {
+    case LINK_DIAGNOSTIC_FLOW_RESULT_OK: return "ok";
+    case LINK_DIAGNOSTIC_FLOW_RESULT_INVALID_ARGUMENT: return "invalid-argument";
+    case LINK_DIAGNOSTIC_FLOW_RESULT_INVALID_STATE: return "invalid-state";
+    case LINK_DIAGNOSTIC_FLOW_RESULT_ELM_ERROR: return "elm-error";
+    case LINK_DIAGNOSTIC_FLOW_RESULT_OBD2_ERROR: return "obd2-error";
+    case LINK_DIAGNOSTIC_FLOW_RESULT_SCHEDULER_ERROR: return "scheduler-error";
+    }
+    return "unknown";
+}
+
+const char *link_diagnostic_flow_stage_name(LinkDiagnosticFlowStage stage)
+{
+    switch (stage) {
+    case LINK_DIAGNOSTIC_FLOW_IDLE: return "idle";
+    case LINK_DIAGNOSTIC_FLOW_INITIALIZING: return "initializing";
+    case LINK_DIAGNOSTIC_FLOW_DISCOVERING_PIDS: return "discovering-pids";
+    case LINK_DIAGNOSTIC_FLOW_MANUFACTURER_EXTENSION: return "manufacturer-extension";
+    case LINK_DIAGNOSTIC_FLOW_RESTORING_AFTER_MANUFACTURER: return "restoring-after-manufacturer";
+    case LINK_DIAGNOSTIC_FLOW_SCANNING_STORED_DTCS: return "scanning-stored-dtcs";
+    case LINK_DIAGNOSTIC_FLOW_SCANNING_PENDING_DTCS: return "scanning-pending-dtcs";
+    case LINK_DIAGNOSTIC_FLOW_SCANNING_PERMANENT_DTCS: return "scanning-permanent-dtcs";
+    case LINK_DIAGNOSTIC_FLOW_LIVE: return "live";
+    case LINK_DIAGNOSTIC_FLOW_READING_LIVE: return "reading-live";
+    case LINK_DIAGNOSTIC_FLOW_FAILED: return "failed";
+    }
+    return "unknown";
+}
+
+LinkDiagnosticFlowResult link_diagnostic_flow_init(
+    LinkDiagnosticFlow *flow,
+    const LinkDiagnosticFlowConfig *config)
+{
+    LinkDiagnosticFlowConfig resolved = LINK_DIAGNOSTIC_FLOW_CONFIG_INIT;
+
+    if (flow == NULL) {
+        return LINK_DIAGNOSTIC_FLOW_RESULT_INVALID_ARGUMENT;
+    }
+    if (config != NULL) {
+        resolved = *config;
+        if (resolved.init_timeout_ms == 0U) {
+            resolved.init_timeout_ms = LINK_DIAGNOSTIC_FLOW_DEFAULT_INIT_TIMEOUT_MS;
+        }
+        if (resolved.query_timeout_ms == 0U) {
+            resolved.query_timeout_ms = LINK_DIAGNOSTIC_FLOW_DEFAULT_QUERY_TIMEOUT_MS;
+        }
+        if (resolved.live_timeout_ms == 0U) {
+            resolved.live_timeout_ms = LINK_DIAGNOSTIC_FLOW_DEFAULT_LIVE_TIMEOUT_MS;
+        }
+    }
+
+    memset(flow, 0, sizeof(*flow));
+    flow->config = resolved;
+    flow->stage = LINK_DIAGNOSTIC_FLOW_IDLE;
+    flow->failure = LINK_DIAGNOSTIC_FLOW_RESULT_OK;
+    flow->elm_failure = LINK_ELM327_RESULT_OK;
+    flow->obd2_failure = LINK_OBD2_RESULT_OK;
+    flow->scheduler_failure = LINK_SCHEDULER_RESULT_OK;
+    link_obd2_pid_set_clear(&flow->supported_pids);
+    link_scheduler_init(&flow->scheduler);
+    return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
+}
+
+LinkDiagnosticFlowResult link_diagnostic_flow_start(LinkDiagnosticFlow *flow)
+{
+    LinkDiagnosticFlowConfig config;
+
+    if (flow == NULL) {
+        return LINK_DIAGNOSTIC_FLOW_RESULT_INVALID_ARGUMENT;
+    }
+    config = flow->config;
+    (void)link_diagnostic_flow_init(flow, &config);
+    link_elm327_init_begin(&flow->initialization);
+    flow->stage = LINK_DIAGNOSTIC_FLOW_INITIALIZING;
+    return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
+}
+
+LinkDiagnosticFlowResult link_diagnostic_flow_next_action(
+    LinkDiagnosticFlow *flow,
+    uint64_t now_ms,
+    LinkDiagnosticFlowAction *action)
+{
+    char command[LINK_ELM327_MAX_COMMAND];
+    LinkObd2Result obd2_result;
+
+    if (flow == NULL || action == NULL) {
+        return LINK_DIAGNOSTIC_FLOW_RESULT_INVALID_ARGUMENT;
+    }
+    flow_clear_action(action);
+
+    if (flow->stage == LINK_DIAGNOSTIC_FLOW_FAILED) {
+        action->kind = LINK_DIAGNOSTIC_FLOW_ACTION_FAILED;
+        return flow->failure;
+    }
+    if (flow->awaiting_response) {
+        return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
+    }
+
+    switch (flow->stage) {
+    case LINK_DIAGNOSTIC_FLOW_IDLE:
+        return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
+
+    case LINK_DIAGNOSTIC_FLOW_INITIALIZING:
+    case LINK_DIAGNOSTIC_FLOW_RESTORING_AFTER_MANUFACTURER: {
+        const char *init_command = link_elm327_init_command(&flow->initialization);
+        if (init_command == NULL) {
+            flow->failure = LINK_DIAGNOSTIC_FLOW_RESULT_INVALID_STATE;
+            flow->stage = LINK_DIAGNOSTIC_FLOW_FAILED;
+            action->kind = LINK_DIAGNOSTIC_FLOW_ACTION_FAILED;
+            return flow->failure;
+        }
+        return flow_emit_command(
+            flow, action, init_command, flow->config.init_timeout_ms);
+    }
+
+    case LINK_DIAGNOSTIC_FLOW_DISCOVERING_PIDS:
+        obd2_result = link_obd2_build_supported_pid_request(
+            flow->supported_pid_base, command, sizeof(command));
+        if (obd2_result != LINK_OBD2_RESULT_OK) {
+            return flow_fail_obd2(flow, obd2_result);
+        }
+        return flow_emit_command(
+            flow, action, command, flow->config.query_timeout_ms);
+
+    case LINK_DIAGNOSTIC_FLOW_MANUFACTURER_EXTENSION:
+        action->kind = LINK_DIAGNOSTIC_FLOW_ACTION_MANUFACTURER_EXTENSION;
+        return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
+
+    case LINK_DIAGNOSTIC_FLOW_SCANNING_STORED_DTCS:
+    case LINK_DIAGNOSTIC_FLOW_SCANNING_PENDING_DTCS:
+    case LINK_DIAGNOSTIC_FLOW_SCANNING_PERMANENT_DTCS: {
+        const LinkObd2DtcKind kind = flow_stage_dtc_kind(flow->stage);
+        obd2_result = link_obd2_build_dtc_request(
+            kind, command, sizeof(command));
+        if (obd2_result != LINK_OBD2_RESULT_OK) {
+            return flow_fail_obd2(flow, obd2_result);
+        }
+        action->dtc_kind = kind;
+        return flow_emit_command(
+            flow, action, command, flow->config.query_timeout_ms);
+    }
+
+    case LINK_DIAGNOSTIC_FLOW_LIVE: {
+        LinkSchedulerDispatch dispatch;
+        LinkSchedulerNextResult next =
+            link_scheduler_next(&flow->scheduler, now_ms, &dispatch);
+
+        if (next == LINK_SCHEDULER_NEXT_EMPTY ||
+            next == LINK_SCHEDULER_NEXT_PAUSED) {
+            action->kind = LINK_DIAGNOSTIC_FLOW_ACTION_READY;
+            return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
+        }
+        if (next == LINK_SCHEDULER_NEXT_WAITING) {
+            action->kind = LINK_DIAGNOSTIC_FLOW_ACTION_WAIT;
+            action->wait_ms = dispatch.wait_ms;
+            return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
+        }
+        if (next != LINK_SCHEDULER_NEXT_READY || !dispatch.pid_valid) {
+            return flow_fail_scheduler(
+                flow, LINK_SCHEDULER_RESULT_INVALID_ARGUMENT);
+        }
+
+        obd2_result = link_obd2_build_live_pid_request(
+            dispatch.pid, command, sizeof(command));
+        if (obd2_result != LINK_OBD2_RESULT_OK) {
+            return flow_fail_obd2(flow, obd2_result);
+        }
+        if (link_scheduler_mark_dispatched(
+                &flow->scheduler, dispatch.index, now_ms) !=
+            LINK_SCHEDULER_RESULT_OK) {
+            return flow_fail_scheduler(
+                flow, LINK_SCHEDULER_RESULT_INVALID_ARGUMENT);
+        }
+
+        flow->active_pid = dispatch.pid;
+        flow->active_schedule_index = dispatch.index;
+        flow->stage = LINK_DIAGNOSTIC_FLOW_READING_LIVE;
+        action->pid = dispatch.pid;
+        return flow_emit_command(
+            flow, action, command, flow->config.live_timeout_ms);
+    }
+
+    case LINK_DIAGNOSTIC_FLOW_READING_LIVE:
+        flow->failure = LINK_DIAGNOSTIC_FLOW_RESULT_INVALID_STATE;
+        flow->stage = LINK_DIAGNOSTIC_FLOW_FAILED;
+        action->kind = LINK_DIAGNOSTIC_FLOW_ACTION_FAILED;
+        return flow->failure;
+
+    case LINK_DIAGNOSTIC_FLOW_FAILED:
+        break;
+    }
+
+    flow->failure = LINK_DIAGNOSTIC_FLOW_RESULT_INVALID_STATE;
+    flow->stage = LINK_DIAGNOSTIC_FLOW_FAILED;
+    action->kind = LINK_DIAGNOSTIC_FLOW_ACTION_FAILED;
+    return flow->failure;
+}
+
+LinkDiagnosticFlowResult link_diagnostic_flow_accept_response(
+    LinkDiagnosticFlow *flow,
+    const LinkElm327Response *response,
+    uint64_t now_ms,
+    LinkDiagnosticFlowEvent *event)
+{
+    LinkDiagnosticFlowStage stage;
+
+    if (flow == NULL || response == NULL || event == NULL) {
+        return LINK_DIAGNOSTIC_FLOW_RESULT_INVALID_ARGUMENT;
+    }
+    flow_clear_event(event);
+    if (flow->stage == LINK_DIAGNOSTIC_FLOW_FAILED) {
+        return flow->failure;
+    }
+    if (!flow->awaiting_response) {
+        return LINK_DIAGNOSTIC_FLOW_RESULT_INVALID_STATE;
+    }
+
+    stage = flow->stage;
+    flow->awaiting_response = false;
+
+    if (stage == LINK_DIAGNOSTIC_FLOW_INITIALIZING ||
+        stage == LINK_DIAGNOSTIC_FLOW_RESTORING_AFTER_MANUFACTURER) {
+        LinkElm327Result result =
+            link_elm327_init_accept(&flow->initialization, response);
+        if (result != LINK_ELM327_RESULT_OK ||
+            flow->initialization.stage == LINK_ELM327_INIT_FAILED) {
+            return flow_fail_elm(flow, result);
+        }
+        if (flow->initialization.adapter_id[0] != '\0') {
+            event->kind = LINK_DIAGNOSTIC_FLOW_EVENT_ADAPTER_IDENTIFIED;
+        }
+        if (flow->initialization.stage == LINK_ELM327_INIT_COMPLETE) {
+            if (stage == LINK_DIAGNOSTIC_FLOW_RESTORING_AFTER_MANUFACTURER) {
+                flow->stage = LINK_DIAGNOSTIC_FLOW_SCANNING_STORED_DTCS;
+            } else {
+                flow->supported_pid_base = 0x00U;
+                flow->stage = LINK_DIAGNOSTIC_FLOW_DISCOVERING_PIDS;
+            }
+        }
+        return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
+    }
+
+    if (stage == LINK_DIAGNOSTIC_FLOW_DISCOVERING_PIDS) {
+        bool has_more = false;
+        LinkObd2Result result = link_obd2_accept_supported_pids(
+            response,
+            flow->supported_pid_base,
+            &flow->supported_pids,
+            &has_more);
+        if (result != LINK_OBD2_RESULT_OK) {
+            return flow_fail_obd2(flow, result);
+        }
+        if (has_more && flow->supported_pid_base <= 0xc0U) {
+            flow->supported_pid_base =
+                (uint8_t)(flow->supported_pid_base + 0x20U);
+        } else {
+            flow->stage = flow->config.manufacturer_extension_after_pid_discovery
+                ? LINK_DIAGNOSTIC_FLOW_MANUFACTURER_EXTENSION
+                : LINK_DIAGNOSTIC_FLOW_SCANNING_STORED_DTCS;
+            event->kind = LINK_DIAGNOSTIC_FLOW_EVENT_PID_DISCOVERY_COMPLETE;
+        }
+        return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
+    }
+
+    if (stage == LINK_DIAGNOSTIC_FLOW_SCANNING_STORED_DTCS ||
+        stage == LINK_DIAGNOSTIC_FLOW_SCANNING_PENDING_DTCS ||
+        stage == LINK_DIAGNOSTIC_FLOW_SCANNING_PERMANENT_DTCS) {
+        const LinkObd2DtcKind kind = flow_stage_dtc_kind(stage);
+        LinkObd2DtcList decoded = {0};
+        LinkObd2DtcList *target = flow_dtc_list(flow, kind);
+        LinkObd2Result result = LINK_OBD2_RESULT_OK;
+
+        if (target == NULL) {
+            flow->failure = LINK_DIAGNOSTIC_FLOW_RESULT_INVALID_STATE;
+            flow->stage = LINK_DIAGNOSTIC_FLOW_FAILED;
+            return flow->failure;
+        }
+        if (response->result != LINK_ELM327_RESULT_NO_DATA) {
+            result = link_obd2_decode_dtcs(response, kind, &decoded);
+        }
+        if (result != LINK_OBD2_RESULT_OK) {
+            return flow_fail_obd2(flow, result);
+        }
+
+        *target = decoded;
+        event->kind = LINK_DIAGNOSTIC_FLOW_EVENT_DTC_LIST;
+        event->dtc_kind = kind;
+        event->dtc_list = target;
+        flow->stage = flow_next_dtc_stage(kind);
+
+        if (kind == LINK_OBD2_DTC_PERMANENT) {
+            LinkSchedulerResult schedule_result =
+                link_scheduler_configure_standard_obd2_bits(
+                    &flow->scheduler,
+                    flow->supported_pids.bits,
+                    now_ms);
+            if (schedule_result != LINK_SCHEDULER_RESULT_OK) {
+                return flow_fail_scheduler(flow, schedule_result);
+            }
+            event->became_ready = true;
+        }
+        return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
+    }
+
+    if (stage == LINK_DIAGNOSTIC_FLOW_READING_LIVE) {
+        LinkObd2Result result;
+        LinkObd2Sample sample;
+
+        flow->stage = LINK_DIAGNOSTIC_FLOW_LIVE;
+        if (response->result == LINK_ELM327_RESULT_NO_DATA) {
+            event->kind = LINK_DIAGNOSTIC_FLOW_EVENT_LIVE_NO_DATA;
+            event->sample.pid = flow->active_pid;
+            return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
+        }
+
+        result = link_obd2_decode_live_pid(
+            response, flow->active_pid, &sample);
+        if (result == LINK_OBD2_RESULT_UNSUPPORTED_PID) {
+            event->kind = LINK_DIAGNOSTIC_FLOW_EVENT_LIVE_UNSUPPORTED;
+            event->sample.pid = flow->active_pid;
+            return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
+        }
+        if (result != LINK_OBD2_RESULT_OK) {
+            return flow_fail_obd2(flow, result);
+        }
+
+        event->kind = LINK_DIAGNOSTIC_FLOW_EVENT_LIVE_SAMPLE;
+        event->sample = sample;
+        return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
+    }
+
+    flow->failure = LINK_DIAGNOSTIC_FLOW_RESULT_INVALID_STATE;
+    flow->stage = LINK_DIAGNOSTIC_FLOW_FAILED;
+    return flow->failure;
+}
+
+LinkDiagnosticFlowResult link_diagnostic_flow_resume_after_manufacturer(
+    LinkDiagnosticFlow *flow)
+{
+    if (flow == NULL) {
+        return LINK_DIAGNOSTIC_FLOW_RESULT_INVALID_ARGUMENT;
+    }
+    if (flow->stage != LINK_DIAGNOSTIC_FLOW_MANUFACTURER_EXTENSION ||
+        flow->awaiting_response) {
+        return LINK_DIAGNOSTIC_FLOW_RESULT_INVALID_STATE;
+    }
+
+    if (flow->config.restore_adapter_after_manufacturer_extension) {
+        link_elm327_init_begin(&flow->initialization);
+        flow->stage = LINK_DIAGNOSTIC_FLOW_RESTORING_AFTER_MANUFACTURER;
+    } else {
+        flow->stage = LINK_DIAGNOSTIC_FLOW_SCANNING_STORED_DTCS;
+    }
+    return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
+}
+
+void link_diagnostic_flow_fail(
+    LinkDiagnosticFlow *flow,
+    LinkDiagnosticFlowResult failure)
+{
+    if (flow == NULL) {
+        return;
+    }
+    if (failure == LINK_DIAGNOSTIC_FLOW_RESULT_OK ||
+        failure == LINK_DIAGNOSTIC_FLOW_RESULT_INVALID_ARGUMENT) {
+        failure = LINK_DIAGNOSTIC_FLOW_RESULT_INVALID_STATE;
+    }
+    flow->failure = failure;
+    flow->stage = LINK_DIAGNOSTIC_FLOW_FAILED;
+    flow->awaiting_response = false;
+}
+
+const LinkObd2PidSet *link_diagnostic_flow_supported_pids(
+    const LinkDiagnosticFlow *flow)
+{
+    return flow == NULL ? NULL : &flow->supported_pids;
+}
+
+const LinkObd2DtcList *link_diagnostic_flow_dtcs(
+    const LinkDiagnosticFlow *flow,
+    LinkObd2DtcKind kind)
+{
+    if (flow == NULL) {
+        return NULL;
+    }
+    switch (kind) {
+    case LINK_OBD2_DTC_STORED:
+        return &flow->stored_dtcs;
+    case LINK_OBD2_DTC_PENDING:
+        return &flow->pending_dtcs;
+    case LINK_OBD2_DTC_PERMANENT:
+        return &flow->permanent_dtcs;
+    }
+    return NULL;
+}
+
+const char *link_diagnostic_flow_adapter_identifier(
+    const LinkDiagnosticFlow *flow)
+{
+    if (flow == NULL || flow->initialization.adapter_id[0] == '\0') {
+        return NULL;
+    }
+    return flow->initialization.adapter_id;
+}

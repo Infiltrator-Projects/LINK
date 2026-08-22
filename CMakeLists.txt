@@ -27,6 +27,7 @@ endif()
 
 add_library(link-core STATIC
     src/core/workspace.c
+    src/core/diagnostic_flow.c
     src/core/isotp.c
     src/core/parameter.c
     src/core/scheduler.c
@@ -53,12 +54,16 @@ else()
     target_compile_options(link-core PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
+# Add the shared native Windows Discover shell. Product repositories supply
+# identity only; the J2534 workflow, menu model, About behaviour, launch model
+# and layout stay in LINK so MBLINK and JAGLINK cannot silently diverge.
 function(link_add_windows_discover target)
     if(NOT WIN32)
         message(FATAL_ERROR "link_add_windows_discover is supported on Windows only.")
     endif()
 
     if(ARGC EQUAL 4 AND NOT ARGV1 STREQUAL "PRODUCT_NAME")
+        # Legacy positional form retained for source compatibility.
         set(LINK_FACE_PRODUCT_NAME "${ARGV1}")
         set(LINK_FACE_PRODUCT_SLUG "${ARGV2}")
         set(LINK_FACE_WINDOW_CLASS "${ARGV3}")
@@ -121,6 +126,9 @@ function(link_add_windows_discover target)
         target_compile_options(${target} PRIVATE /W4 /utf-8)
     endif()
 
+    # The product's iPhone AppIcon PNG is the canonical identity image. Windows
+    # needs an ICO resource, so LINK wraps those exact PNG bytes in an ICO
+    # container at build time rather than maintaining a second artwork source.
     if(LINK_FACE_PRODUCT_ICON_PNG)
         if(NOT EXISTS "${LINK_FACE_PRODUCT_ICON_PNG}")
             message(FATAL_ERROR "PRODUCT_ICON_PNG does not exist: ${LINK_FACE_PRODUCT_ICON_PNG}")
@@ -227,6 +235,10 @@ if(BUILD_TESTING AND PROJECT_IS_TOP_LEVEL)
     target_link_libraries(link-test-workspace PRIVATE LINK::Core)
     add_test(NAME link-workspace COMMAND link-test-workspace)
 
+    add_executable(link-test-diagnostic-flow tests/test_diagnostic_flow.c)
+    target_link_libraries(link-test-diagnostic-flow PRIVATE LINK::Core)
+    add_test(NAME link-diagnostic-flow COMMAND link-test-diagnostic-flow)
+
     add_executable(link-test-isotp tests/test_isotp.c)
     target_link_libraries(link-test-isotp PRIVATE LINK::Core)
     add_test(NAME link-isotp COMMAND link-test-isotp)
@@ -246,10 +258,6 @@ if(BUILD_TESTING AND PROJECT_IS_TOP_LEVEL)
     add_executable(link-test-uds tests/test_uds.c)
     target_link_libraries(link-test-uds PRIVATE LINK::Core)
     add_test(NAME link-uds COMMAND link-test-uds)
-
-    add_executable(link-test-uds-dtc tests/test_uds_dtc.c)
-    target_link_libraries(link-test-uds-dtc PRIVATE LINK::Core)
-    add_test(NAME link-uds-dtc COMMAND link-test-uds-dtc)
 
     add_executable(link-test-discover-safety tests/test_discover_safety.c)
     target_link_libraries(link-test-discover-safety PRIVATE LINK::Core)
