@@ -23,6 +23,7 @@ endif()
 
 add_library(link-core STATIC
     src/core/workspace.c
+    src/core/isotp.c
     src/discover/safety.c
     src/discover/evidence.c
 )
@@ -119,6 +120,10 @@ if(BUILD_TESTING AND PROJECT_IS_TOP_LEVEL)
     add_executable(link-test-workspace tests/test_workspace.c)
     target_link_libraries(link-test-workspace PRIVATE LINK::Core)
     add_test(NAME link-workspace COMMAND link-test-workspace)
+
+    add_executable(link-test-isotp tests/test_isotp.c)
+    target_link_libraries(link-test-isotp PRIVATE LINK::Core)
+    add_test(NAME link-isotp COMMAND link-test-isotp)
 
     add_executable(link-test-discover-safety tests/test_discover_safety.c)
     target_link_libraries(link-test-discover-safety PRIVATE LINK::Core)
