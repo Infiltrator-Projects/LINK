@@ -18,7 +18,7 @@
 
 #define WIN32_LEAN_AND_MEAN
 #ifndef _WIN32_WINNT
-#define _WIN32_WINNT 0x0601
+#define _WIN32_WINNT 0x0602
 #endif
 #include <windows.h>
 #include <commctrl.h>
@@ -225,7 +225,7 @@ static HRESULT CALLBACK about_callback(HWND window, UINT notification,
     (void)wparam;
     (void)reference_data;
 
-    if (notification == TDN_HYPERLINK_CLICK && lparam != 0) {
+    if (notification == TDN_HYPERLINK_CLICKED && lparam != 0) {
         (void)ShellExecuteW(window, L"open", (LPCWSTR)lparam,
                             NULL, NULL, SW_SHOWNORMAL);
     }
