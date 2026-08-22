@@ -24,9 +24,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
 
-      - name: Initialise Common only
+      - name: Initialise and verify Common
         shell: bash
-        run: git submodule update --init src/infiltratr-common
+        run: |
+          set -euo pipefail
+          git submodule update --init src/infiltratr-common
+          test "$(tr -d '[:space:]' < src/infiltratr-common/VERSION)" = "1.11.0"
 
       - name: Configure
         shell: bash
@@ -43,7 +46,7 @@ jobs:
       - name: Test
         run: ctest --test-dir build --build-config Release --output-on-failure
 
-      - name: Verify one scanner source produces both product faces
+      - name: Verify one shared scanner implementation produces both product faces
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
@@ -51,6 +54,7 @@ jobs:
           $jag = Get-ChildItem -Path build -Recurse -Filter jaglink-discover.exe | Select-Object -First 1
           if (-not $mb) { throw 'mblink-discover.exe was not produced by LINK' }
           if (-not $jag) { throw 'jaglink-discover.exe was not produced by LINK' }
-          if (-not (Test-Path platform/windows/link-discover.c)) { throw 'shared scanner source is missing' }
+          if (-not (Test-Path platform/windows/link-discover.c)) { throw 'shared scanner backend is missing' }
+          if (-not (Test-Path platform/windows/link-discover-ui.c)) { throw 'shared scanner UI shell is missing' }
           Write-Host "MBLINK face: $($mb.FullName)"
           Write-Host "JAGLINK face: $($jag.FullName)"

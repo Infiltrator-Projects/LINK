@@ -4,12 +4,14 @@
  * @brief Protocol-neutral diagnostic parameter identity and formatting.
  *
  * LINK deliberately separates a parameter's stable identity and presentation
- * metadata from the transport that produced a sample.  Product faces may keep
+ * metadata from the transport that produced a sample. Product faces may keep
  * references to definitions returned by this API for the lifetime of the
  * process; the built-in definition table is immutable static storage.
  */
 #ifndef LINK_PARAMETER_H
 #define LINK_PARAMETER_H
+
+#include "link/obd2.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -30,7 +32,7 @@ typedef enum LinkParameterProtocol {
 /**
  * Canonical identity of one diagnostic value.
  *
- * `module` is protocol-specific.  Standard OBD-II values use
+ * `module` is protocol-specific. Standard OBD-II values use
  * LINK_PARAMETER_MODULE_STANDARD_OBD2; manufacturer layers may allocate their
  * own endpoint identifiers without changing the generic store contract.
  */
@@ -56,7 +58,7 @@ typedef struct LinkParameterDefinition {
 /**
  * Timestamped scalar observation.
  *
- * `definition` is borrowed and must outlive the sample.  Built-in definitions
+ * `definition` is borrowed and must outlive the sample. Built-in definitions
  * satisfy that requirement because they have static lifetime.
  */
 typedef struct LinkParameterSample {
@@ -66,23 +68,19 @@ typedef struct LinkParameterSample {
     double value;
 } LinkParameterSample;
 
-/** Unit codes used when importing decoded OBD-II values into LINK. */
-typedef enum LinkObd2UnitCode {
-    LINK_OBD2_UNIT_NONE = 0,
-    LINK_OBD2_UNIT_PERCENT,
-    LINK_OBD2_UNIT_CELSIUS,
-    LINK_OBD2_UNIT_KPA,
-    LINK_OBD2_UNIT_RPM,
-    LINK_OBD2_UNIT_KMH,
-    LINK_OBD2_UNIT_GRAMS_PER_SECOND,
-    LINK_OBD2_UNIT_VOLTS,
-    LINK_OBD2_UNIT_LITRES_PER_HOUR
-} LinkObd2UnitCode;
+/**
+ * Compatibility name for the canonical OBD-II unit enum.
+ *
+ * OBD-II owns the unit identifiers. Parameter import reuses that type instead
+ * of redeclaring the same LINK_OBD2_UNIT_* enumerators in a second public
+ * header, which keeps combined OBD-II/parameter consumers valid C11.
+ */
+typedef LinkObd2Unit LinkObd2UnitCode;
 
 /** Returns a stable diagnostic name for `protocol`, or "unknown". */
 const char *link_parameter_protocol_name(LinkParameterProtocol protocol);
 
-/** Validates key range and protocol invariants.  NULL is invalid. */
+/** Validates key range and protocol invariants. NULL is invalid. */
 bool link_parameter_key_is_valid(const LinkParameterKey *key);
 
 /** Compares two valid-or-invalid keys by value; NULL operands are unequal. */
@@ -99,8 +97,8 @@ bool link_parameter_sample_is_valid(const LinkParameterSample *sample);
 /**
  * Formats a scalar according to `definition`.
  *
- * Returns false for invalid arguments or insufficient output capacity.  On
- * success `buffer` is always NUL-terminated.  An unavailable value is rendered
+ * Returns false for invalid arguments or insufficient output capacity. On
+ * success `buffer` is always NUL-terminated. An unavailable value is rendered
  * using LINK's canonical unavailable representation rather than the numeric
  * value supplied by the caller.
  */
@@ -135,7 +133,7 @@ bool link_parameter_obd2_expected_unit(uint8_t pid, LinkObd2UnitCode *unit);
 /**
  * Converts a decoded OBD-II scalar into a protocol-neutral LINK sample.
  *
- * The supplied unit must match LINK's definition for the PID.  `parameter`
+ * The supplied unit must match LINK's definition for the PID. `parameter`
  * receives a borrowed pointer to immutable definition storage on success.
  */
 bool link_parameter_from_obd2_scalar(
