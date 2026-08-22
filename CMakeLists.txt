@@ -21,6 +21,7 @@ if(NOT TARGET InfiltratrCommon::Portable)
 endif()
 
 add_library(link-core STATIC
+    src/core/workspace.c
     src/discover/safety.c
     src/discover/evidence.c
 )
@@ -44,6 +45,10 @@ else()
 endif()
 
 if(BUILD_TESTING AND PROJECT_IS_TOP_LEVEL)
+    add_executable(link-test-workspace tests/test_workspace.c)
+    target_link_libraries(link-test-workspace PRIVATE LINK::Core)
+    add_test(NAME link-workspace COMMAND link-test-workspace)
+
     add_executable(link-test-discover-safety tests/test_discover_safety.c)
     target_link_libraries(link-test-discover-safety PRIVATE LINK::Core)
     add_test(NAME link-discover-safety COMMAND link-test-discover-safety)
