@@ -1,1 +1,0 @@
-Generic JAGLINK-only candidates identified for raw staging: include/jaglink/discover.h; src/discover/{safety,evidence}.c; platform/windows/jaglink-discover.c; tests/{test_discover_safety,test_evidence}.c. Jaguar vehicle definitions remain excluded.

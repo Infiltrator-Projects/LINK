@@ -1,1 +1,0 @@
-Shared MBLINK baseline candidates identified for raw staging: src/core/{isotp,parameter,scheduler,telemetry_csv,telemetry_store}.c; src/elm327/{elm327,can,session,probe}.c; src/obd2/obd2.c; src/uds/uds.c; matching public headers. These remain temporary until neutralised to LINK naming.

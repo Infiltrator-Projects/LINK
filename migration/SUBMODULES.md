@@ -1,1 +1,0 @@
-Temporary full-source migration inputs are pinned through `.gitmodules`: `migration/mblink-source` and `migration/jaglink-source`. These exist only to support gradual extraction into neutral LINK code and will be removed after migration.
