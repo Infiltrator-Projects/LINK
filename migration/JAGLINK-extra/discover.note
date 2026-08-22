@@ -1,0 +1,1 @@
+JAGLINK generic additions identified for promotion: include/jaglink/discover.h, src/discover/safety.c, src/discover/evidence.c, platform/windows/jaglink-discover.c, tests/test_discover_safety.c, tests/test_evidence.c.
