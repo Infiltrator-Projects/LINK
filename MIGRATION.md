@@ -2,7 +2,7 @@
 
 Dependency hierarchy: `Infiltratr Common -> LINK -> MBLINK / JAGLINK`.
 
-## Completed shared ownership through LINK 0.8.0
+## Completed shared ownership through LINK 0.8.1
 
 - diagnostic workspace;
 - Classical-CAN ISO-TP;
@@ -17,7 +17,8 @@ Dependency hierarchy: `Infiltratr Common -> LINK -> MBLINK / JAGLINK`.
 - ELM327-managed CAN channel;
 - transport-backed ELM327 command session;
 - standard SAE OBD-II request/response, PID, readiness, VIN and DTC engine;
-- ISO 14229 UDS request/response, DID and client-state engine.
+- ISO 14229 UDS request/response, DID and client-state engine;
+- read-only UDS ReadDTCInformation codec and DTC status helpers.
 
 Product-prefixed files may remain only as compatibility aliases/wrappers. They must not contain a second implementation of LINK-owned behaviour.
 
