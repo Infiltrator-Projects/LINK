@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "link/diagnostic_flow.h"
 
-#include <math.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -11,6 +10,13 @@
         return 1; \
     } \
 } while (0)
+
+static bool near_value(double value, double expected, double tolerance)
+{
+    double difference = value - expected;
+    if (difference < 0.0) difference = -difference;
+    return difference <= tolerance;
+}
 
 static LinkElm327Response response_ok(const char *text, bool ok_seen)
 {
@@ -145,7 +151,7 @@ static int test_standard_sequence(void)
           LINK_DIAGNOSTIC_FLOW_RESULT_OK);
     CHECK(event.kind == LINK_DIAGNOSTIC_FLOW_EVENT_LIVE_SAMPLE);
     CHECK(event.sample.pid == 0x0cU);
-    CHECK(fabs(event.sample.value - 1726.0) < 0.001);
+    CHECK(near_value(event.sample.value, 1726.0, 0.001));
     CHECK(flow.stage == LINK_DIAGNOSTIC_FLOW_LIVE);
 
     CHECK(link_diagnostic_flow_next_action(&flow, 1001U, &action) ==
