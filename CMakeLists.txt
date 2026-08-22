@@ -10,11 +10,15 @@ set(CMAKE_C_EXTENSIONS OFF)
 
 include(CTest)
 
-if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/infiltratr-common/CMakeLists.txt")
-    message(FATAL_ERROR "Infiltratr Common submodule is missing. Initialise src/infiltratr-common.")
+# When LINK is embedded by MBLINK/JAGLINK, reuse the parent's already-loaded
+# Infiltratr Common target. Standalone LINK builds use the pinned local
+# submodule instead. This keeps one Common implementation in the final graph.
+if(NOT TARGET InfiltratrCommon::Portable)
+    if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/infiltratr-common/CMakeLists.txt")
+        message(FATAL_ERROR "Infiltratr Common is required. Initialise src/infiltratr-common or provide InfiltratrCommon::Portable from the parent project.")
+    endif()
+    add_subdirectory(src/infiltratr-common)
 endif()
-
-add_subdirectory(src/infiltratr-common)
 
 add_library(link-core STATIC
     src/discover/safety.c
@@ -39,7 +43,7 @@ else()
     target_compile_options(link-core PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
-if(BUILD_TESTING)
+if(BUILD_TESTING AND PROJECT_IS_TOP_LEVEL)
     add_executable(link-test-discover-safety tests/test_discover_safety.c)
     target_link_libraries(link-test-discover-safety PRIVATE LINK::Core)
     add_test(NAME link-discover-safety COMMAND link-test-discover-safety)
