@@ -24,19 +24,18 @@ add_library(link-core STATIC
     src/core/parameter.c
     src/core/scheduler.c
     src/core/telemetry.c
+    src/core/transport.c
+    src/elm327/elm327.c
+    src/elm327/can.c
+    src/elm327/probe.c
+    src/elm327/session.c
     src/discover/safety.c
     src/discover/evidence.c
 )
 add_library(LINK::Core ALIAS link-core)
 
-target_include_directories(link-core
-    PUBLIC
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-        $<INSTALL_INTERFACE:include>
-)
-
+target_include_directories(link-core PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> $<INSTALL_INTERFACE:include>)
 target_link_libraries(link-core PUBLIC InfiltratrCommon::Portable)
-
 if(MSVC)
     target_compile_options(link-core PRIVATE /W4)
 else()
@@ -47,7 +46,6 @@ function(link_add_windows_discover target)
     if(NOT WIN32)
         message(FATAL_ERROR "link_add_windows_discover is supported on Windows only.")
     endif()
-
     if(ARGC EQUAL 4 AND NOT ARGV1 STREQUAL "PRODUCT_NAME")
         set(LINK_FACE_PRODUCT_NAME "${ARGV1}")
         set(LINK_FACE_PRODUCT_SLUG "${ARGV2}")
@@ -59,42 +57,23 @@ function(link_add_windows_discover target)
             message(FATAL_ERROR "Unknown link_add_windows_discover arguments: ${LINK_FACE_UNPARSED_ARGUMENTS}")
         endif()
     endif()
-
     foreach(required PRODUCT_NAME PRODUCT_SLUG WINDOW_CLASS)
         if(NOT LINK_FACE_${required})
             message(FATAL_ERROR "link_add_windows_discover requires ${required}.")
         endif()
     endforeach()
-
     add_executable(${target} WIN32 "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platform/windows/link-discover.c")
     target_link_libraries(${target} PRIVATE LINK::Core comdlg32 advapi32)
-    target_compile_definitions(${target} PRIVATE
-        _CRT_SECURE_NO_WARNINGS
-        LINK_PRODUCT_NAME="${LINK_FACE_PRODUCT_NAME}"
-        LINK_PRODUCT_SLUG="${LINK_FACE_PRODUCT_SLUG}"
-        LINK_PRODUCT_WINDOW_CLASS="${LINK_FACE_WINDOW_CLASS}")
+    target_compile_definitions(${target} PRIVATE _CRT_SECURE_NO_WARNINGS LINK_PRODUCT_NAME="${LINK_FACE_PRODUCT_NAME}" LINK_PRODUCT_SLUG="${LINK_FACE_PRODUCT_SLUG}" LINK_PRODUCT_WINDOW_CLASS="${LINK_FACE_WINDOW_CLASS}")
     set_target_properties(${target} PROPERTIES OUTPUT_NAME "${LINK_FACE_PRODUCT_SLUG}-discover")
 endfunction()
 
-option(LINK_BUILD_REFERENCE_PRODUCT_FACES
-    "Build MBLINK and JAGLINK reference Windows Discover faces when LINK is top-level"
-    OFF)
-
+option(LINK_BUILD_REFERENCE_PRODUCT_FACES "Build MBLINK and JAGLINK reference Windows Discover faces when LINK is top-level" OFF)
 if(WIN32 AND PROJECT_IS_TOP_LEVEL)
-    link_add_windows_discover(link-discover
-        PRODUCT_NAME "LINK"
-        PRODUCT_SLUG "link"
-        WINDOW_CLASS "LINKDiscoverWindow")
-
+    link_add_windows_discover(link-discover PRODUCT_NAME "LINK" PRODUCT_SLUG "link" WINDOW_CLASS "LINKDiscoverWindow")
     if(LINK_BUILD_REFERENCE_PRODUCT_FACES)
-        link_add_windows_discover(mblink-discover
-            PRODUCT_NAME "MBLINK"
-            PRODUCT_SLUG "mblink"
-            WINDOW_CLASS "MBLINKDiscoverWindow")
-        link_add_windows_discover(jaglink-discover
-            PRODUCT_NAME "JAGLINK"
-            PRODUCT_SLUG "jaglink"
-            WINDOW_CLASS "JAGLINKDiscoverWindow")
+        link_add_windows_discover(mblink-discover PRODUCT_NAME "MBLINK" PRODUCT_SLUG "mblink" WINDOW_CLASS "MBLINKDiscoverWindow")
+        link_add_windows_discover(jaglink-discover PRODUCT_NAME "JAGLINK" PRODUCT_SLUG "jaglink" WINDOW_CLASS "JAGLINKDiscoverWindow")
     endif()
 endif()
 
@@ -102,19 +81,18 @@ if(BUILD_TESTING AND PROJECT_IS_TOP_LEVEL)
     add_executable(link-test-workspace tests/test_workspace.c)
     target_link_libraries(link-test-workspace PRIVATE LINK::Core)
     add_test(NAME link-workspace COMMAND link-test-workspace)
-
     add_executable(link-test-isotp tests/test_isotp.c)
     target_link_libraries(link-test-isotp PRIVATE LINK::Core)
     add_test(NAME link-isotp COMMAND link-test-isotp)
-
     add_executable(link-test-runtime tests/test_runtime.c)
     target_link_libraries(link-test-runtime PRIVATE LINK::Core)
     add_test(NAME link-runtime COMMAND link-test-runtime)
-
+    add_executable(link-test-elm327 tests/test_elm327.c)
+    target_link_libraries(link-test-elm327 PRIVATE LINK::Core)
+    add_test(NAME link-elm327 COMMAND link-test-elm327)
     add_executable(link-test-discover-safety tests/test_discover_safety.c)
     target_link_libraries(link-test-discover-safety PRIVATE LINK::Core)
     add_test(NAME link-discover-safety COMMAND link-test-discover-safety)
-
     add_executable(link-test-evidence tests/test_evidence.c)
     target_link_libraries(link-test-evidence PRIVATE LINK::Core)
     add_test(NAME link-evidence COMMAND link-test-evidence)

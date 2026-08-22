@@ -1,47 +1,33 @@
 # LINK migration status
 
-LINK is being populated incrementally from the historically separate MBLINK and JAGLINK implementations. Product-specific Mercedes and Jaguar behaviour is deliberately excluded.
+Dependency hierarchy: `Infiltratr Common -> LINK -> MBLINK / JAGLINK`.
 
-The dependency hierarchy is:
+## Completed shared ownership through LINK 0.7.0
 
-```text
-Infiltratr Common -> LINK -> MBLINK / JAGLINK
-```
-
-A component is promoted only after the product implementations are compared, the best generic behaviour is retained, product identity is removed from the shared implementation, existing Common facilities are reused where appropriate, and both products can consume the shared result without behavioural regression.
-
-## Completed shared ownership
-
-The following are implementation-complete in LINK 0.6.0:
-
-- diagnostic workspace model;
+- diagnostic workspace;
 - Classical-CAN ISO-TP;
-- parameter definitions, keys and formatting;
-- bounded parameter store/history;
-- parameter scheduler;
-- telemetry store and CSV writer;
-- Discover deny-by-default safety classifier;
-- JSON Lines evidence writer;
-- Windows OpenPort 2.0/J2534 Discover scanner.
+- parameter definitions/store/history;
+- scheduler;
+- telemetry/CSV;
+- Discover safety/evidence;
+- Windows OpenPort/J2534 scanner;
+- byte-stream transport ABI;
+- ELM327 command framing/parser/init;
+- ELM327 adapter/protocol probe;
+- ELM327-managed CAN channel;
+- transport-backed ELM327 command session.
 
-MBLINK and JAGLINK retain small product-prefixed compatibility/adaptor files where their existing public C APIs still need to delegate into LINK. Those files are not independent implementations.
-
-Native iPhone builds compile the exact pinned LINK C sources required by the product target rather than carrying product-local copies.
+Product-prefixed files may remain only as compatibility aliases/wrappers. They must not contain a second implementation of LINK-owned behaviour.
 
 ## Remaining generic migration candidates
 
-1. ELM327 transport/session/CAN/probe;
-2. standard OBD-II;
-3. UDS;
-4. Apple BLE transport/controller glue;
-5. shared Linux application structure;
-6. shared iPhone application structure;
-7. packaging/release helpers and common CI assertions.
+1. standard OBD-II;
+2. UDS;
+3. Apple transport/controller glue;
+4. shared Linux application structure;
+5. shared iPhone application structure;
+6. packaging/release helpers and common CI assertions.
 
-Mercedes- and Jaguar-specific definitions and diagnostic behaviour remain in their product repositories.
-
-## Completion rule
-
-A migration is not considered complete merely because LINK contains a copy. LINK must be the source of truth, both products must consume it, duplicate generic implementation must be removed or reduced to compatibility delegation, tests must pass in both products, and the documentation must describe the resulting ownership accurately.
+A migration is complete only when LINK is the source of truth, both products consume it, duplicate implementation is removed, regression tests pass, and documentation accurately records ownership.
 
 SPDX-License-Identifier: GPL-3.0-or-later
