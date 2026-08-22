@@ -1,12 +1,8 @@
 # LINK
 
-LINK is the shared application engine for the LINK vehicle-diagnostics family.
-
-MBLINK and JAGLINK are products built from this same engine. They must not carry independent copies of generic application code.
+LINK is the shared C11 vehicle-diagnostics/application engine used by MBLINK and JAGLINK.
 
 ## Dependency hierarchy
-
-LINK reuses Infiltratr Common wherever possible. LINK must not duplicate facilities that already belong in Common, and generic improvements that are useful beyond vehicle diagnostics should be promoted into Common instead of being implemented privately here.
 
 ```text
 Infiltratr Common
@@ -16,80 +12,48 @@ Infiltratr Common
   MBLINK  JAGLINK
 ```
 
-Infiltratr Common owns broadly reusable portable primitives and contracts used across projects.
+Infiltratr Common owns portable facilities that are useful outside vehicle diagnostics. LINK owns automotive functionality that is shared by MBLINK and JAGLINK. The product repositories own branding, product metadata and genuinely manufacturer-specific definitions/behaviour.
 
-LINK owns vehicle-diagnostics/application behaviour shared by MBLINK and JAGLINK.
+The dependency direction is one-way: Common must not depend on LINK or either product; LINK may depend on Common but never on a product; products consume LINK and must not fork LINK-owned behaviour.
 
-MBLINK and JAGLINK own only their product face and vehicle-specific definitions/behaviour.
+## Current shared implementation
 
-## Architectural rule
+LINK 0.6.0 currently owns:
 
-If a change applies to multiple unrelated projects, it probably belongs in Infiltratr Common.
+- the diagnostic workspace model;
+- Classical-CAN ISO-TP;
+- diagnostic parameter definitions, keys, formatting and bounded parameter history;
+- parameter scheduling;
+- telemetry storage and CSV recording;
+- Discover deny-by-default safety classification;
+- JSON Lines diagnostic evidence writing and operator annotations;
+- the Windows OpenPort 2.0/J2534 Discover scanner.
 
-If a change applies to both MBLINK and JAGLINK, but is specifically part of the vehicle-diagnostics application, it belongs in LINK.
+The Windows scanner is the reference product-face pattern. MBLINK and JAGLINK compile the same `platform/windows/link-discover.c` and `LINK::Core`; only product identity and resources differ.
 
-If a change applies only to Mercedes or only to Jaguar, it stays in the corresponding product repository.
+## Remaining migration
 
-MBLINK owns only Mercedes-specific material such as branding, icons, product metadata, Mercedes ECU/protocol definitions, and Mercedes-specific diagnostic behaviour.
+The next generic automotive blocks to promote into LINK are:
 
-JAGLINK owns only Jaguar-specific material such as branding, icons, product metadata, Jaguar ECU/protocol definitions, and Jaguar-specific diagnostic behaviour.
+1. ELM327 command/parser/session/CAN/probe support;
+2. standard OBD-II;
+3. UDS;
+4. shared Apple transport/controller glue;
+5. shared Linux and iPhone application structure where behaviour is genuinely common;
+6. packaging, CI and release helpers.
 
-Everything else belongs here unless Common already provides it: portable diagnostics logic, transports, ELM327, ISO-TP, OBD-II, UDS, telemetry, parameter scheduling, discovery, safety classification, evidence/logging, OpenPort/J2534 support, Linux/Windows/iOS platform glue, shared UI structure, tests, packaging helpers, and release/build machinery.
+Manufacturer-specific Mercedes and Jaguar definitions remain outside LINK.
 
-## One implementation, multiple faces
+## Engineering rules
 
-Product identity must never create a second implementation of shared behaviour.
+- C is the default implementation language; C++ is appropriate where it materially improves the design.
+- Platform-required languages belong at narrow UI/interop edges rather than becoming alternate protocol engines.
+- Public APIs document ownership, lifetime, failure behaviour, invariants and non-obvious constraints.
+- Comments explain rationale and contracts; they do not narrate obvious syntax.
+- Product identity is data/configuration. It must not create a second implementation of shared behaviour.
+- Unknown or unsafe diagnostic operations remain denied by default.
+- Generic improvements useful beyond automotive diagnostics should be promoted to Infiltratr Common rather than duplicated here.
 
-The current Discover/OpenPort model is the reference pattern:
-
-```text
-LINK Discover + MBLINK face = MBLINK Discover
-LINK Discover + JAGLINK face = JAGLINK Discover
-
-LINK Windows scanner + MBLINK face = mblink-discover.exe
-LINK Windows scanner + JAGLINK face = jaglink-discover.exe
-```
-
-Both Windows executables are built from the same `platform/windows/link-discover.c` and the same `LINK::Core`. Only product-facing identity changes.
-
-See `docs/DISCOVER.md` for the Discover/scanner contract and `docs/PRODUCT_FACES.md` for the general face-only architecture rule.
-
-## Product model
-
-```text
-Infiltratr Common
-  + LINK shared diagnostics engine
-  + MBLINK face + Mercedes definitions
-  = MBLINK
-
-Infiltratr Common
-  + LINK shared diagnostics engine
-  + JAGLINK face + Jaguar definitions
-  = JAGLINK
-```
-
-The intended end state is that MBLINK and JAGLINK contain only a small product layer, ideally around 5–10 product-specific files or small directories plus their README/version metadata.
-
-## Migration policy
-
-Migration is incremental and test-preserving. A component moves into LINK only after the corresponding MBLINK and JAGLINK implementations are compared, the best generic behaviour is retained, product names are removed from the shared implementation, existing Infiltratr Common facilities are reused wherever appropriate, and both products can consume the shared result.
-
-Initial migration order:
-
-1. parameter/store/scheduler/telemetry core
-2. ISO-TP
-3. ELM327
-4. OBD-II and UDS
-5. discovery, safety and evidence
-6. OpenPort/J2534 and platform transports
-7. Apple, Linux and Windows shared application glue
-8. shared UI structure
-9. packaging, CI and release machinery
-
-Mercedes and Jaguar vehicle-specific code remains outside LINK.
-
-## Source of truth
-
-Infiltratr Common is the source of truth for reusable cross-project primitives. LINK is the source of truth for shared MBLINK/JAGLINK vehicle-diagnostics behaviour. Product repositories should pin known Common and LINK revisions rather than copying those implementations into their own trees.
+See `MIGRATION.md`, `docs/DISCOVER.md` and `docs/PRODUCT_FACES.md` for the migration and product-face contracts.
 
 SPDX-License-Identifier: GPL-3.0-or-later
