@@ -36,6 +36,8 @@ add_library(link-core STATIC
     src/elm327/can.c
     src/elm327/probe.c
     src/elm327/session.c
+    src/obd2/obd2.c
+    src/uds/uds.c
     src/discover/safety.c
     src/discover/evidence.c
 )
@@ -243,6 +245,14 @@ if(BUILD_TESTING AND PROJECT_IS_TOP_LEVEL)
     add_executable(link-test-elm327 tests/test_elm327.c)
     target_link_libraries(link-test-elm327 PRIVATE LINK::Core)
     add_test(NAME link-elm327 COMMAND link-test-elm327)
+
+    add_executable(link-test-obd2 tests/test_obd2.c)
+    target_link_libraries(link-test-obd2 PRIVATE LINK::Core)
+    add_test(NAME link-obd2 COMMAND link-test-obd2)
+
+    add_executable(link-test-uds tests/test_uds.c)
+    target_link_libraries(link-test-uds PRIVATE LINK::Core)
+    add_test(NAME link-uds COMMAND link-test-uds)
 
     add_executable(link-test-discover-safety tests/test_discover_safety.c)
     target_link_libraries(link-test-discover-safety PRIVATE LINK::Core)
