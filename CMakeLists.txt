@@ -44,6 +44,25 @@ else()
     target_compile_options(link-core PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
+function(link_add_windows_discover target product_name product_slug window_class)
+    if(NOT WIN32)
+        message(FATAL_ERROR "link_add_windows_discover is supported on Windows only.")
+    endif()
+
+    add_executable(${target} WIN32
+        "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platform/windows/link-discover.c")
+    target_link_libraries(${target} PRIVATE LINK::Core comdlg32 advapi32)
+    target_compile_definitions(${target} PRIVATE
+        _CRT_SECURE_NO_WARNINGS
+        LINK_PRODUCT_NAME="${product_name}"
+        LINK_PRODUCT_SLUG="${product_slug}"
+        LINK_PRODUCT_WINDOW_CLASS="${window_class}")
+endfunction()
+
+if(WIN32 AND PROJECT_IS_TOP_LEVEL)
+    link_add_windows_discover(link-discover "LINK" "link" "LINKDiscoverWindow")
+endif()
+
 if(BUILD_TESTING AND PROJECT_IS_TOP_LEVEL)
     add_executable(link-test-workspace tests/test_workspace.c)
     target_link_libraries(link-test-workspace PRIVATE LINK::Core)
