@@ -1,3 +1,9 @@
 [submodule "src/infiltratr-common"]
 	path = src/infiltratr-common
 	url = https://github.com/The-First-Infiltrator/Infiltrator-Libraries.git
+[submodule "migration/mblink-source"]
+	path = migration/mblink-source
+	url = https://github.com/The-First-Infiltrator/MBLINK.git
+[submodule "migration/jaglink-source"]
+	path = migration/jaglink-source
+	url = https://github.com/The-First-Infiltrator/Jaglink.git
