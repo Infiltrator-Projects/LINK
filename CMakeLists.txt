@@ -46,20 +46,32 @@ else()
 endif()
 
 # Build one shared Windows Discover/OpenPort implementation with a product face.
-# The product repositories supply identity only; they never own a second scanner
-# source file. This function is the sole supported constructor for product
-# Windows Discover targets.
+# Products supply identity only; they never own a second scanner source file.
+#
+# Preferred form:
+#   link_add_windows_discover(target
+#       PRODUCT_NAME "MBLINK"
+#       PRODUCT_SLUG "mblink"
+#       WINDOW_CLASS "MBLINKDiscoverWindow")
+#
+# The original positional form remains accepted during migration:
+#   link_add_windows_discover(target "MBLINK" "mblink" "MBLINKDiscoverWindow")
 function(link_add_windows_discover target)
     if(NOT WIN32)
         message(FATAL_ERROR "link_add_windows_discover is supported on Windows only.")
     endif()
 
-    set(one_value_args PRODUCT_NAME PRODUCT_SLUG WINDOW_CLASS)
-    cmake_parse_arguments(LINK_FACE "" "${one_value_args}" "" ${ARGN})
-
-    if(LINK_FACE_UNPARSED_ARGUMENTS)
-        message(FATAL_ERROR
-            "Unknown link_add_windows_discover arguments: ${LINK_FACE_UNPARSED_ARGUMENTS}")
+    if(ARGC EQUAL 4 AND NOT ARGV1 STREQUAL "PRODUCT_NAME")
+        set(LINK_FACE_PRODUCT_NAME "${ARGV1}")
+        set(LINK_FACE_PRODUCT_SLUG "${ARGV2}")
+        set(LINK_FACE_WINDOW_CLASS "${ARGV3}")
+    else()
+        set(one_value_args PRODUCT_NAME PRODUCT_SLUG WINDOW_CLASS)
+        cmake_parse_arguments(LINK_FACE "" "${one_value_args}" "" ${ARGN})
+        if(LINK_FACE_UNPARSED_ARGUMENTS)
+            message(FATAL_ERROR
+                "Unknown link_add_windows_discover arguments: ${LINK_FACE_UNPARSED_ARGUMENTS}")
+        endif()
     endif()
 
     foreach(required PRODUCT_NAME PRODUCT_SLUG WINDOW_CLASS)
