@@ -13,6 +13,19 @@ static int require_substring(const char *text, const char *needle)
     return 1;
 }
 
+static FILE *open_binary_read(const char *path)
+{
+#if defined(_MSC_VER)
+    FILE *file = NULL;
+    if (fopen_s(&file, path, "rb") != 0) {
+        return NULL;
+    }
+    return file;
+#else
+    return fopen(path, "rb");
+#endif
+}
+
 int main(void)
 {
     const char *path = "link-evidence-test.jsonl";
@@ -60,7 +73,7 @@ int main(void)
     }
     link_evidence_close(writer);
 
-    file = fopen(path, "rb");
+    file = open_binary_read(path);
     if (file == NULL) {
         (void)fprintf(stderr, "cannot reopen evidence output\n");
         (void)remove(path);

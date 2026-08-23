@@ -56,6 +56,19 @@ static int json_string(FILE *file, const char *text)
     return fputc('"', file) == EOF ? -1 : 0;
 }
 
+static FILE *open_binary_write(const char *path)
+{
+#if defined(_MSC_VER)
+    FILE *file = NULL;
+    if (fopen_s(&file, path, "wb") != 0) {
+        return NULL;
+    }
+    return file;
+#else
+    return fopen(path, "wb");
+#endif
+}
+
 link_evidence_writer *link_evidence_open(const char *path)
 {
     link_evidence_writer *writer;
@@ -69,7 +82,7 @@ link_evidence_writer *link_evidence_open(const char *path)
         return NULL;
     }
 
-    writer->file = fopen(path, "wb");
+    writer->file = open_binary_write(path);
     if (writer->file == NULL) {
         free(writer);
         return NULL;

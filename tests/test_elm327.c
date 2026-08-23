@@ -49,7 +49,11 @@ int main(void)
     REQUIRE(link_elm327_can_channel_begin(&can_state, &can_config) == LINK_ELM327_CAN_RESULT_OK);
     REQUIRE(link_elm327_can_channel_command(&can_state, can_command, sizeof(can_command)) == LINK_ELM327_CAN_RESULT_OK);
     REQUIRE(strcmp(can_command, "ATSH7E0") == 0);
-    memset(&response, 0, sizeof(response)); response.result = LINK_ELM327_RESULT_OK; strcpy(response.text, "62 F1 90 31"); response.length = strlen(response.text); response.line_count = 1U;
+    memset(&response, 0, sizeof(response));
+    response.result = LINK_ELM327_RESULT_OK;
+    memcpy(response.text, "62 F1 90 31", sizeof("62 F1 90 31"));
+    response.length = strlen(response.text);
+    response.line_count = 1U;
     REQUIRE(link_elm327_can_decode_pdu(&response, pdu, sizeof(pdu), &pdu_length) == LINK_ELM327_CAN_RESULT_OK);
     REQUIRE(pdu_length == 4U && pdu[0] == 0x62U && pdu[1] == 0xf1U);
 

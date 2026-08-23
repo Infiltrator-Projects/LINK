@@ -49,7 +49,7 @@ int main(void)
               sample.value == 1726.0,
           "decode RPM");
 
-    strcpy(command, "sentinel");
+    memcpy(command, "sentinel", sizeof("sentinel"));
     check(link_obd2_build_clear_dtc_request(&authorization, command,
                                              sizeof(command)) ==
               LINK_OBD2_RESULT_NOT_AUTHORIZED && command[0] == '\0',
