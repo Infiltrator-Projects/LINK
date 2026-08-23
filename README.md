@@ -6,7 +6,7 @@
 
 LINK is the shared C11 vehicle-diagnostics and application engine used by MBLINK and JAGLINK.
 
-**Current source version:** 0.9.1 (next release: 0.10.0)  
+**Current source version:** 0.11.0  
 **Shared foundation:** Infiltratr Common 1.11.0  
 **Platforms:** Linux, Windows, macOS/iOS-facing portable core  
 **Licence:** GPL-3.0-or-later
@@ -31,19 +31,19 @@ LINK currently owns:
 - ELM327 framing, parsing, initialization and adapter/protocol probing;
 - ELM327-managed ISO 15765 CAN channels and transport-backed sessions;
 - standard OBD-II requests, PID/VIN/readiness/DTC decoding;
-- shared generic DTC knowledge: normalized code classification, human-readable definitions for a growing standards-backed catalogue, subsystem/category metadata, explicit unknown-code handling and ISO 14229 status translation;
+- a complete pinned generic OBD-II DTC catalogue containing 9,533 definitions across the seven standardized generic families (`P0`, `P2`, standardized `P3`, `B0`, `C0`, `U0`, `U3`), with normalized classification, independently authored CC0 titles/categories, explicit unknown handling and ISO 14229 status translation;
 - ISO 14229 UDS request/response, DID and client-state handling;
 - read-only UDS `ReadDTCInformation` helpers;
-- Classical CAN ISO-TP;
+- Classical CAN and CAN-FD ISO-TP, including CAN-FD payloads through 64 bytes and extended First Frame lengths for PDUs above 4095 bytes;
 - parameter definitions, store/history, scheduler and telemetry/CSV;
 - diagnostic workspace model;
 - portable diagnostic-flow controller state machine;
 - Discover safety classification and evidence writing; and
 - shared native Windows OpenPort 2.0/J2534 Discover scanner shell.
 
-The DTC knowledge API is presentation-neutral and deliberately preserves the raw ECU code. A valid code that LINK does not yet know remains an explicit unmapped diagnostic result; no product face is allowed to fabricate a description. Manufacturer-specific descriptions remain in the owning product repository rather than leaking into LINK.
+The DTC knowledge API is presentation-neutral and deliberately preserves the raw ECU code. Generic definitions come from a reproducible pinned OBDex CC0 data snapshot. SAE J2012 itself is not vendored or reproduced. A valid reserved or otherwise unmapped generic code remains explicit, and manufacturer-specific descriptions remain in the owning product repository rather than leaking into LINK.
 
-The initial 0.10 catalogue concentrates on high-value engine/diesel diagnostics shared by MBLINK and JAGLINK, including fuel delivery/rail pressure, injectors, boost, engine-position sensing, EGR, misfire, glow-plug/preheat, DPF/EGT/NOx aftertreatment and common vehicle-network communication faults. Structured cylinder families are generated deterministically rather than duplicated as UI strings.
+The catalogue is generated deterministically by `scripts/import-obdex-dtcs.py`. The generator validates exact family counts and a total of 9,533 unique generic definitions before producing the vendored normalized snapshot and compiled C lookup. The resolver uses that compiled table directly, so product builds require no network access or runtime data files.
 
 The shared diagnostic-flow controller owns the normal product-neutral sequence:
 
@@ -77,7 +77,7 @@ cmake --build build --config Release --parallel
 ctest --test-dir build --build-config Release --output-on-failure
 ```
 
-GitHub Actions builds and tests the portable core on Linux, macOS and Windows. The DTC knowledge suite checks known-code translation, structured cylinder mappings, manufacturer-specific unknown handling, network-code metadata, malformed-code rejection and shared UDS status semantics. The Windows configuration also proves that the same shared Discover implementation can produce both MBLINK and JAGLINK product faces.
+GitHub Actions builds and tests the portable core on Linux, macOS and Windows. The DTC knowledge suite enforces the exact 9,533-definition catalogue size and pinned upstream snapshot, samples all seven generic families, checks generic/manufacturer range boundaries, preserves lowercase normalization and malformed-code rejection, and verifies shared UDS status semantics. The ISO-TP suite covers preserved Classical CAN behaviour as well as CAN-FD single-frame, multi-frame and extended-length traffic. The Windows configuration also proves that the same shared Discover implementation can produce both MBLINK and JAGLINK product faces.
 
 ## Release assets
 
@@ -111,8 +111,8 @@ Manually runnable build/test helpers, where present, are diagnostic tools only a
 
 ## Roadmap
 
-The next diagnostic completion work is to connect the existing OBD freeze-frame/readiness primitives to the same resolved fault-record path, then continue expanding the standards-backed generic DTC catalogue. Remaining consolidation work also includes reusable BLE transport coordination, additional shared Linux/iPhone application structure where genuinely common, and further packaging/CI helper consolidation without pulling product branding into LINK.
+The next diagnostic completion work is to connect the existing OBD freeze-frame/readiness primitives to the same resolved fault-record path. The generic DTC catalogue is now complete for the pinned OBDex snapshot and should be refreshed reproducibly when its upstream source changes. Remaining consolidation work includes reusable BLE transport coordination, additional shared Linux/iPhone application structure where genuinely common, and further packaging/CI helper consolidation without pulling product branding into LINK.
 
 ## Licence
 
-LINK is free software licensed under the GNU General Public License version 3 or, at your option, any later version (`GPL-3.0-or-later`).
+LINK is free software licensed under the GNU General Public License version 3 or, at your option, any later version (`GPL-3.0-or-later`). The vendored OBDex generic DTC data snapshot is CC0-1.0; its provenance is documented in `docs/DTC-CATALOGUE-SOURCE.md` and `third_party/obdex/SOURCE.md`.
