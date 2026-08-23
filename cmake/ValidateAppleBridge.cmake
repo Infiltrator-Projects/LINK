@@ -27,6 +27,12 @@ function(link_validate_product_apple_bridge product_root)
     file(GLOB_RECURSE product_bridge_files
         "${product_root}/src/*.c"
         "${product_root}/app/ios/*.pbxproj")
+    # Never allow the nested LINK checkout to satisfy its own bridge coverage.
+    # Only product-owned wrapper/bridge source and the product Xcode project
+    # count as evidence that the iPhone target actually compiles a LINK source.
+    list(FILTER product_bridge_files EXCLUDE REGEX "/src/link/")
+    list(FILTER product_bridge_files EXCLUDE REGEX "/src/infiltratr-common/")
+
     if(NOT product_bridge_files)
         message(FATAL_ERROR
             "Embedding product has no iOS bridge/Xcode sources to validate: ${product_root}")
