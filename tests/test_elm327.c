@@ -3,6 +3,8 @@
 #include "link/elm327_can.h"
 #include "link/elm327_probe.h"
 #include "link/elm327_session.h"
+#include "link/elm327_simulator.h"
+#include "link/obd2.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -26,6 +28,21 @@ static void mock_disconnect(void *context) { ((MockTransport *)context)->connect
 static bool mock_is_connected(void *context) { return ((MockTransport *)context)->connected; }
 static LinkTransportStatus mock_write(void *context, const uint8_t *data, size_t size) { MockTransport *mock = context; REQUIRE(size <= sizeof(mock->last_write)); memcpy(mock->last_write, data, size); mock->last_write_size = size; return LINK_TRANSPORT_OK; }
 static void mock_set_receiver(void *context, LinkTransportReceiveFn receive, void *receive_context) { MockTransport *mock = context; mock->receive = receive; mock->receive_context = receive_context; }
+
+static bool simulator_custom_response(
+    void *context,
+    const char *command,
+    char *response,
+    size_t response_size)
+{
+    (void)context;
+    if (strcmp(command, "22F190") != 0) return false;
+    if (response_size < sizeof("62F1905744443230373330323246313233343536")) return false;
+    memcpy(response,
+           "62F1905744443230373330323246313233343536",
+           sizeof("62F1905744443230373330323246313233343536"));
+    return true;
+}
 
 int main(void)
 {
@@ -68,5 +85,65 @@ int main(void)
     REQUIRE(session.status == LINK_ELM327_SESSION_COMPLETE);
     REQUIRE(link_elm327_session_response(&session) != NULL);
     link_elm327_session_deinit(&session);
+
+    {
+        LinkElm327Simulator simulator;
+        LinkElm327SimulatorConfig config = LINK_ELM327_SIMULATOR_CONFIG_INIT;
+        LinkTransport simulated_transport;
+        LinkElm327Session simulated_session;
+        const LinkElm327Response *simulated_response;
+        LinkObd2PidSet supported;
+        LinkObd2Sample sample;
+        LinkObd2DtcList dtcs;
+        bool has_more = false;
+
+        config.adapter_identifier = "ELM327 v2.3 LINK TEST";
+        config.vin = "WDD2073022F123456";
+        config.custom_responder = simulator_custom_response;
+        link_elm327_simulator_init(&simulator, &config);
+        simulated_transport = link_elm327_simulator_transport(&simulator);
+        REQUIRE(link_transport_is_valid(&simulated_transport));
+        REQUIRE(link_elm327_session_init(&simulated_session, &simulated_transport, NULL, NULL));
+        REQUIRE(link_elm327_session_connect(&simulated_session) == LINK_TRANSPORT_OK);
+
+        REQUIRE(link_elm327_session_begin(&simulated_session, "ATZ", 1000U, 500U) == LINK_ELM327_SESSION_OP_OK);
+        simulated_response = link_elm327_session_response(&simulated_session);
+        REQUIRE(simulated_response != NULL);
+        REQUIRE(strcmp(simulated_response->text, "ELM327 v2.3 LINK TEST") == 0);
+        REQUIRE(simulated_response->echo_removed);
+
+        REQUIRE(link_elm327_session_begin(&simulated_session, "ATE0", 1100U, 500U) == LINK_ELM327_SESSION_OP_OK);
+        simulated_response = link_elm327_session_response(&simulated_session);
+        REQUIRE(simulated_response != NULL && simulated_response->ok_seen);
+
+        REQUIRE(link_elm327_session_begin(&simulated_session, "0100", 1200U, 500U) == LINK_ELM327_SESSION_OP_OK);
+        simulated_response = link_elm327_session_response(&simulated_session);
+        REQUIRE(simulated_response != NULL);
+        link_obd2_pid_set_clear(&supported);
+        REQUIRE(link_obd2_accept_supported_pids(simulated_response, 0x00U, &supported, &has_more) == LINK_OBD2_RESULT_OK);
+        REQUIRE(has_more);
+        REQUIRE(link_obd2_pid_set_contains(&supported, 0x0cU));
+
+        REQUIRE(link_elm327_session_begin(&simulated_session, "010C", 1300U, 500U) == LINK_ELM327_SESSION_OP_OK);
+        simulated_response = link_elm327_session_response(&simulated_session);
+        REQUIRE(simulated_response != NULL);
+        REQUIRE(link_obd2_decode_live_pid(simulated_response, 0x0cU, &sample) == LINK_OBD2_RESULT_OK);
+        REQUIRE(sample.unit == LINK_OBD2_UNIT_RPM && sample.value > 0.0);
+
+        REQUIRE(link_elm327_session_begin(&simulated_session, "03", 1400U, 500U) == LINK_ELM327_SESSION_OP_OK);
+        simulated_response = link_elm327_session_response(&simulated_session);
+        REQUIRE(simulated_response != NULL);
+        REQUIRE(link_obd2_decode_dtcs(simulated_response, LINK_OBD2_DTC_STORED, &dtcs) == LINK_OBD2_RESULT_OK);
+        REQUIRE(dtcs.count == 2U);
+        REQUIRE(strcmp(dtcs.entries[0].code, "P0401") == 0);
+
+        REQUIRE(link_elm327_session_begin(&simulated_session, "22F190", 1500U, 500U) == LINK_ELM327_SESSION_OP_OK);
+        simulated_response = link_elm327_session_response(&simulated_session);
+        REQUIRE(simulated_response != NULL);
+        REQUIRE(strcmp(simulated_response->text,
+                       "62F1905744443230373330323246313233343536") == 0);
+
+        link_elm327_session_deinit(&simulated_session);
+    }
     return 0;
 }
