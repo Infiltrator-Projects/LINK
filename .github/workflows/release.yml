@@ -2,7 +2,9 @@
 name: LINK Release
 
 on:
-  workflow_dispatch:
+  workflow_run:
+    workflows: ["LINK CI"]
+    types: [completed]
 
 permissions:
   contents: read
@@ -13,19 +15,25 @@ concurrency:
 
 jobs:
   publish:
-    name: Publish approved main release
+    name: Publish release commit from main
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      startsWith(github.event.workflow_run.head_commit.message, 'Release ')
     permissions:
       contents: write
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
       GH_TOKEN: ${{ github.token }}
+      EXPECTED_SHA: ${{ github.event.workflow_run.head_sha }}
 
     steps:
-      - name: Check out current main
+      - name: Check out exact tested main commit
         uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 0
           submodules: recursive
 
@@ -34,19 +42,20 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          version="$(tr -d '[:space:]' < VERSION)"
-          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "tag=v$version" >> "$GITHUB_OUTPUT"
-
-      - name: Verify exact current main
-        shell: bash
-        run: |
-          set -euo pipefail
           git fetch origin main --tags
           head_commit="$(git rev-parse HEAD)"
           main_commit="$(git rev-parse origin/main)"
-          test "$head_commit" = "$main_commit"
+          test "$head_commit" = "$EXPECTED_SHA"
+          test "$main_commit" = "$EXPECTED_SHA"
+          version="$(tr -d '[:space:]' < VERSION)"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          subject="$(git log -1 --format=%s "$head_commit")"
+          if [[ "$subject" != "Release ${version}" && "$subject" != "Release ${version}:"* ]]; then
+            echo "Release commit subject must begin with Release ${version}." >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
 
       - name: Build source release
         shell: bash
@@ -70,6 +79,9 @@ jobs:
         run: |
           set -euo pipefail
           head_commit="$(git rev-parse HEAD)"
+          main_commit="$(git rev-parse origin/main)"
+          test "$head_commit" = "$EXPECTED_SHA"
+          test "$main_commit" = "$EXPECTED_SHA"
           if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
             echo "Release tag $TAG already exists; published releases are immutable." >&2
             exit 1
@@ -83,7 +95,7 @@ jobs:
           git push origin "$TAG"
           gh release create "$TAG" release-assets/* --repo "$GITHUB_REPOSITORY" --target "$head_commit" \
             --title "LINK $VERSION" \
-            --notes "LINK $VERSION: explicitly approved release built from verified current main."
+            --notes "LINK $VERSION: automatic release from tested current main."
 
       - name: Verify published assets
         shell: bash
