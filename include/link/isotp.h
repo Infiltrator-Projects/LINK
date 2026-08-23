@@ -3,8 +3,12 @@
  * @file isotp.h
  * @brief Portable ISO-TP (ISO 15765-2) transport-layer foundation.
  *
- * Classical-CAN buffers are caller-owned and all protocol state is bounded.
- * Timing values use one caller-supplied monotonic microsecond clock.
+ * Classical CAN and CAN FD buffers are caller-owned and all protocol state is
+ * bounded. Timing values use one caller-supplied monotonic microsecond clock.
+ *
+ * Link-layer data_length is the maximum CAN payload length used for this
+ * ISO-TP connection. A zero data_length preserves the historical defaults:
+ * 8 bytes for Classical CAN and 64 bytes for CAN FD.
  */
 #ifndef LINK_ISOTP_H
 #define LINK_ISOTP_H
@@ -18,7 +22,8 @@ extern "C" {
 #endif
 
 #define LINK_ISOTP_CLASSIC_CAN_DATA_LENGTH 8U
-#define LINK_ISOTP_MAX_PDU_LENGTH 4095U
+#define LINK_ISOTP_CAN_FD_MAX_DATA_LENGTH 64U
+#define LINK_ISOTP_MAX_PDU_LENGTH UINT32_MAX
 
 typedef enum {
     LINK_ISOTP_ADDRESSING_NORMAL = 0,
@@ -85,7 +90,8 @@ typedef struct {
     uint32_t can_id;
     bool extended_id;
     uint8_t length;
-    uint8_t data[LINK_ISOTP_CLASSIC_CAN_DATA_LENGTH];
+    uint8_t data[LINK_ISOTP_CAN_FD_MAX_DATA_LENGTH];
+    bool can_fd;
 } LinkIsoTpCanFrame;
 
 typedef struct {
@@ -93,6 +99,8 @@ typedef struct {
     uint8_t block_size;
     uint8_t stmin;
     uint64_t consecutive_timeout_us;
+    bool can_fd;
+    uint8_t data_length;
 } LinkIsoTpRxConfig;
 
 typedef struct {
@@ -112,6 +120,8 @@ typedef struct {
     LinkIsoTpAddress address;
     uint64_t flow_control_timeout_us;
     uint8_t max_wait_frames;
+    bool can_fd;
+    uint8_t data_length;
 } LinkIsoTpTxConfig;
 
 typedef struct {
@@ -135,6 +145,7 @@ const char *link_isotp_rx_state_name(LinkIsoTpRxState state);
 const char *link_isotp_tx_state_name(LinkIsoTpTxState state);
 
 bool link_isotp_address_is_valid(const LinkIsoTpAddress *address);
+bool link_isotp_can_data_length_is_valid(bool can_fd, uint8_t data_length);
 bool link_isotp_stmin_to_us(uint8_t stmin, uint32_t *microseconds);
 
 LinkIsoTpResult link_isotp_rx_init(

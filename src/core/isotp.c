@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /**
  * @file isotp.c
- * @brief ISO-TP (ISO 15765-2) over Classical CAN.
+ * @brief ISO-TP (ISO 15765-2) over Classical CAN and CAN FD.
  */
 #include "link/isotp.h"
 
@@ -27,43 +27,158 @@ static size_t link_isotp_pci_offset(const LinkIsoTpAddress *address)
         ? 1U : 0U;
 }
 
-static size_t link_isotp_single_frame_capacity(
+static size_t link_isotp_effective_data_length(bool can_fd, uint8_t data_length)
+{
+    if (data_length != 0U) {
+        return data_length;
+    }
+    return can_fd ? LINK_ISOTP_CAN_FD_MAX_DATA_LENGTH
+                  : LINK_ISOTP_CLASSIC_CAN_DATA_LENGTH;
+}
+
+bool link_isotp_can_data_length_is_valid(bool can_fd, uint8_t data_length)
+{
+    if (!can_fd) {
+        return data_length == 0U ||
+               data_length == LINK_ISOTP_CLASSIC_CAN_DATA_LENGTH;
+    }
+
+    switch (data_length) {
+    case 0U:
+    case 8U:
+    case 12U:
+    case 16U:
+    case 20U:
+    case 24U:
+    case 32U:
+    case 48U:
+    case 64U:
+        return true;
+    default:
+        return false;
+    }
+}
+
+static bool link_isotp_wire_data_length_is_valid(
+    bool can_fd, uint8_t data_length)
+{
+    if (data_length == 0U) {
+        return false;
+    }
+    if (!can_fd) {
+        return data_length <= LINK_ISOTP_CLASSIC_CAN_DATA_LENGTH;
+    }
+    if (data_length <= LINK_ISOTP_CLASSIC_CAN_DATA_LENGTH) {
+        return true;
+    }
+
+    switch (data_length) {
+    case 12U:
+    case 16U:
+    case 20U:
+    case 24U:
+    case 32U:
+    case 48U:
+    case 64U:
+        return true;
+    default:
+        return false;
+    }
+}
+
+static size_t link_isotp_short_single_frame_capacity(
     const LinkIsoTpAddress *address)
 {
     return LINK_ISOTP_CLASSIC_CAN_DATA_LENGTH -
            link_isotp_pci_offset(address) - 1U;
+}
+
+static size_t link_isotp_single_frame_capacity(
+    const LinkIsoTpAddress *address,
+    bool can_fd,
+    size_t data_length)
+{
+    const size_t offset = link_isotp_pci_offset(address);
+
+    if (can_fd && data_length > LINK_ISOTP_CLASSIC_CAN_DATA_LENGTH) {
+        if (data_length <= offset + 2U) {
+            return 0U;
+        }
+        return data_length - offset - 2U;
+    }
+    return link_isotp_short_single_frame_capacity(address);
 }
 
 static size_t link_isotp_first_frame_capacity(
-    const LinkIsoTpAddress *address)
+    const LinkIsoTpAddress *address,
+    size_t data_length,
+    bool extended_length)
 {
-    return LINK_ISOTP_CLASSIC_CAN_DATA_LENGTH -
-           link_isotp_pci_offset(address) - 2U;
+    const size_t header_length = extended_length ? 6U : 2U;
+    const size_t offset = link_isotp_pci_offset(address);
+
+    if (data_length <= offset + header_length) {
+        return 0U;
+    }
+    return data_length - offset - header_length;
 }
 
 static size_t link_isotp_consecutive_frame_capacity(
-    const LinkIsoTpAddress *address)
+    const LinkIsoTpAddress *address,
+    size_t data_length)
 {
-    return LINK_ISOTP_CLASSIC_CAN_DATA_LENGTH -
-           link_isotp_pci_offset(address) - 1U;
+    const size_t offset = link_isotp_pci_offset(address);
+
+    if (data_length <= offset + 1U) {
+        return 0U;
+    }
+    return data_length - offset - 1U;
+}
+
+static size_t link_isotp_round_transmit_length(
+    bool can_fd, size_t required, size_t maximum)
+{
+    static const uint8_t fd_lengths[] = {
+        12U, 16U, 20U, 24U, 32U, 48U, 64U
+    };
+    size_t index;
+
+    if (required == 0U || required > maximum) {
+        return 0U;
+    }
+    if (!can_fd || required <= LINK_ISOTP_CLASSIC_CAN_DATA_LENGTH) {
+        return required;
+    }
+
+    for (index = 0U; index < sizeof(fd_lengths) / sizeof(fd_lengths[0]); ++index) {
+        if ((size_t)fd_lengths[index] >= required &&
+            (size_t)fd_lengths[index] <= maximum) {
+            return fd_lengths[index];
+        }
+    }
+    return 0U;
 }
 
 static bool link_isotp_frame_valid(const LinkIsoTpCanFrame *frame)
 {
     return frame != NULL &&
-           frame->length > 0U &&
-           frame->length <= LINK_ISOTP_CLASSIC_CAN_DATA_LENGTH &&
+           link_isotp_wire_data_length_is_valid(frame->can_fd, frame->length) &&
+           frame->length <= LINK_ISOTP_CAN_FD_MAX_DATA_LENGTH &&
            link_isotp_can_id_valid(frame->can_id, frame->extended_id);
 }
 
 static bool link_isotp_frame_matches_receive_address(
     const LinkIsoTpAddress *address,
+    bool can_fd,
+    size_t maximum_data_length,
     const LinkIsoTpCanFrame *frame,
     size_t *pci_offset)
 {
     size_t offset;
 
     if (address == NULL || !link_isotp_frame_valid(frame) ||
+        frame->can_fd != can_fd ||
+        (size_t)frame->length > maximum_data_length ||
         frame->can_id != address->rx_can_id ||
         frame->extended_id != address->rx_extended_id) {
         return false;
@@ -87,6 +202,7 @@ static bool link_isotp_frame_matches_receive_address(
 
 static void link_isotp_prepare_transmit_frame(
     const LinkIsoTpAddress *address,
+    bool can_fd,
     LinkIsoTpCanFrame *frame,
     size_t *pci_offset)
 {
@@ -95,6 +211,7 @@ static void link_isotp_prepare_transmit_frame(
     memset(frame, 0, sizeof(*frame));
     frame->can_id = address->tx_can_id;
     frame->extended_id = address->tx_extended_id;
+    frame->can_fd = can_fd;
 
     if (offset != 0U) {
         frame->data[0] = address->tx_address_extension;
@@ -111,7 +228,7 @@ static uint64_t link_isotp_deadline(uint64_t now_us, uint64_t timeout_us)
 }
 
 static LinkIsoTpResult link_isotp_build_flow_control(
-    const LinkIsoTpAddress *address,
+    const LinkIsoTpRxConfig *config,
     LinkIsoTpFlowStatus flow_status,
     uint8_t block_size,
     uint8_t stmin,
@@ -119,12 +236,17 @@ static LinkIsoTpResult link_isotp_build_flow_control(
 {
     size_t offset;
 
-    if (!link_isotp_address_is_valid(address) || frame == NULL ||
+    if (config == NULL ||
+        !link_isotp_address_is_valid(&config->address) ||
+        !link_isotp_can_data_length_is_valid(config->can_fd,
+                                              config->data_length) ||
+        frame == NULL ||
         flow_status > LINK_ISOTP_FLOW_OVERFLOW) {
         return LINK_ISOTP_RESULT_INVALID_ARGUMENT;
     }
 
-    link_isotp_prepare_transmit_frame(address, frame, &offset);
+    link_isotp_prepare_transmit_frame(&config->address, config->can_fd,
+                                      frame, &offset);
     frame->data[offset] = (uint8_t)(0x30U | (uint8_t)flow_status);
     frame->data[offset + 1U] = block_size;
     frame->data[offset + 2U] = stmin;
@@ -224,6 +346,8 @@ LinkIsoTpResult link_isotp_rx_init(
     if (receiver == NULL || config == NULL || buffer == NULL ||
         capacity == 0U ||
         !link_isotp_address_is_valid(&config->address) ||
+        !link_isotp_can_data_length_is_valid(config->can_fd,
+                                              config->data_length) ||
         config->consecutive_timeout_us == 0U ||
         !link_isotp_stmin_to_us(config->stmin, &stmin_us)) {
         return LINK_ISOTP_RESULT_INVALID_ARGUMENT;
@@ -269,20 +393,45 @@ static LinkIsoTpResult link_isotp_rx_accept_single(
     const LinkIsoTpCanFrame *frame,
     size_t offset)
 {
-    const size_t payload_length = (size_t)(frame->data[offset] & 0x0fU);
-    const size_t data_offset = offset + 1U;
-    const size_t capacity = link_isotp_single_frame_capacity(
-        &receiver->config.address);
+    const size_t short_capacity =
+        link_isotp_short_single_frame_capacity(&receiver->config.address);
+    size_t payload_length;
+    size_t data_offset;
 
     if (receiver->state != LINK_ISOTP_RX_IDLE) {
         return link_isotp_rx_fail(
             receiver, LINK_ISOTP_RESULT_UNEXPECTED_FRAME);
     }
-    if (payload_length == 0U || payload_length > capacity ||
-        data_offset + payload_length > frame->length) {
-        return link_isotp_rx_fail(
-            receiver, LINK_ISOTP_RESULT_INVALID_FRAME);
+
+    payload_length = (size_t)(frame->data[offset] & 0x0fU);
+    if (payload_length != 0U) {
+        if (frame->length > LINK_ISOTP_CLASSIC_CAN_DATA_LENGTH) {
+            return link_isotp_rx_fail(
+                receiver, LINK_ISOTP_RESULT_INVALID_FRAME);
+        }
+        data_offset = offset + 1U;
+        if (payload_length > short_capacity ||
+            data_offset + payload_length > frame->length) {
+            return link_isotp_rx_fail(
+                receiver, LINK_ISOTP_RESULT_INVALID_FRAME);
+        }
+    } else {
+        if (!receiver->config.can_fd || !frame->can_fd ||
+            frame->length <= LINK_ISOTP_CLASSIC_CAN_DATA_LENGTH ||
+            frame->length < offset + 2U) {
+            return link_isotp_rx_fail(
+                receiver, LINK_ISOTP_RESULT_INVALID_FRAME);
+        }
+
+        payload_length = frame->data[offset + 1U];
+        data_offset = offset + 2U;
+        if (payload_length <= short_capacity ||
+            data_offset + payload_length > frame->length) {
+            return link_isotp_rx_fail(
+                receiver, LINK_ISOTP_RESULT_INVALID_FRAME);
+        }
     }
+
     if (payload_length > receiver->capacity) {
         return link_isotp_rx_fail(
             receiver, LINK_ISOTP_RESULT_BUFFER_TOO_SMALL);
@@ -307,6 +456,8 @@ static LinkIsoTpResult link_isotp_rx_accept_first(
     size_t payload_length;
     size_t data_offset;
     size_t initial_length;
+    size_t single_frame_capacity;
+    uint32_t extended_length;
     LinkIsoTpResult fc_result;
 
     if (receiver->state != LINK_ISOTP_RX_IDLE) {
@@ -323,18 +474,44 @@ static LinkIsoTpResult link_isotp_rx_accept_first(
         (size_t)frame->data[offset + 1U];
 
     if (payload_length == 0U) {
-        return link_isotp_rx_fail(
-            receiver, LINK_ISOTP_RESULT_UNSUPPORTED);
+        if (frame->length < offset + 6U) {
+            return link_isotp_rx_fail(
+                receiver, LINK_ISOTP_RESULT_INVALID_FRAME);
+        }
+
+        extended_length =
+            ((uint32_t)frame->data[offset + 2U] << 24U) |
+            ((uint32_t)frame->data[offset + 3U] << 16U) |
+            ((uint32_t)frame->data[offset + 4U] << 8U) |
+            (uint32_t)frame->data[offset + 5U];
+
+        if (extended_length <= 4095U) {
+            return link_isotp_rx_fail(
+                receiver, LINK_ISOTP_RESULT_INVALID_FRAME);
+        }
+#if SIZE_MAX < UINT32_MAX
+        if (extended_length > (uint32_t)SIZE_MAX) {
+            return link_isotp_rx_fail(
+                receiver, LINK_ISOTP_RESULT_INVALID_FRAME);
+        }
+#endif
+        payload_length = (size_t)extended_length;
+        data_offset = offset + 6U;
+    } else {
+        data_offset = offset + 2U;
     }
-    if (payload_length <=
-            link_isotp_single_frame_capacity(&receiver->config.address) ||
-        payload_length > LINK_ISOTP_MAX_PDU_LENGTH) {
+
+    single_frame_capacity = link_isotp_single_frame_capacity(
+        &receiver->config.address, frame->can_fd, frame->length);
+    if (payload_length <= single_frame_capacity ||
+        payload_length > (size_t)LINK_ISOTP_MAX_PDU_LENGTH) {
         return link_isotp_rx_fail(
             receiver, LINK_ISOTP_RESULT_INVALID_FRAME);
     }
+
     if (payload_length > receiver->capacity) {
         fc_result = link_isotp_build_flow_control(
-            &receiver->config.address,
+            &receiver->config,
             LINK_ISOTP_FLOW_OVERFLOW,
             0U,
             0U,
@@ -346,12 +523,8 @@ static LinkIsoTpResult link_isotp_rx_accept_first(
             receiver, LINK_ISOTP_RESULT_BUFFER_TOO_SMALL);
     }
 
-    data_offset = offset + 2U;
     initial_length = frame->length - data_offset;
-    if (initial_length == 0U ||
-        initial_length > link_isotp_first_frame_capacity(
-            &receiver->config.address) ||
-        initial_length >= payload_length) {
+    if (initial_length == 0U || initial_length >= payload_length) {
         return link_isotp_rx_fail(
             receiver, LINK_ISOTP_RESULT_INVALID_FRAME);
     }
@@ -366,7 +539,7 @@ static LinkIsoTpResult link_isotp_rx_accept_first(
     receiver->state = LINK_ISOTP_RX_RECEIVING;
 
     fc_result = link_isotp_build_flow_control(
-        &receiver->config.address,
+        &receiver->config,
         LINK_ISOTP_FLOW_CONTINUE_TO_SEND,
         receiver->config.block_size,
         receiver->config.stmin,
@@ -388,6 +561,9 @@ static LinkIsoTpResult link_isotp_rx_accept_consecutive(
 {
     const uint8_t sequence = (uint8_t)(frame->data[offset] & 0x0fU);
     const size_t data_offset = offset + 1U;
+    const size_t maximum_data_length =
+        link_isotp_effective_data_length(receiver->config.can_fd,
+                                         receiver->config.data_length);
     size_t available;
     size_t remaining;
     size_t copy_length;
@@ -407,8 +583,9 @@ static LinkIsoTpResult link_isotp_rx_accept_consecutive(
     }
 
     available = frame->length - data_offset;
-    if (available > link_isotp_consecutive_frame_capacity(
-            &receiver->config.address)) {
+    if (available >
+        link_isotp_consecutive_frame_capacity(
+            &receiver->config.address, maximum_data_length)) {
         return link_isotp_rx_fail(
             receiver, LINK_ISOTP_RESULT_INVALID_FRAME);
     }
@@ -436,7 +613,7 @@ static LinkIsoTpResult link_isotp_rx_accept_consecutive(
         receiver->block_counter >= receiver->config.block_size) {
         receiver->block_counter = 0U;
         fc_result = link_isotp_build_flow_control(
-            &receiver->config.address,
+            &receiver->config,
             LINK_ISOTP_FLOW_CONTINUE_TO_SEND,
             receiver->config.block_size,
             receiver->config.stmin,
@@ -457,6 +634,11 @@ LinkIsoTpResult link_isotp_rx_feed(
     LinkIsoTpCanFrame *flow_control_frame,
     bool *flow_control_ready)
 {
+    const size_t maximum_data_length =
+        receiver != NULL
+            ? link_isotp_effective_data_length(receiver->config.can_fd,
+                                               receiver->config.data_length)
+            : 0U;
     size_t offset;
     uint8_t frame_type;
 
@@ -471,7 +653,11 @@ LinkIsoTpResult link_isotp_rx_feed(
     }
 
     if (!link_isotp_frame_matches_receive_address(
-            &receiver->config.address, frame, &offset)) {
+            &receiver->config.address,
+            receiver->config.can_fd,
+            maximum_data_length,
+            frame,
+            &offset)) {
         return LINK_ISOTP_RESULT_UNEXPECTED_FRAME;
     }
 
@@ -546,11 +732,13 @@ LinkIsoTpResult link_isotp_tx_init(
     if (transmitter == NULL || config == NULL || payload == NULL ||
         payload_length == 0U ||
         !link_isotp_address_is_valid(&config->address) ||
+        !link_isotp_can_data_length_is_valid(config->can_fd,
+                                              config->data_length) ||
         config->flow_control_timeout_us == 0U) {
         return LINK_ISOTP_RESULT_INVALID_ARGUMENT;
     }
 
-    if (payload_length > LINK_ISOTP_MAX_PDU_LENGTH) {
+    if (payload_length > (size_t)LINK_ISOTP_MAX_PDU_LENGTH) {
         return LINK_ISOTP_RESULT_PAYLOAD_TOO_LARGE;
     }
 
@@ -597,9 +785,17 @@ LinkIsoTpResult link_isotp_tx_start(
     uint64_t now_us,
     LinkIsoTpCanFrame *frame)
 {
+    const size_t maximum_data_length =
+        transmitter != NULL
+            ? link_isotp_effective_data_length(transmitter->config.can_fd,
+                                               transmitter->config.data_length)
+            : 0U;
     size_t offset;
+    size_t short_sf_capacity;
     size_t sf_capacity;
+    size_t frame_length;
     size_t ff_capacity;
+    bool extended_length;
 
     if (transmitter == NULL || frame == NULL ||
         transmitter->payload == NULL ||
@@ -613,18 +809,55 @@ LinkIsoTpResult link_isotp_tx_start(
         return LINK_ISOTP_RESULT_UNEXPECTED_FRAME;
     }
 
+    short_sf_capacity =
+        link_isotp_short_single_frame_capacity(&transmitter->config.address);
     sf_capacity = link_isotp_single_frame_capacity(
-        &transmitter->config.address);
-    link_isotp_prepare_transmit_frame(
-        &transmitter->config.address, frame, &offset);
+        &transmitter->config.address,
+        transmitter->config.can_fd,
+        maximum_data_length);
 
-    if (transmitter->payload_length <= sf_capacity) {
+    link_isotp_prepare_transmit_frame(
+        &transmitter->config.address,
+        transmitter->config.can_fd,
+        frame,
+        &offset);
+
+    if (transmitter->payload_length <= short_sf_capacity) {
         frame->data[offset] = (uint8_t)transmitter->payload_length;
         memcpy(&frame->data[offset + 1U],
                transmitter->payload,
                transmitter->payload_length);
-        frame->length = (uint8_t)(
-            offset + 1U + transmitter->payload_length);
+        frame_length = offset + 1U + transmitter->payload_length;
+        frame_length = link_isotp_round_transmit_length(
+            transmitter->config.can_fd,
+            frame_length,
+            maximum_data_length);
+        if (frame_length == 0U) {
+            return link_isotp_tx_fail(
+                transmitter, LINK_ISOTP_RESULT_INVALID_ARGUMENT);
+        }
+        frame->length = (uint8_t)frame_length;
+        transmitter->offset = transmitter->payload_length;
+        transmitter->state = LINK_ISOTP_TX_COMPLETE;
+        return LINK_ISOTP_RESULT_COMPLETE;
+    }
+
+    if (transmitter->config.can_fd &&
+        maximum_data_length > LINK_ISOTP_CLASSIC_CAN_DATA_LENGTH &&
+        transmitter->payload_length <= sf_capacity) {
+        frame->data[offset] = 0x00U;
+        frame->data[offset + 1U] = (uint8_t)transmitter->payload_length;
+        memcpy(&frame->data[offset + 2U],
+               transmitter->payload,
+               transmitter->payload_length);
+        frame_length = offset + 2U + transmitter->payload_length;
+        frame_length = link_isotp_round_transmit_length(
+            true, frame_length, maximum_data_length);
+        if (frame_length == 0U) {
+            return link_isotp_tx_fail(
+                transmitter, LINK_ISOTP_RESULT_INVALID_ARGUMENT);
+        }
+        frame->length = (uint8_t)frame_length;
         transmitter->offset = transmitter->payload_length;
         transmitter->state = LINK_ISOTP_TX_COMPLETE;
         return LINK_ISOTP_RESULT_COMPLETE;
@@ -635,21 +868,42 @@ LinkIsoTpResult link_isotp_tx_start(
         return link_isotp_tx_fail(
             transmitter, LINK_ISOTP_RESULT_UNSUPPORTED);
     }
-    if (transmitter->payload_length > LINK_ISOTP_MAX_PDU_LENGTH) {
+    if (transmitter->payload_length > (size_t)LINK_ISOTP_MAX_PDU_LENGTH) {
         return link_isotp_tx_fail(
             transmitter, LINK_ISOTP_RESULT_PAYLOAD_TOO_LARGE);
     }
 
+    extended_length = transmitter->payload_length > 4095U;
     ff_capacity = link_isotp_first_frame_capacity(
-        &transmitter->config.address);
-    frame->data[offset] = (uint8_t)(
-        0x10U | ((transmitter->payload_length >> 8U) & 0x0fU));
-    frame->data[offset + 1U] =
-        (uint8_t)(transmitter->payload_length & 0xffU);
-    memcpy(&frame->data[offset + 2U],
-           transmitter->payload,
-           ff_capacity);
-    frame->length = LINK_ISOTP_CLASSIC_CAN_DATA_LENGTH;
+        &transmitter->config.address,
+        maximum_data_length,
+        extended_length);
+    if (ff_capacity == 0U) {
+        return link_isotp_tx_fail(
+            transmitter, LINK_ISOTP_RESULT_UNSUPPORTED);
+    }
+
+    if (extended_length) {
+        const uint32_t payload_length = (uint32_t)transmitter->payload_length;
+        frame->data[offset] = 0x10U;
+        frame->data[offset + 1U] = 0x00U;
+        frame->data[offset + 2U] = (uint8_t)(payload_length >> 24U);
+        frame->data[offset + 3U] = (uint8_t)(payload_length >> 16U);
+        frame->data[offset + 4U] = (uint8_t)(payload_length >> 8U);
+        frame->data[offset + 5U] = (uint8_t)payload_length;
+        memcpy(&frame->data[offset + 6U],
+               transmitter->payload,
+               ff_capacity);
+    } else {
+        frame->data[offset] = (uint8_t)(
+            0x10U | ((transmitter->payload_length >> 8U) & 0x0fU));
+        frame->data[offset + 1U] =
+            (uint8_t)(transmitter->payload_length & 0xffU);
+        memcpy(&frame->data[offset + 2U],
+               transmitter->payload,
+               ff_capacity);
+    }
+    frame->length = (uint8_t)maximum_data_length;
 
     transmitter->offset = ff_capacity;
     transmitter->next_sequence = 1U;
@@ -668,6 +922,11 @@ LinkIsoTpResult link_isotp_tx_accept_flow_control(
     const LinkIsoTpCanFrame *frame,
     uint64_t now_us)
 {
+    const size_t maximum_data_length =
+        transmitter != NULL
+            ? link_isotp_effective_data_length(transmitter->config.can_fd,
+                                               transmitter->config.data_length)
+            : 0U;
     size_t offset;
     uint8_t flow_status;
     uint32_t separation_time_us;
@@ -686,7 +945,11 @@ LinkIsoTpResult link_isotp_tx_accept_flow_control(
             transmitter, LINK_ISOTP_RESULT_INVALID_FRAME);
     }
     if (!link_isotp_frame_matches_receive_address(
-            &transmitter->config.address, frame, &offset)) {
+            &transmitter->config.address,
+            transmitter->config.can_fd,
+            maximum_data_length,
+            frame,
+            &offset)) {
         return LINK_ISOTP_RESULT_UNEXPECTED_FRAME;
     }
     if (frame->length < offset + 3U ||
@@ -741,10 +1004,16 @@ LinkIsoTpResult link_isotp_tx_next(
     uint64_t now_us,
     LinkIsoTpCanFrame *frame)
 {
+    const size_t maximum_data_length =
+        transmitter != NULL
+            ? link_isotp_effective_data_length(transmitter->config.can_fd,
+                                               transmitter->config.data_length)
+            : 0U;
     size_t offset;
     size_t frame_capacity;
     size_t remaining;
     size_t copy_length;
+    size_t frame_length;
 
     if (transmitter == NULL || frame == NULL) {
         return LINK_ISOTP_RESULT_INVALID_ARGUMENT;
@@ -771,18 +1040,32 @@ LinkIsoTpResult link_isotp_tx_next(
     }
 
     link_isotp_prepare_transmit_frame(
-        &transmitter->config.address, frame, &offset);
+        &transmitter->config.address,
+        transmitter->config.can_fd,
+        frame,
+        &offset);
     frame->data[offset] = (uint8_t)(
         0x20U | (transmitter->next_sequence & 0x0fU));
 
     frame_capacity = link_isotp_consecutive_frame_capacity(
-        &transmitter->config.address);
+        &transmitter->config.address,
+        maximum_data_length);
     remaining = transmitter->payload_length - transmitter->offset;
     copy_length = remaining < frame_capacity ? remaining : frame_capacity;
     memcpy(&frame->data[offset + 1U],
            &transmitter->payload[transmitter->offset],
            copy_length);
-    frame->length = (uint8_t)(offset + 1U + copy_length);
+
+    frame_length = offset + 1U + copy_length;
+    frame_length = link_isotp_round_transmit_length(
+        transmitter->config.can_fd,
+        frame_length,
+        maximum_data_length);
+    if (frame_length == 0U) {
+        return link_isotp_tx_fail(
+            transmitter, LINK_ISOTP_RESULT_INVALID_ARGUMENT);
+    }
+    frame->length = (uint8_t)frame_length;
 
     transmitter->offset += copy_length;
     transmitter->next_sequence =
