@@ -6,8 +6,8 @@
 
 LINK is the shared C11 vehicle-diagnostics and application engine used by MBLINK and JAGLINK.
 
-**Current source version:** 0.11.0  
-**Shared foundation:** Infiltratr Common 1.11.0  
+**Current source version:** see [`VERSION`](VERSION)  
+**Shared foundation:** exact Infiltratr Common release/commit pinned by `src/infiltratr-common` and `CMakeLists.txt`  
 **Platforms:** Linux, Windows, macOS/iOS-facing portable core  
 **Licence:** GPL-3.0-or-later
 
@@ -33,6 +33,7 @@ LINK currently owns:
 - standard OBD-II requests, PID/VIN/readiness/DTC decoding;
 - a complete pinned generic OBD-II DTC catalogue containing 9,533 definitions across the seven standardized generic families (`P0`, `P2`, standardized `P3`, `B0`, `C0`, `U0`, `U3`), with normalized classification, independently authored CC0 titles/categories, explicit unknown handling and ISO 14229 status translation;
 - ISO 14229 UDS request/response, DID and client-state handling;
+- a compiled 27-service ISO 14229 service catalogue and bounded request/response codecs;
 - read-only UDS `ReadDTCInformation` helpers;
 - Classical CAN and CAN-FD ISO-TP, including CAN-FD payloads through 64 bytes and extended First Frame lengths for PDUs above 4095 bytes;
 - parameter definitions, store/history, scheduler and telemetry/CSV;
@@ -40,6 +41,8 @@ LINK currently owns:
 - portable diagnostic-flow controller state machine;
 - Discover safety classification and evidence writing; and
 - shared native Windows OpenPort 2.0/J2534 Discover scanner shell.
+
+Codec support does not grant transmit permission. Discover remains independently deny-by-default; adding a UDS codec cannot silently broaden its request allowlist.
 
 The DTC knowledge API is presentation-neutral and deliberately preserves the raw ECU code. Generic definitions come from a reproducible pinned OBDex CC0 data snapshot. SAE J2012 itself is not vendored or reproduced. A valid reserved or otherwise unmapped generic code remains explicit, and manufacturer-specific descriptions remain in the owning product repository rather than leaking into LINK.
 
@@ -67,6 +70,8 @@ Shared protocol state machines, diagnostic sequencing, safety policy, generic di
 
 Compatibility aliases/wrappers preserve product-prefixed public APIs while the underlying ELM327, OBD-II, UDS, DTC knowledge and diagnostic-flow algorithms remain single-source in LINK.
 
+The 27-service UDS implementation is compiled into `LINK::Core`; `include/link/uds_services.h` contains the public contract rather than per-consumer private implementations.
+
 ## Build and test
 
 ```bash
@@ -77,7 +82,27 @@ cmake --build build --config Release --parallel
 ctest --test-dir build --build-config Release --output-on-failure
 ```
 
-GitHub Actions builds and tests the portable core on Linux, macOS and Windows. The DTC knowledge suite enforces the exact 9,533-definition catalogue size and pinned upstream snapshot, samples all seven generic families, checks generic/manufacturer range boundaries, preserves lowercase normalization and malformed-code rejection, and verifies shared UDS status semantics. The ISO-TP suite covers preserved Classical CAN behaviour as well as CAN-FD single-frame, multi-frame and extended-length traffic. The Windows configuration also proves that the same shared Discover implementation can produce both MBLINK and JAGLINK product faces.
+Sanitizer build:
+
+```bash
+cmake -S . -B build-sanitized -DCMAKE_BUILD_TYPE=Debug -DLINK_ENABLE_SANITIZERS=ON
+cmake --build build-sanitized --parallel
+ctest --test-dir build-sanitized --output-on-failure
+```
+
+GitHub Actions builds and tests the strict portable core on Linux, macOS and Windows and runs ASan+UBSan on Linux. The DTC knowledge suite enforces the exact 9,533-definition catalogue size and pinned upstream snapshot, samples all seven generic families, checks generic/manufacturer range boundaries, preserves lowercase normalization and malformed-code rejection, and verifies shared UDS status semantics. The ISO-TP suite covers preserved Classical CAN behaviour as well as CAN-FD single-frame, multi-frame and extended-length traffic. The Windows configuration proves that the same shared Discover implementation can produce both MBLINK and JAGLINK product faces.
+
+CI also installs LINK and its Common dependency to a clean prefix, rediscovers the exported `LINK::Core` package with `find_package`, and builds an external consumer that exercises the 27-service catalogue and 64-byte CAN-FD contract.
+
+## Installed CMake package
+
+A configured build can be installed with:
+
+```bash
+cmake --install build --prefix /desired/prefix
+```
+
+Consumers then use `find_package(LINK CONFIG REQUIRED)` and link `LINK::Core`. The installed LINK package resolves its `InfiltratrCommon` dependency rather than requiring consumers to enumerate LINK or Common source files.
 
 ## Release assets
 
@@ -111,7 +136,7 @@ Manually runnable build/test helpers, where present, are diagnostic tools only a
 
 ## Roadmap
 
-The next diagnostic completion work is to connect the existing OBD freeze-frame/readiness primitives to the same resolved fault-record path. The generic DTC catalogue is now complete for the pinned OBDex snapshot and should be refreshed reproducibly when its upstream source changes. Remaining consolidation work includes reusable BLE transport coordination, additional shared Linux/iPhone application structure where genuinely common, and further packaging/CI helper consolidation without pulling product branding into LINK.
+The next diagnostic completion work is to connect the existing OBD freeze-frame/readiness primitives to the same resolved fault-record path. The generic DTC catalogue is complete for the pinned OBDex snapshot and should be refreshed reproducibly when its upstream source changes. Remaining consolidation work includes reusable BLE transport coordination and further packaging/CI helper consolidation without pulling product branding into LINK.
 
 ## Licence
 

@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+find_dependency(InfiltratrCommon CONFIG)
+
+include("${CMAKE_CURRENT_LIST_DIR}/LINKTargets.cmake")

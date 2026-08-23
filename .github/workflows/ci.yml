@@ -11,9 +11,9 @@ permissions:
 
 jobs:
   portable-core:
-    name: ${{ matrix.os }} / C11
+    name: ${{ matrix.os }} / strict C11
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -21,7 +21,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Enforce main-only automatic release policy
         shell: bash
@@ -55,12 +55,13 @@ jobs:
             exit 1
           fi
 
-      - name: Initialise and verify Common
+      - name: Initialise and verify exact Common dependency
         shell: bash
         run: |
           set -euo pipefail
           git submodule update --init src/infiltratr-common
-          test "$(tr -d '[:space:]' < src/infiltratr-common/VERSION)" = "1.11.0"
+          test "$(tr -d '[:space:]' < src/infiltratr-common/VERSION)" = "1.11.2"
+          test "$(git -C src/infiltratr-common rev-parse HEAD)" = "b23a9d086ea323c0c6157dea3dd24db635b007c7"
 
       - name: Configure
         shell: bash
@@ -77,6 +78,18 @@ jobs:
       - name: Test
         run: ctest --test-dir build --build-config Release --output-on-failure
 
+      - name: Verify installed CMake package from an external consumer
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          prefix="$RUNNER_TEMP/link-install"
+          cmake --install build --prefix "$prefix"
+          cmake -S tests/cmake-consumer -B package-consumer \
+            -DCMAKE_PREFIX_PATH="$prefix"
+          cmake --build package-consumer --parallel
+          ./package-consumer/link-package-consumer
+
       - name: Verify one shared scanner implementation produces both product faces
         if: runner.os == 'Windows'
         shell: pwsh
@@ -89,3 +102,23 @@ jobs:
           if (-not (Test-Path platform/windows/link-discover-ui.c)) { throw 'shared scanner UI shell is missing' }
           Write-Host "MBLINK face: $($mb.FullName)"
           Write-Host "JAGLINK face: $($jag.FullName)"
+
+  sanitizers:
+    name: Ubuntu / ASan + UBSan
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Initialise Common
+        shell: bash
+        run: git submodule update --init src/infiltratr-common
+      - name: Configure sanitizers
+        run: cmake -S . -B build-sanitized -DCMAKE_BUILD_TYPE=Debug -DLINK_ENABLE_SANITIZERS=ON
+      - name: Build sanitizers
+        run: cmake --build build-sanitized --parallel
+      - name: Test sanitizers
+        run: ctest --test-dir build-sanitized --output-on-failure
+        env:
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1

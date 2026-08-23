@@ -1,19 +1,18 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 cmake_minimum_required(VERSION 3.20)
 
-# The Windows Discover executables are distributed as standalone files. Select
-# the static MSVC runtime through the documented CMake abstraction so a clean
-# Windows installation does not need a matching Visual C++ redistributable.
 if(POLICY CMP0091)
     cmake_policy(SET CMP0091 NEW)
 endif()
 
-file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/VERSION" LINK_VERSION LIMIT_COUNT 1)
-project(LINK VERSION ${LINK_VERSION} LANGUAGES C)
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/VERSION" LINK_PROJECT_VERSION)
+string(STRIP "${LINK_PROJECT_VERSION}" LINK_PROJECT_VERSION)
+if(NOT LINK_PROJECT_VERSION MATCHES "^[0-9]+\\.[0-9]+\\.[0-9]+$")
+    message(FATAL_ERROR "VERSION must contain a semantic major.minor.patch version.")
+endif()
+project(LINK VERSION "${LINK_PROJECT_VERSION}" LANGUAGES C)
 
 # Keep every LINK-owned target and vendored Common target on the same CRT.
-# Setting this before add_subdirectory(Common) prevents a /MD static library
-# from being linked into the standalone /MT Windows Discover executables.
 if(MSVC)
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()
@@ -21,16 +20,60 @@ endif()
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 include(CTest)
 include(CMakeParseArguments)
+include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
+
+option(LINK_ENABLE_SANITIZERS "Enable AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
+option(LINK_BUILD_REFERENCE_PRODUCT_FACES
+    "Build MBLINK and JAGLINK reference Windows Discover faces when LINK is top-level"
+    OFF)
+
+set(LINK_COMMON_VERSION "1.11.2")
+set(LINK_COMMON_COMMIT "b23a9d086ea323c0c6157dea3dd24db635b007c7")
+set(LINK_COMMON_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/infiltratr-common")
 
 if(NOT TARGET InfiltratrCommon::Portable)
-    if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/infiltratr-common/CMakeLists.txt")
-        message(FATAL_ERROR "Infiltratr Common is required. Initialise src/infiltratr-common or provide InfiltratrCommon::Portable from the parent project.")
+    if(NOT EXISTS "${LINK_COMMON_DIR}/CMakeLists.txt")
+        message(FATAL_ERROR
+            "Infiltratr Common ${LINK_COMMON_VERSION} is required. Initialise src/infiltratr-common or provide InfiltratrCommon::Portable from the parent project.")
+    endif()
+    file(READ "${LINK_COMMON_DIR}/VERSION" LINK_COMMON_FOUND_VERSION)
+    string(STRIP "${LINK_COMMON_FOUND_VERSION}" LINK_COMMON_FOUND_VERSION)
+    if(NOT LINK_COMMON_FOUND_VERSION STREQUAL LINK_COMMON_VERSION)
+        message(FATAL_ERROR
+            "Infiltratr Common ${LINK_COMMON_VERSION} is required; found ${LINK_COMMON_FOUND_VERSION}.")
+    endif()
+    find_program(LINK_GIT_EXECUTABLE git)
+    if(LINK_GIT_EXECUTABLE)
+        execute_process(
+            COMMAND "${LINK_GIT_EXECUTABLE}" -C "${LINK_COMMON_DIR}" rev-parse HEAD
+            OUTPUT_VARIABLE LINK_COMMON_FOUND_COMMIT
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+            ERROR_QUIET
+            RESULT_VARIABLE LINK_COMMON_COMMIT_RESULT)
+        if(LINK_COMMON_COMMIT_RESULT EQUAL 0 AND
+           NOT LINK_COMMON_FOUND_COMMIT STREQUAL LINK_COMMON_COMMIT)
+            message(FATAL_ERROR
+                "Infiltratr Common must be pinned to ${LINK_COMMON_COMMIT}; found ${LINK_COMMON_FOUND_COMMIT}.")
+        endif()
     endif()
     add_subdirectory(src/infiltratr-common)
 endif()
+
+if(LINK_ENABLE_SANITIZERS AND
+   NOT CMAKE_C_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
+    message(FATAL_ERROR "LINK_ENABLE_SANITIZERS requires GCC or Clang.")
+endif()
+
+set(LINK_WARNING_FLAGS
+    -Wall -Wextra -Wpedantic -Wshadow -Wformat=2
+    -Wstrict-prototypes -Wmissing-prototypes -Werror)
+set(LINK_SANITIZER_FLAGS
+    -fsanitize=address,undefined -fno-omit-frame-pointer)
 
 add_library(link-core STATIC
     src/core/workspace.c
@@ -47,19 +90,24 @@ add_library(link-core STATIC
     src/obd2/obd2.c
     src/obd2/dtc_knowledge.c
     src/uds/uds.c
+    src/uds/uds_services.c
     src/discover/safety.c
-    src/discover/evidence.c
-)
+    src/discover/evidence.c)
 add_library(LINK::Core ALIAS link-core)
-
+set_target_properties(link-core PROPERTIES EXPORT_NAME Core)
 target_include_directories(link-core PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-    $<INSTALL_INTERFACE:include>)
+    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 target_link_libraries(link-core PUBLIC InfiltratrCommon::Portable)
+
 if(MSVC)
-    target_compile_options(link-core PRIVATE /W4)
+    target_compile_options(link-core PRIVATE /W4 /WX)
 else()
-    target_compile_options(link-core PRIVATE -Wall -Wextra -Wpedantic)
+    target_compile_options(link-core PRIVATE ${LINK_WARNING_FLAGS})
+endif()
+if(LINK_ENABLE_SANITIZERS)
+    target_compile_options(link-core PRIVATE ${LINK_SANITIZER_FLAGS})
+    target_link_options(link-core INTERFACE -fsanitize=address,undefined)
 endif()
 
 # Add the shared native Windows Discover shell. Product repositories supply
@@ -71,7 +119,6 @@ function(link_add_windows_discover target)
     endif()
 
     if(ARGC EQUAL 4 AND NOT ARGV1 STREQUAL "PRODUCT_NAME")
-        # Legacy positional form retained for source compatibility.
         set(LINK_FACE_PRODUCT_NAME "${ARGV1}")
         set(LINK_FACE_PRODUCT_SLUG "${ARGV2}")
         set(LINK_FACE_WINDOW_CLASS "${ARGV3}")
@@ -131,12 +178,9 @@ function(link_add_windows_discover target)
     if(MSVC)
         set_property(TARGET ${target} PROPERTY
             MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
-        target_compile_options(${target} PRIVATE /W4 /utf-8)
+        target_compile_options(${target} PRIVATE /W4 /WX /utf-8)
     endif()
 
-    # The product's iPhone AppIcon PNG is the canonical identity image. Windows
-    # needs an ICO resource, so LINK wraps those exact PNG bytes in an ICO
-    # container at build time rather than maintaining a second artwork source.
     if(LINK_FACE_PRODUCT_ICON_PNG)
         if(NOT EXISTS "${LINK_FACE_PRODUCT_ICON_PNG}")
             message(FATAL_ERROR "PRODUCT_ICON_PNG does not exist: ${LINK_FACE_PRODUCT_ICON_PNG}")
@@ -206,9 +250,6 @@ function(link_add_windows_discover target)
         OUTPUT_NAME "${LINK_FACE_PRODUCT_SLUG}-discover")
 endfunction()
 
-option(LINK_BUILD_REFERENCE_PRODUCT_FACES
-    "Build MBLINK and JAGLINK reference Windows Discover faces when LINK is top-level"
-    OFF)
 if(WIN32 AND PROJECT_IS_TOP_LEVEL)
     link_add_windows_discover(link-discover
         PRODUCT_NAME "LINK"
@@ -238,44 +279,54 @@ if(WIN32 AND PROJECT_IS_TOP_LEVEL)
     endif()
 endif()
 
+function(link_add_test target source test_name)
+    add_executable(${target} ${source})
+    target_link_libraries(${target} PRIVATE LINK::Core)
+    if(MSVC)
+        target_compile_options(${target} PRIVATE /W4 /WX)
+    else()
+        target_compile_options(${target} PRIVATE ${LINK_WARNING_FLAGS})
+    endif()
+    if(LINK_ENABLE_SANITIZERS)
+        target_compile_options(${target} PRIVATE ${LINK_SANITIZER_FLAGS})
+        target_link_options(${target} PRIVATE -fsanitize=address,undefined)
+    endif()
+    add_test(NAME ${test_name} COMMAND ${target})
+endfunction()
+
 if(BUILD_TESTING AND PROJECT_IS_TOP_LEVEL)
-    add_executable(link-test-workspace tests/test_workspace.c)
-    target_link_libraries(link-test-workspace PRIVATE LINK::Core)
-    add_test(NAME link-workspace COMMAND link-test-workspace)
-
-    add_executable(link-test-diagnostic-flow tests/test_diagnostic_flow.c)
-    target_link_libraries(link-test-diagnostic-flow PRIVATE LINK::Core)
-    add_test(NAME link-diagnostic-flow COMMAND link-test-diagnostic-flow)
-
-    add_executable(link-test-isotp tests/test_isotp.c)
-    target_link_libraries(link-test-isotp PRIVATE LINK::Core)
-    add_test(NAME link-isotp COMMAND link-test-isotp)
-
-    add_executable(link-test-runtime tests/test_runtime.c)
-    target_link_libraries(link-test-runtime PRIVATE LINK::Core)
-    add_test(NAME link-runtime COMMAND link-test-runtime)
-
-    add_executable(link-test-elm327 tests/test_elm327.c)
-    target_link_libraries(link-test-elm327 PRIVATE LINK::Core)
-    add_test(NAME link-elm327 COMMAND link-test-elm327)
-
-    add_executable(link-test-obd2 tests/test_obd2.c)
-    target_link_libraries(link-test-obd2 PRIVATE LINK::Core)
-    add_test(NAME link-obd2 COMMAND link-test-obd2)
-
-    add_executable(link-test-dtc-knowledge tests/test_dtc_knowledge.c)
-    target_link_libraries(link-test-dtc-knowledge PRIVATE LINK::Core)
-    add_test(NAME link-dtc-knowledge COMMAND link-test-dtc-knowledge)
-
-    add_executable(link-test-uds tests/test_uds.c)
-    target_link_libraries(link-test-uds PRIVATE LINK::Core)
-    add_test(NAME link-uds COMMAND link-test-uds)
-
-    add_executable(link-test-discover-safety tests/test_discover_safety.c)
-    target_link_libraries(link-test-discover-safety PRIVATE LINK::Core)
-    add_test(NAME link-discover-safety COMMAND link-test-discover-safety)
-
-    add_executable(link-test-evidence tests/test_evidence.c)
-    target_link_libraries(link-test-evidence PRIVATE LINK::Core)
-    add_test(NAME link-evidence COMMAND link-test-evidence)
+    link_add_test(link-test-workspace tests/test_workspace.c link-workspace)
+    link_add_test(link-test-diagnostic-flow tests/test_diagnostic_flow.c link-diagnostic-flow)
+    link_add_test(link-test-isotp tests/test_isotp.c link-isotp)
+    link_add_test(link-test-runtime tests/test_runtime.c link-runtime)
+    link_add_test(link-test-elm327 tests/test_elm327.c link-elm327)
+    link_add_test(link-test-obd2 tests/test_obd2.c link-obd2)
+    link_add_test(link-test-dtc-knowledge tests/test_dtc_knowledge.c link-dtc-knowledge)
+    link_add_test(link-test-uds tests/test_uds.c link-uds)
+    link_add_test(link-test-discover-safety tests/test_discover_safety.c link-discover-safety)
+    link_add_test(link-test-evidence tests/test_evidence.c link-evidence)
 endif()
+
+install(TARGETS link-core
+    EXPORT LINKTargets
+    ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+    LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+    RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
+install(DIRECTORY include/link
+    DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
+install(EXPORT LINKTargets
+    FILE LINKTargets.cmake
+    NAMESPACE LINK::
+    DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/LINK")
+configure_package_config_file(
+    cmake/LINKConfig.cmake.in
+    "${CMAKE_CURRENT_BINARY_DIR}/LINKConfig.cmake"
+    INSTALL_DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/LINK")
+write_basic_package_version_file(
+    "${CMAKE_CURRENT_BINARY_DIR}/LINKConfigVersion.cmake"
+    VERSION "${PROJECT_VERSION}"
+    COMPATIBILITY SameMajorVersion)
+install(FILES
+    "${CMAKE_CURRENT_BINARY_DIR}/LINKConfig.cmake"
+    "${CMAKE_CURRENT_BINARY_DIR}/LINKConfigVersion.cmake"
+    DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/LINK")

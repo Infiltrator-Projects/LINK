@@ -5,9 +5,9 @@
 LINK owns the product-neutral ISO 14229 request/response layer shared by MBLINK
 and JAGLINK. `include/link/uds.h` retains the typed core client, session,
 TesterPresent and ReadDataByIdentifier APIs. `include/link/uds_dtc.h` provides
-the read-only ReadDTCInformation helper. `include/link/uds_services.h` completes
-the standard service catalogue and supplies bounded request codecs for the
-remaining services.
+the read-only ReadDTCInformation helper. `include/link/uds_services.h` declares
+the complete standard service catalogue and bounded codec API; the implementation
+is compiled once in `src/uds/uds_services.c` as part of `LINK::Core`.
 
 The codec layer only serializes or validates diagnostic PDUs. It does not send
 them. Complex records whose meaning is ECU- or application-specific remain raw
@@ -51,8 +51,8 @@ to duplicate service-ID tables.
 
 ## Request codecs
 
-`uds_services.h` adds named builders for the services that were not already
-typed in `uds.h` or `uds_dtc.h`. The common helpers cover:
+The service API supplies named builders for services that were not already typed
+in `uds.h` or `uds_dtc.h`. The common helpers cover:
 
 - registered raw service records;
 - standard subfunction encoding including the suppress-positive-response bit;
@@ -100,6 +100,10 @@ LINK codec layer itself does not contain a bypass.
 
 `tests/test_discover_safety.c` independently proves that adding those codecs
 does not broaden the Discover transmit allowlist.
+
+The installed-package consumer test also verifies that the exported `LINK::Core`
+target supplies this compiled service implementation and the 64-byte CAN-FD
+ISO-TP contract outside the LINK source tree.
 
 This documentation is an implementation map, not a reproduction of ISO 14229.
 For normative protocol requirements, use the applicable licensed standard.
