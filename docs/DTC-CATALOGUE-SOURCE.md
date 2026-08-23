@@ -1,18 +1,11 @@
-<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+# OBDex generic DTC catalogue source
 
-# SAE generic DTC catalogue source
+LINK's complete generic OBD-II DTC catalogue is generated from OBDex, an open machine-readable generic DTC database whose data is dedicated to the public domain under CC0-1.0.
 
-LINK owns the shared generic diagnostic trouble-code catalogue used by product faces. The catalogue is standards-oriented data; manufacturer-specific definitions remain in MBLINK, JAGLINK or another owning product.
+Pinned upstream snapshot: `foerbsnavi/OBDex@bc58b0eb7273226a1aabae98e956b70b8362bda1`.
 
-The complete-table import is normalized from the GPLv3 PiOBDII ISO/SAE DTC dataset by Jason Birch. That project explicitly notes that its descriptions were gathered and reformatted from multiple sources, so LINK preserves provenance and treats the imported text as a reviewed data snapshot rather than claiming it is a verbatim publication of SAE J2012.
+The pinned snapshot contains 9,533 generic definitions across the seven SAE/ISO generic families: P0, P2, the standardized portion of P3, B0, C0, U0 and U3. LINK imports the five-character code, broad category and independently authored English title. Manufacturer-specific definitions are not imported into LINK and remain owned by manufacturer product repositories such as MBLINK and JAGLINK.
 
-Import rules:
+The generated `third_party/obdex/generic-dtcs.tsv` is the vendored normalized snapshot used for audit and reproducibility. `src/obd2/dtc_catalogue.inc` is the compiled lookup generated from the same input. `scripts/import-obdex-dtcs.py` validates exact family counts and rejects missing titles or duplicates before either file is generated.
 
-- retain only syntactically valid five-character DTC records;
-- preserve explicit ISO/SAE reserved records as reserved, not known faults;
-- keep manufacturer-specific ranges out of the generic definition table;
-- reject duplicate codes with conflicting descriptions;
-- generate the compiled lookup deterministically from the vendored normalized snapshot; and
-- test representative Powertrain, Body, Chassis and Network definitions plus reserved/unknown behavior.
-
-Source: `BirchJD/PiOBDII`, `DATA/TroubleCodes-ISO-SAE.txt`, GPL v3 or later project terms. Imported snapshot source blob: `4c695c631bf867f0255782a81258c89aa9888305`.
+SAE J2012 itself is copyrighted. LINK does not vendor or claim to reproduce the SAE publication. OBDex states that its descriptions are independently authored and licenses its data CC0-1.0.

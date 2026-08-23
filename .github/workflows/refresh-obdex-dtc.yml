@@ -1,0 +1,73 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Refresh OBDex generic DTC catalogue
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - scripts/import-obdex-dtcs.py
+      - .github/workflows/refresh-obdex-dtc.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: refresh-obdex-dtc
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout LINK
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Fetch pinned OBDex snapshot
+        env:
+          OBDEX_COMMIT: bc58b0eb7273226a1aabae98e956b70b8362bda1
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/obdex
+          git init -q /tmp/obdex
+          git -C /tmp/obdex remote add origin https://github.com/foerbsnavi/OBDex.git
+          git -C /tmp/obdex fetch --depth 1 origin "$OBDEX_COMMIT"
+          git -C /tmp/obdex checkout -q --detach FETCH_HEAD
+          test "$(git -C /tmp/obdex rev-parse HEAD)" = "$OBDEX_COMMIT"
+          test "$(cat /tmp/obdex/LICENSE-DATA | head -n 1)" != ""
+
+      - name: Generate complete generic catalogue
+        run: |
+          set -euo pipefail
+          python3 scripts/import-obdex-dtcs.py \
+            /tmp/obdex/data/generic \
+            third_party/obdex/generic-dtcs.tsv \
+            src/obd2/dtc_catalogue.inc \
+            third_party/obdex/SOURCE.md
+          cp /tmp/obdex/LICENSE-DATA third_party/obdex/LICENSE-DATA
+          test "$(grep -vc '^#' third_party/obdex/generic-dtcs.tsv)" -eq 9534
+          grep -q '^P0420' third_party/obdex/generic-dtcs.tsv
+          grep -q '^B0001' third_party/obdex/generic-dtcs.tsv
+          grep -q '^C0031' third_party/obdex/generic-dtcs.tsv
+          grep -q '^U0100' third_party/obdex/generic-dtcs.tsv
+          grep -q '^U3000' third_party/obdex/generic-dtcs.tsv
+          git diff --check
+
+      - name: Commit normalized snapshot to main
+        run: |
+          set -euo pipefail
+          git add third_party/obdex/generic-dtcs.tsv \
+                  third_party/obdex/LICENSE-DATA \
+                  third_party/obdex/SOURCE.md \
+                  src/obd2/dtc_catalogue.inc
+          if git diff --cached --quiet; then
+            echo "Catalogue already matches the pinned OBDex snapshot."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Import complete OBDex generic DTC catalogue"
+          git push origin HEAD:main
