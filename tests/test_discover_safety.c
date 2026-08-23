@@ -34,8 +34,18 @@ int main(void)
     static const uint8_t allowed_obd[] = {
         0x01U, 0x03U, 0x07U, 0x09U, 0x0AU
     };
+    static const uint8_t write_or_control[] = {
+        0x10U, 0x28U, 0x2CU, 0x2EU, 0x2FU,
+        0x3DU, 0x83U, 0x85U, 0x86U, 0x87U
+    };
+    static const uint8_t security[] = {
+        0x27U, 0x29U, 0x84U
+    };
     static const uint8_t programming[] = {
-        0x34U, 0x35U, 0x36U, 0x37U
+        0x34U, 0x35U, 0x36U, 0x37U, 0x38U
+    };
+    static const uint8_t deny_by_default[] = {
+        0x23U, 0x24U, 0x2AU, 0x3EU
     };
     size_t i;
     int failures = 0;
@@ -51,26 +61,48 @@ int main(void)
                        LINK_SAFETY_REASON_ALLOWED_UDS_READ);
     failures += expect(0x22U, LINK_SAFETY_ALLOW_READ_ONLY,
                        LINK_SAFETY_REASON_ALLOWED_UDS_READ);
+
     failures += expect(0x04U, LINK_SAFETY_BLOCK,
                        LINK_SAFETY_REASON_DTC_CLEAR);
     failures += expect(0x14U, LINK_SAFETY_BLOCK,
                        LINK_SAFETY_REASON_DTC_CLEAR);
     failures += expect(0x11U, LINK_SAFETY_BLOCK,
                        LINK_SAFETY_REASON_ECU_RESET);
-    failures += expect(0x27U, LINK_SAFETY_BLOCK,
-                       LINK_SAFETY_REASON_SECURITY_ACCESS);
-    failures += expect(0x29U, LINK_SAFETY_BLOCK,
-                       LINK_SAFETY_REASON_SECURITY_ACCESS);
     failures += expect(0x31U, LINK_SAFETY_BLOCK,
                        LINK_SAFETY_REASON_ROUTINE_CONTROL);
-    failures += expect(0x2EU, LINK_SAFETY_BLOCK,
-                       LINK_SAFETY_REASON_WRITE_OR_CONTROL);
-    failures += expect(0x3DU, LINK_SAFETY_BLOCK,
-                       LINK_SAFETY_REASON_WRITE_OR_CONTROL);
+
+    for (i = 0U;
+         i < sizeof(write_or_control) / sizeof(write_or_control[0]);
+         ++i) {
+        failures += expect(write_or_control[i],
+                           LINK_SAFETY_BLOCK,
+                           LINK_SAFETY_REASON_WRITE_OR_CONTROL);
+    }
+
+    for (i = 0U; i < sizeof(security) / sizeof(security[0]); ++i) {
+        failures += expect(security[i],
+                           LINK_SAFETY_BLOCK,
+                           LINK_SAFETY_REASON_SECURITY_ACCESS);
+    }
 
     for (i = 0U; i < sizeof(programming) / sizeof(programming[0]); ++i) {
-        failures += expect(programming[i], LINK_SAFETY_BLOCK,
+        failures += expect(programming[i],
+                           LINK_SAFETY_BLOCK,
                            LINK_SAFETY_REASON_PROGRAMMING);
+    }
+
+    /*
+     * ReadMemoryByAddress, ReadScalingDataByIdentifier and
+     * ReadDataByPeriodicIdentifier are not automatically enabled just because
+     * codecs exist. TesterPresent is likewise not part of the bounded Discover
+     * read inventory. Explicit product policy is required to broaden this.
+     */
+    for (i = 0U;
+         i < sizeof(deny_by_default) / sizeof(deny_by_default[0]);
+         ++i) {
+        failures += expect(deny_by_default[i],
+                           LINK_SAFETY_BLOCK,
+                           LINK_SAFETY_REASON_DENY_BY_DEFAULT);
     }
 
     failures += expect(0x99U, LINK_SAFETY_BLOCK,

@@ -44,6 +44,11 @@ link_safety_result link_safety_classify(const uint8_t *payload, size_t length)
         break;
     }
 
+    /*
+     * Discover is intentionally more restrictive than the codec layer.
+     * Adding a standards-correct request builder must never make a state-
+     * changing, security, or programming service transmissible by accident.
+     */
     switch (service) {
     case 0x19U:
     case 0x22U:
@@ -60,13 +65,20 @@ link_safety_result link_safety_classify(const uint8_t *payload, size_t length)
                       service);
     case 0x27U:
     case 0x29U:
+    case 0x84U:
         return result(LINK_SAFETY_BLOCK,
                       LINK_SAFETY_REASON_SECURITY_ACCESS,
                       service);
+    case 0x10U:
+    case 0x28U:
+    case 0x2CU:
     case 0x2EU:
     case 0x2FU:
     case 0x3DU:
-    case 0x28U:
+    case 0x83U:
+    case 0x85U:
+    case 0x86U:
+    case 0x87U:
         return result(LINK_SAFETY_BLOCK,
                       LINK_SAFETY_REASON_WRITE_OR_CONTROL,
                       service);
@@ -78,6 +90,7 @@ link_safety_result link_safety_classify(const uint8_t *payload, size_t length)
     case 0x35U:
     case 0x36U:
     case 0x37U:
+    case 0x38U:
         return result(LINK_SAFETY_BLOCK,
                       LINK_SAFETY_REASON_PROGRAMMING,
                       service);
