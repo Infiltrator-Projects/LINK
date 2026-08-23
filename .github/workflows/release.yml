@@ -1,0 +1,97 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: LINK Release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-release-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish approved main release
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - name: Check out current main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          submodules: recursive
+
+      - id: release
+        name: Resolve release version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(tr -d '[:space:]' < VERSION)"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+
+      - name: Verify exact current main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main --tags
+          head_commit="$(git rev-parse HEAD)"
+          main_commit="$(git rev-parse origin/main)"
+          test "$head_commit" = "$main_commit"
+
+      - name: Build source release
+        shell: bash
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          staging="$RUNNER_TEMP/LINK-${VERSION}"
+          mkdir -p "$staging" release-assets
+          rsync -a --exclude='.git' --exclude='release-assets' ./ "$staging/"
+          (cd "$RUNNER_TEMP" && zip -qry "$GITHUB_WORKSPACE/release-assets/LINK-${VERSION}-source.zip" "LINK-${VERSION}")
+          (cd release-assets && sha256sum "LINK-${VERSION}-source.zip" > SHA256SUMS.txt)
+          test -s "release-assets/LINK-${VERSION}-source.zip"
+          test -s release-assets/SHA256SUMS.txt
+
+      - name: Create immutable tag and release
+        shell: bash
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          head_commit="$(git rev-parse HEAD)"
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            echo "Release tag $TAG already exists; published releases are immutable." >&2
+            exit 1
+          fi
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; published releases are immutable." >&2
+            exit 1
+          fi
+
+          git tag "$TAG" "$head_commit"
+          git push origin "$TAG"
+          gh release create "$TAG" release-assets/* --repo "$GITHUB_REPOSITORY" --target "$head_commit" \
+            --title "LINK $VERSION" \
+            --notes "LINK $VERSION: explicitly approved release built from verified current main."
+
+      - name: Verify published assets
+        shell: bash
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          assets="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')"
+          grep -Fxq "LINK-${VERSION}-source.zip" <<<"$assets"
+          grep -Fxq "SHA256SUMS.txt" <<<"$assets"
