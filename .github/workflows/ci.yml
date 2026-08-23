@@ -39,6 +39,17 @@ jobs:
           grep -Fq 'ref: main' "$release"
           grep -Fq 'published releases are immutable' "$release"
 
+      - name: Keep Release tests executable
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -REn --include='*.c' --include='*.h' \
+              -e '#[[:space:]]*include[[:space:]]*<assert\.h>' \
+              -e '(^|[^[:alnum:]_])assert[[:space:]]*\(' tests; then
+            echo "LINK tests must not depend on assert(); Release builds define NDEBUG." >&2
+            exit 1
+          fi
+
       - name: Initialise and verify Common
         shell: bash
         run: |
