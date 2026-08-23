@@ -24,6 +24,32 @@ jobs:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
 
+      - name: Enforce explicit release approval
+        shell: bash
+        run: |
+          set -euo pipefail
+          release=.github/workflows/release.yml
+          test -f "$release"
+          test ! -e .github/workflows/auto-release.yml
+          grep -qx '  workflow_dispatch:' "$release"
+          if grep -Eq '^  (push|workflow_run|schedule):' "$release"; then
+            echo "LINK release publication must be manual-only." >&2
+            exit 1
+          fi
+          grep -Fq 'ref: main' "$release"
+          grep -Fq 'published releases are immutable' "$release"
+
+      - name: Keep Release tests executable
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -REn --include='*.c' --include='*.h' \
+              -e '#[[:space:]]*include[[:space:]]*<assert\.h>' \
+              -e '(^|[^[:alnum:]_])assert[[:space:]]*\(' tests; then
+            echo "LINK tests must not depend on assert(); Release builds define NDEBUG." >&2
+            exit 1
+          fi
+
       - name: Initialise and verify Common
         shell: bash
         run: |

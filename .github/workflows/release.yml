@@ -1,34 +1,31 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-name: LINK Auto Release
+name: LINK Release
 
 on:
-  workflow_run:
-    workflows: ["LINK CI"]
-    types: [completed]
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: publish-release-${{ github.repository }}
+  cancel-in-progress: false
 
 jobs:
   publish:
-    name: Publish successful main release
-    if: >-
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.event == 'push' &&
-      github.event.workflow_run.head_branch == 'main' &&
-      github.event.workflow_run.head_repository.full_name == github.repository &&
-      startsWith(github.event.workflow_run.head_commit.message, 'Release ')
+    name: Publish approved main release
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
       GH_TOKEN: ${{ github.token }}
 
     steps:
-      - name: Check out verified release commit
+      - name: Check out current main
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: main
           fetch-depth: 0
           submodules: recursive
 
@@ -42,13 +39,14 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=v$version" >> "$GITHUB_OUTPUT"
 
-      - name: Verify exact main commit
+      - name: Verify exact current main
         shell: bash
         run: |
           set -euo pipefail
           git fetch origin main --tags
-          test "$RELEASE_SHA" = "$(git rev-parse HEAD)"
-          test "$RELEASE_SHA" = "$(git rev-parse origin/main)"
+          head_commit="$(git rev-parse HEAD)"
+          main_commit="$(git rev-parse origin/main)"
+          test "$head_commit" = "$main_commit"
 
       - name: Build source release
         shell: bash
@@ -61,33 +59,31 @@ jobs:
           rsync -a --exclude='.git' --exclude='release-assets' ./ "$staging/"
           (cd "$RUNNER_TEMP" && zip -qry "$GITHUB_WORKSPACE/release-assets/LINK-${VERSION}-source.zip" "LINK-${VERSION}")
           (cd release-assets && sha256sum "LINK-${VERSION}-source.zip" > SHA256SUMS.txt)
+          test -s "release-assets/LINK-${VERSION}-source.zip"
+          test -s release-assets/SHA256SUMS.txt
 
-      - name: Tag and publish
+      - name: Create immutable tag and release
         shell: bash
         env:
           VERSION: ${{ steps.release.outputs.version }}
           TAG: ${{ steps.release.outputs.tag }}
         run: |
           set -euo pipefail
-          if tag_commit=$(git rev-list -n 1 "$TAG" 2>/dev/null); then
-            if [[ "$tag_commit" != "$RELEASE_SHA" ]]; then
-              echo "Tag $TAG already points to $tag_commit, not $RELEASE_SHA." >&2
-              exit 1
-            fi
-            echo "Tag $TAG already exists on this exact release commit; verifying release only."
-          else
-            git tag "$TAG" "$RELEASE_SHA"
-            git push origin "$TAG"
+          head_commit="$(git rev-parse HEAD)"
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            echo "Release tag $TAG already exists; published releases are immutable." >&2
+            exit 1
           fi
-
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "Release $TAG already exists; refusing to replace immutable assets." >&2
+            echo "Release $TAG already exists; published releases are immutable." >&2
             exit 1
           fi
 
-          gh release create "$TAG" release-assets/* --repo "$GITHUB_REPOSITORY" --target "$RELEASE_SHA" \
+          git tag "$TAG" "$head_commit"
+          git push origin "$TAG"
+          gh release create "$TAG" release-assets/* --repo "$GITHUB_REPOSITORY" --target "$head_commit" \
             --title "LINK $VERSION" \
-            --notes "LINK $VERSION built and published automatically after successful main CI."
+            --notes "LINK $VERSION: explicitly approved release built from verified current main."
 
       - name: Verify published assets
         shell: bash
