@@ -11,6 +11,13 @@ endif()
 file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/VERSION" LINK_VERSION LIMIT_COUNT 1)
 project(LINK VERSION ${LINK_VERSION} LANGUAGES C)
 
+# Keep every LINK-owned target and vendored Common target on the same CRT.
+# Setting this before add_subdirectory(Common) prevents a /MD static library
+# from being linked into the standalone /MT Windows Discover executables.
+if(MSVC)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif()
+
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
