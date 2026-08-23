@@ -12,7 +12,6 @@ if(NOT LINK_PROJECT_VERSION MATCHES "^[0-9]+\\.[0-9]+\\.[0-9]+$")
 endif()
 project(LINK VERSION "${LINK_PROJECT_VERSION}" LANGUAGES C)
 
-# Keep every LINK-owned target and vendored Common target on the same CRT.
 if(MSVC)
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()
@@ -31,6 +30,9 @@ option(LINK_ENABLE_SANITIZERS "Enable AddressSanitizer and UndefinedBehaviorSani
 option(LINK_BUILD_REFERENCE_PRODUCT_FACES
     "Build MBLINK and JAGLINK reference Windows Discover faces when LINK is top-level"
     OFF)
+option(LINK_ENABLE_INSTALL
+    "Install LINK headers, library and CMake package when LINK is top-level"
+    ${PROJECT_IS_TOP_LEVEL})
 
 set(LINK_COMMON_VERSION "1.11.2")
 set(LINK_COMMON_COMMIT "b23a9d086ea323c0c6157dea3dd24db635b007c7")
@@ -110,9 +112,6 @@ if(LINK_ENABLE_SANITIZERS)
     target_link_options(link-core INTERFACE -fsanitize=address,undefined)
 endif()
 
-# Add the shared native Windows Discover shell. Product repositories supply
-# identity only; the J2534 workflow, menu model, About behaviour, launch model
-# and layout stay in LINK so MBLINK and JAGLINK cannot silently diverge.
 function(link_add_windows_discover target)
     if(NOT WIN32)
         message(FATAL_ERROR "link_add_windows_discover is supported on Windows only.")
@@ -307,26 +306,28 @@ if(BUILD_TESTING AND PROJECT_IS_TOP_LEVEL)
     link_add_test(link-test-evidence tests/test_evidence.c link-evidence)
 endif()
 
-install(TARGETS link-core
-    EXPORT LINKTargets
-    ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
-    LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
-    RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
-install(DIRECTORY include/link
-    DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
-install(EXPORT LINKTargets
-    FILE LINKTargets.cmake
-    NAMESPACE LINK::
-    DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/LINK")
-configure_package_config_file(
-    cmake/LINKConfig.cmake.in
-    "${CMAKE_CURRENT_BINARY_DIR}/LINKConfig.cmake"
-    INSTALL_DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/LINK")
-write_basic_package_version_file(
-    "${CMAKE_CURRENT_BINARY_DIR}/LINKConfigVersion.cmake"
-    VERSION "${PROJECT_VERSION}"
-    COMPATIBILITY SameMajorVersion)
-install(FILES
-    "${CMAKE_CURRENT_BINARY_DIR}/LINKConfig.cmake"
-    "${CMAKE_CURRENT_BINARY_DIR}/LINKConfigVersion.cmake"
-    DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/LINK")
+if(LINK_ENABLE_INSTALL)
+    install(TARGETS link-core
+        EXPORT LINKTargets
+        ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+        LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+        RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
+    install(DIRECTORY include/link
+        DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
+    install(EXPORT LINKTargets
+        FILE LINKTargets.cmake
+        NAMESPACE LINK::
+        DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/LINK")
+    configure_package_config_file(
+        cmake/LINKConfig.cmake.in
+        "${CMAKE_CURRENT_BINARY_DIR}/LINKConfig.cmake"
+        INSTALL_DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/LINK")
+    write_basic_package_version_file(
+        "${CMAKE_CURRENT_BINARY_DIR}/LINKConfigVersion.cmake"
+        VERSION "${PROJECT_VERSION}"
+        COMPATIBILITY SameMajorVersion)
+    install(FILES
+        "${CMAKE_CURRENT_BINARY_DIR}/LINKConfig.cmake"
+        "${CMAKE_CURRENT_BINARY_DIR}/LINKConfigVersion.cmake"
+        DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/LINK")
+endif()
