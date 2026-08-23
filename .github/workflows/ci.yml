@@ -4,7 +4,6 @@ name: LINK CI
 on:
   push:
     branches: [main]
-  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -24,20 +23,26 @@ jobs:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
 
-      - name: Enforce explicit release approval
+      - name: Enforce main-only automatic release policy
         shell: bash
         run: |
           set -euo pipefail
           release=.github/workflows/release.yml
           test -f "$release"
           test ! -e .github/workflows/auto-release.yml
-          grep -qx '  workflow_dispatch:' "$release"
-          if grep -Eq '^  (push|workflow_run|schedule):' "$release"; then
-            echo "LINK release publication must be manual-only." >&2
+          grep -Fq '  workflow_run:' "$release"
+          grep -Fq 'workflows: ["LINK CI"]' "$release"
+          grep -Fq "startsWith(github.event.workflow_run.head_commit.message, 'Release ')" "$release"
+          grep -Fq 'github.event.workflow_run.head_branch == '\''main'\''' "$release"
+          grep -Fq 'published releases are immutable' "$release"
+          if grep -Eq '^  (pull_request|merge_group|schedule):' .github/workflows/ci.yml; then
+            echo "LINK CI must run from main only." >&2
             exit 1
           fi
-          grep -Fq 'ref: main' "$release"
-          grep -Fq 'published releases are immutable' "$release"
+          if grep -Eq '^  workflow_dispatch:' "$release"; then
+            echo "LINK release publication must not require manual approval." >&2
+            exit 1
+          fi
 
       - name: Keep Release tests executable
         shell: bash
