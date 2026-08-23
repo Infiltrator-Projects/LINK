@@ -331,3 +331,12 @@ if(LINK_ENABLE_INSTALL)
         "${CMAKE_CURRENT_BINARY_DIR}/LINKConfigVersion.cmake"
         DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/LINK")
 endif()
+
+# Product iOS projects intentionally compile the pinned LINK sources directly.
+# Validate that this bridge remains complete every time LINK is embedded so a
+# newly compiled LINK::Core source cannot silently disappear from the iPhone
+# product build.
+if(NOT PROJECT_IS_TOP_LEVEL AND EXISTS "${CMAKE_SOURCE_DIR}/app/ios")
+    include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/ValidateAppleBridge.cmake")
+    link_validate_product_apple_bridge("${CMAKE_SOURCE_DIR}")
+endif()
