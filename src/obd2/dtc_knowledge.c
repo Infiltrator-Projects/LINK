@@ -7,136 +7,11 @@
 
 typedef struct {
     const char *code;
-    const char *title;
     const char *category;
-} LinkDtcEntry;
+    const char *title;
+} LinkDtcCatalogueEntry;
 
-static const LinkDtcEntry standard_entries[] = {
-    {"P0001", "Fuel Volume Regulator Control Circuit/Open", "Fuel delivery"},
-    {"P0002", "Fuel Volume Regulator Control Circuit Range/Performance", "Fuel delivery"},
-    {"P0003", "Fuel Volume Regulator Control Circuit Low", "Fuel delivery"},
-    {"P0004", "Fuel Volume Regulator Control Circuit High", "Fuel delivery"},
-    {"P0087", "Fuel Rail/System Pressure Too Low", "Fuel pressure"},
-    {"P0088", "Fuel Rail/System Pressure Too High", "Fuel pressure"},
-    {"P0089", "Fuel Pressure Regulator 1 Performance", "Fuel pressure"},
-    {"P0090", "Fuel Pressure Regulator 1 Control Circuit/Open", "Fuel pressure"},
-    {"P0091", "Fuel Pressure Regulator 1 Control Circuit Low", "Fuel pressure"},
-    {"P0092", "Fuel Pressure Regulator 1 Control Circuit High", "Fuel pressure"},
-    {"P0093", "Fuel System Leak Detected - Large Leak", "Fuel delivery"},
-    {"P0094", "Fuel System Leak Detected - Small Leak", "Fuel delivery"},
-    {"P0100", "Mass or Volume Air Flow A Circuit", "Air metering"},
-    {"P0101", "Mass or Volume Air Flow A Circuit Range/Performance", "Air metering"},
-    {"P0102", "Mass or Volume Air Flow A Circuit Low", "Air metering"},
-    {"P0103", "Mass or Volume Air Flow A Circuit High", "Air metering"},
-    {"P0104", "Mass or Volume Air Flow A Circuit Intermittent", "Air metering"},
-    {"P0105", "Manifold Absolute Pressure/Barometric Pressure Circuit", "Air metering"},
-    {"P0106", "Manifold Absolute Pressure/Barometric Pressure Circuit Range/Performance", "Air metering"},
-    {"P0107", "Manifold Absolute Pressure/Barometric Pressure Circuit Low", "Air metering"},
-    {"P0108", "Manifold Absolute Pressure/Barometric Pressure Circuit High", "Air metering"},
-    {"P0109", "Manifold Absolute Pressure/Barometric Pressure Circuit Intermittent", "Air metering"},
-    {"P0110", "Intake Air Temperature Sensor 1 Circuit", "Temperature sensing"},
-    {"P0111", "Intake Air Temperature Sensor 1 Circuit Range/Performance", "Temperature sensing"},
-    {"P0112", "Intake Air Temperature Sensor 1 Circuit Low", "Temperature sensing"},
-    {"P0113", "Intake Air Temperature Sensor 1 Circuit High", "Temperature sensing"},
-    {"P0114", "Intake Air Temperature Sensor 1 Circuit Intermittent", "Temperature sensing"},
-    {"P0115", "Engine Coolant Temperature Sensor 1 Circuit", "Temperature sensing"},
-    {"P0116", "Engine Coolant Temperature Sensor 1 Circuit Range/Performance", "Temperature sensing"},
-    {"P0117", "Engine Coolant Temperature Sensor 1 Circuit Low", "Temperature sensing"},
-    {"P0118", "Engine Coolant Temperature Sensor 1 Circuit High", "Temperature sensing"},
-    {"P0119", "Engine Coolant Temperature Sensor 1 Circuit Intermittent", "Temperature sensing"},
-    {"P0190", "Fuel Rail Pressure Sensor A Circuit", "Fuel pressure"},
-    {"P0191", "Fuel Rail Pressure Sensor A Circuit Range/Performance", "Fuel pressure"},
-    {"P0192", "Fuel Rail Pressure Sensor A Circuit Low", "Fuel pressure"},
-    {"P0193", "Fuel Rail Pressure Sensor A Circuit High", "Fuel pressure"},
-    {"P0194", "Fuel Rail Pressure Sensor A Circuit Intermittent", "Fuel pressure"},
-    {"P0200", "Injector Circuit/Open", "Fuel injection"},
-    {"P0234", "Turbocharger/Supercharger A Overboost Condition", "Boost control"},
-    {"P0299", "Turbocharger/Supercharger A Underboost Condition", "Boost control"},
-    {"P0300", "Random/Multiple Cylinder Misfire Detected", "Combustion/misfire"},
-    {"P0335", "Crankshaft Position Sensor A Circuit", "Engine position sensing"},
-    {"P0336", "Crankshaft Position Sensor A Circuit Range/Performance", "Engine position sensing"},
-    {"P0337", "Crankshaft Position Sensor A Circuit Low", "Engine position sensing"},
-    {"P0338", "Crankshaft Position Sensor A Circuit High", "Engine position sensing"},
-    {"P0339", "Crankshaft Position Sensor A Circuit Intermittent", "Engine position sensing"},
-    {"P0340", "Camshaft Position Sensor A Circuit - Bank 1 or Single Sensor", "Engine position sensing"},
-    {"P0341", "Camshaft Position Sensor A Circuit Range/Performance - Bank 1 or Single Sensor", "Engine position sensing"},
-    {"P0342", "Camshaft Position Sensor A Circuit Low - Bank 1 or Single Sensor", "Engine position sensing"},
-    {"P0343", "Camshaft Position Sensor A Circuit High - Bank 1 or Single Sensor", "Engine position sensing"},
-    {"P0344", "Camshaft Position Sensor A Circuit Intermittent - Bank 1 or Single Sensor", "Engine position sensing"},
-    {"P0400", "Exhaust Gas Recirculation Flow Malfunction", "EGR/emissions"},
-    {"P0401", "Exhaust Gas Recirculation Flow Insufficient Detected", "EGR/emissions"},
-    {"P0402", "Exhaust Gas Recirculation Flow Excessive Detected", "EGR/emissions"},
-    {"P0403", "Exhaust Gas Recirculation Control Circuit", "EGR/emissions"},
-    {"P0404", "Exhaust Gas Recirculation Control Circuit Range/Performance", "EGR/emissions"},
-    {"P0405", "Exhaust Gas Recirculation Sensor A Circuit Low", "EGR/emissions"},
-    {"P0406", "Exhaust Gas Recirculation Sensor A Circuit High", "EGR/emissions"},
-    {"P0407", "Exhaust Gas Recirculation Sensor B Circuit Low", "EGR/emissions"},
-    {"P0408", "Exhaust Gas Recirculation Sensor B Circuit High", "EGR/emissions"},
-    {"P0409", "Exhaust Gas Recirculation Sensor A Circuit", "EGR/emissions"},
-    {"P0420", "Catalyst System Efficiency Below Threshold - Bank 1", "Catalyst/aftertreatment"},
-    {"P0430", "Catalyst System Efficiency Below Threshold - Bank 2", "Catalyst/aftertreatment"},
-    {"P0470", "Exhaust Pressure Sensor A Circuit", "Exhaust pressure"},
-    {"P0471", "Exhaust Pressure Sensor A Circuit Range/Performance", "Exhaust pressure"},
-    {"P0472", "Exhaust Pressure Sensor A Circuit Low", "Exhaust pressure"},
-    {"P0473", "Exhaust Pressure Sensor A Circuit High", "Exhaust pressure"},
-    {"P0474", "Exhaust Pressure Sensor A Circuit Intermittent", "Exhaust pressure"},
-    {"P0480", "Cooling Fan 1 Control Circuit", "Cooling/electrical"},
-    {"P0481", "Cooling Fan 2 Control Circuit", "Cooling/electrical"},
-    {"P0500", "Vehicle Speed Sensor A", "Vehicle speed sensing"},
-    {"P0544", "Exhaust Gas Temperature Sensor Circuit - Bank 1 Sensor 1", "Exhaust temperature"},
-    {"P0545", "Exhaust Gas Temperature Sensor Circuit Low - Bank 1 Sensor 1", "Exhaust temperature"},
-    {"P0546", "Exhaust Gas Temperature Sensor Circuit High - Bank 1 Sensor 1", "Exhaust temperature"},
-    {"P0560", "System Voltage", "Electrical supply"},
-    {"P0562", "System Voltage Low", "Electrical supply"},
-    {"P0563", "System Voltage High", "Electrical supply"},
-    {"P0600", "Serial Communication Link", "Control module"},
-    {"P0601", "Internal Control Module Memory Check Sum Error", "Control module"},
-    {"P0602", "Control Module Programming Error", "Control module"},
-    {"P0603", "Internal Control Module Keep Alive Memory Error", "Control module"},
-    {"P0604", "Internal Control Module Random Access Memory Error", "Control module"},
-    {"P0605", "Internal Control Module Read Only Memory Error", "Control module"},
-    {"P0606", "PCM/ECM Processor Fault", "Control module"},
-    {"P0627", "Fuel Pump A Control Circuit/Open", "Fuel delivery"},
-    {"P0628", "Fuel Pump A Control Circuit Low", "Fuel delivery"},
-    {"P0629", "Fuel Pump A Control Circuit High", "Fuel delivery"},
-    {"P0670", "Glow Plug Control Module Control Circuit/Open", "Glow plug/preheat"},
-    {"P2002", "Diesel Particulate Filter Efficiency Below Threshold - Bank 1", "DPF/aftertreatment"},
-    {"P2003", "Diesel Particulate Filter Efficiency Below Threshold - Bank 2", "DPF/aftertreatment"},
-    {"P2031", "Exhaust Gas Temperature Sensor Circuit - Bank 1 Sensor 2", "Exhaust temperature"},
-    {"P2032", "Exhaust Gas Temperature Sensor Circuit Low - Bank 1 Sensor 2", "Exhaust temperature"},
-    {"P2033", "Exhaust Gas Temperature Sensor Circuit High - Bank 1 Sensor 2", "Exhaust temperature"},
-    {"P2200", "NOx Sensor Circuit - Bank 1", "NOx/aftertreatment"},
-    {"P2201", "NOx Sensor Circuit Range/Performance - Bank 1", "NOx/aftertreatment"},
-    {"P2202", "NOx Sensor Circuit Low - Bank 1", "NOx/aftertreatment"},
-    {"P2203", "NOx Sensor Circuit High - Bank 1", "NOx/aftertreatment"},
-    {"P2204", "NOx Sensor Circuit Intermittent - Bank 1", "NOx/aftertreatment"},
-    {"P2291", "Injector Control Pressure Too Low - Engine Cranking", "Fuel injection"},
-    {"P2293", "Fuel Pressure Regulator 2 Performance", "Fuel pressure"},
-    {"P2294", "Fuel Pressure Regulator 2 Control Circuit/Open", "Fuel pressure"},
-    {"P2295", "Fuel Pressure Regulator 2 Control Circuit Low", "Fuel pressure"},
-    {"P2296", "Fuel Pressure Regulator 2 Control Circuit High", "Fuel pressure"},
-    {"P242A", "Exhaust Gas Temperature Sensor Circuit - Bank 1 Sensor 3", "Exhaust temperature"},
-    {"P242B", "Exhaust Gas Temperature Sensor Circuit Range/Performance - Bank 1 Sensor 3", "Exhaust temperature"},
-    {"P242C", "Exhaust Gas Temperature Sensor Circuit Low - Bank 1 Sensor 3", "Exhaust temperature"},
-    {"P242D", "Exhaust Gas Temperature Sensor Circuit High - Bank 1 Sensor 3", "Exhaust temperature"},
-    {"P242E", "Exhaust Gas Temperature Sensor Circuit Intermittent/Erratic - Bank 1 Sensor 3", "Exhaust temperature"},
-    {"P242F", "Diesel Particulate Filter Restriction - Ash Accumulation", "DPF/aftertreatment"},
-    {"P2452", "Diesel Particulate Filter Pressure Sensor A Circuit", "DPF/aftertreatment"},
-    {"P2453", "Diesel Particulate Filter Pressure Sensor A Circuit Range/Performance", "DPF/aftertreatment"},
-    {"P2454", "Diesel Particulate Filter Pressure Sensor A Circuit Low", "DPF/aftertreatment"},
-    {"P2455", "Diesel Particulate Filter Pressure Sensor A Circuit High", "DPF/aftertreatment"},
-    {"P2456", "Diesel Particulate Filter Pressure Sensor A Circuit Intermittent/Erratic", "DPF/aftertreatment"},
-    {"P2458", "Diesel Particulate Filter Regeneration Duration", "DPF/aftertreatment"},
-    {"P2459", "Diesel Particulate Filter Regeneration Frequency", "DPF/aftertreatment"},
-    {"P2463", "Diesel Particulate Filter Restriction - Soot Accumulation", "DPF/aftertreatment"},
-    {"U0001", "High Speed CAN Communication Bus", "Vehicle network"},
-    {"U0100", "Lost Communication With ECM/PCM A", "Vehicle network"},
-    {"U0101", "Lost Communication With TCM", "Vehicle network"},
-    {"U0121", "Lost Communication With Anti-Lock Brake System Control Module", "Vehicle network"},
-    {"U0140", "Lost Communication With Body Control Module", "Vehicle network"},
-    {"U0155", "Lost Communication With Instrument Panel Cluster Control Module", "Vehicle network"},
-    {"U0401", "Invalid Data Received From ECM/PCM A", "Vehicle network"}
-};
+#include "dtc_catalogue.inc"
 
 static bool valid_hex(char value)
 {
@@ -177,61 +52,25 @@ static void copy_text(char *destination, size_t size, const char *source)
     (void)snprintf(destination, size, "%s", source);
 }
 
-static bool resolve_pattern(const char code[LINK_DTC_CODE_LENGTH], LinkDtcKnowledge *knowledge)
+static const LinkDtcCatalogueEntry *catalogue_find(const char code[LINK_DTC_CODE_LENGTH])
 {
-    unsigned int numeric;
-    unsigned int cylinder;
-    unsigned int offset;
+    size_t low = 0U;
+    size_t high = sizeof(link_dtc_catalogue) / sizeof(link_dtc_catalogue[0]);
 
-    if (sscanf(code + 1, "%4x", &numeric) != 1) return false;
-
-    if (numeric >= 0x0201U && numeric <= 0x020cU) {
-        cylinder = numeric - 0x0200U;
-        (void)snprintf(knowledge->title, sizeof(knowledge->title),
-                       "Injector Circuit/Open - Cylinder %u", cylinder);
-        copy_text(knowledge->category, sizeof(knowledge->category), "Fuel injection");
-        return true;
+    while (low < high) {
+        size_t middle = low + (high - low) / 2U;
+        int comparison = strcmp(code, link_dtc_catalogue[middle].code);
+        if (comparison == 0) return &link_dtc_catalogue[middle];
+        if (comparison < 0) high = middle;
+        else low = middle + 1U;
     }
-    if (numeric >= 0x0261U && numeric <= 0x0296U) {
-        offset = numeric - 0x0261U;
-        cylinder = offset / 3U + 1U;
-        switch (offset % 3U) {
-        case 0U:
-            (void)snprintf(knowledge->title, sizeof(knowledge->title),
-                           "Cylinder %u Injector Circuit Low", cylinder);
-            break;
-        case 1U:
-            (void)snprintf(knowledge->title, sizeof(knowledge->title),
-                           "Cylinder %u Injector Circuit High", cylinder);
-            break;
-        default:
-            (void)snprintf(knowledge->title, sizeof(knowledge->title),
-                           "Cylinder %u Contribution/Balance", cylinder);
-            break;
-        }
-        copy_text(knowledge->category, sizeof(knowledge->category), "Fuel injection");
-        return true;
-    }
-    if (numeric >= 0x0301U && numeric <= 0x030cU) {
-        cylinder = numeric - 0x0300U;
-        (void)snprintf(knowledge->title, sizeof(knowledge->title),
-                       "Cylinder %u Misfire Detected", cylinder);
-        copy_text(knowledge->category, sizeof(knowledge->category), "Combustion/misfire");
-        return true;
-    }
-    if (numeric >= 0x0671U && numeric <= 0x0682U) {
-        cylinder = numeric - 0x0670U;
-        (void)snprintf(knowledge->title, sizeof(knowledge->title),
-                       "Cylinder %u Glow Plug Circuit/Open", cylinder);
-        copy_text(knowledge->category, sizeof(knowledge->category), "Glow plug/preheat");
-        return true;
-    }
-    return false;
+    return NULL;
 }
 
 bool link_dtc_resolve(const char *code, LinkDtcKnowledge *knowledge)
 {
     LinkDtcKnowledge resolved = {0};
+    const LinkDtcCatalogueEntry *entry;
     size_t index;
 
     if (code == NULL || knowledge == NULL || strlen(code) != 5U) return false;
@@ -239,6 +78,7 @@ bool link_dtc_resolve(const char *code, LinkDtcKnowledge *knowledge)
         resolved.code[index] = (char)toupper((unsigned char)code[index]);
     }
     resolved.code[5] = '\0';
+
     if (system_from_code(resolved.code[0]) == LINK_DTC_SYSTEM_UNKNOWN ||
         resolved.code[1] < '0' || resolved.code[1] > '3' ||
         !valid_hex(resolved.code[2]) || !valid_hex(resolved.code[3]) ||
@@ -250,25 +90,33 @@ bool link_dtc_resolve(const char *code, LinkDtcKnowledge *knowledge)
     resolved.origin = origin_from_code(resolved.code);
     resolved.source = LINK_DTC_SOURCE_UNKNOWN;
 
-    for (index = 0U; index < sizeof(standard_entries) / sizeof(standard_entries[0]); ++index) {
-        if (strcmp(resolved.code, standard_entries[index].code) == 0) {
-            resolved.definition_known = true;
-            resolved.origin = LINK_DTC_ORIGIN_STANDARD_GENERIC;
-            resolved.source = LINK_DTC_SOURCE_STANDARD_GENERIC;
-            copy_text(resolved.title, sizeof(resolved.title), standard_entries[index].title);
-            copy_text(resolved.category, sizeof(resolved.category), standard_entries[index].category);
-            *knowledge = resolved;
-            return true;
-        }
+    /* Never let the shared catalogue assign a generic meaning to a
+       manufacturer-specific range. Product faces own those definitions. */
+    if (resolved.origin != LINK_DTC_ORIGIN_STANDARD_GENERIC) {
+        *knowledge = resolved;
+        return true;
     }
 
-    if (resolved.system == LINK_DTC_SYSTEM_POWERTRAIN && resolve_pattern(resolved.code, &resolved)) {
+    entry = catalogue_find(resolved.code);
+    if (entry != NULL) {
         resolved.definition_known = true;
-        resolved.origin = LINK_DTC_ORIGIN_STANDARD_GENERIC;
         resolved.source = LINK_DTC_SOURCE_STANDARD_GENERIC;
+        copy_text(resolved.title, sizeof(resolved.title), entry->title);
+        copy_text(resolved.category, sizeof(resolved.category), entry->category);
     }
+
     *knowledge = resolved;
     return true;
+}
+
+size_t link_dtc_catalogue_definition_count(void)
+{
+    return sizeof(link_dtc_catalogue) / sizeof(link_dtc_catalogue[0]);
+}
+
+const char *link_dtc_catalogue_snapshot(void)
+{
+    return LINK_DTC_CATALOGUE_SNAPSHOT;
 }
 
 const char *link_dtc_system_name(LinkDtcSystem system)
@@ -296,7 +144,7 @@ const char *link_dtc_origin_name(LinkDtcOrigin origin)
 const char *link_dtc_source_name(LinkDtcSource source)
 {
     switch (source) {
-    case LINK_DTC_SOURCE_STANDARD_GENERIC: return "SAE/ISO generic definition";
+    case LINK_DTC_SOURCE_STANDARD_GENERIC: return "OBDex CC0 generic definition";
     case LINK_DTC_SOURCE_UNKNOWN: return "Unmapped";
     }
     return "Unmapped";
