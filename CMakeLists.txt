@@ -45,6 +45,7 @@ add_library(link-core STATIC
     src/elm327/probe.c
     src/elm327/session.c
     src/obd2/obd2.c
+    src/obd2/dtc_knowledge.c
     src/uds/uds.c
     src/discover/safety.c
     src/discover/evidence.c
@@ -261,6 +262,10 @@ if(BUILD_TESTING AND PROJECT_IS_TOP_LEVEL)
     add_executable(link-test-obd2 tests/test_obd2.c)
     target_link_libraries(link-test-obd2 PRIVATE LINK::Core)
     add_test(NAME link-obd2 COMMAND link-test-obd2)
+
+    add_executable(link-test-dtc-knowledge tests/test_dtc_knowledge.c)
+    target_link_libraries(link-test-dtc-knowledge PRIVATE LINK::Core)
+    add_test(NAME link-dtc-knowledge COMMAND link-test-dtc-knowledge)
 
     add_executable(link-test-uds tests/test_uds.c)
     target_link_libraries(link-test-uds PRIVATE LINK::Core)
