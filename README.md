@@ -6,7 +6,7 @@
 
 LINK is the shared C11 vehicle-diagnostics and application engine used by MBLINK and JAGLINK.
 
-**Current version:** 0.9.1  
+**Current source version:** 0.9.1 (next release: 0.10.0)  
 **Shared foundation:** Infiltratr Common 1.11.0  
 **Platforms:** Linux, Windows, macOS/iOS-facing portable core  
 **Licence:** GPL-3.0-or-later
@@ -31,6 +31,7 @@ LINK currently owns:
 - ELM327 framing, parsing, initialization and adapter/protocol probing;
 - ELM327-managed ISO 15765 CAN channels and transport-backed sessions;
 - standard OBD-II requests, PID/VIN/readiness/DTC decoding;
+- shared generic DTC knowledge: normalized code classification, human-readable definitions for a growing standards-backed catalogue, subsystem/category metadata, explicit unknown-code handling and ISO 14229 status translation;
 - ISO 14229 UDS request/response, DID and client-state handling;
 - read-only UDS `ReadDTCInformation` helpers;
 - Classical CAN ISO-TP;
@@ -39,6 +40,10 @@ LINK currently owns:
 - portable diagnostic-flow controller state machine;
 - Discover safety classification and evidence writing; and
 - shared native Windows OpenPort 2.0/J2534 Discover scanner shell.
+
+The DTC knowledge API is presentation-neutral and deliberately preserves the raw ECU code. A valid code that LINK does not yet know remains an explicit unmapped diagnostic result; no product face is allowed to fabricate a description. Manufacturer-specific descriptions remain in the owning product repository rather than leaking into LINK.
+
+The initial 0.10 catalogue concentrates on high-value engine/diesel diagnostics shared by MBLINK and JAGLINK, including fuel delivery/rail pressure, injectors, boost, engine-position sensing, EGR, misfire, glow-plug/preheat, DPF/EGT/NOx aftertreatment and common vehicle-network communication faults. Structured cylinder families are generated deterministically rather than duplicated as UI strings.
 
 The shared diagnostic-flow controller owns the normal product-neutral sequence:
 
@@ -58,9 +63,9 @@ MBLINK uses the extension hook for Mercedes-specific probing. JAGLINK currently 
 
 Portable diagnostic behaviour is C11. C++ is used only where it materially improves a design. Platform-required languages remain narrow presentation or interop edges and must not become alternate protocol implementations.
 
-Shared protocol state machines, diagnostic sequencing, safety policy and transport-independent decisions belong in LINK rather than Swift, Objective-C, GTK callbacks or Win32 message handlers.
+Shared protocol state machines, diagnostic sequencing, safety policy, generic diagnostic knowledge and transport-independent decisions belong in LINK rather than Swift, Objective-C, GTK callbacks or Win32 message handlers.
 
-Compatibility aliases/wrappers preserve product-prefixed public APIs while the underlying ELM327, OBD-II, UDS and diagnostic-flow algorithms remain single-source in LINK.
+Compatibility aliases/wrappers preserve product-prefixed public APIs while the underlying ELM327, OBD-II, UDS, DTC knowledge and diagnostic-flow algorithms remain single-source in LINK.
 
 ## Build and test
 
@@ -72,7 +77,7 @@ cmake --build build --config Release --parallel
 ctest --test-dir build --build-config Release --output-on-failure
 ```
 
-GitHub Actions builds and tests the portable core on Linux, macOS and Windows. The Windows configuration also proves that the same shared Discover implementation can produce both MBLINK and JAGLINK product faces.
+GitHub Actions builds and tests the portable core on Linux, macOS and Windows. The DTC knowledge suite checks known-code translation, structured cylinder mappings, manufacturer-specific unknown handling, network-code metadata, malformed-code rejection and shared UDS status semantics. The Windows configuration also proves that the same shared Discover implementation can produce both MBLINK and JAGLINK product faces.
 
 ## Release assets
 
@@ -98,15 +103,15 @@ Manually runnable build/test helpers, where present, are diagnostic tools only a
 ## Engineering rules
 
 - Broadly reusable non-automotive primitives belong in Infiltratr Common.
-- Shared automotive behaviour belongs in LINK.
+- Shared automotive behaviour and generic diagnostic knowledge belong in LINK.
 - Manufacturer-specific definitions and behaviour remain in the product repositories.
 - Public APIs document ownership, lifetime, failure behaviour and invariants.
 - Source comments explain rationale and non-obvious state-machine constraints rather than narrating syntax.
-- Unknown or write-capable diagnostic actions remain denied unless an owning product explicitly introduces and validates them.
+- Unknown DTCs remain explicit and evidence-preserving; unknown or write-capable diagnostic actions remain denied unless an owning product explicitly introduces and validates them.
 
 ## Roadmap
 
-Remaining consolidation work includes reusable BLE transport coordination, additional shared Linux/iPhone application structure where genuinely common, and further packaging/CI helper consolidation without pulling product branding into LINK.
+The next diagnostic completion work is to connect the existing OBD freeze-frame/readiness primitives to the same resolved fault-record path, then continue expanding the standards-backed generic DTC catalogue. Remaining consolidation work also includes reusable BLE transport coordination, additional shared Linux/iPhone application structure where genuinely common, and further packaging/CI helper consolidation without pulling product branding into LINK.
 
 ## Licence
 
