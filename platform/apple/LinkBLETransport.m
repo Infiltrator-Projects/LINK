@@ -5,6 +5,8 @@
 
 #import <CoreBluetooth/CoreBluetooth.h>
 
+NS_ASSUME_NONNULL_BEGIN
+
 static const NSTimeInterval LinkScanTimeoutSeconds = 12.0;
 static const NSTimeInterval LinkConnectTimeoutSeconds = 8.0;
 static const NSTimeInterval LinkDiscoveryTimeoutSeconds = 8.0;
@@ -26,13 +28,8 @@ static const NSUInteger LinkWriteQueueLimit = 65536U;
 static NSComparisonResult LinkCompareCandidates(LinkBLECandidate *left,
                                                  LinkBLECandidate *right)
 {
-    if (left.score > right.score) {
-        return NSOrderedAscending;
-    }
-    if (left.score < right.score) {
-        return NSOrderedDescending;
-    }
-
+    if (left.score > right.score) return NSOrderedAscending;
+    if (left.score < right.score) return NSOrderedDescending;
     NSString *leftKey = [NSString stringWithFormat:@"%@/%@/%@",
                          left.service.UUID.UUIDString,
                          left.writeCharacteristic.UUID.UUIDString,
@@ -73,15 +70,11 @@ static BOOL LinkRemainingBytesAreWhitespace(const uint8_t *bytes,
                                              NSUInteger start,
                                              NSUInteger length)
 {
-    if (bytes == NULL || start > length) {
-        return NO;
-    }
+    if (bytes == NULL || start > length) return NO;
     for (NSUInteger index = start; index < length; ++index) {
         uint8_t value = bytes[index];
         if (value != (uint8_t)' ' && value != (uint8_t)'\t' &&
-            value != (uint8_t)'\r' && value != (uint8_t)'\n') {
-            return NO;
-        }
+            value != (uint8_t)'\r' && value != (uint8_t)'\n') return NO;
     }
     return YES;
 }
@@ -110,34 +103,29 @@ static BOOL LinkRemainingBytesAreWhitespace(const uint8_t *bytes,
                      recover:(BOOL)recover;
 - (LinkTransportStatus)enqueueApplicationBytes:(const uint8_t *)bytes
                                           size:(size_t)size;
-- (void)setCReceiver:(LinkTransportReceiveFn)receiver
-             context:(void *)context;
+- (void)setCReceiver:(LinkTransportReceiveFn)receiver context:(void *)context;
 @end
 
 @implementation LinkBLETransport {
-    CBCentralManager *_central;
-    CBPeripheral *_peripheral;
+    CBCentralManager *_Nullable _central;
+    CBPeripheral *_Nullable _peripheral;
     BOOL _startRequested;
     NSUInteger _operationGeneration;
     NSUInteger _pendingServiceDiscoveries;
-
-    NSArray<LinkBLECandidate *> *_candidates;
+    NSArray<LinkBLECandidate *> *_Nullable _candidates;
     NSUInteger _candidateIndex;
-    LinkBLECandidate *_probingCandidate;
+    LinkBLECandidate *_Nullable _probingCandidate;
     NSUInteger _probeGeneration;
     BOOL _probeSent;
     BOOL _probeParserActive;
     LinkElm327Parser _probeParser;
-
-    CBCharacteristic *_selectedWrite;
-    CBCharacteristic *_selectedNotify;
+    CBCharacteristic *_Nullable _selectedWrite;
+    CBCharacteristic *_Nullable _selectedNotify;
     CBCharacteristicWriteType _selectedWriteType;
-
     NSMutableData *_writeQueue;
     BOOL _writeWithResponseInFlight;
-
-    LinkTransportReceiveFn _receiver;
-    void *_receiverContext;
+    LinkTransportReceiveFn _Nullable _receiver;
+    void *_Nullable _receiverContext;
 }
 
 - (instancetype)init
@@ -155,16 +143,13 @@ static BOOL LinkRemainingBytesAreWhitespace(const uint8_t *bytes,
 {
     return self.state == LinkBLETransportStateReady &&
            _peripheral.state == CBPeripheralStateConnected &&
-           _selectedWrite != nil &&
-           _selectedNotify != nil;
+           _selectedWrite != nil && _selectedNotify != nil;
 }
 
 - (void)notifyDelegate
 {
     id<LinkBLETransportDelegate> delegate = self.delegate;
-    if (delegate != nil) {
-        [delegate bleTransportDidUpdate:self];
-    }
+    if (delegate != nil) [delegate bleTransportDidUpdate:self];
 }
 
 - (void)setState:(LinkBLETransportState)state status:(NSString *)status
@@ -187,57 +172,36 @@ static BOOL LinkRemainingBytesAreWhitespace(const uint8_t *bytes,
         LinkBLETransport *strongSelf = weakSelf;
         if (strongSelf == nil || !strongSelf->_startRequested ||
             strongSelf->_operationGeneration != generation ||
-            strongSelf.state != state) {
-            return;
-        }
-        if (recover) {
-            [strongSelf recoverAfterTransientFailure:message];
-        } else {
-            [strongSelf failAndStop:message];
-        }
+            strongSelf.state != state) return;
+        if (recover) [strongSelf recoverAfterTransientFailure:message];
+        else [strongSelf failAndStop:message];
     });
 }
 
 - (void)start
 {
     if (![NSThread isMainThread]) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            [self start];
-        });
+        dispatch_async(dispatch_get_main_queue(), ^{ [self start]; });
         return;
     }
-
     _startRequested = YES;
-    if (self.isReady) {
-        [self notifyDelegate];
-        return;
-    }
-
+    if (self.isReady) { [self notifyDelegate]; return; }
     if (_central == nil) {
         _central = [[CBCentralManager alloc] initWithDelegate:self
                                                        queue:dispatch_get_main_queue()];
-        [self setState:LinkBLETransportStateWaitingForBluetooth
-                status:@"Waiting for Bluetooth"];
+        [self setState:LinkBLETransportStateWaitingForBluetooth status:@"Waiting for Bluetooth"];
         return;
     }
-
-    if (_central.state == CBManagerStatePoweredOn) {
-        [self beginScan];
-    } else {
-        [self setState:LinkBLETransportStateWaitingForBluetooth
-                status:@"Waiting for Bluetooth"];
-    }
+    if (_central.state == CBManagerStatePoweredOn) [self beginScan];
+    else [self setState:LinkBLETransportStateWaitingForBluetooth status:@"Waiting for Bluetooth"];
 }
 
 - (void)disconnect
 {
     if (![NSThread isMainThread]) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            [self disconnect];
-        });
+        dispatch_async(dispatch_get_main_queue(), ^{ [self disconnect]; });
         return;
     }
-
     _startRequested = NO;
     _operationGeneration++;
     _probeGeneration++;
@@ -245,13 +209,11 @@ static BOOL LinkRemainingBytesAreWhitespace(const uint8_t *bytes,
     [_writeQueue setLength:0U];
     _writeWithResponseInFlight = NO;
     _probeParserActive = NO;
-
     CBPeripheral *peripheral = _peripheral;
     _peripheral = nil;
     [self resetSelection];
-    if (peripheral != nil && peripheral.state != CBPeripheralStateDisconnected) {
+    if (peripheral != nil && peripheral.state != CBPeripheralStateDisconnected)
         [_central cancelPeripheralConnection:peripheral];
-    }
     [self setState:LinkBLETransportStateDisconnected status:@"Disconnected"];
 }
 
@@ -277,13 +239,11 @@ static BOOL LinkRemainingBytesAreWhitespace(const uint8_t *bytes,
     [_central stopScan];
     [_writeQueue setLength:0U];
     _probeParserActive = NO;
-
     CBPeripheral *peripheral = _peripheral;
     _peripheral = nil;
     [self resetSelection];
-    if (peripheral != nil && peripheral.state != CBPeripheralStateDisconnected) {
+    if (peripheral != nil && peripheral.state != CBPeripheralStateDisconnected)
         [_central cancelPeripheralConnection:peripheral];
-    }
     [self setState:LinkBLETransportStateFailed status:status];
 }
 
@@ -295,80 +255,56 @@ static BOOL LinkRemainingBytesAreWhitespace(const uint8_t *bytes,
     [_central stopScan];
     [_writeQueue setLength:0U];
     _probeParserActive = NO;
-
     CBPeripheral *peripheral = _peripheral;
     _peripheral = nil;
     [self resetSelection];
-    if (peripheral != nil && peripheral.state != CBPeripheralStateDisconnected) {
+    if (peripheral != nil && peripheral.state != CBPeripheralStateDisconnected)
         [_central cancelPeripheralConnection:peripheral];
-    }
-
     [self setState:LinkBLETransportStateDisconnected status:status];
-
     __weak LinkBLETransport *weakSelf = self;
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW,
                                  (int64_t)(LinkReconnectDelaySeconds * NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{
         LinkBLETransport *strongSelf = weakSelf;
         if (strongSelf == nil || !strongSelf->_startRequested ||
-            strongSelf->_operationGeneration != recoveryGeneration) {
-            return;
-        }
-        if (strongSelf->_central.state == CBManagerStatePoweredOn) {
-            [strongSelf beginScan];
-        } else {
-            [strongSelf setState:LinkBLETransportStateWaitingForBluetooth
-                          status:@"Waiting for Bluetooth"];
-        }
+            strongSelf->_operationGeneration != recoveryGeneration) return;
+        if (strongSelf->_central.state == CBManagerStatePoweredOn) [strongSelf beginScan];
+        else [strongSelf setState:LinkBLETransportStateWaitingForBluetooth status:@"Waiting for Bluetooth"];
     });
 }
 
 - (void)beginScan
 {
-    if (!_startRequested || _central.state != CBManagerStatePoweredOn) {
-        return;
-    }
-
+    if (!_startRequested || _central.state != CBManagerStatePoweredOn) return;
     _operationGeneration++;
     NSUInteger generation = _operationGeneration;
     _probeGeneration++;
     [_central stopScan];
     [_writeQueue setLength:0U];
     _writeWithResponseInFlight = NO;
-
     CBPeripheral *oldPeripheral = _peripheral;
     _peripheral = nil;
-    if (oldPeripheral != nil && oldPeripheral.state != CBPeripheralStateDisconnected) {
+    if (oldPeripheral != nil && oldPeripheral.state != CBPeripheralStateDisconnected)
         [_central cancelPeripheralConnection:oldPeripheral];
-    }
-
     self.peripheralName = nil;
     self.adapterIdentifier = nil;
     [self resetSelection];
-
     [_central scanForPeripheralsWithServices:nil options:nil];
-    [self setState:LinkBLETransportStateScanning
-            status:@"Scanning for BLE OBD adapter"];
-    [self scheduleStateTimeout:LinkBLETransportStateScanning
-                    generation:generation
-                         after:LinkScanTimeoutSeconds
-                       message:@"No BLE OBD adapter found"
-                       recover:NO];
+    [self setState:LinkBLETransportStateScanning status:@"Scanning for BLE OBD adapter"];
+    [self scheduleStateTimeout:LinkBLETransportStateScanning generation:generation
+                         after:LinkScanTimeoutSeconds message:@"No BLE OBD adapter found" recover:NO];
 }
 
 - (void)centralManagerDidUpdateState:(CBCentralManager *)central
 {
     switch (central.state) {
     case CBManagerStatePoweredOn:
-        if (_startRequested) {
-            [self beginScan];
-        }
+        if (_startRequested) [self beginScan];
         break;
     case CBManagerStatePoweredOff:
         _operationGeneration++;
         [central stopScan];
-        [self setState:LinkBLETransportStateWaitingForBluetooth
-                status:@"Bluetooth is off"];
+        [self setState:LinkBLETransportStateWaitingForBluetooth status:@"Bluetooth is off"];
         break;
     case CBManagerStateUnauthorized:
         [self failAndStop:@"Bluetooth permission denied"];
@@ -379,8 +315,7 @@ static BOOL LinkRemainingBytesAreWhitespace(const uint8_t *bytes,
     case CBManagerStateResetting:
     case CBManagerStateUnknown:
         _operationGeneration++;
-        [self setState:LinkBLETransportStateWaitingForBluetooth
-                status:@"Bluetooth is not ready"];
+        [self setState:LinkBLETransportStateWaitingForBluetooth status:@"Bluetooth is not ready"];
         break;
     }
 }
@@ -390,18 +325,10 @@ static BOOL LinkRemainingBytesAreWhitespace(const uint8_t *bytes,
      advertisementData:(NSDictionary<NSString *, id> *)advertisementData
                   RSSI:(NSNumber *)RSSI
 {
-    if (!_startRequested || self.state != LinkBLETransportStateScanning) {
-        return;
-    }
-
+    if (!_startRequested || self.state != LinkBLETransportStateScanning) return;
     NSString *name = advertisementData[CBAdvertisementDataLocalNameKey];
-    if (name.length == 0U) {
-        name = peripheral.name;
-    }
-    if (name.length == 0U || !LinkPeripheralNameLooksLikeAdapter(name)) {
-        return;
-    }
-
+    if (name.length == 0U) name = peripheral.name;
+    if (name.length == 0U || !LinkPeripheralNameLooksLikeAdapter(name)) return;
     [central stopScan];
     _operationGeneration++;
     NSUInteger generation = _operationGeneration;
@@ -411,37 +338,27 @@ static BOOL LinkRemainingBytesAreWhitespace(const uint8_t *bytes,
     [self setState:LinkBLETransportStateConnecting
             status:[NSString stringWithFormat:@"Connecting to %@", name]];
     [central connectPeripheral:peripheral options:nil];
-    [self scheduleStateTimeout:LinkBLETransportStateConnecting
-                    generation:generation
-                         after:LinkConnectTimeoutSeconds
-                       message:@"BLE adapter connection timed out"
-                       recover:YES];
+    [self scheduleStateTimeout:LinkBLETransportStateConnecting generation:generation
+                         after:LinkConnectTimeoutSeconds message:@"BLE adapter connection timed out" recover:YES];
     (void)RSSI;
 }
 
 - (void)centralManager:(CBCentralManager *)central
   didConnectPeripheral:(CBPeripheral *)peripheral
 {
-    if (peripheral != _peripheral || !_startRequested) {
-        return;
-    }
-
+    if (peripheral != _peripheral || !_startRequested) return;
     _operationGeneration++;
     NSUInteger generation = _operationGeneration;
-    [self setState:LinkBLETransportStateDiscovering
-            status:@"Discovering adapter services"];
+    [self setState:LinkBLETransportStateDiscovering status:@"Discovering adapter services"];
     [peripheral discoverServices:nil];
-    [self scheduleStateTimeout:LinkBLETransportStateDiscovering
-                    generation:generation
-                         after:LinkDiscoveryTimeoutSeconds
-                       message:@"BLE service discovery timed out"
-                       recover:YES];
+    [self scheduleStateTimeout:LinkBLETransportStateDiscovering generation:generation
+                         after:LinkDiscoveryTimeoutSeconds message:@"BLE service discovery timed out" recover:YES];
     (void)central;
 }
 
 - (void)centralManager:(CBCentralManager *)central
  didFailToConnectPeripheral:(CBPeripheral *)peripheral
-                 error:(NSError *)error
+                 error:(NSError * _Nullable)error
 {
     if (peripheral == _peripheral && _startRequested) {
         NSString *message = error.localizedDescription ?: @"BLE adapter connection failed";
@@ -452,12 +369,9 @@ static BOOL LinkRemainingBytesAreWhitespace(const uint8_t *bytes,
 
 - (void)centralManager:(CBCentralManager *)central
  didDisconnectPeripheral:(CBPeripheral *)peripheral
-                  error:(NSError *)error
+                  error:(NSError * _Nullable)error
 {
-    if (peripheral != _peripheral) {
-        return;
-    }
-
+    if (peripheral != _peripheral) return;
     if (_startRequested) {
         NSString *message = error.localizedDescription ?: @"Adapter disconnected; reconnecting";
         [self recoverAfterTransientFailure:message];
@@ -470,176 +384,100 @@ static BOOL LinkRemainingBytesAreWhitespace(const uint8_t *bytes,
 }
 
 - (void)peripheral:(CBPeripheral *)peripheral
-didDiscoverServices:(NSError *)error
+didDiscoverServices:(NSError * _Nullable)error
 {
-    if (peripheral != _peripheral || !_startRequested) {
-        return;
-    }
-    if (error != nil) {
-        [self recoverAfterTransientFailure:error.localizedDescription];
-        return;
-    }
-
+    if (peripheral != _peripheral || !_startRequested) return;
+    if (error != nil) { [self recoverAfterTransientFailure:error.localizedDescription]; return; }
     NSArray<CBService *> *services = peripheral.services;
-    if (services.count == 0U) {
-        [self recoverAfterTransientFailure:@"Adapter exposes no BLE services"];
-        return;
-    }
-
+    if (services.count == 0U) { [self recoverAfterTransientFailure:@"Adapter exposes no BLE services"]; return; }
     _pendingServiceDiscoveries = services.count;
-    for (CBService *service in services) {
-        [peripheral discoverCharacteristics:nil forService:service];
-    }
+    for (CBService *service in services) [peripheral discoverCharacteristics:nil forService:service];
 }
 
 - (void)peripheral:(CBPeripheral *)peripheral
 didDiscoverCharacteristicsForService:(CBService *)service
-             error:(NSError *)error
+             error:(NSError * _Nullable)error
 {
-    if (peripheral != _peripheral || !_startRequested) {
-        return;
-    }
-
-    if (_pendingServiceDiscoveries > 0U) {
-        _pendingServiceDiscoveries--;
-    }
-
-    /* A failed service may coexist with a valid UART on another service. */
+    if (peripheral != _peripheral || !_startRequested) return;
+    if (_pendingServiceDiscoveries > 0U) _pendingServiceDiscoveries--;
     (void)error;
-
-    if (_pendingServiceDiscoveries == 0U) {
-        _operationGeneration++;
-        [self buildAndProbeCandidates];
-    }
+    if (_pendingServiceDiscoveries == 0U) { _operationGeneration++; [self buildAndProbeCandidates]; }
     (void)service;
 }
 
 - (void)buildAndProbeCandidates
 {
     NSMutableArray<LinkBLECandidate *> *result = [[NSMutableArray alloc] init];
-
     for (CBService *service in _peripheral.services) {
         NSArray<CBCharacteristic *> *characteristics = service.characteristics;
         for (CBCharacteristic *notify in characteristics) {
             CBCharacteristicProperties notifyProperties = notify.properties;
             BOOL canNotify = (notifyProperties & CBCharacteristicPropertyNotify) != 0;
             BOOL canIndicate = (notifyProperties & CBCharacteristicPropertyIndicate) != 0;
-            if (!canNotify && !canIndicate) {
-                continue;
-            }
-
+            if (!canNotify && !canIndicate) continue;
             for (CBCharacteristic *write in characteristics) {
                 CBCharacteristicProperties writeProperties = write.properties;
-                BOOL withoutResponse =
-                    (writeProperties & CBCharacteristicPropertyWriteWithoutResponse) != 0;
-                BOOL withResponse =
-                    (writeProperties & CBCharacteristicPropertyWrite) != 0;
-                if (!withoutResponse && !withResponse) {
-                    continue;
-                }
-
+                BOOL withoutResponse = (writeProperties & CBCharacteristicPropertyWriteWithoutResponse) != 0;
+                BOOL withResponse = (writeProperties & CBCharacteristicPropertyWrite) != 0;
+                if (!withoutResponse && !withResponse) continue;
                 LinkBLECandidate *candidate = [[LinkBLECandidate alloc] init];
                 candidate.service = service;
                 candidate.writeCharacteristic = write;
                 candidate.notifyCharacteristic = notify;
-                candidate.writeType = withoutResponse
-                    ? CBCharacteristicWriteWithoutResponse
-                    : CBCharacteristicWriteWithResponse;
-
+                candidate.writeType = withoutResponse ? CBCharacteristicWriteWithoutResponse : CBCharacteristicWriteWithResponse;
                 NSInteger score = 0;
                 score += withoutResponse ? 8 : 4;
                 score += canNotify ? 4 : 2;
-                if (write == notify) {
-                    score += 1;
-                }
+                if (write == notify) score += 1;
                 candidate.score = score;
                 [result addObject:candidate];
             }
         }
     }
-
     LinkSortCandidates(result);
     _candidates = [result copy];
     _candidateIndex = 0U;
-
-    if (_candidates.count == 0U) {
-        [self failAndStop:@"No writable/notify BLE command channel found"];
-        return;
-    }
-
-    [self setState:LinkBLETransportStateProbing
-            status:@"Validating ELM327 BLE channel"];
+    if (_candidates.count == 0U) { [self failAndStop:@"No writable/notify BLE command channel found"]; return; }
+    [self setState:LinkBLETransportStateProbing status:@"Validating ELM327 BLE channel"];
     [self probeNextCandidate];
 }
 
 - (void)probeNextCandidate
 {
-    if (!_startRequested || _peripheral.state != CBPeripheralStateConnected) {
-        return;
-    }
-    if (_candidateIndex >= _candidates.count) {
-        [self failAndStop:@"No ELM327 command channel responded"];
-        return;
-    }
-
+    if (!_startRequested || _peripheral.state != CBPeripheralStateConnected) return;
+    if (_candidateIndex >= _candidates.count) { [self failAndStop:@"No ELM327 command channel responded"]; return; }
     _probingCandidate = [_candidates objectAtIndex:_candidateIndex++];
     _probeGeneration++;
     NSUInteger generation = _probeGeneration;
     _probeSent = NO;
-    _probeParserActive =
-        link_elm327_parser_begin(&_probeParser, "ATI") == LINK_ELM327_RESULT_OK;
-    if (!_probeParserActive) {
-        [self failCurrentProbe];
-        return;
-    }
-
-    [_peripheral setNotifyValue:YES
-             forCharacteristic:_probingCandidate.notifyCharacteristic];
-
+    _probeParserActive = link_elm327_parser_begin(&_probeParser, "ATI") == LINK_ELM327_RESULT_OK;
+    if (!_probeParserActive) { [self failCurrentProbe]; return; }
+    [_peripheral setNotifyValue:YES forCharacteristic:_probingCandidate.notifyCharacteristic];
     __weak LinkBLETransport *weakSelf = self;
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW,
-                                 (int64_t)(LinkProbeTimeoutSeconds * NSEC_PER_SEC)),
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(LinkProbeTimeoutSeconds * NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{
         LinkBLETransport *strongSelf = weakSelf;
         if (strongSelf != nil && strongSelf->_startRequested &&
             strongSelf->_probeGeneration == generation &&
-            strongSelf.state == LinkBLETransportStateProbing &&
-            strongSelf->_probingCandidate != nil) {
+            strongSelf.state == LinkBLETransportStateProbing && strongSelf->_probingCandidate != nil)
             [strongSelf failCurrentProbe];
-        }
     });
 }
 
 - (void)sendProbeIfPossible
 {
-    if (_probingCandidate == nil || _probeSent || !_probeParserActive) {
-        return;
-    }
-    if (_probingCandidate.writeType == CBCharacteristicWriteWithoutResponse &&
-        !_peripheral.canSendWriteWithoutResponse) {
-        return;
-    }
-
+    if (_probingCandidate == nil || _probeSent || !_probeParserActive) return;
+    if (_probingCandidate.writeType == CBCharacteristicWriteWithoutResponse && !_peripheral.canSendWriteWithoutResponse) return;
     uint8_t frame[LINK_ELM327_MAX_COMMAND + 1U];
     size_t frameSize = 0U;
-    if (link_elm327_build_command("ATI", frame, sizeof(frame), &frameSize) !=
-        LINK_ELM327_RESULT_OK) {
-        [self failCurrentProbe];
-        return;
+    if (link_elm327_build_command("ATI", frame, sizeof(frame), &frameSize) != LINK_ELM327_RESULT_OK) {
+        [self failCurrentProbe]; return;
     }
-
-    NSUInteger maximum = [_peripheral maximumWriteValueLengthForType:
-                          _probingCandidate.writeType];
-    if (maximum == 0U || frameSize > (size_t)maximum) {
-        [self failCurrentProbe];
-        return;
-    }
-
+    NSUInteger maximum = [_peripheral maximumWriteValueLengthForType:_probingCandidate.writeType];
+    if (maximum == 0U || frameSize > (size_t)maximum) { [self failCurrentProbe]; return; }
     NSData *probe = [NSData dataWithBytes:frame length:(NSUInteger)frameSize];
     _probeSent = YES;
-    [_peripheral writeValue:probe
-          forCharacteristic:_probingCandidate.writeCharacteristic
-                       type:_probingCandidate.writeType];
+    [_peripheral writeValue:probe forCharacteristic:_probingCandidate.writeCharacteristic type:_probingCandidate.writeType];
 }
 
 - (void)failCurrentProbe
@@ -649,107 +487,53 @@ didDiscoverCharacteristicsForService:(CBService *)service
     _probingCandidate = nil;
     _probeSent = NO;
     _probeParserActive = NO;
-
-    if (candidate != nil && candidate.notifyCharacteristic.isNotifying) {
+    if (candidate != nil && candidate.notifyCharacteristic.isNotifying)
         [_peripheral setNotifyValue:NO forCharacteristic:candidate.notifyCharacteristic];
-    }
-
-    dispatch_async(dispatch_get_main_queue(), ^{
-        [self probeNextCandidate];
-    });
+    dispatch_async(dispatch_get_main_queue(), ^{ [self probeNextCandidate]; });
 }
 
 - (void)peripheral:(CBPeripheral *)peripheral
 didUpdateNotificationStateForCharacteristic:(CBCharacteristic *)characteristic
-             error:(NSError *)error
+             error:(NSError * _Nullable)error
 {
-    if (peripheral != _peripheral) {
-        return;
-    }
-
-    if (_probingCandidate != nil &&
-        characteristic == _probingCandidate.notifyCharacteristic) {
-        if (error != nil || !characteristic.isNotifying) {
-            [self failCurrentProbe];
-            return;
-        }
+    if (peripheral != _peripheral) return;
+    if (_probingCandidate != nil && characteristic == _probingCandidate.notifyCharacteristic) {
+        if (error != nil || !characteristic.isNotifying) { [self failCurrentProbe]; return; }
         [self sendProbeIfPossible];
         return;
     }
-
-    if (characteristic == _selectedNotify && error != nil) {
+    if (characteristic == _selectedNotify && error != nil)
         [self recoverAfterTransientFailure:error.localizedDescription];
-    }
 }
 
 - (void)peripheral:(CBPeripheral *)peripheral
 didUpdateValueForCharacteristic:(CBCharacteristic *)characteristic
-             error:(NSError *)error
+             error:(NSError * _Nullable)error
 {
-    if (peripheral != _peripheral) {
-        return;
-    }
+    if (peripheral != _peripheral) return;
     if (error != nil) {
-        if (_probingCandidate != nil &&
-            characteristic == _probingCandidate.notifyCharacteristic) {
-            [self failCurrentProbe];
-        } else {
-            [self recoverAfterTransientFailure:error.localizedDescription];
-        }
+        if (_probingCandidate != nil && characteristic == _probingCandidate.notifyCharacteristic) [self failCurrentProbe];
+        else [self recoverAfterTransientFailure:error.localizedDescription];
         return;
     }
-
     NSData *value = characteristic.value;
-    if (value.length == 0U) {
-        return;
-    }
-
-    if (_probingCandidate != nil &&
-        characteristic == _probingCandidate.notifyCharacteristic) {
-        if (!_probeParserActive) {
-            [self failCurrentProbe];
-            return;
-        }
-
+    if (value.length == 0U) return;
+    if (_probingCandidate != nil && characteristic == _probingCandidate.notifyCharacteristic) {
+        if (!_probeParserActive) { [self failCurrentProbe]; return; }
         size_t consumed = 0U;
-        LinkElm327Result parseResult =
-            link_elm327_parser_feed(&_probeParser,
-                                    value.bytes,
-                                    value.length,
-                                    &consumed);
-        if (parseResult == LINK_ELM327_RESULT_MORE_DATA) {
-            return;
+        LinkElm327Result parseResult = link_elm327_parser_feed(&_probeParser, value.bytes, value.length, &consumed);
+        if (parseResult == LINK_ELM327_RESULT_MORE_DATA) return;
+        if (parseResult != LINK_ELM327_RESULT_OK) { [self failCurrentProbe]; return; }
+        if (consumed < value.length && !LinkRemainingBytesAreWhitespace(value.bytes, (NSUInteger)consumed, value.length)) {
+            [self failCurrentProbe]; return;
         }
-        if (parseResult != LINK_ELM327_RESULT_OK) {
-            [self failCurrentProbe];
-            return;
-        }
-        if (consumed < value.length &&
-            !LinkRemainingBytesAreWhitespace(value.bytes,
-                                             (NSUInteger)consumed,
-                                             value.length)) {
-            [self failCurrentProbe];
-            return;
-        }
-
         LinkElm327Response response;
-        LinkElm327Result finishResult =
-            link_elm327_parser_finish(&_probeParser, &response);
-        if (finishResult != LINK_ELM327_RESULT_OK ||
-            response.length == 0U || response.line_count == 0U) {
-            [self failCurrentProbe];
-            return;
+        LinkElm327Result finishResult = link_elm327_parser_finish(&_probeParser, &response);
+        if (finishResult != LINK_ELM327_RESULT_OK || response.length == 0U || response.line_count == 0U) {
+            [self failCurrentProbe]; return;
         }
-
-        NSString *identifier =
-            [[NSString alloc] initWithBytes:response.text
-                                     length:response.length
-                                   encoding:NSASCIIStringEncoding];
-        if (identifier.length == 0U) {
-            [self failCurrentProbe];
-            return;
-        }
-
+        NSString *identifier = [[NSString alloc] initWithBytes:response.text length:response.length encoding:NSASCIIStringEncoding];
+        if (identifier.length == 0U) { [self failCurrentProbe]; return; }
         LinkBLECandidate *candidate = _probingCandidate;
         _probeGeneration++;
         _probingCandidate = nil;
@@ -765,34 +549,20 @@ didUpdateValueForCharacteristic:(CBCharacteristic *)characteristic
         [self setState:LinkBLETransportStateReady status:@"BLE adapter ready"];
         return;
     }
-
     if (self.isReady && characteristic == _selectedNotify) {
         LinkTransportReceiveFn receiver = NULL;
         void *receiverContext = NULL;
-        @synchronized (self) {
-            receiver = _receiver;
-            receiverContext = _receiverContext;
-        }
-        if (receiver != NULL) {
-            receiver(receiverContext, value.bytes, value.length);
-        }
+        @synchronized (self) { receiver = _receiver; receiverContext = _receiverContext; }
+        if (receiver != NULL) receiver(receiverContext, value.bytes, value.length);
     }
 }
 
-- (LinkTransportStatus)enqueueApplicationBytes:(const uint8_t *)bytes
-                                          size:(size_t)size
+- (LinkTransportStatus)enqueueApplicationBytes:(const uint8_t *)bytes size:(size_t)size
 {
-    if (!self.isReady) {
-        return LINK_TRANSPORT_NOT_CONNECTED;
-    }
-    if (bytes == NULL || size == 0U || size > (size_t)NSUIntegerMax) {
-        return LINK_TRANSPORT_INVALID_ARGUMENT;
-    }
-    if (size > (size_t)LinkWriteQueueLimit ||
-        _writeQueue.length > LinkWriteQueueLimit - (NSUInteger)size) {
+    if (!self.isReady) return LINK_TRANSPORT_NOT_CONNECTED;
+    if (bytes == NULL || size == 0U || size > (size_t)NSUIntegerMax) return LINK_TRANSPORT_INVALID_ARGUMENT;
+    if (size > (size_t)LinkWriteQueueLimit || _writeQueue.length > LinkWriteQueueLimit - (NSUInteger)size)
         return LINK_TRANSPORT_BUSY;
-    }
-
     [_writeQueue appendBytes:bytes length:(NSUInteger)size];
     [self flushWrites];
     return LINK_TRANSPORT_OK;
@@ -801,86 +571,45 @@ didUpdateValueForCharacteristic:(CBCharacteristic *)characteristic
 - (void)flushWrites
 {
     while (self.isReady && _writeQueue.length != 0U) {
-        if (_selectedWriteType == CBCharacteristicWriteWithResponse &&
-            _writeWithResponseInFlight) {
-            return;
-        }
-        if (_selectedWriteType == CBCharacteristicWriteWithoutResponse &&
-            !_peripheral.canSendWriteWithoutResponse) {
-            return;
-        }
-
-        NSUInteger maximum =
-            [_peripheral maximumWriteValueLengthForType:_selectedWriteType];
-        if (maximum == 0U) {
-            [self recoverAfterTransientFailure:@"BLE adapter reported zero write capacity"];
-            return;
-        }
-
+        if (_selectedWriteType == CBCharacteristicWriteWithResponse && _writeWithResponseInFlight) return;
+        if (_selectedWriteType == CBCharacteristicWriteWithoutResponse && !_peripheral.canSendWriteWithoutResponse) return;
+        NSUInteger maximum = [_peripheral maximumWriteValueLengthForType:_selectedWriteType];
+        if (maximum == 0U) { [self recoverAfterTransientFailure:@"BLE adapter reported zero write capacity"]; return; }
         NSUInteger chunkLength = MIN(maximum, _writeQueue.length);
         NSData *chunk = [_writeQueue subdataWithRange:NSMakeRange(0U, chunkLength)];
-        [_writeQueue replaceBytesInRange:NSMakeRange(0U, chunkLength)
-                               withBytes:NULL
-                                  length:0U];
-
-        if (_selectedWriteType == CBCharacteristicWriteWithResponse) {
-            _writeWithResponseInFlight = YES;
-        }
-        [_peripheral writeValue:chunk
-              forCharacteristic:_selectedWrite
-                           type:_selectedWriteType];
-
-        if (_selectedWriteType == CBCharacteristicWriteWithResponse) {
-            return;
-        }
+        [_writeQueue replaceBytesInRange:NSMakeRange(0U, chunkLength) withBytes:NULL length:0U];
+        if (_selectedWriteType == CBCharacteristicWriteWithResponse) _writeWithResponseInFlight = YES;
+        [_peripheral writeValue:chunk forCharacteristic:_selectedWrite type:_selectedWriteType];
+        if (_selectedWriteType == CBCharacteristicWriteWithResponse) return;
     }
 }
 
 - (void)peripheralIsReadyToSendWriteWithoutResponse:(CBPeripheral *)peripheral
 {
-    if (peripheral != _peripheral) {
-        return;
-    }
-    if (_probingCandidate != nil && !_probeSent) {
-        [self sendProbeIfPossible];
-        return;
-    }
+    if (peripheral != _peripheral) return;
+    if (_probingCandidate != nil && !_probeSent) { [self sendProbeIfPossible]; return; }
     [self flushWrites];
 }
 
 - (void)peripheral:(CBPeripheral *)peripheral
 didWriteValueForCharacteristic:(CBCharacteristic *)characteristic
-             error:(NSError *)error
+             error:(NSError * _Nullable)error
 {
-    if (peripheral != _peripheral) {
+    if (peripheral != _peripheral) return;
+    if (_probingCandidate != nil && characteristic == _probingCandidate.writeCharacteristic) {
+        if (error != nil) [self failCurrentProbe];
         return;
     }
-
-    if (_probingCandidate != nil &&
-        characteristic == _probingCandidate.writeCharacteristic) {
-        if (error != nil) {
-            [self failCurrentProbe];
-        }
-        return;
-    }
-
     if (characteristic == _selectedWrite) {
         _writeWithResponseInFlight = NO;
-        if (error != nil) {
-            [self recoverAfterTransientFailure:error.localizedDescription];
-            return;
-        }
+        if (error != nil) { [self recoverAfterTransientFailure:error.localizedDescription]; return; }
         [self flushWrites];
     }
 }
 
-- (void)setCReceiver:(LinkTransportReceiveFn)receiver
-             context:(void *)context
+- (void)setCReceiver:(LinkTransportReceiveFn)receiver context:(void *)context
 {
-    @synchronized (self) {
-        _receiver = receiver;
-        _receiverContext = context;
-    }
+    @synchronized (self) { _receiver = receiver; _receiverContext = context; }
 }
 
 @end
@@ -888,72 +617,38 @@ didWriteValueForCharacteristic:(CBCharacteristic *)characteristic
 static LinkTransportStatus LinkCTransportConnect(void *context)
 {
     LinkBLETransport *transport = (__bridge LinkBLETransport *)context;
-    if (transport == nil) {
-        return LINK_TRANSPORT_INVALID_ARGUMENT;
-    }
-
-    if ([NSThread isMainThread]) {
-        [transport start];
-    } else {
-        dispatch_sync(dispatch_get_main_queue(), ^{
-            [transport start];
-        });
-    }
+    if (transport == nil) return LINK_TRANSPORT_INVALID_ARGUMENT;
+    if ([NSThread isMainThread]) [transport start];
+    else dispatch_sync(dispatch_get_main_queue(), ^{ [transport start]; });
     return LINK_TRANSPORT_OK;
 }
 
 static void LinkCTransportDisconnect(void *context)
 {
     LinkBLETransport *transport = (__bridge LinkBLETransport *)context;
-    if (transport == nil) {
-        return;
-    }
-
-    if ([NSThread isMainThread]) {
-        [transport disconnect];
-    } else {
-        dispatch_sync(dispatch_get_main_queue(), ^{
-            [transport disconnect];
-        });
-    }
+    if (transport == nil) return;
+    if ([NSThread isMainThread]) [transport disconnect];
+    else dispatch_sync(dispatch_get_main_queue(), ^{ [transport disconnect]; });
 }
 
 static bool LinkCTransportIsConnected(void *context)
 {
     LinkBLETransport *transport = (__bridge LinkBLETransport *)context;
-    if (transport == nil) {
-        return false;
-    }
-
+    if (transport == nil) return false;
     __block BOOL ready = NO;
-    if ([NSThread isMainThread]) {
-        ready = transport.isReady;
-    } else {
-        dispatch_sync(dispatch_get_main_queue(), ^{
-            ready = transport.isReady;
-        });
-    }
+    if ([NSThread isMainThread]) ready = transport.isReady;
+    else dispatch_sync(dispatch_get_main_queue(), ^{ ready = transport.isReady; });
     return ready;
 }
 
-static LinkTransportStatus LinkCTransportWrite(void *context,
-                                                const uint8_t *data,
-                                                size_t size)
+static LinkTransportStatus LinkCTransportWrite(void *context, const uint8_t *data, size_t size)
 {
     LinkBLETransport *transport = (__bridge LinkBLETransport *)context;
-    if (transport == nil) {
-        return LINK_TRANSPORT_INVALID_ARGUMENT;
-    }
-
+    if (transport == nil) return LINK_TRANSPORT_INVALID_ARGUMENT;
     __block LinkTransportStatus status = LINK_TRANSPORT_IO_ERROR;
-    void (^writeBlock)(void) = ^{
-        status = [transport enqueueApplicationBytes:data size:size];
-    };
-    if ([NSThread isMainThread]) {
-        writeBlock();
-    } else {
-        dispatch_sync(dispatch_get_main_queue(), writeBlock);
-    }
+    void (^writeBlock)(void) = ^{ status = [transport enqueueApplicationBytes:data size:size]; };
+    if ([NSThread isMainThread]) writeBlock();
+    else dispatch_sync(dispatch_get_main_queue(), writeBlock);
     return status;
 }
 
@@ -962,19 +657,14 @@ static void LinkCTransportSetReceiver(void *context,
                                       void *receiverContext)
 {
     LinkBLETransport *transport = (__bridge LinkBLETransport *)context;
-    if (transport == nil) {
-        return;
-    }
+    if (transport == nil) return;
     [transport setCReceiver:receiver context:receiverContext];
 }
 
 LinkTransport LinkBLETransportMakeCTransport(LinkBLETransport *transport)
 {
     LinkTransport result = LINK_TRANSPORT_INIT;
-    if (transport == nil) {
-        return result;
-    }
-
+    if (transport == nil) return result;
     result.context = (__bridge void *)transport;
     result.connect = LinkCTransportConnect;
     result.disconnect = LinkCTransportDisconnect;
@@ -983,3 +673,5 @@ LinkTransport LinkBLETransportMakeCTransport(LinkBLETransport *transport)
     result.set_receiver = LinkCTransportSetReceiver;
     return result;
 }
+
+NS_ASSUME_NONNULL_END
