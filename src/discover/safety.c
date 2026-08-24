@@ -48,10 +48,13 @@ link_safety_result link_safety_classify(const uint8_t *payload, size_t length)
      * Discover is intentionally more restrictive than the codec layer.
      * Adding a standards-correct request builder must never make a state-
      * changing, security, or programming service transmissible by accident.
+     * TesterPresent (0x3E) is a non-mutating keepalive and is permitted only
+     * with the same read-only Discover boundary as identity/DTC requests.
      */
     switch (service) {
     case 0x19U:
     case 0x22U:
+    case 0x3EU:
         return result(LINK_SAFETY_ALLOW_READ_ONLY,
                       LINK_SAFETY_REASON_ALLOWED_UDS_READ,
                       service);
@@ -107,7 +110,7 @@ const char *link_safety_reason_string(link_safety_reason reason)
     case LINK_SAFETY_REASON_ALLOWED_OBD_READ:
         return "allowed OBD read";
     case LINK_SAFETY_REASON_ALLOWED_UDS_READ:
-        return "allowed UDS read";
+        return "allowed UDS read/keepalive";
     case LINK_SAFETY_REASON_EMPTY_REQUEST:
         return "empty request";
     case LINK_SAFETY_REASON_WRITE_OR_CONTROL:
