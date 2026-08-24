@@ -1,0 +1,6 @@
+{
+  "locale": "en-AU",
+  "fallback": true,
+  "ownership": "LINK reusable automotive and shared-shell language",
+  "note": "The compiled C catalogue in src/core/i18n.c is authoritative at runtime; this source catalogue is the translator-facing key ledger and CI completeness reference."
+}
