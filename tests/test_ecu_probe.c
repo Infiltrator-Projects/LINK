@@ -1,9 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "link/ecu_probe.h"
 
-#include <assert.h>
 #include <stdio.h>
 #include <string.h>
+
+#define CHECK(expr) do { if (!(expr)) { \
+    (void)fprintf(stderr, "check failed: %s at %s:%d\n", \
+                  #expr, __FILE__, __LINE__); \
+    return 1; \
+} } while (0)
 
 static LinkElm327Response ok_response(const char *text)
 {
@@ -13,35 +18,31 @@ static LinkElm327Response ok_response(const char *text)
     response.ok_seen = true;
     if (text != NULL) {
         (void)snprintf(response.text, sizeof(response.text), "%s", text);
+        response.length = strlen(response.text);
+        response.line_count = response.length == 0U ? 0U : 1U;
     }
     return response;
 }
 
-static void accept_channel_configuration(LinkEcuProbe *probe)
+static int accept_channel_configuration(LinkEcuProbe *probe)
 {
+    static const char *const expected[] = {
+        "ATSH7E0", "ATCRA7E8", "ATCAF1", "ATCFC1"
+    };
     char command[64];
     size_t written = 0U;
     LinkElm327Response response = ok_response("OK");
+    size_t index;
 
-    assert(link_ecu_probe_command(probe, command, sizeof(command), &written) ==
-           LINK_ECU_PROBE_RESULT_OK);
-    assert(strcmp(command, "ATSH7E0") == 0);
-    assert(link_ecu_probe_accept(probe, &response) == LINK_ECU_PROBE_RESULT_OK);
-
-    assert(link_ecu_probe_command(probe, command, sizeof(command), &written) ==
-           LINK_ECU_PROBE_RESULT_OK);
-    assert(strcmp(command, "ATCRA7E8") == 0);
-    assert(link_ecu_probe_accept(probe, &response) == LINK_ECU_PROBE_RESULT_OK);
-
-    assert(link_ecu_probe_command(probe, command, sizeof(command), &written) ==
-           LINK_ECU_PROBE_RESULT_OK);
-    assert(strcmp(command, "ATCAF1") == 0);
-    assert(link_ecu_probe_accept(probe, &response) == LINK_ECU_PROBE_RESULT_OK);
-
-    assert(link_ecu_probe_command(probe, command, sizeof(command), &written) ==
-           LINK_ECU_PROBE_RESULT_OK);
-    assert(strcmp(command, "ATCFC1") == 0);
-    assert(link_ecu_probe_accept(probe, &response) == LINK_ECU_PROBE_RESULT_OK);
+    for (index = 0U; index < sizeof(expected) / sizeof(expected[0]); ++index) {
+        CHECK(link_ecu_probe_command(probe, command, sizeof(command), &written) ==
+              LINK_ECU_PROBE_RESULT_OK);
+        CHECK(strcmp(command, expected[index]) == 0);
+        CHECK(written == strlen(expected[index]));
+        CHECK(link_ecu_probe_accept(probe, &response) ==
+              LINK_ECU_PROBE_RESULT_OK);
+    }
+    return 0;
 }
 
 int main(void)
@@ -63,54 +64,55 @@ int main(void)
     LinkElm327Response response;
     const LinkEcuProbeDidResult *did_result;
 
-    assert(link_ecu_probe_profile_is_valid(&profile));
-    assert(link_ecu_probe_begin(&probe, &profile) == LINK_ECU_PROBE_RESULT_OK);
-    assert(probe.stage == LINK_ECU_PROBE_STAGE_CONFIGURE_CHANNEL);
+    CHECK(link_ecu_probe_profile_is_valid(&profile));
+    CHECK(link_ecu_probe_begin(&probe, &profile) == LINK_ECU_PROBE_RESULT_OK);
+    CHECK(probe.stage == LINK_ECU_PROBE_STAGE_CONFIGURE_CHANNEL);
 
-    accept_channel_configuration(&probe);
-    assert(probe.stage == LINK_ECU_PROBE_STAGE_TESTER_PRESENT);
+    CHECK(accept_channel_configuration(&probe) == 0);
+    CHECK(probe.stage == LINK_ECU_PROBE_STAGE_TESTER_PRESENT);
 
-    assert(link_ecu_probe_command(&probe, command, sizeof(command), &written) ==
-           LINK_ECU_PROBE_RESULT_OK);
-    assert(strcmp(command, "3E00") == 0);
+    CHECK(link_ecu_probe_command(&probe, command, sizeof(command), &written) ==
+          LINK_ECU_PROBE_RESULT_OK);
+    CHECK(strcmp(command, "3E00") == 0);
     response = ok_response("7E00");
-    assert(link_ecu_probe_accept(&probe, &response) == LINK_ECU_PROBE_RESULT_OK);
+    CHECK(link_ecu_probe_accept(&probe, &response) == LINK_ECU_PROBE_RESULT_OK);
 
-    assert(link_ecu_probe_command(&probe, command, sizeof(command), &written) ==
-           LINK_ECU_PROBE_RESULT_OK);
-    assert(strcmp(command, "22F190") == 0);
+    CHECK(link_ecu_probe_command(&probe, command, sizeof(command), &written) ==
+          LINK_ECU_PROBE_RESULT_OK);
+    CHECK(strcmp(command, "22F190") == 0);
     response = ok_response("62F1905744443230373330323246313233343536");
-    assert(link_ecu_probe_accept(&probe, &response) == LINK_ECU_PROBE_RESULT_OK);
+    CHECK(link_ecu_probe_accept(&probe, &response) == LINK_ECU_PROBE_RESULT_OK);
 
     did_result = link_ecu_probe_did_result_at(&probe, 0U);
-    assert(did_result != NULL);
-    assert(did_result->status == LINK_ECU_PROBE_READ_AVAILABLE);
-    assert(did_result->data_length == 17U);
-    assert(memcmp(did_result->data, "WDD2073022F123456", 17U) == 0);
+    CHECK(did_result != NULL);
+    CHECK(did_result->status == LINK_ECU_PROBE_READ_AVAILABLE);
+    CHECK(did_result->data_length == 17U);
+    CHECK(memcmp(did_result->data, "WDD2073022F123456", 17U) == 0);
 
-    assert(link_ecu_probe_command(&probe, command, sizeof(command), &written) ==
-           LINK_ECU_PROBE_RESULT_OK);
-    assert(strcmp(command, "22F18C") == 0);
+    CHECK(link_ecu_probe_command(&probe, command, sizeof(command), &written) ==
+          LINK_ECU_PROBE_RESULT_OK);
+    CHECK(strcmp(command, "22F18C") == 0);
     memset(&response, 0, sizeof(response));
     response.result = LINK_ELM327_RESULT_NO_DATA;
-    assert(link_ecu_probe_accept(&probe, &response) == LINK_ECU_PROBE_RESULT_OK);
+    CHECK(link_ecu_probe_accept(&probe, &response) == LINK_ECU_PROBE_RESULT_OK);
 
     did_result = link_ecu_probe_did_result_at(&probe, 1U);
-    assert(did_result != NULL);
-    assert(did_result->status == LINK_ECU_PROBE_READ_NO_RESPONSE);
-    assert(probe.stage == LINK_ECU_PROBE_STAGE_READ_DTC_INFORMATION);
+    CHECK(did_result != NULL);
+    CHECK(did_result->status == LINK_ECU_PROBE_READ_NO_RESPONSE);
+    CHECK(probe.stage == LINK_ECU_PROBE_STAGE_READ_DTC_INFORMATION);
 
-    assert(link_ecu_probe_command(&probe, command, sizeof(command), &written) ==
-           LINK_ECU_PROBE_RESULT_OK);
-    assert(strcmp(command, "1902FF") == 0);
+    CHECK(link_ecu_probe_command(&probe, command, sizeof(command), &written) ==
+          LINK_ECU_PROBE_RESULT_OK);
+    CHECK(strcmp(command, "1902FF") == 0);
     response = ok_response("5902FF0112345609");
-    assert(link_ecu_probe_accept(&probe, &response) == LINK_ECU_PROBE_RESULT_COMPLETE);
-    assert(probe.stage == LINK_ECU_PROBE_STAGE_COMPLETE);
-    assert(probe.dtc_status == LINK_ECU_PROBE_READ_AVAILABLE);
-    assert(probe.dtcs.count == 1U);
-    assert(probe.dtcs.records[0].code == 0x123456U);
-    assert(probe.dtcs.records[0].status == 0x09U);
-    assert(link_ecu_probe_did_result_count(&probe) == 2U);
+    CHECK(link_ecu_probe_accept(&probe, &response) ==
+          LINK_ECU_PROBE_RESULT_COMPLETE);
+    CHECK(probe.stage == LINK_ECU_PROBE_STAGE_COMPLETE);
+    CHECK(probe.dtc_status == LINK_ECU_PROBE_READ_AVAILABLE);
+    CHECK(probe.dtcs.count == 1U);
+    CHECK(probe.dtcs.records[0].code == UINT32_C(0x123456));
+    CHECK(probe.dtcs.records[0].status == 0x09U);
+    CHECK(link_ecu_probe_did_result_count(&probe) == 2U);
 
     puts("LINK ECU probe tests passed");
     return 0;
