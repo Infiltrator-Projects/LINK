@@ -25,6 +25,14 @@ void link_i18n_init(void);
 /** Select a locale such as en-AU, en-US, de-DE, fr-FR, es-ES or it-IT. */
 bool link_i18n_set_locale(const char *locale);
 
+/**
+ * Select the operating-system/user locale where the platform exposes one.
+ * Windows uses the user locale; POSIX-family builds consult LC_ALL,
+ * LC_MESSAGES and LANG in that order. Apple UI code may subsequently override
+ * this with the first preferred-language tag supplied by Foundation.
+ */
+bool link_i18n_set_system_locale(void);
+
 /** Return the currently requested normalised locale. */
 const char *link_i18n_locale(void);
 
