@@ -7,6 +7,12 @@
 #endif
 #include <windows.h>
 
+/* Initialise from the Windows user locale exactly once. */
+void link_win_i18n_init(void);
+
+/* Translate one human-readable screen string in the currently selected UI language. */
+const char *link_win_i18n_translate_text(const char *text);
+
 HWND link_win_i18n_create_window_a(const char *class_name,
                                    const char *window_name,
                                    DWORD style,
