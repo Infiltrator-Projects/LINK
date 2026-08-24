@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "link-gtk-shell.h"
+#include "link/linux_serial.h"
+#include "link/workspace.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -14,15 +16,42 @@ typedef struct LinkGtkShell {
     GtkWidget *status;
     GtkWidget *link_button;
     LinkLinuxSerialTransport serial;
+    LinkTransport transport;
 } LinkGtkShell;
+
+static const char link_gtk_base_css[] =
+    ".link-connection-bar { padding: 12px; border-radius: 14px; }"
+    ".link-link-button { font-weight: 800; padding: 8px 18px; }"
+    ".link-connection-status { font-weight: 700; }"
+    ".link-brand { font-size: 28px; font-weight: 900; letter-spacing: 3px; }"
+    ".link-brand-subtitle { font-size: 11px; font-weight: 800; }"
+    ".link-brand-version { opacity: 0.7; font-size: 11px; }"
+    ".link-section-title { font-weight: 800; }"
+    ".link-section-summary { opacity: 0.68; font-size: 11px; }"
+    ".link-content-title { font-size: 30px; font-weight: 900; }"
+    ".link-content-summary { opacity: 0.78; font-size: 14px; }";
 
 static GtkWidget *left_label(const char *text, const char *css)
 {
-    GtkWidget *label = gtk_label_new(text);
+    GtkWidget *label = gtk_label_new(text != NULL ? text : "");
     gtk_label_set_xalign(GTK_LABEL(label), 0.0F);
     gtk_label_set_wrap(GTK_LABEL(label), TRUE);
     if (css != NULL) gtk_widget_add_css_class(label, css);
     return label;
+}
+
+static void load_css(const char *css)
+{
+    GtkCssProvider *provider;
+    if (css == NULL) return;
+    provider = gtk_css_provider_new();
+    G_GNUC_BEGIN_IGNORE_DEPRECATIONS
+    gtk_css_provider_load_from_data(provider, css, -1);
+    G_GNUC_END_IGNORE_DEPRECATIONS
+    gtk_style_context_add_provider_for_display(gdk_display_get_default(),
+                                                GTK_STYLE_PROVIDER(provider),
+                                                GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+    g_object_unref(provider);
 }
 
 static void clear_box(GtkWidget *box)
@@ -50,8 +79,14 @@ static void refresh_devices(LinkGtkShell *shell)
 static const char *selected_device(LinkGtkShell *shell)
 {
     GObject *item = gtk_drop_down_get_selected_item(GTK_DROP_DOWN(shell->device_combo));
-    if (item == NULL) return NULL;
-    return gtk_string_object_get_string(GTK_STRING_OBJECT(item));
+    return item != NULL ? gtk_string_object_get_string(GTK_STRING_OBJECT(item)) : NULL;
+}
+
+static void notify_connection(LinkGtkShell *shell, bool connected, const char *identity)
+{
+    if (shell->descriptor->connection_changed != NULL)
+        shell->descriptor->connection_changed(&shell->transport, connected, identity,
+                                              shell->descriptor->context);
 }
 
 static void set_connection_state(LinkGtkShell *shell, bool connected, const char *message)
@@ -65,10 +100,12 @@ static void link_clicked(GtkButton *button, gpointer user_data)
 {
     LinkGtkShell *shell = user_data;
     const char *device;
+    char identity[160];
     (void)button;
-    if (link_linux_serial_is_open(&shell->serial)) {
-        link_linux_serial_close(&shell->serial);
+    if (shell->transport.is_connected(shell->transport.context)) {
+        shell->transport.disconnect(shell->transport.context);
         set_connection_state(shell, false, "Disconnected");
+        notify_connection(shell, false, "");
         return;
     }
     device = selected_device(shell);
@@ -76,11 +113,26 @@ static void link_clicked(GtkButton *button, gpointer user_data)
         set_connection_state(shell, false, "No ELM327 serial device detected");
         return;
     }
-    if (!link_linux_serial_open(&shell->serial, device, 38400U)) {
-        set_connection_state(shell, false, "Unable to open adapter (check permissions / baud rate)");
+    if (!link_linux_serial_configure(&shell->serial, device, 38400U)) {
+        set_connection_state(shell, false, "Invalid adapter configuration");
         return;
     }
-    set_connection_state(shell, true, "Serial adapter open · ready for LINK diagnostic session");
+    if (shell->transport.connect(shell->transport.context) != LINK_TRANSPORT_OK) {
+        set_connection_state(shell, false, "Unable to open adapter · check dialout permissions");
+        return;
+    }
+    if (!link_linux_serial_probe_elm327(&shell->serial, identity, sizeof(identity))) {
+        shell->transport.disconnect(shell->transport.context);
+        set_connection_state(shell, false, "Device opened but ELM327 identity handshake failed");
+        return;
+    }
+    if (identity[0] == '\0') (void)snprintf(identity, sizeof(identity), "ELM327-compatible adapter");
+    {
+        char message[256];
+        (void)snprintf(message, sizeof(message), "Linked · %s", identity);
+        set_connection_state(shell, true, message);
+    }
+    notify_connection(shell, true, identity);
 }
 
 static void refresh_clicked(GtkButton *button, gpointer user_data)
@@ -89,16 +141,25 @@ static void refresh_clicked(GtkButton *button, gpointer user_data)
     refresh_devices((LinkGtkShell *)user_data);
 }
 
+static gboolean pump_serial(gpointer user_data)
+{
+    LinkGtkShell *shell = user_data;
+    link_linux_serial_pump(&shell->serial);
+    return G_SOURCE_CONTINUE;
+}
+
 static void select_section(GtkListBox *list, GtkListBoxRow *row, gpointer user_data)
 {
     LinkGtkShell *shell = user_data;
     size_t index;
+    const LinkWorkspaceSectionDescriptor *section;
     (void)list;
     if (row == NULL) return;
     index = (size_t)GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(row), "link-section"));
-    if (index >= shell->descriptor->section_count) return;
-    gtk_label_set_text(GTK_LABEL(shell->title), shell->descriptor->section_titles[index]);
-    gtk_label_set_text(GTK_LABEL(shell->summary), shell->descriptor->section_summaries[index]);
+    section = link_workspace_section_at(index);
+    if (section == NULL) return;
+    gtk_label_set_text(GTK_LABEL(shell->title), section->title);
+    gtk_label_set_text(GTK_LABEL(shell->summary), section->summary);
     clear_box(shell->body);
     if (shell->descriptor->render_section != NULL)
         shell->descriptor->render_section(index, shell->body, shell->descriptor->context);
@@ -150,14 +211,8 @@ static void activate(GtkApplication *application, gpointer user_data)
     shell->window = GTK_WINDOW(window);
     gtk_window_set_title(shell->window, d->window_title);
     gtk_window_set_default_size(shell->window, 1180, 760);
-    if (d->css != NULL) {
-        GtkCssProvider *provider = gtk_css_provider_new();
-        G_GNUC_BEGIN_IGNORE_DEPRECATIONS
-        gtk_css_provider_load_from_data(provider, d->css, -1);
-        G_GNUC_END_IGNORE_DEPRECATIONS
-        gtk_style_context_add_provider_for_display(gdk_display_get_default(), GTK_STYLE_PROVIDER(provider), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
-        g_object_unref(provider);
-    }
+    load_css(link_gtk_base_css);
+    load_css(d->css);
     if (d->emblem_resource != NULL) {
         GtkWidget *image = gtk_image_new_from_resource(d->emblem_resource);
         gtk_image_set_pixel_size(GTK_IMAGE(image), 58);
@@ -169,11 +224,15 @@ static void activate(GtkApplication *application, gpointer user_data)
     gtk_box_append(GTK_BOX(sidebar), left_label(d->version, "link-brand-version"));
 
     gtk_list_box_set_selection_mode(GTK_LIST_BOX(list), GTK_SELECTION_SINGLE);
-    for (index = 0U; index < d->section_count; ++index) {
-        GtkWidget *row = gtk_list_box_row_new();
-        GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
-        gtk_box_append(GTK_BOX(box), left_label(d->section_titles[index], "link-section-title"));
-        gtk_box_append(GTK_BOX(box), left_label(d->section_summaries[index], "link-section-summary"));
+    for (index = 0U; index < link_workspace_section_count(); ++index) {
+        const LinkWorkspaceSectionDescriptor *section = link_workspace_section_at(index);
+        GtkWidget *row;
+        GtkWidget *box;
+        if (section == NULL) continue;
+        row = gtk_list_box_row_new();
+        box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
+        gtk_box_append(GTK_BOX(box), left_label(section->title, "link-section-title"));
+        gtk_box_append(GTK_BOX(box), left_label(section->summary, "link-section-summary"));
         gtk_list_box_row_set_child(GTK_LIST_BOX_ROW(row), box);
         g_object_set_data(G_OBJECT(row), "link-section", GUINT_TO_POINTER((unsigned int)index));
         gtk_list_box_append(GTK_LIST_BOX(list), row);
@@ -184,8 +243,11 @@ static void activate(GtkApplication *application, gpointer user_data)
     g_signal_connect(about, "clicked", G_CALLBACK(about_clicked), shell);
     gtk_box_append(GTK_BOX(sidebar), about);
 
-    shell->title = left_label(d->section_count ? d->section_titles[0] : "Diagnostics", "link-content-title");
-    shell->summary = left_label(d->section_count ? d->section_summaries[0] : "", "link-content-summary");
+    {
+        const LinkWorkspaceSectionDescriptor *first = link_workspace_section_at(0U);
+        shell->title = left_label(first != NULL ? first->title : "Diagnostics", "link-content-title");
+        shell->summary = left_label(first != NULL ? first->summary : "", "link-content-summary");
+    }
     shell->body = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
     gtk_box_append(GTK_BOX(content), shell->title);
     gtk_box_append(GTK_BOX(content), shell->summary);
@@ -208,8 +270,8 @@ static void activate(GtkApplication *application, gpointer user_data)
     gtk_box_append(GTK_BOX(root), sidebar);
     gtk_box_append(GTK_BOX(root), main);
     gtk_window_set_child(shell->window, root);
-    if (d->section_count != 0U && d->render_section != NULL)
-        d->render_section(0U, shell->body, d->context);
+    if (d->render_section != NULL) d->render_section(0U, shell->body, d->context);
+    (void)g_timeout_add(25U, pump_serial, shell);
     gtk_window_present(shell->window);
 }
 
@@ -222,10 +284,13 @@ int link_gtk_shell_run(int argc, char **argv,
     if (descriptor == NULL || descriptor->app_id == NULL) return 2;
     shell.descriptor = descriptor;
     link_linux_serial_init(&shell.serial);
+    shell.transport = link_linux_serial_as_transport(&shell.serial);
+    if (!link_transport_is_valid(&shell.transport)) return 3;
     application = gtk_application_new(descriptor->app_id, G_APPLICATION_DEFAULT_FLAGS);
     g_signal_connect(application, "activate", G_CALLBACK(activate), &shell);
     status = g_application_run(G_APPLICATION(application), argc, argv);
-    link_linux_serial_close(&shell.serial);
+    if (shell.transport.is_connected(shell.transport.context))
+        shell.transport.disconnect(shell.transport.context);
     g_object_unref(application);
     return status;
 }

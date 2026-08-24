@@ -113,6 +113,21 @@ if(LINK_ENABLE_SANITIZERS)
     target_link_options(link-core INTERFACE -fsanitize=address,undefined)
 endif()
 
+function(link_enable_linux_gtk_shell target)
+    if(NOT UNIX OR APPLE)
+        message(FATAL_ERROR "link_enable_linux_gtk_shell is supported on Linux only.")
+    endif()
+    if(NOT TARGET ${target})
+        message(FATAL_ERROR "link_enable_linux_gtk_shell target does not exist: ${target}")
+    endif()
+    target_sources(${target} PRIVATE
+        "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platform/linux/link-linux-serial.c"
+        "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platform/linux/link-gtk-shell.c")
+    target_include_directories(${target} PRIVATE
+        "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platform/linux")
+    target_link_libraries(${target} PRIVATE LINK::Core)
+endfunction()
+
 function(link_add_windows_discover target)
     if(NOT WIN32)
         message(FATAL_ERROR "link_add_windows_discover is supported on Windows only.")
@@ -124,14 +139,8 @@ function(link_add_windows_discover target)
         set(LINK_FACE_WINDOW_CLASS "${ARGV3}")
     else()
         set(one_value_args
-            PRODUCT_NAME
-            PRODUCT_SLUG
-            WINDOW_CLASS
-            PRODUCT_VERSION
-            PRODUCT_COPYRIGHT
-            PRODUCT_SUBTITLE
-            PRODUCT_WEBSITE
-            PRODUCT_ICON_PNG)
+            PRODUCT_NAME PRODUCT_SLUG WINDOW_CLASS PRODUCT_VERSION
+            PRODUCT_COPYRIGHT PRODUCT_SUBTITLE PRODUCT_WEBSITE PRODUCT_ICON_PNG)
         cmake_parse_arguments(LINK_FACE "" "${one_value_args}" "" ${ARGN})
         if(LINK_FACE_UNPARSED_ARGUMENTS)
             message(FATAL_ERROR "Unknown link_add_windows_discover arguments: ${LINK_FACE_UNPARSED_ARGUMENTS}")
@@ -143,28 +152,13 @@ function(link_add_windows_discover target)
             message(FATAL_ERROR "link_add_windows_discover requires ${required}.")
         endif()
     endforeach()
+    if(NOT LINK_FACE_PRODUCT_VERSION) set(LINK_FACE_PRODUCT_VERSION "unknown") endif()
+    if(NOT LINK_FACE_PRODUCT_COPYRIGHT) set(LINK_FACE_PRODUCT_COPYRIGHT "Copyright (C) 2026 The First Infiltrator") endif()
+    if(NOT LINK_FACE_PRODUCT_SUBTITLE) set(LINK_FACE_PRODUCT_SUBTITLE "Vehicle Diagnostics") endif()
+    if(NOT LINK_FACE_PRODUCT_WEBSITE) set(LINK_FACE_PRODUCT_WEBSITE "https://github.com/The-First-Infiltrator/LINK") endif()
 
-    if(NOT LINK_FACE_PRODUCT_VERSION)
-        set(LINK_FACE_PRODUCT_VERSION "unknown")
-    endif()
-    if(NOT LINK_FACE_PRODUCT_COPYRIGHT)
-        set(LINK_FACE_PRODUCT_COPYRIGHT "Copyright (C) 2026 The First Infiltrator")
-    endif()
-    if(NOT LINK_FACE_PRODUCT_SUBTITLE)
-        set(LINK_FACE_PRODUCT_SUBTITLE "Vehicle Diagnostics")
-    endif()
-    if(NOT LINK_FACE_PRODUCT_WEBSITE)
-        set(LINK_FACE_PRODUCT_WEBSITE "https://github.com/The-First-Infiltrator/LINK")
-    endif()
-
-    add_executable(${target} WIN32
-        "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platform/windows/link-discover-ui.c")
-    target_link_libraries(${target} PRIVATE
-        LINK::Core
-        comdlg32
-        advapi32
-        shell32
-        comctl32)
+    add_executable(${target} WIN32 "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platform/windows/link-discover-ui.c")
+    target_link_libraries(${target} PRIVATE LINK::Core comdlg32 advapi32 shell32 comctl32)
     target_compile_definitions(${target} PRIVATE
         _CRT_SECURE_NO_WARNINGS
         LINK_PRODUCT_NAME="${LINK_FACE_PRODUCT_NAME}"
@@ -174,34 +168,24 @@ function(link_add_windows_discover target)
         LINK_PRODUCT_COPYRIGHT="${LINK_FACE_PRODUCT_COPYRIGHT}"
         LINK_PRODUCT_SUBTITLE="${LINK_FACE_PRODUCT_SUBTITLE}"
         LINK_PRODUCT_WEBSITE="${LINK_FACE_PRODUCT_WEBSITE}")
-
     if(MSVC)
-        set_property(TARGET ${target} PROPERTY
-            MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+        set_property(TARGET ${target} PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
         target_compile_options(${target} PRIVATE /W4 /WX /utf-8)
     endif()
-
     if(LINK_FACE_PRODUCT_ICON_PNG)
         if(NOT EXISTS "${LINK_FACE_PRODUCT_ICON_PNG}")
             message(FATAL_ERROR "PRODUCT_ICON_PNG does not exist: ${LINK_FACE_PRODUCT_ICON_PNG}")
         endif()
-
-        find_program(LINK_POWERSHELL_EXECUTABLE
-            NAMES powershell.exe powershell REQUIRED)
+        find_program(LINK_POWERSHELL_EXECUTABLE NAMES powershell.exe powershell REQUIRED)
         set(generated_icon "${CMAKE_CURRENT_BINARY_DIR}/${target}-product.ico")
         set(generated_rc "${CMAKE_CURRENT_BINARY_DIR}/${target}-product.rc")
-
         add_custom_command(
             OUTPUT "${generated_icon}"
             COMMAND "${LINK_POWERSHELL_EXECUTABLE}" -NoProfile -ExecutionPolicy Bypass
                 -File "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platform/windows/png-to-ico.ps1"
-                -InputPng "${LINK_FACE_PRODUCT_ICON_PNG}"
-                -OutputIco "${generated_icon}"
-            DEPENDS
-                "${LINK_FACE_PRODUCT_ICON_PNG}"
-                "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platform/windows/png-to-ico.ps1"
+                -InputPng "${LINK_FACE_PRODUCT_ICON_PNG}" -OutputIco "${generated_icon}"
+            DEPENDS "${LINK_FACE_PRODUCT_ICON_PNG}" "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platform/windows/png-to-ico.ps1"
             VERBATIM)
-
         set(version_major 0)
         set(version_minor 0)
         set(version_patch 0)
@@ -210,22 +194,12 @@ function(link_add_windows_discover target)
             set(version_minor "${CMAKE_MATCH_2}")
             set(version_patch "${CMAKE_MATCH_3}")
         endif()
-
         file(WRITE "${generated_rc}"
             "1 ICON \"${generated_icon}\"\n"
-            "1 VERSIONINFO\n"
-            "FILEVERSION ${version_major},${version_minor},${version_patch},0\n"
+            "1 VERSIONINFO\nFILEVERSION ${version_major},${version_minor},${version_patch},0\n"
             "PRODUCTVERSION ${version_major},${version_minor},${version_patch},0\n"
-            "FILEFLAGSMASK 0x3fL\n"
-            "FILEFLAGS 0x0L\n"
-            "FILEOS 0x40004L\n"
-            "FILETYPE 0x1L\n"
-            "FILESUBTYPE 0x0L\n"
-            "BEGIN\n"
-            "  BLOCK \"StringFileInfo\"\n"
-            "  BEGIN\n"
-            "    BLOCK \"040904b0\"\n"
-            "    BEGIN\n"
+            "FILEFLAGSMASK 0x3fL\nFILEFLAGS 0x0L\nFILEOS 0x40004L\nFILETYPE 0x1L\nFILESUBTYPE 0x0L\n"
+            "BEGIN\n  BLOCK \"StringFileInfo\"\n  BEGIN\n    BLOCK \"040904b0\"\n    BEGIN\n"
             "      VALUE \"CompanyName\", \"The First Infiltrator\"\n"
             "      VALUE \"FileDescription\", \"${LINK_FACE_PRODUCT_NAME} Discover\"\n"
             "      VALUE \"FileVersion\", \"${LINK_FACE_PRODUCT_VERSION}\"\n"
@@ -234,47 +208,27 @@ function(link_add_windows_discover target)
             "      VALUE \"OriginalFilename\", \"${LINK_FACE_PRODUCT_NAME}-${LINK_FACE_PRODUCT_VERSION}-windows-discover.exe\"\n"
             "      VALUE \"ProductName\", \"${LINK_FACE_PRODUCT_NAME}\"\n"
             "      VALUE \"ProductVersion\", \"${LINK_FACE_PRODUCT_VERSION}\"\n"
-            "    END\n"
-            "  END\n"
-            "  BLOCK \"VarFileInfo\"\n"
-            "  BEGIN\n"
-            "    VALUE \"Translation\", 0x0409, 1200\n"
-            "  END\n"
-            "END\n")
-        set_source_files_properties("${generated_rc}" PROPERTIES
-            OBJECT_DEPENDS "${generated_icon}")
+            "    END\n  END\n  BLOCK \"VarFileInfo\"\n  BEGIN\n    VALUE \"Translation\", 0x0409, 1200\n  END\nEND\n")
+        set_source_files_properties("${generated_rc}" PROPERTIES OBJECT_DEPENDS "${generated_icon}")
         target_sources(${target} PRIVATE "${generated_rc}")
     endif()
-
-    set_target_properties(${target} PROPERTIES
-        OUTPUT_NAME "${LINK_FACE_PRODUCT_SLUG}-discover")
+    set_target_properties(${target} PROPERTIES OUTPUT_NAME "${LINK_FACE_PRODUCT_SLUG}-discover")
 endfunction()
 
 if(WIN32 AND PROJECT_IS_TOP_LEVEL)
     link_add_windows_discover(link-discover
-        PRODUCT_NAME "LINK"
-        PRODUCT_SLUG "link"
-        WINDOW_CLASS "LINKDiscoverWindow"
-        PRODUCT_VERSION "${PROJECT_VERSION}"
-        PRODUCT_COPYRIGHT "Copyright (C) 2026 The First Infiltrator"
+        PRODUCT_NAME "LINK" PRODUCT_SLUG "link" WINDOW_CLASS "LINKDiscoverWindow"
+        PRODUCT_VERSION "${PROJECT_VERSION}" PRODUCT_COPYRIGHT "Copyright (C) 2026 The First Infiltrator"
         PRODUCT_SUBTITLE "Shared Vehicle Diagnostics"
         PRODUCT_WEBSITE "https://github.com/The-First-Infiltrator/LINK")
     if(LINK_BUILD_REFERENCE_PRODUCT_FACES)
-        link_add_windows_discover(mblink-discover
-            PRODUCT_NAME "MBLINK"
-            PRODUCT_SLUG "mblink"
-            WINDOW_CLASS "MBLINKDiscoverWindow"
-            PRODUCT_VERSION "${PROJECT_VERSION}"
-            PRODUCT_COPYRIGHT "Copyright (C) 2026 Shannon Smith"
-            PRODUCT_SUBTITLE "Mercedes-Benz Diagnostics"
+        link_add_windows_discover(mblink-discover PRODUCT_NAME "MBLINK" PRODUCT_SLUG "mblink"
+            WINDOW_CLASS "MBLINKDiscoverWindow" PRODUCT_VERSION "${PROJECT_VERSION}"
+            PRODUCT_COPYRIGHT "Copyright (C) 2026 Shannon Smith" PRODUCT_SUBTITLE "Mercedes-Benz Diagnostics"
             PRODUCT_WEBSITE "https://github.com/The-First-Infiltrator/MBLINK")
-        link_add_windows_discover(jaglink-discover
-            PRODUCT_NAME "JAGLINK"
-            PRODUCT_SLUG "jaglink"
-            WINDOW_CLASS "JAGLINKDiscoverWindow"
-            PRODUCT_VERSION "${PROJECT_VERSION}"
-            PRODUCT_COPYRIGHT "Copyright (C) 2026 Xavier Wheaton and Shannon Smith"
-            PRODUCT_SUBTITLE "Jaguar X400 Diagnostics"
+        link_add_windows_discover(jaglink-discover PRODUCT_NAME "JAGLINK" PRODUCT_SLUG "jaglink"
+            WINDOW_CLASS "JAGLINKDiscoverWindow" PRODUCT_VERSION "${PROJECT_VERSION}"
+            PRODUCT_COPYRIGHT "Copyright (C) 2026 Xavier Wheaton and Shannon Smith" PRODUCT_SUBTITLE "Jaguar X400 Diagnostics"
             PRODUCT_WEBSITE "https://github.com/The-First-Infiltrator/Jaglink")
     endif()
 endif()
@@ -309,35 +263,18 @@ if(BUILD_TESTING AND PROJECT_IS_TOP_LEVEL)
 endif()
 
 if(LINK_ENABLE_INSTALL)
-    install(TARGETS link-core
-        EXPORT LINKTargets
-        ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
-        LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
-        RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
-    install(DIRECTORY include/link
-        DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
-    install(EXPORT LINKTargets
-        FILE LINKTargets.cmake
-        NAMESPACE LINK::
-        DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/LINK")
-    configure_package_config_file(
-        cmake/LINKConfig.cmake.in
-        "${CMAKE_CURRENT_BINARY_DIR}/LINKConfig.cmake"
+    install(TARGETS link-core EXPORT LINKTargets ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+        LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}" RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
+    install(DIRECTORY include/link DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
+    install(EXPORT LINKTargets FILE LINKTargets.cmake NAMESPACE LINK:: DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/LINK")
+    configure_package_config_file(cmake/LINKConfig.cmake.in "${CMAKE_CURRENT_BINARY_DIR}/LINKConfig.cmake"
         INSTALL_DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/LINK")
-    write_basic_package_version_file(
-        "${CMAKE_CURRENT_BINARY_DIR}/LINKConfigVersion.cmake"
-        VERSION "${PROJECT_VERSION}"
-        COMPATIBILITY SameMajorVersion)
-    install(FILES
-        "${CMAKE_CURRENT_BINARY_DIR}/LINKConfig.cmake"
-        "${CMAKE_CURRENT_BINARY_DIR}/LINKConfigVersion.cmake"
+    write_basic_package_version_file("${CMAKE_CURRENT_BINARY_DIR}/LINKConfigVersion.cmake"
+        VERSION "${PROJECT_VERSION}" COMPATIBILITY SameMajorVersion)
+    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/LINKConfig.cmake" "${CMAKE_CURRENT_BINARY_DIR}/LINKConfigVersion.cmake"
         DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/LINK")
 endif()
 
-# Product iOS projects intentionally compile the pinned LINK sources directly.
-# Validate that this bridge remains complete every time LINK is embedded so a
-# newly compiled LINK::Core source cannot silently disappear from the iPhone
-# product build.
 if(NOT PROJECT_IS_TOP_LEVEL AND EXISTS "${CMAKE_SOURCE_DIR}/app/ios")
     include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/ValidateAppleBridge.cmake")
     link_validate_product_apple_bridge("${CMAKE_SOURCE_DIR}")

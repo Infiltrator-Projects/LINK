@@ -2,8 +2,9 @@
 #ifndef LINK_GTK_SHELL_H
 #define LINK_GTK_SHELL_H
 
-#include "link/linux_serial.h"
+#include "link/transport.h"
 #include <gtk/gtk.h>
+#include <stdbool.h>
 #include <stddef.h>
 
 #ifdef __cplusplus
@@ -18,11 +19,12 @@ typedef struct LinkGtkShellDescriptor {
     const char *version;
     const char *emblem_resource;
     const char *css;
-    const char *const *section_titles;
-    const char *const *section_summaries;
-    size_t section_count;
     void (*render_section)(size_t section, GtkWidget *body, void *context);
     void (*show_about)(GtkWindow *window, void *context);
+    void (*connection_changed)(LinkTransport *transport,
+                               bool connected,
+                               const char *adapter_identity,
+                               void *context);
     void *context;
 } LinkGtkShellDescriptor;
 
