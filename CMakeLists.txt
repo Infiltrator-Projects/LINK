@@ -172,7 +172,11 @@ function(link_add_windows_discover target)
         set(LINK_FACE_PRODUCT_WEBSITE "https://github.com/The-First-Infiltrator/LINK")
     endif()
 
-    add_executable(${target} WIN32 "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platform/windows/link-discover-ui.c")
+    set(link_windows_discover_source "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platform/windows/link-discover-ui.c")
+    set(link_windows_i18n_header "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platform/windows/link-discover-i18n.h")
+    add_executable(${target} WIN32
+        "${link_windows_discover_source}"
+        "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platform/windows/link-discover-i18n.c")
     target_link_libraries(${target} PRIVATE LINK::Core comdlg32 advapi32 shell32 comctl32)
     target_compile_definitions(${target} PRIVATE
         _CRT_SECURE_NO_WARNINGS
@@ -186,6 +190,11 @@ function(link_add_windows_discover target)
     if(MSVC)
         set_property(TARGET ${target} PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
         target_compile_options(${target} PRIVATE /W4 /WX /utf-8)
+        set_source_files_properties("${link_windows_discover_source}" PROPERTIES
+            COMPILE_OPTIONS "/FI${link_windows_i18n_header}")
+    elseif(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        set_source_files_properties("${link_windows_discover_source}" PROPERTIES
+            COMPILE_OPTIONS "-include;${link_windows_i18n_header}")
     endif()
     if(LINK_FACE_PRODUCT_ICON_PNG)
         if(NOT EXISTS "${LINK_FACE_PRODUCT_ICON_PNG}")
