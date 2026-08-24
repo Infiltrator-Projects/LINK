@@ -9,12 +9,17 @@
 
 static int link_win_i18n_initialised;
 
-static void ensure_locale(void)
+void link_win_i18n_init(void)
 {
     if (link_win_i18n_initialised) return;
     link_i18n_init();
     (void)link_i18n_set_system_locale();
     link_win_i18n_initialised = 1;
+}
+
+static void ensure_locale(void)
+{
+    link_win_i18n_init();
 }
 
 static const char *literal_key(const char *text)
@@ -47,7 +52,7 @@ static const char *literal_key(const char *text)
     return NULL;
 }
 
-static const char *translate(const char *text)
+const char *link_win_i18n_translate_text(const char *text)
 {
     const char *key;
     static char buffer[512];
@@ -100,7 +105,7 @@ HWND link_win_i18n_create_window_a(const char *class_name,
                                    HWND parent, HMENU menu,
                                    HINSTANCE instance, LPVOID parameter)
 {
-    return CreateWindowExA(0U, class_name, translate(window_name), style,
+    return CreateWindowExA(0U, class_name, link_win_i18n_translate_text(window_name), style,
                            x, y, width, height, parent, menu, instance, parameter);
 }
 
@@ -112,7 +117,8 @@ HWND link_win_i18n_create_window_ex_a(DWORD extended_style,
                                       HWND parent, HMENU menu,
                                       HINSTANCE instance, LPVOID parameter)
 {
-    return CreateWindowExA(extended_style, class_name, translate(window_name),
+    return CreateWindowExA(extended_style, class_name,
+                           link_win_i18n_translate_text(window_name),
                            style, x, y, width, height,
                            parent, menu, instance, parameter);
 }
@@ -120,11 +126,11 @@ HWND link_win_i18n_create_window_ex_a(DWORD extended_style,
 BOOL link_win_i18n_append_menu_a(HMENU menu, UINT flags,
                                  UINT_PTR item, const char *text)
 {
-    return AppendMenuA(menu, flags, item, translate(text));
+    return AppendMenuA(menu, flags, item, link_win_i18n_translate_text(text));
 }
 
 int link_win_i18n_message_box_a(HWND window, const char *text,
                                 const char *caption, UINT type)
 {
-    return MessageBoxA(window, translate(text), caption, type);
+    return MessageBoxA(window, link_win_i18n_translate_text(text), caption, type);
 }
