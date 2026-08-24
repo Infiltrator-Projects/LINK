@@ -2,6 +2,7 @@
 #ifndef LINK_GTK_SHELL_H
 #define LINK_GTK_SHELL_H
 
+#include "link/diagnostic_flow.h"
 #include "link/transport.h"
 #include <gtk/gtk.h>
 #include <stdbool.h>
@@ -24,6 +25,11 @@ typedef struct LinkGtkShellDescriptor {
     void (*connection_changed)(LinkTransport *transport,
                                bool connected,
                                const char *adapter_identity,
+                               void *context);
+    void (*diagnostic_changed)(const LinkDiagnosticFlow *flow,
+                               const LinkDiagnosticFlowEvent *event,
+                               bool active,
+                               bool ready,
                                void *context);
     void *context;
 } LinkGtkShellDescriptor;

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "link-gtk-shell.h"
 #include "link/linux_serial.h"
+#include "link/elm327_session.h"
 #include "link/workspace.h"
 
 #include <stdio.h>
@@ -17,6 +18,13 @@ typedef struct LinkGtkShell {
     GtkWidget *link_button;
     LinkLinuxSerialTransport serial;
     LinkTransport transport;
+    LinkElm327Session session;
+    LinkDiagnosticFlow flow;
+    bool session_initialized;
+    bool diagnostics_active;
+    bool diagnostics_ready;
+    bool session_event_pending;
+    size_t current_section;
 } LinkGtkShell;
 
 static const char link_gtk_base_css[] =
@@ -30,6 +38,12 @@ static const char link_gtk_base_css[] =
     ".link-section-summary { opacity: 0.68; font-size: 11px; }"
     ".link-content-title { font-size: 30px; font-weight: 900; }"
     ".link-content-summary { opacity: 0.78; font-size: 14px; }";
+
+static uint64_t monotonic_ms(void)
+{
+    const gint64 value = g_get_monotonic_time();
+    return value <= 0 ? 0U : (uint64_t)(value / 1000);
+}
 
 static GtkWidget *left_label(const char *text, const char *css)
 {
@@ -63,6 +77,22 @@ static void clear_box(GtkWidget *box)
     }
 }
 
+static void render_current_section(LinkGtkShell *shell)
+{
+    const LinkWorkspaceSectionDescriptor *section;
+    if (shell == NULL || shell->body == NULL) return;
+    section = link_workspace_section_at(shell->current_section);
+    if (section == NULL) return;
+    if (shell->title != NULL) gtk_label_set_text(GTK_LABEL(shell->title), section->title);
+    if (shell->summary != NULL) gtk_label_set_text(GTK_LABEL(shell->summary), section->summary);
+    clear_box(shell->body);
+    if (shell->descriptor->render_section != NULL) {
+        shell->descriptor->render_section(shell->current_section,
+                                          shell->body,
+                                          shell->descriptor->context);
+    }
+}
+
 static void refresh_devices(LinkGtkShell *shell)
 {
     char paths[32][256];
@@ -84,9 +114,26 @@ static const char *selected_device(LinkGtkShell *shell)
 
 static void notify_connection(LinkGtkShell *shell, bool connected, const char *identity)
 {
-    if (shell->descriptor->connection_changed != NULL)
-        shell->descriptor->connection_changed(&shell->transport, connected, identity,
+    if (shell->descriptor->connection_changed != NULL) {
+        shell->descriptor->connection_changed(&shell->transport,
+                                              connected,
+                                              identity,
                                               shell->descriptor->context);
+    }
+}
+
+static void notify_diagnostic(LinkGtkShell *shell,
+                              const LinkDiagnosticFlowEvent *event)
+{
+    if (shell->descriptor->diagnostic_changed != NULL) {
+        shell->descriptor->diagnostic_changed(
+            shell->diagnostics_active ? &shell->flow : NULL,
+            event,
+            shell->diagnostics_active,
+            shell->diagnostics_ready,
+            shell->descriptor->context);
+    }
+    render_current_section(shell);
 }
 
 static void set_connection_state(LinkGtkShell *shell, bool connected, const char *message)
@@ -96,18 +143,231 @@ static void set_connection_state(LinkGtkShell *shell, bool connected, const char
     gtk_widget_set_sensitive(shell->device_combo, !connected);
 }
 
+static const char *diagnostic_stage_message(const LinkGtkShell *shell)
+{
+    if (shell == NULL) return "Diagnostic state unavailable";
+    switch (shell->flow.stage) {
+    case LINK_DIAGNOSTIC_FLOW_IDLE:
+        return "Linked · diagnostic session idle";
+    case LINK_DIAGNOSTIC_FLOW_INITIALIZING:
+        return "Linked · initialising ELM327 adapter";
+    case LINK_DIAGNOSTIC_FLOW_DISCOVERING_PIDS:
+        return "Linked · discovering supported OBD-II PIDs";
+    case LINK_DIAGNOSTIC_FLOW_MANUFACTURER_EXTENSION:
+        return "Linked · manufacturer extension pending";
+    case LINK_DIAGNOSTIC_FLOW_RESTORING_AFTER_MANUFACTURER:
+        return "Linked · restoring standard OBD-II channel";
+    case LINK_DIAGNOSTIC_FLOW_SCANNING_STORED_DTCS:
+        return "Linked · scanning stored OBD-II faults";
+    case LINK_DIAGNOSTIC_FLOW_SCANNING_PENDING_DTCS:
+        return "Linked · scanning pending OBD-II faults";
+    case LINK_DIAGNOSTIC_FLOW_SCANNING_PERMANENT_DTCS:
+        return "Linked · scanning permanent OBD-II faults";
+    case LINK_DIAGNOSTIC_FLOW_LIVE:
+    case LINK_DIAGNOSTIC_FLOW_READING_LIVE:
+        return "Linked · live OBD-II polling active";
+    case LINK_DIAGNOSTIC_FLOW_FAILED:
+        return "Linked · diagnostic session failed · LINK DOWN / LINK UP to retry";
+    }
+    return "Linked · diagnostics active";
+}
+
+static void fail_diagnostics(LinkGtkShell *shell,
+                             LinkDiagnosticFlowResult failure)
+{
+    if (shell == NULL) return;
+    link_diagnostic_flow_fail(&shell->flow, failure);
+    shell->diagnostics_active = false;
+    shell->diagnostics_ready = false;
+    set_connection_state(shell, true,
+                         "Linked · diagnostic session failed · LINK DOWN / LINK UP to retry");
+    if (shell->descriptor->diagnostic_changed != NULL) {
+        shell->descriptor->diagnostic_changed(&shell->flow,
+                                              NULL,
+                                              false,
+                                              false,
+                                              shell->descriptor->context);
+    }
+    render_current_section(shell);
+}
+
+static void session_event(void *context,
+                          const LinkElm327Session *session)
+{
+    LinkGtkShell *shell = context;
+    (void)session;
+    if (shell != NULL) shell->session_event_pending = true;
+}
+
+static bool drive_diagnostics(LinkGtkShell *shell)
+{
+    LinkDiagnosticFlowAction action;
+    LinkDiagnosticFlowResult result;
+
+    if (shell == NULL || !shell->session_initialized || !shell->diagnostics_active)
+        return false;
+    if (shell->session.status == LINK_ELM327_SESSION_WAITING) return true;
+
+    result = link_diagnostic_flow_next_action(&shell->flow, monotonic_ms(), &action);
+    if (result != LINK_DIAGNOSTIC_FLOW_RESULT_OK) {
+        fail_diagnostics(shell, result);
+        return false;
+    }
+
+    switch (action.kind) {
+    case LINK_DIAGNOSTIC_FLOW_ACTION_NONE:
+    case LINK_DIAGNOSTIC_FLOW_ACTION_WAIT:
+        return true;
+
+    case LINK_DIAGNOSTIC_FLOW_ACTION_SEND_COMMAND: {
+        LinkElm327SessionOpResult op;
+        set_connection_state(shell, true, diagnostic_stage_message(shell));
+        op = link_elm327_session_begin(&shell->session,
+                                       action.command,
+                                       monotonic_ms(),
+                                       action.timeout_ms);
+        if (op != LINK_ELM327_SESSION_OP_OK) {
+            fail_diagnostics(shell, LINK_DIAGNOSTIC_FLOW_RESULT_ELM_ERROR);
+            return false;
+        }
+        notify_diagnostic(shell, NULL);
+        return true;
+    }
+
+    case LINK_DIAGNOSTIC_FLOW_ACTION_READY:
+        shell->diagnostics_ready = true;
+        set_connection_state(shell, true, "Linked · diagnostics ready");
+        notify_diagnostic(shell, NULL);
+        return true;
+
+    case LINK_DIAGNOSTIC_FLOW_ACTION_MANUFACTURER_EXTENSION:
+        fail_diagnostics(shell, LINK_DIAGNOSTIC_FLOW_RESULT_INVALID_STATE);
+        return false;
+
+    case LINK_DIAGNOSTIC_FLOW_ACTION_FAILED:
+        fail_diagnostics(shell, shell->flow.failure);
+        return false;
+    }
+    fail_diagnostics(shell, LINK_DIAGNOSTIC_FLOW_RESULT_INVALID_STATE);
+    return false;
+}
+
+static void process_session_event(LinkGtkShell *shell)
+{
+    LinkElm327SessionStatus status;
+    if (shell == NULL || !shell->session_initialized || !shell->session_event_pending) return;
+    shell->session_event_pending = false;
+    status = shell->session.status;
+
+    if (status == LINK_ELM327_SESSION_COMPLETE) {
+        const LinkElm327Response *response = link_elm327_session_response(&shell->session);
+        LinkDiagnosticFlowEvent event;
+        LinkDiagnosticFlowResult result;
+        if (response == NULL) {
+            fail_diagnostics(shell, LINK_DIAGNOSTIC_FLOW_RESULT_ELM_ERROR);
+            return;
+        }
+        result = link_diagnostic_flow_accept_response(&shell->flow,
+                                                      response,
+                                                      monotonic_ms(),
+                                                      &event);
+        if (result != LINK_DIAGNOSTIC_FLOW_RESULT_OK) {
+            fail_diagnostics(shell, result);
+            return;
+        }
+        if (event.became_ready ||
+            event.kind == LINK_DIAGNOSTIC_FLOW_EVENT_LIVE_SAMPLE ||
+            event.kind == LINK_DIAGNOSTIC_FLOW_EVENT_LIVE_NO_DATA ||
+            event.kind == LINK_DIAGNOSTIC_FLOW_EVENT_LIVE_UNSUPPORTED) {
+            shell->diagnostics_ready = true;
+        }
+        set_connection_state(shell, true, diagnostic_stage_message(shell));
+        notify_diagnostic(shell, &event);
+        (void)drive_diagnostics(shell);
+        return;
+    }
+
+    if (status == LINK_ELM327_SESSION_TIMED_OUT ||
+        status == LINK_ELM327_SESSION_FAILED) {
+        shell->flow.elm_failure = shell->session.elm_result;
+        fail_diagnostics(shell, LINK_DIAGNOSTIC_FLOW_RESULT_ELM_ERROR);
+        return;
+    }
+    if (status == LINK_ELM327_SESSION_CANCELLED) {
+        fail_diagnostics(shell, LINK_DIAGNOSTIC_FLOW_RESULT_INVALID_STATE);
+    }
+}
+
+static bool start_diagnostics(LinkGtkShell *shell)
+{
+    LinkDiagnosticFlowConfig config = LINK_DIAGNOSTIC_FLOW_CONFIG_INIT;
+    if (shell == NULL) return false;
+
+    if (!link_elm327_session_init(&shell->session,
+                                  &shell->transport,
+                                  session_event,
+                                  shell)) {
+        return false;
+    }
+    shell->session_initialized = true;
+    if (link_elm327_session_connect(&shell->session) != LINK_TRANSPORT_OK) {
+        link_elm327_session_deinit(&shell->session);
+        shell->session_initialized = false;
+        return false;
+    }
+    if (link_diagnostic_flow_init(&shell->flow, &config) != LINK_DIAGNOSTIC_FLOW_RESULT_OK ||
+        link_diagnostic_flow_start(&shell->flow) != LINK_DIAGNOSTIC_FLOW_RESULT_OK) {
+        link_elm327_session_deinit(&shell->session);
+        shell->session_initialized = false;
+        return false;
+    }
+    shell->diagnostics_active = true;
+    shell->diagnostics_ready = false;
+    shell->session_event_pending = false;
+    set_connection_state(shell, true, diagnostic_stage_message(shell));
+    notify_diagnostic(shell, NULL);
+    return drive_diagnostics(shell);
+}
+
+static void stop_diagnostics(LinkGtkShell *shell)
+{
+    if (shell == NULL) return;
+    if (shell->session_initialized) {
+        if (link_elm327_session_is_connected(&shell->session))
+            link_elm327_session_disconnect(&shell->session);
+        link_elm327_session_deinit(&shell->session);
+        shell->session_initialized = false;
+    }
+    shell->diagnostics_active = false;
+    shell->diagnostics_ready = false;
+    shell->session_event_pending = false;
+    memset(&shell->flow, 0, sizeof(shell->flow));
+    if (shell->descriptor->diagnostic_changed != NULL) {
+        shell->descriptor->diagnostic_changed(NULL,
+                                              NULL,
+                                              false,
+                                              false,
+                                              shell->descriptor->context);
+    }
+    render_current_section(shell);
+}
+
 static void link_clicked(GtkButton *button, gpointer user_data)
 {
     LinkGtkShell *shell = user_data;
     const char *device;
     char identity[160];
     (void)button;
+
     if (shell->transport.is_connected(shell->transport.context)) {
-        shell->transport.disconnect(shell->transport.context);
+        stop_diagnostics(shell);
+        if (shell->transport.is_connected(shell->transport.context))
+            shell->transport.disconnect(shell->transport.context);
         set_connection_state(shell, false, "Disconnected");
         notify_connection(shell, false, "");
         return;
     }
+
     device = selected_device(shell);
     if (device == NULL || device[0] == '\0') {
         set_connection_state(shell, false, "No ELM327 serial device detected");
@@ -127,12 +387,16 @@ static void link_clicked(GtkButton *button, gpointer user_data)
         return;
     }
     if (identity[0] == '\0') (void)snprintf(identity, sizeof(identity), "ELM327-compatible adapter");
+
     {
         char message[256];
-        (void)snprintf(message, sizeof(message), "Linked · %s", identity);
+        (void)snprintf(message, sizeof(message), "Linked · %s · starting diagnostics", identity);
         set_connection_state(shell, true, message);
     }
     notify_connection(shell, true, identity);
+    if (!start_diagnostics(shell)) {
+        fail_diagnostics(shell, LINK_DIAGNOSTIC_FLOW_RESULT_ELM_ERROR);
+    }
 }
 
 static void refresh_clicked(GtkButton *button, gpointer user_data)
@@ -145,24 +409,25 @@ static gboolean pump_serial(gpointer user_data)
 {
     LinkGtkShell *shell = user_data;
     link_linux_serial_pump(&shell->serial);
+    if (shell->session_initialized) {
+        (void)link_elm327_session_tick(&shell->session, monotonic_ms());
+        if (shell->session_event_pending) process_session_event(shell);
+        if (shell->diagnostics_active &&
+            shell->session.status != LINK_ELM327_SESSION_WAITING) {
+            (void)drive_diagnostics(shell);
+        }
+    }
     return G_SOURCE_CONTINUE;
 }
 
 static void select_section(GtkListBox *list, GtkListBoxRow *row, gpointer user_data)
 {
     LinkGtkShell *shell = user_data;
-    size_t index;
-    const LinkWorkspaceSectionDescriptor *section;
     (void)list;
     if (row == NULL) return;
-    index = (size_t)GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(row), "link-section"));
-    section = link_workspace_section_at(index);
-    if (section == NULL) return;
-    gtk_label_set_text(GTK_LABEL(shell->title), section->title);
-    gtk_label_set_text(GTK_LABEL(shell->summary), section->summary);
-    clear_box(shell->body);
-    if (shell->descriptor->render_section != NULL)
-        shell->descriptor->render_section(index, shell->body, shell->descriptor->context);
+    shell->current_section =
+        (size_t)GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(row), "link-section"));
+    render_current_section(shell);
 }
 
 static void about_clicked(GtkButton *button, gpointer user_data)
@@ -209,6 +474,7 @@ static void activate(GtkApplication *application, gpointer user_data)
     size_t index;
 
     shell->window = GTK_WINDOW(window);
+    shell->current_section = 0U;
     gtk_window_set_title(shell->window, d->window_title);
     gtk_window_set_default_size(shell->window, 1180, 760);
     load_css(link_gtk_base_css);
@@ -270,7 +536,7 @@ static void activate(GtkApplication *application, gpointer user_data)
     gtk_box_append(GTK_BOX(root), sidebar);
     gtk_box_append(GTK_BOX(root), main);
     gtk_window_set_child(shell->window, root);
-    if (d->render_section != NULL) d->render_section(0U, shell->body, d->context);
+    render_current_section(shell);
     (void)g_timeout_add(25U, pump_serial, shell);
     gtk_window_present(shell->window);
 }
@@ -289,6 +555,7 @@ int link_gtk_shell_run(int argc, char **argv,
     application = gtk_application_new(descriptor->app_id, G_APPLICATION_DEFAULT_FLAGS);
     g_signal_connect(application, "activate", G_CALLBACK(activate), &shell);
     status = g_application_run(G_APPLICATION(application), argc, argv);
+    stop_diagnostics(&shell);
     if (shell.transport.is_connected(shell.transport.context))
         shell.transport.disconnect(shell.transport.context);
     g_object_unref(application);
