@@ -23,6 +23,8 @@ Infiltratr Common
 
 Infiltratr Common owns portable facilities useful outside vehicle diagnostics. LINK owns product-neutral automotive functionality. MBLINK and JAGLINK own branding, metadata and genuinely manufacturer-specific behaviour.
 
+Each manufacturer repository may build multiple branded application targets without creating a new repository. Today that includes the main MBLINK/JAGLINK applications and the specialist MBLINK Discover/JAGLINK Discover targets. Discover is the ECU/module discovery, identification, read-only inventory and evidence/dump application; its generic mechanics live in LINK while Mercedes/Jaguar knowledge remains in the appropriate product repository.
+
 ## Capabilities
 
 LINK currently owns:
@@ -39,7 +41,8 @@ LINK currently owns:
 - parameter definitions, store/history, scheduler and telemetry/CSV;
 - diagnostic workspace model;
 - portable diagnostic-flow controller state machine;
-- Discover safety classification and evidence writing; and
+- Discover safety classification and evidence writing;
+- common ECU/module discovery, identification and raw-response acquisition primitives; and
 - shared native Windows OpenPort 2.0/J2534 Discover scanner shell.
 
 Codec support does not grant transmit permission. Discover remains independently deny-by-default; adding a UDS codec cannot silently broaden its request allowlist.
@@ -61,6 +64,23 @@ ELM init
 ```
 
 MBLINK uses the extension hook for Mercedes-specific probing. JAGLINK currently skips it. Manufacturer logic therefore stays above LINK while the generic sequencing remains shared.
+
+## Discover application model
+
+Discover is not a separate product repository. It is a specialist branded application target inside each manufacturer repository:
+
+```text
+LINK shared Discover engine
+       ↓                 ↓
+MBLINK Discover     JAGLINK Discover
+ Mercedes face       Jaguar face
+```
+
+The current implementation provides passive CAN capture plus a bounded read-only standard OBD inventory. Its intended evolution is deeper manufacturer-aware module discovery, ECU identification, documented read-only acquisition and structured evidence/dump export using the same shared engine.
+
+That evolution must not fork the generic scanner. Mercedes-specific module topology, identifiers and probes belong in MBLINK; Jaguar-specific equivalents belong in JAGLINK. The reusable state machine, transports, safety classifier, evidence model and platform shell stay here.
+
+See `docs/DISCOVER.md` and `docs/PRODUCT_FACES.md` for the repository/application boundary.
 
 ## Architecture
 
@@ -130,13 +150,14 @@ Manually runnable build/test helpers, where present, are diagnostic tools only a
 - Broadly reusable non-automotive primitives belong in Infiltratr Common.
 - Shared automotive behaviour and generic diagnostic knowledge belong in LINK.
 - Manufacturer-specific definitions and behaviour remain in the product repositories.
+- Multiple executables for one manufacturer do not require multiple repositories; keep the product family together and share mechanics through LINK.
 - Public APIs document ownership, lifetime, failure behaviour and invariants.
 - Source comments explain rationale and non-obvious state-machine constraints rather than narrating syntax.
 - Unknown DTCs remain explicit and evidence-preserving; unknown or write-capable diagnostic actions remain denied unless an owning product explicitly introduces and validates them.
 
 ## Roadmap
 
-The next diagnostic completion work is to connect the existing OBD freeze-frame/readiness primitives to the same resolved fault-record path. The generic DTC catalogue is complete for the pinned OBDex snapshot and should be refreshed reproducibly when its upstream source changes. Remaining consolidation work includes reusable BLE transport coordination and further packaging/CI helper consolidation without pulling product branding into LINK.
+The next diagnostic completion work is to connect the existing OBD freeze-frame/readiness primitives to the same resolved fault-record path. In parallel, Discover should evolve from its present passive CAN/bounded OBD baseline into the shared deep read-only ECU/module reader: manufacturer-aware module inventory, identity acquisition and structured evidence/dump export, while keeping all generic mechanics single-source in LINK. The generic DTC catalogue is complete for the pinned OBDex snapshot and should be refreshed reproducibly when its upstream source changes. Remaining consolidation work includes reusable BLE transport coordination and further packaging/CI helper consolidation without pulling product branding into LINK.
 
 ## Licence
 
