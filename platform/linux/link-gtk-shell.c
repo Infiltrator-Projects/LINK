@@ -2,6 +2,7 @@
 #include "link-gtk-shell.h"
 #include "link/linux_serial.h"
 #include "link/elm327_session.h"
+#include "link/i18n.h"
 #include "link/workspace.h"
 
 #include <stdio.h>
@@ -13,6 +14,13 @@ typedef struct LinkGtkShell {
     GtkWidget *body;
     GtkWidget *title;
     GtkWidget *summary;
+    GtkWidget *nav_list;
+    GtkWidget *brand_subtitle;
+    GtkWidget *language_label;
+    GtkWidget *language_combo;
+    GtkWidget *adapter_label;
+    GtkWidget *refresh_button;
+    GtkWidget *about_button;
     GtkWidget *device_combo;
     GtkWidget *status;
     GtkWidget *link_button;
@@ -27,6 +35,14 @@ typedef struct LinkGtkShell {
     size_t current_section;
 } LinkGtkShell;
 
+static const char *const selectable_locales[] = {
+    "en-AU", "de-DE", "pl-PL"
+};
+
+static const char *const selectable_locale_names[] = {
+    "English", "Deutsch", "Polski", NULL
+};
+
 static const char link_gtk_base_css[] =
     ".link-root { background: transparent; }"
     ".link-sidebar { background: rgba(0,0,0,0.20); border-right: 1px solid rgba(255,255,255,0.12); padding: 16px; }"
@@ -36,6 +52,7 @@ static const char link_gtk_base_css[] =
     ".link-nav-row:hover { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.12); }"
     ".link-nav-row:selected { background: rgba(255,255,255,0.11); border-color: rgba(255,255,255,0.30); }"
     ".link-about-button { margin-top: 6px; }"
+    ".link-language-label { opacity: 0.72; font-size: 11px; font-weight: 700; }"
     ".link-connection-bar { padding: 12px; border-radius: 14px; }"
     ".link-link-button { font-weight: 800; padding: 8px 18px; }"
     ".link-connection-status { font-weight: 700; }"
@@ -85,6 +102,68 @@ static void clear_box(GtkWidget *box)
     }
 }
 
+static char *language_config_path(void)
+{
+    char *directory = g_build_filename(g_get_user_config_dir(),
+                                       "the-first-infiltrator", NULL);
+    char *path;
+    if (directory == NULL) return NULL;
+    (void)g_mkdir_with_parents(directory, 0700);
+    path = g_build_filename(directory, "link-language.ini", NULL);
+    g_free(directory);
+    return path;
+}
+
+static void save_selected_locale(const char *locale)
+{
+    GKeyFile *key_file;
+    char *path;
+    char *data;
+    gsize length = 0U;
+    if (locale == NULL) return;
+    path = language_config_path();
+    if (path == NULL) return;
+    key_file = g_key_file_new();
+    g_key_file_set_string(key_file, "ui", "language", locale);
+    data = g_key_file_to_data(key_file, &length, NULL);
+    if (data != NULL) {
+        (void)g_file_set_contents(path, data, (gssize)length, NULL);
+        g_free(data);
+    }
+    g_key_file_unref(key_file);
+    g_free(path);
+}
+
+static void initialise_selected_locale(void)
+{
+    GKeyFile *key_file;
+    char *path;
+    char *locale = NULL;
+
+    /* Let the existing adapter establish the OS locale once, then honour a
+       manual saved choice. Subsequent screen translations do not reset it. */
+    (void)link_gtk_i18n_translate_text("");
+
+    path = language_config_path();
+    if (path == NULL) return;
+    key_file = g_key_file_new();
+    if (g_key_file_load_from_file(key_file, path, G_KEY_FILE_NONE, NULL)) {
+        locale = g_key_file_get_string(key_file, "ui", "language", NULL);
+        if (locale != NULL) (void)link_i18n_set_locale(locale);
+    }
+    g_free(locale);
+    g_key_file_unref(key_file);
+    g_free(path);
+}
+
+static guint selected_locale_index(void)
+{
+    const char *locale = link_i18n_locale();
+    if (locale != NULL && strncmp(locale, "de", 2U) == 0) return 1U;
+    if (locale != NULL && strncmp(locale, "pl", 2U) == 0) return 2U;
+    return 0U;
+}
+
 static void render_current_section(LinkGtkShell *shell)
 {
     const LinkWorkspaceSectionDescriptor *section;
@@ -98,6 +177,38 @@ static void render_current_section(LinkGtkShell *shell)
         shell->descriptor->render_section(shell->current_section,
                                           shell->body,
                                           shell->descriptor->context);
+    }
+}
+
+static void rebuild_navigation(LinkGtkShell *shell)
+{
+    GtkWidget *child;
+    size_t index;
+    if (shell == NULL || shell->nav_list == NULL) return;
+
+    child = gtk_widget_get_first_child(shell->nav_list);
+    while (child != NULL) {
+        GtkWidget *next = gtk_widget_get_next_sibling(child);
+        gtk_list_box_remove(GTK_LIST_BOX(shell->nav_list), child);
+        child = next;
+    }
+
+    for (index = 0U; index < link_workspace_section_count(); ++index) {
+        const LinkWorkspaceSectionDescriptor *section = link_workspace_section_at(index);
+        GtkWidget *row;
+        GtkWidget *box;
+        if (section == NULL) continue;
+        row = gtk_list_box_row_new();
+        box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
+        gtk_widget_add_css_class(row, "link-nav-row");
+        gtk_box_append(GTK_BOX(box), left_label(section->title, "link-section-title"));
+        gtk_box_append(GTK_BOX(box), left_label(section->summary, "link-section-summary"));
+        gtk_list_box_row_set_child(GTK_LIST_BOX_ROW(row), box);
+        g_object_set_data(G_OBJECT(row), "link-section",
+                          GUINT_TO_POINTER((unsigned int)index));
+        gtk_list_box_append(GTK_LIST_BOX(shell->nav_list), row);
+        if (index == shell->current_section)
+            gtk_list_box_select_row(GTK_LIST_BOX(shell->nav_list), GTK_LIST_BOX_ROW(row));
     }
 }
 
@@ -178,6 +289,52 @@ static const char *diagnostic_stage_message(const LinkGtkShell *shell)
         return "Linked · diagnostic session failed · LINK DOWN / LINK UP to retry";
     }
     return "Linked · diagnostics active";
+}
+
+static void refresh_visible_language(LinkGtkShell *shell)
+{
+    const bool connected = shell != NULL &&
+        shell->transport.is_connected != NULL &&
+        shell->transport.is_connected(shell->transport.context);
+    if (shell == NULL) return;
+
+    if (shell->window != NULL)
+        gtk_window_set_title(shell->window,
+            link_gtk_i18n_translate_text(shell->descriptor->window_title));
+    if (shell->brand_subtitle != NULL)
+        gtk_label_set_text(GTK_LABEL(shell->brand_subtitle), shell->descriptor->brand_subtitle);
+    if (shell->language_label != NULL)
+        gtk_label_set_text(GTK_LABEL(shell->language_label), "Language");
+    if (shell->adapter_label != NULL)
+        gtk_label_set_text(GTK_LABEL(shell->adapter_label), "Adapter");
+    if (shell->refresh_button != NULL)
+        gtk_button_set_label(GTK_BUTTON(shell->refresh_button), "Refresh");
+    if (shell->about_button != NULL)
+        gtk_button_set_label(GTK_BUTTON(shell->about_button), "About");
+
+    rebuild_navigation(shell);
+    if (shell->status != NULL && shell->link_button != NULL) {
+        if (connected)
+            set_connection_state(shell, true,
+                shell->diagnostic_valid ? diagnostic_stage_message(shell)
+                                        : "Linked · diagnostics active");
+        else
+            set_connection_state(shell, false, "Disconnected");
+    }
+    render_current_section(shell);
+}
+
+static void language_changed(GObject *object, GParamSpec *spec, gpointer user_data)
+{
+    LinkGtkShell *shell = user_data;
+    guint selected;
+    (void)spec;
+    if (shell == NULL || object == NULL) return;
+    selected = gtk_drop_down_get_selected(GTK_DROP_DOWN(object));
+    if (selected >= sizeof(selectable_locales) / sizeof(selectable_locales[0])) return;
+    if (!link_i18n_set_locale(selectable_locales[selected])) return;
+    save_selected_locale(selectable_locales[selected]);
+    refresh_visible_language(shell);
 }
 
 static void fail_diagnostics(LinkGtkShell *shell,
@@ -449,18 +606,19 @@ static void about_clicked(GtkButton *button, gpointer user_data)
 static GtkWidget *build_connection_bar(LinkGtkShell *shell)
 {
     GtkWidget *bar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
-    GtkWidget *refresh = gtk_button_new_with_label("Refresh");
+    shell->refresh_button = gtk_button_new_with_label("Refresh");
+    shell->adapter_label = left_label("Adapter", NULL);
     shell->device_combo = gtk_drop_down_new(NULL, NULL);
     shell->status = left_label("Disconnected", "link-connection-status");
     shell->link_button = gtk_button_new_with_label("LINK UP");
     gtk_widget_set_hexpand(shell->status, TRUE);
     gtk_widget_add_css_class(bar, "link-connection-bar");
     gtk_widget_add_css_class(shell->link_button, "link-link-button");
-    g_signal_connect(refresh, "clicked", G_CALLBACK(refresh_clicked), shell);
+    g_signal_connect(shell->refresh_button, "clicked", G_CALLBACK(refresh_clicked), shell);
     g_signal_connect(shell->link_button, "clicked", G_CALLBACK(link_clicked), shell);
-    gtk_box_append(GTK_BOX(bar), left_label("Adapter", NULL));
+    gtk_box_append(GTK_BOX(bar), shell->adapter_label);
     gtk_box_append(GTK_BOX(bar), shell->device_combo);
-    gtk_box_append(GTK_BOX(bar), refresh);
+    gtk_box_append(GTK_BOX(bar), shell->refresh_button);
     gtk_box_append(GTK_BOX(bar), shell->status);
     gtk_box_append(GTK_BOX(bar), shell->link_button);
     refresh_devices(shell);
@@ -476,14 +634,13 @@ static void activate(GtkApplication *application, gpointer user_data)
     GtkWidget *sidebar = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
     GtkWidget *main = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
     GtkWidget *brand = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
-    GtkWidget *list = gtk_list_box_new();
-    GtkWidget *about = gtk_button_new_with_label("About");
     GtkWidget *content = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
-    size_t index;
+    GtkStringList *language_model;
 
     shell->window = GTK_WINDOW(window);
     shell->current_section = 0U;
-    gtk_window_set_title(shell->window, d->window_title);
+    gtk_window_set_title(shell->window,
+                         link_gtk_i18n_translate_text(d->window_title));
     gtk_window_set_default_size(shell->window, 1180, 760);
     if (d->brand_name != NULL && d->brand_name[0] != '\0') {
         char *icon_name = g_ascii_strdown(d->brand_name, -1);
@@ -496,8 +653,6 @@ static void activate(GtkApplication *application, gpointer user_data)
     gtk_widget_add_css_class(root, "link-root");
     gtk_widget_add_css_class(sidebar, "link-sidebar");
     gtk_widget_add_css_class(brand, "link-brand-header");
-    gtk_widget_add_css_class(list, "link-nav-list");
-    gtk_widget_add_css_class(about, "link-about-button");
     if (d->emblem_resource != NULL) {
         GtkWidget *image = gtk_image_new_from_resource(d->emblem_resource);
         gtk_image_set_pixel_size(GTK_IMAGE(image), 58);
@@ -505,29 +660,32 @@ static void activate(GtkApplication *application, gpointer user_data)
     }
     gtk_box_append(GTK_BOX(brand), left_label(d->brand_name, "link-brand"));
     gtk_box_append(GTK_BOX(sidebar), brand);
-    gtk_box_append(GTK_BOX(sidebar), left_label(d->brand_subtitle, "link-brand-subtitle"));
+    shell->brand_subtitle = left_label(d->brand_subtitle, "link-brand-subtitle");
+    gtk_box_append(GTK_BOX(sidebar), shell->brand_subtitle);
     gtk_box_append(GTK_BOX(sidebar), left_label(d->version, "link-brand-version"));
 
-    gtk_list_box_set_selection_mode(GTK_LIST_BOX(list), GTK_SELECTION_SINGLE);
-    for (index = 0U; index < link_workspace_section_count(); ++index) {
-        const LinkWorkspaceSectionDescriptor *section = link_workspace_section_at(index);
-        GtkWidget *row;
-        GtkWidget *box;
-        if (section == NULL) continue;
-        row = gtk_list_box_row_new();
-        box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
-        gtk_widget_add_css_class(row, "link-nav-row");
-        gtk_box_append(GTK_BOX(box), left_label(section->title, "link-section-title"));
-        gtk_box_append(GTK_BOX(box), left_label(section->summary, "link-section-summary"));
-        gtk_list_box_row_set_child(GTK_LIST_BOX_ROW(row), box);
-        g_object_set_data(G_OBJECT(row), "link-section", GUINT_TO_POINTER((unsigned int)index));
-        gtk_list_box_append(GTK_LIST_BOX(list), row);
-    }
-    g_signal_connect(list, "row-selected", G_CALLBACK(select_section), shell);
-    gtk_widget_set_vexpand(list, TRUE);
-    gtk_box_append(GTK_BOX(sidebar), list);
-    g_signal_connect(about, "clicked", G_CALLBACK(about_clicked), shell);
-    gtk_box_append(GTK_BOX(sidebar), about);
+    shell->nav_list = gtk_list_box_new();
+    gtk_widget_add_css_class(shell->nav_list, "link-nav-list");
+    gtk_list_box_set_selection_mode(GTK_LIST_BOX(shell->nav_list), GTK_SELECTION_SINGLE);
+    g_signal_connect(shell->nav_list, "row-selected", G_CALLBACK(select_section), shell);
+    gtk_widget_set_vexpand(shell->nav_list, TRUE);
+    gtk_box_append(GTK_BOX(sidebar), shell->nav_list);
+    rebuild_navigation(shell);
+
+    shell->language_label = left_label("Language", "link-language-label");
+    language_model = gtk_string_list_new(selectable_locale_names);
+    shell->language_combo = gtk_drop_down_new(G_LIST_MODEL(language_model), NULL);
+    gtk_drop_down_set_selected(GTK_DROP_DOWN(shell->language_combo), selected_locale_index());
+    g_object_unref(language_model);
+    gtk_box_append(GTK_BOX(sidebar), shell->language_label);
+    gtk_box_append(GTK_BOX(sidebar), shell->language_combo);
+    g_signal_connect(shell->language_combo, "notify::selected",
+                     G_CALLBACK(language_changed), shell);
+
+    shell->about_button = gtk_button_new_with_label("About");
+    gtk_widget_add_css_class(shell->about_button, "link-about-button");
+    g_signal_connect(shell->about_button, "clicked", G_CALLBACK(about_clicked), shell);
+    gtk_box_append(GTK_BOX(sidebar), shell->about_button);
 
     {
         const LinkWorkspaceSectionDescriptor *first = link_workspace_section_at(0U);
@@ -565,6 +723,7 @@ int link_gtk_shell_run(int argc, char **argv,
     int status;
     if (descriptor == NULL || descriptor->app_id == NULL) return 2;
     shell.descriptor = descriptor;
+    initialise_selected_locale();
     link_linux_serial_init(&shell.serial);
     shell.transport = link_linux_serial_as_transport(&shell.serial);
     if (!link_transport_is_valid(&shell.transport)) return 3;
