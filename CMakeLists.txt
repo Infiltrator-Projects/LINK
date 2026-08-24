@@ -94,7 +94,8 @@ add_library(link-core STATIC
     src/uds/uds.c
     src/uds/uds_services.c
     src/discover/safety.c
-    src/discover/evidence.c)
+    src/discover/evidence.c
+    src/discover/ecu_probe.c)
 add_library(LINK::Core ALIAS link-core)
 set_target_properties(link-core PROPERTIES EXPORT_NAME Core)
 target_include_directories(link-core PUBLIC
@@ -304,6 +305,7 @@ if(BUILD_TESTING AND PROJECT_IS_TOP_LEVEL)
     link_add_test(link-test-uds tests/test_uds.c link-uds)
     link_add_test(link-test-discover-safety tests/test_discover_safety.c link-discover-safety)
     link_add_test(link-test-evidence tests/test_evidence.c link-evidence)
+    link_add_test(link-test-ecu-probe tests/test_ecu_probe.c link-ecu-probe)
 endif()
 
 if(LINK_ENABLE_INSTALL)
