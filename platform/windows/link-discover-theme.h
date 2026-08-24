@@ -248,10 +248,11 @@ static LRESULT WINAPI link_theme_def_window_proc(HWND window, UINT message,
     default:
         break;
     }
-    return DefWindowProcW(window, message, wparam, lparam);
+    /* The shared Discover window is created through the ANSI Win32 API. */
+    return DefWindowProcA(window, message, wparam, lparam);
 }
 
-/* Route the Discover fallback through LINK's product-aware theme handler. */
+/* Route subsequent Discover fallback calls through the product-aware handler. */
 #define DefWindowProcA link_theme_def_window_proc
 
 #endif
