@@ -28,6 +28,14 @@ typedef struct LinkGtkShell {
 } LinkGtkShell;
 
 static const char link_gtk_base_css[] =
+    ".link-root { background: transparent; }"
+    ".link-sidebar { background: rgba(0,0,0,0.20); border-right: 1px solid rgba(255,255,255,0.12); padding: 16px; }"
+    ".link-brand-header { padding-bottom: 8px; }"
+    ".link-nav-list { background: transparent; }"
+    ".link-nav-row { margin: 4px 0; padding: 3px 5px; border-radius: 11px; border: 1px solid transparent; background: transparent; }"
+    ".link-nav-row:hover { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.12); }"
+    ".link-nav-row:selected { background: rgba(255,255,255,0.11); border-color: rgba(255,255,255,0.30); }"
+    ".link-about-button { margin-top: 6px; }"
     ".link-connection-bar { padding: 12px; border-radius: 14px; }"
     ".link-link-button { font-weight: 800; padding: 8px 18px; }"
     ".link-connection-status { font-weight: 700; }"
@@ -477,8 +485,19 @@ static void activate(GtkApplication *application, gpointer user_data)
     shell->current_section = 0U;
     gtk_window_set_title(shell->window, d->window_title);
     gtk_window_set_default_size(shell->window, 1180, 760);
+    if (d->brand_name != NULL && d->brand_name[0] != '\0') {
+        char *icon_name = g_ascii_strdown(d->brand_name, -1);
+        if (icon_name != NULL && icon_name[0] != '\0')
+            gtk_window_set_icon_name(shell->window, icon_name);
+        g_free(icon_name);
+    }
     load_css(link_gtk_base_css);
     load_css(d->css);
+    gtk_widget_add_css_class(root, "link-root");
+    gtk_widget_add_css_class(sidebar, "link-sidebar");
+    gtk_widget_add_css_class(brand, "link-brand-header");
+    gtk_widget_add_css_class(list, "link-nav-list");
+    gtk_widget_add_css_class(about, "link-about-button");
     if (d->emblem_resource != NULL) {
         GtkWidget *image = gtk_image_new_from_resource(d->emblem_resource);
         gtk_image_set_pixel_size(GTK_IMAGE(image), 58);
@@ -497,6 +516,7 @@ static void activate(GtkApplication *application, gpointer user_data)
         if (section == NULL) continue;
         row = gtk_list_box_row_new();
         box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
+        gtk_widget_add_css_class(row, "link-nav-row");
         gtk_box_append(GTK_BOX(box), left_label(section->title, "link-section-title"));
         gtk_box_append(GTK_BOX(box), left_label(section->summary, "link-section-summary"));
         gtk_list_box_row_set_child(GTK_LIST_BOX_ROW(row), box);
@@ -528,10 +548,6 @@ static void activate(GtkApplication *application, gpointer user_data)
     gtk_widget_set_margin_start(main, 18);
     gtk_widget_set_margin_end(main, 18);
     gtk_widget_set_size_request(sidebar, 320, -1);
-    gtk_widget_set_margin_top(sidebar, 16);
-    gtk_widget_set_margin_bottom(sidebar, 16);
-    gtk_widget_set_margin_start(sidebar, 16);
-    gtk_widget_set_margin_end(sidebar, 16);
 
     gtk_box_append(GTK_BOX(root), sidebar);
     gtk_box_append(GTK_BOX(root), main);
