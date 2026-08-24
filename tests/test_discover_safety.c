@@ -45,7 +45,7 @@ int main(void)
         0x34U, 0x35U, 0x36U, 0x37U, 0x38U
     };
     static const uint8_t deny_by_default[] = {
-        0x23U, 0x24U, 0x2AU, 0x3EU
+        0x23U, 0x24U, 0x2AU
     };
     size_t i;
     int failures = 0;
@@ -60,6 +60,8 @@ int main(void)
     failures += expect(0x19U, LINK_SAFETY_ALLOW_READ_ONLY,
                        LINK_SAFETY_REASON_ALLOWED_UDS_READ);
     failures += expect(0x22U, LINK_SAFETY_ALLOW_READ_ONLY,
+                       LINK_SAFETY_REASON_ALLOWED_UDS_READ);
+    failures += expect(0x3EU, LINK_SAFETY_ALLOW_READ_ONLY,
                        LINK_SAFETY_REASON_ALLOWED_UDS_READ);
 
     failures += expect(0x04U, LINK_SAFETY_BLOCK,
@@ -94,8 +96,8 @@ int main(void)
     /*
      * ReadMemoryByAddress, ReadScalingDataByIdentifier and
      * ReadDataByPeriodicIdentifier are not automatically enabled just because
-     * codecs exist. TesterPresent is likewise not part of the bounded Discover
-     * read inventory. Explicit product policy is required to broaden this.
+     * codecs exist. TesterPresent is the one non-mutating keepalive admitted
+     * by the bounded ECU probe and is covered above explicitly.
      */
     for (i = 0U;
          i < sizeof(deny_by_default) / sizeof(deny_by_default[0]);
