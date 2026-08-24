@@ -235,7 +235,7 @@ size_t link_linux_serial_discover(char paths[][256], size_t capacity)
             }
         }
         if (match) {
-            (void)snprintf(paths[count], 256U, "/dev/%s", entry->d_name);
+            (void)snprintf(paths[count], 256U, "/dev/%.249s", entry->d_name);
             count++;
         }
     }
