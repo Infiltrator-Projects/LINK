@@ -81,6 +81,7 @@ add_library(link-core STATIC
     src/core/workspace.c
     src/core/i18n.c
     src/core/i18n_platform.c
+    src/core/fuel_economy.c
     src/core/diagnostic_flow.c
     src/core/isotp.c
     src/core/parameter.c
@@ -275,6 +276,7 @@ endfunction()
 if(BUILD_TESTING AND PROJECT_IS_TOP_LEVEL)
     link_add_test(link-test-workspace tests/test_workspace.c link-workspace)
     link_add_test(link-test-i18n tests/test_i18n.c link-i18n)
+    link_add_test(link-test-fuel-economy tests/test_fuel_economy.c link-fuel-economy)
     link_add_test(link-test-diagnostic-flow tests/test_diagnostic_flow.c link-diagnostic-flow)
     link_add_test(link-test-isotp tests/test_isotp.c link-isotp)
     link_add_test(link-test-runtime tests/test_runtime.c link-runtime)
