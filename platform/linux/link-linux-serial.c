@@ -46,7 +46,10 @@ static LinkTransportStatus serial_connect(void *context)
     tty.c_iflag &= ~(IGNBRK | BRKINT | PARMRK | ISTRIP | INLCR | IGNCR | ICRNL | IXON);
     tty.c_oflag &= ~OPOST;
     tty.c_lflag &= ~(ECHO | ECHONL | ICANON | ISIG | IEXTEN);
-    tty.c_cflag &= ~(PARENB | PARODD | CSTOPB | CRTSCTS);
+    tty.c_cflag &= ~(PARENB | PARODD | CSTOPB);
+#ifdef CRTSCTS
+    tty.c_cflag &= ~CRTSCTS;
+#endif
     tty.c_cflag |= CLOCAL | CREAD;
     tty.c_cc[VMIN] = 0;
     tty.c_cc[VTIME] = 1;
