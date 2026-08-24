@@ -60,8 +60,8 @@ jobs:
         run: |
           set -euo pipefail
           git submodule update --init src/infiltratr-common
-          test "$(tr -d '[:space:]' < src/infiltratr-common/VERSION)" = "1.11.2"
-          test "$(git -C src/infiltratr-common rev-parse HEAD)" = "b23a9d086ea323c0c6157dea3dd24db635b007c7"
+          test "$(tr -d '[:space:]' < src/infiltratr-common/VERSION)" = "1.13.0"
+          test "$(git -C src/infiltratr-common rev-parse HEAD)" = "1b2e258bd576e86968261463375d144a8874bd01"
 
       - name: Configure
         shell: bash
