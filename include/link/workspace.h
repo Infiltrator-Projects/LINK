@@ -30,6 +30,8 @@ typedef struct LinkWorkspaceSectionDescriptor {
     const char *key;
     const char *title;
     const char *summary;
+    const char *title_i18n_key;
+    const char *summary_i18n_key;
 } LinkWorkspaceSectionDescriptor;
 
 size_t link_workspace_section_count(void);
