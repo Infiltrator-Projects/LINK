@@ -8,55 +8,73 @@ static const LinkWorkspaceSectionDescriptor link_workspace_sections[] = {
         .section = LINK_WORKSPACE_VEHICLE,
         .key = "vehicle",
         .title = "Vehicle",
-        .summary = "Vehicle identity, adapter and connection information"
+        .summary = "Vehicle identity, adapter and connection information",
+        .title_i18n_key = "nav.vehicle",
+        .summary_i18n_key = "nav.vehicle.summary"
     },
     {
         .section = LINK_WORKSPACE_MODULES,
         .key = "modules",
         .title = "Modules",
-        .summary = "Discovered control modules and ECU identification"
+        .summary = "Discovered control modules and ECU identification",
+        .title_i18n_key = "nav.modules",
+        .summary_i18n_key = "nav.modules.summary"
     },
     {
         .section = LINK_WORKSPACE_FAULTS,
         .key = "faults",
         .title = "Faults",
-        .summary = "Diagnostic trouble codes by control module"
+        .summary = "Diagnostic trouble codes by control module",
+        .title_i18n_key = "nav.faults",
+        .summary_i18n_key = "nav.faults.summary"
     },
     {
         .section = LINK_WORKSPACE_LIVE_DATA,
         .key = "live-data",
         .title = "Live Data",
-        .summary = "Search, select and favourite live diagnostic parameters"
+        .summary = "Search, select and favourite live diagnostic parameters",
+        .title_i18n_key = "nav.live_data",
+        .summary_i18n_key = "nav.live_data.summary"
     },
     {
         .section = LINK_WORKSPACE_TABLE,
         .key = "table",
         .title = "Table",
-        .summary = "Dense live values for selected diagnostic parameters"
+        .summary = "Dense live values for selected diagnostic parameters",
+        .title_i18n_key = "nav.table",
+        .summary_i18n_key = "nav.table.summary"
     },
     {
         .section = LINK_WORKSPACE_DASHBOARD,
         .key = "dashboard",
         .title = "Dashboard",
-        .summary = "At-a-glance live diagnostic measurements"
+        .summary = "At-a-glance live diagnostic measurements",
+        .title_i18n_key = "nav.dashboard",
+        .summary_i18n_key = "nav.dashboard.summary"
     },
     {
         .section = LINK_WORKSPACE_GRAPHS,
         .key = "graphs",
         .title = "Graphs",
-        .summary = "Time-series views for selected diagnostic parameters"
+        .summary = "Time-series views for selected diagnostic parameters",
+        .title_i18n_key = "nav.graphs",
+        .summary_i18n_key = "nav.graphs.summary"
     },
     {
         .section = LINK_WORKSPACE_LOG,
         .key = "log",
         .title = "Log",
-        .summary = "Diagnostic session history and exported telemetry"
+        .summary = "Diagnostic session history and exported telemetry",
+        .title_i18n_key = "nav.log",
+        .summary_i18n_key = "nav.log.summary"
     },
     {
         .section = LINK_WORKSPACE_SETTINGS,
         .key = "settings",
         .title = "Settings",
-        .summary = "Display, adapter, units, logging and application preferences"
+        .summary = "Display, adapter, units, logging and application preferences",
+        .title_i18n_key = "nav.settings",
+        .summary_i18n_key = "nav.settings.summary"
     }
 };
 
