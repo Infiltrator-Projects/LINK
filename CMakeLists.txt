@@ -34,8 +34,8 @@ option(LINK_ENABLE_INSTALL
     "Install LINK headers, library and CMake package when LINK is top-level"
     ${PROJECT_IS_TOP_LEVEL})
 
-set(LINK_COMMON_VERSION "1.11.2")
-set(LINK_COMMON_COMMIT "b23a9d086ea323c0c6157dea3dd24db635b007c7")
+set(LINK_COMMON_VERSION "1.13.0")
+set(LINK_COMMON_COMMIT "1b2e258bd576e86968261463375d144a8874bd01")
 set(LINK_COMMON_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/infiltratr-common")
 
 if(NOT TARGET InfiltratrCommon::Portable)
@@ -79,6 +79,7 @@ set(LINK_SANITIZER_FLAGS
 
 add_library(link-core STATIC
     src/core/workspace.c
+    src/core/i18n.c
     src/core/diagnostic_flow.c
     src/core/isotp.c
     src/core/parameter.c
@@ -104,7 +105,7 @@ target_include_directories(link-core PUBLIC
 target_link_libraries(link-core PUBLIC InfiltratrCommon::Portable)
 
 if(MSVC)
-    target_compile_options(link-core PRIVATE /W4 /WX)
+    target_compile_options(link-core PRIVATE /W4 /WX /utf-8)
 else()
     target_compile_options(link-core PRIVATE ${LINK_WARNING_FLAGS})
 endif()
@@ -245,7 +246,7 @@ function(link_add_test target source test_name)
     add_executable(${target} ${source})
     target_link_libraries(${target} PRIVATE LINK::Core)
     if(MSVC)
-        target_compile_options(${target} PRIVATE /W4 /WX)
+        target_compile_options(${target} PRIVATE /W4 /WX /utf-8)
     else()
         target_compile_options(${target} PRIVATE ${LINK_WARNING_FLAGS})
     endif()
@@ -258,6 +259,7 @@ endfunction()
 
 if(BUILD_TESTING AND PROJECT_IS_TOP_LEVEL)
     link_add_test(link-test-workspace tests/test_workspace.c link-workspace)
+    link_add_test(link-test-i18n tests/test_i18n.c link-i18n)
     link_add_test(link-test-diagnostic-flow tests/test_diagnostic_flow.c link-diagnostic-flow)
     link_add_test(link-test-isotp tests/test_isotp.c link-isotp)
     link_add_test(link-test-runtime tests/test_runtime.c link-runtime)
