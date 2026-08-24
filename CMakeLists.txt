@@ -80,6 +80,7 @@ set(LINK_SANITIZER_FLAGS
 add_library(link-core STATIC
     src/core/workspace.c
     src/core/i18n.c
+    src/core/i18n_platform.c
     src/core/diagnostic_flow.c
     src/core/isotp.c
     src/core/parameter.c
@@ -121,9 +122,14 @@ function(link_enable_linux_gtk_shell target)
     if(NOT TARGET ${target})
         message(FATAL_ERROR "link_enable_linux_gtk_shell target does not exist: ${target}")
     endif()
+    set(link_gtk_shell_source "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platform/linux/link-gtk-shell.c")
+    set(link_gtk_i18n_header "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platform/linux/link-gtk-i18n.h")
     target_sources(${target} PRIVATE
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platform/linux/link-linux-serial.c"
-        "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platform/linux/link-gtk-shell.c")
+        "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platform/linux/link-gtk-i18n.c"
+        "${link_gtk_shell_source}")
+    set_source_files_properties("${link_gtk_shell_source}" PROPERTIES
+        COMPILE_OPTIONS "-include;${link_gtk_i18n_header}")
     target_include_directories(${target} PRIVATE
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platform/linux")
     target_link_libraries(${target} PRIVATE LINK::Core)
