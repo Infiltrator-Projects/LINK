@@ -169,7 +169,11 @@ bool link_i18n_load_language_pack(const char *path)
     LinkLanguagePack *existing;
 
     if (path == NULL || path[0] == '\0') return false;
+#ifdef _WIN32
+    if (fopen_s(&file, path, "rb") != 0) file = NULL;
+#else
     file = fopen(path, "rb");
+#endif
     if (file == NULL) return false;
     memset(&candidate, 0, sizeof(candidate));
 
