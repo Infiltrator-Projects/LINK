@@ -1,0 +1,181 @@
+name: Temporary localisation platform fix
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/tmp-fix-i18n-platform.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Patch Windows and Linux localisation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          # Windows: repair accidental embedded NULs from the generator, preserve
+          # the full selected locale (rather than collapsing everything except
+          # German/Polish to en-AU), and use the dynamic 15-language command range.
+          p = Path('platform/windows/link-discover-i18n.c')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace('\x00', r'\0')
+          old = '''static const char *selected_locale(void)
+          {
+              const char *locale;
+              ensure_locale();
+              locale = link_i18n_locale();
+              if (locale != NULL && strncmp(locale, "de", 2U) == 0) return "de-DE";
+              if (locale != NULL && strncmp(locale, "pl", 2U) == 0) return "pl-PL";
+              return "en-AU";
+          }
+          '''
+          new = '''static const char *selected_locale(void)
+          {
+              const char *locale;
+              ensure_locale();
+              locale = link_i18n_locale();
+              return (locale != NULL && locale[0] != '\\0') ? locale : "en-AU";
+          }
+          '''
+          if old not in s:
+              raise SystemExit('Windows selected_locale block not found')
+          s = s.replace(old, new, 1)
+          old = '''    if (language_menu != NULL)
+                  (void)CheckMenuRadioItem(language_menu,
+                                           IDM_LANGUAGE_ENGLISH, IDM_LANGUAGE_POLISH,
+                                           selected, MF_BYCOMMAND);
+          '''
+          new = '''    if (language_menu != NULL) {
+                  const size_t count = link_i18n_supported_locale_count();
+                  if (count != 0U)
+                      (void)CheckMenuRadioItem(language_menu,
+                                               IDM_LANGUAGE_FIRST,
+                                               IDM_LANGUAGE_FIRST + (UINT)count - 1U,
+                                               selected, MF_BYCOMMAND);
+              }
+          '''
+          if old not in s:
+              raise SystemExit('Windows radio range block not found')
+          s = s.replace(old, new, 1)
+          p.write_text(s, encoding='utf-8')
+
+          # Linux: remove the English GTK empty-dropdown placeholder, make the
+          # disconnected LINK status genuinely Polish/German, and cover every
+          # Jaguar explanatory sentence so changing to Polish does not leave
+          # English prose elsewhere in the application.
+          p = Path('platform/linux/link-gtk-i18n.c')
+          s = p.read_text(encoding='utf-8')
+          s = s.replace('{"LINK OFFLINE", "LINK OFFLINE", "LINK OFFLINE"},',
+                        '{"LINK OFFLINE", "LINK GETRENNT", "LINK ROZŁĄCZONY"},')
+          anchor = '    {"Unavailable", "Nicht verfügbar", "Niedostępne"},\n'
+          additions = '''    {"No adapter", "Kein Adapter", "Brak adaptera"},
+              {"LINK carries the Linux connection directly into ELM initialisation, supported-PID discovery, stored/pending/permanent OBD-II fault inventory and live polling.",
+               "LINK führt die Linux-Verbindung direkt zur ELM-Initialisierung, Erkennung unterstützter PIDs, zum Lesen gespeicherter/anstehender/permanenter OBD-II-Fehler und zur Live-Abfrage.",
+               "LINK prowadzi połączenie Linux bezpośrednio do inicjalizacji ELM, wykrywania obsługiwanych PID-ów, odczytu zapisanych/oczekujących/trwałych usterek OBD-II oraz odpytywania na żywo."},
+              {"Jaguar-specific topology remains in JAGLINK while the standard transport, fault and live-data engine is shared through LINK.",
+               "Die Jaguar-spezifische Topologie bleibt in JAGLINK, während Standardtransport, Fehler- und Live-Daten-Engine über LINK gemeinsam genutzt werden.",
+               "Topologia specyficzna dla Jaguara pozostaje w JAGLINK, a standardowy transport, obsługa usterek i dane na żywo są współdzielone przez LINK."},
+              {"Standards-based powertrain DTC decoding is provided by LINK and remains read-only.",
+               "Die standardbasierte Antriebsstrang-DTC-Decodierung wird von LINK bereitgestellt und bleibt schreibgeschützt.",
+               "Oparte na standardach dekodowanie kodów DTC układu napędowego zapewnia LINK i pozostaje tylko do odczytu."},
+              {"Jaguar-specific module acquisition remains gated by verified X400 module addresses and safe read-only requests.",
+               "Die Jaguar-spezifische Modulerfassung bleibt auf verifizierte X400-Moduladressen und sichere Nur-Lese-Anfragen beschränkt.",
+               "Odczyt modułów specyficznych dla Jaguara pozostaje ograniczony do zweryfikowanych adresów modułów X400 i bezpiecznych żądań tylko do odczytu."},
+              {"LINK prefers a verified Jaguar factory value when available, otherwise uses measured SAE PID 0x5E fuel rate with PID 0x0D vehicle speed. Estimates are never presented as measured data.",
+               "LINK bevorzugt einen verifizierten Jaguar-Werkswert; andernfalls werden die gemessene SAE-Kraftstoffrate PID 0x5E und die Fahrzeuggeschwindigkeit PID 0x0D verwendet. Schätzwerte werden nie als Messwerte dargestellt.",
+               "LINK preferuje zweryfikowaną wartość fabryczną Jaguara; w przeciwnym razie używa zmierzonego przepływu paliwa SAE PID 0x5E z prędkością pojazdu PID 0x0D. Wartości szacowane nigdy nie są przedstawiane jako pomiary."},
+              {"Time-series traces receive real LINK telemetry samples from the active Linux diagnostic flow.",
+               "Zeitreihen erhalten reale LINK-Telemetriemesswerte aus dem aktiven Linux-Diagnoseablauf.",
+               "Wykresy czasowe otrzymują rzeczywiste próbki telemetrii LINK z aktywnego przebiegu diagnostyki Linux."},
+              {"Raw requests, responses and telemetry use the shared evidence path; no synthetic vehicle data is displayed.",
+               "Rohanforderungen, Antworten und Telemetrie verwenden den gemeinsamen Nachweispfad; synthetische Fahrzeugdaten werden nicht angezeigt.",
+               "Surowe żądania, odpowiedzi i telemetria korzystają ze wspólnej ścieżki danych dowodowych; nie są wyświetlane żadne syntetyczne dane pojazdu."},
+          '''
+          if additions.strip() not in s:
+              if anchor not in s:
+                  raise SystemExit('Linux literal translation anchor not found')
+              s = s.replace(anchor, anchor + additions, 1)
+          p.write_text(s, encoding='utf-8')
+
+          p = Path('platform/linux/link-gtk-shell.c')
+          s = p.read_text(encoding='utf-8')
+          old = '''    count = link_linux_serial_discover(paths, 32U);
+              for (index = 0U; index < count; ++index) gtk_string_list_append(model, paths[index]);
+              gtk_drop_down_set_model(GTK_DROP_DOWN(shell->device_combo), G_LIST_MODEL(model));
+              if (count != 0U) gtk_drop_down_set_selected(GTK_DROP_DOWN(shell->device_combo), 0U);
+          '''
+          new = '''    count = link_linux_serial_discover(paths, 32U);
+              for (index = 0U; index < count; ++index) gtk_string_list_append(model, paths[index]);
+              if (count == 0U)
+                  gtk_string_list_append(model, link_gtk_i18n_translate_text("No adapter"));
+              gtk_drop_down_set_model(GTK_DROP_DOWN(shell->device_combo), G_LIST_MODEL(model));
+              gtk_drop_down_set_selected(GTK_DROP_DOWN(shell->device_combo), 0U);
+          '''
+          if old not in s:
+              raise SystemExit('Linux refresh_devices block not found')
+          s = s.replace(old, new, 1)
+          old = '''static const char *selected_device(LinkGtkShell *shell)
+          {
+              GObject *item = gtk_drop_down_get_selected_item(GTK_DROP_DOWN(shell->device_combo));
+              return item != NULL ? gtk_string_object_get_string(GTK_STRING_OBJECT(item)) : NULL;
+          }
+          '''
+          new = '''static const char *selected_device(LinkGtkShell *shell)
+          {
+              GObject *item = gtk_drop_down_get_selected_item(GTK_DROP_DOWN(shell->device_combo));
+              const char *value = item != NULL ? gtk_string_object_get_string(GTK_STRING_OBJECT(item)) : NULL;
+              const char *placeholder = link_gtk_i18n_translate_text("No adapter");
+              if (value == NULL || (placeholder != NULL && strcmp(value, placeholder) == 0)) return NULL;
+              return value;
+          }
+          '''
+          if old not in s:
+              raise SystemExit('Linux selected_device block not found')
+          s = s.replace(old, new, 1)
+          old = '''    if (shell->about_button != NULL)
+                  gtk_button_set_label(GTK_BUTTON(shell->about_button), "About");
+
+              rebuild_navigation(shell);
+          '''
+          new = '''    if (shell->about_button != NULL)
+                  gtk_button_set_label(GTK_BUTTON(shell->about_button), "About");
+
+              refresh_devices(shell);
+              rebuild_navigation(shell);
+          '''
+          if old not in s:
+              raise SystemExit('Linux language refresh anchor not found')
+          s = s.replace(old, new, 1)
+          p.write_text(s, encoding='utf-8')
+          PY
+
+      - name: Build and test portable LINK
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
+          cmake --build build --parallel
+          ctest --test-dir build --output-on-failure
+
+      - name: Commit fix and remove temporary workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/tmp-fix-i18n-platform.yml
+          git add platform/windows/link-discover-i18n.c platform/linux/link-gtk-i18n.c platform/linux/link-gtk-shell.c
+          git commit -m "Fix 15-language platform localisation"
+          git push origin HEAD:main
