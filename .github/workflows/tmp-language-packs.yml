@@ -20,7 +20,18 @@ jobs:
           submodules: recursive
 
       - name: Apply language-pack implementation
-        run: python3 tools/tmp_language_packs.py
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('tools/tmp_language_packs.py')
+          s = p.read_text()
+          old = 'needle = "    ensure_locale();\\n    if (text == NULL) return NULL;\\n"'
+          new = 'needle = "    ensure_locale();\\n    if (text == NULL) return \\\"\\\\\\\";\\n"'
+          if old not in s:
+              raise SystemExit('GTK helper marker not found')
+          p.write_text(s.replace(old, new, 1))
+          PY
+          python3 tools/tmp_language_packs.py
 
       - name: Build and test
         run: |
