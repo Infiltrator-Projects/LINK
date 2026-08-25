@@ -316,8 +316,10 @@ static void refresh_visible_language(LinkGtkShell *shell)
     if (shell->status != NULL && shell->link_button != NULL) {
         if (connected)
             set_connection_state(shell, true,
-                shell->diagnostic_valid ? diagnostic_stage_message(shell)
-                                        : "Linked · diagnostics active");
+                (shell->diagnostics_active || shell->diagnostics_ready ||
+                 shell->flow.stage == LINK_DIAGNOSTIC_FLOW_FAILED)
+                    ? diagnostic_stage_message(shell)
+                    : "Linked · diagnostic session idle");
         else
             set_connection_state(shell, false, "Disconnected");
     }

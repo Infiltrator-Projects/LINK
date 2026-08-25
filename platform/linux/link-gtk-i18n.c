@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-#include <gtk/gtk.h>
+#define LINK_GTK_I18N_IMPLEMENTATION 1
+#include "link-gtk-i18n.h"
 
 #include "link/i18n.h"
 
