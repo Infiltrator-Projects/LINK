@@ -16,10 +16,16 @@ void link_gtk_i18n_button_set_label(GtkButton *button, const char *text);
  * Product GTK faces may force-include this header as well as the shared shell.
  * This keeps ordinary literal UI text in product code while routing what the
  * operator actually sees through the same tiny English/German/Polish table.
+ *
+ * The implementation defines LINK_GTK_I18N_IMPLEMENTATION before including
+ * this header so its calls to the real GTK functions are not macro-routed
+ * back into the wrappers themselves.
  */
+#ifndef LINK_GTK_I18N_IMPLEMENTATION
 #define gtk_label_new link_gtk_i18n_label_new
 #define gtk_label_set_text link_gtk_i18n_label_set_text
 #define gtk_button_new_with_label link_gtk_i18n_button_new_with_label
 #define gtk_button_set_label link_gtk_i18n_button_set_label
+#endif
 
 #endif
