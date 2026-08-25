@@ -81,6 +81,7 @@ add_library(link-core STATIC
     src/core/workspace.c
     src/core/i18n.c
     src/core/i18n_platform.c
+    src/core/language_pack.c
     src/core/fuel_economy.c
     src/core/diagnostic_flow.c
     src/core/isotp.c

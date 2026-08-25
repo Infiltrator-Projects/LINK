@@ -208,8 +208,13 @@ const char *link_gtk_i18n_translate_text(const char *text)
 
     ensure_locale();
     if (text == NULL) return "";
+    {
+        const char *packed_translation = link_i18n_text(text);
+        if (packed_translation != NULL && strcmp(packed_translation, text) != 0)
+            return packed_translation;
+    }
     key = translation_key(text);
-    if (key != NULL) return link_i18n_tr(key);
+    if (key != NULL) return link_i18n_text(key);
 
     translated = literal_translate(text);
     if (translated != text) return translated;

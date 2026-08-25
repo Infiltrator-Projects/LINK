@@ -18,12 +18,12 @@ bool link_i18n_set_system_locale(void)
     count = WideCharToMultiByte(CP_UTF8, 0, wide, -1, utf8,
                                 (int)sizeof(utf8), NULL, NULL);
     if (count <= 0) return false;
-    return link_i18n_set_locale(utf8);
+    return link_i18n_select_locale(utf8);
 #else
     const char *locale = getenv("LC_ALL");
     if (locale == NULL || locale[0] == '\0') locale = getenv("LC_MESSAGES");
     if (locale == NULL || locale[0] == '\0') locale = getenv("LANG");
     if (locale == NULL || locale[0] == '\0') return false;
-    return link_i18n_set_locale(locale);
+    return link_i18n_select_locale(locale);
 #endif
 }

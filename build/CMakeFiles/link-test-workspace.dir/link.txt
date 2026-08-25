@@ -1,0 +1,1 @@
+/usr/bin/cc -Wl,--dependency-file=CMakeFiles/link-test-workspace.dir/link.d "CMakeFiles/link-test-workspace.dir/tests/test_workspace.c.o" -o link-test-workspace  liblink-core.a src/infiltratr-common/libinfiltratr-portable.a -lm

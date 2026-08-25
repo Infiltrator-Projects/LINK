@@ -1,0 +1,8 @@
+# Example LINK language pack
+locale=sv-SE
+name=Svenska
+direction=ltr
+version=1
+nav.vehicle=Fordon
+nav.faults=Fel
+nav.settings=Inställningar

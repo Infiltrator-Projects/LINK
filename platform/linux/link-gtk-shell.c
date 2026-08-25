@@ -107,6 +107,41 @@ static char *language_config_path(void)
     return path;
 }
 
+static void scan_language_pack_directories(const LinkGtkShell *shell)
+{
+    char *slug;
+    char *system_path;
+    char *user_path;
+    char *exe_path;
+    char *exe_dir;
+    char *portable_path;
+    if (shell == NULL || shell->descriptor == NULL) return;
+    slug = g_ascii_strdown(shell->descriptor->brand_name != NULL ? shell->descriptor->brand_name : "link", -1);
+    if (slug == NULL) return;
+    system_path = g_build_filename("/usr/share", slug, "Languages", NULL);
+    if (system_path != NULL) {
+        (void)link_i18n_scan_language_directory(system_path);
+        g_free(system_path);
+    }
+    exe_path = g_file_read_link("/proc/self/exe", NULL);
+    if (exe_path != NULL) {
+        exe_dir = g_path_get_dirname(exe_path);
+        portable_path = g_build_filename(exe_dir, "Languages", NULL);
+        if (portable_path != NULL) {
+            (void)link_i18n_scan_language_directory(portable_path);
+            g_free(portable_path);
+        }
+        g_free(exe_dir);
+        g_free(exe_path);
+    }
+    user_path = g_build_filename(g_get_user_data_dir(), slug, "Languages", NULL);
+    if (user_path != NULL) {
+        (void)link_i18n_scan_language_directory(user_path);
+        g_free(user_path);
+    }
+    g_free(slug);
+}
+
 static void save_selected_locale(const char *locale)
 {
     GKeyFile *key_file;
@@ -142,7 +177,7 @@ static void initialise_selected_locale(void)
     key_file = g_key_file_new();
     if (g_key_file_load_from_file(key_file, path, G_KEY_FILE_NONE, NULL)) {
         locale = g_key_file_get_string(key_file, "ui", "language", NULL);
-        if (locale != NULL) (void)link_i18n_set_locale(locale);
+        if (locale != NULL) (void)link_i18n_select_locale(locale);
     }
     g_free(locale);
     g_key_file_unref(key_file);
@@ -151,10 +186,10 @@ static void initialise_selected_locale(void)
 
 static guint selected_locale_index(void)
 {
-    const char *locale = link_i18n_locale();
+    const char *locale = link_i18n_selected_locale();
     size_t index;
-    for (index = 0U; index < link_i18n_supported_locale_count(); ++index) {
-        const char *candidate = link_i18n_supported_locale(index);
+    for (index = 0U; index < link_i18n_installed_locale_count(); ++index) {
+        const char *candidate = link_i18n_installed_locale(index);
         if (locale != NULL && candidate != NULL && strcmp(locale, candidate) == 0)
   return (guint)index;
     }
@@ -301,7 +336,7 @@ static void refresh_visible_language(LinkGtkShell *shell)
     if (shell->brand_subtitle != NULL)
         gtk_label_set_text(GTK_LABEL(shell->brand_subtitle), shell->descriptor->brand_subtitle);
     if (shell->language_label != NULL)
-        gtk_label_set_text(GTK_LABEL(shell->language_label), "Language");
+        gtk_label_set_text(GTK_LABEL(shell->language_label), "🌐");
     if (shell->adapter_label != NULL)
         gtk_label_set_text(GTK_LABEL(shell->adapter_label), "Adapter");
     if (shell->refresh_button != NULL)
@@ -331,13 +366,13 @@ static void language_changed(GObject *object, GParamSpec *spec, gpointer user_da
     (void)spec;
     if (shell == NULL || object == NULL) return;
     selected = gtk_drop_down_get_selected(GTK_DROP_DOWN(object));
-    if ((size_t)selected >= link_i18n_supported_locale_count()) return;
-    locale = link_i18n_supported_locale((size_t)selected);
-    if (locale == NULL || !link_i18n_set_locale(locale)) return;
+    if ((size_t)selected >= link_i18n_installed_locale_count()) return;
+    locale = link_i18n_installed_locale((size_t)selected);
+    if (locale == NULL || !link_i18n_select_locale(locale)) return;
     save_selected_locale(locale);
     if (shell->window != NULL)
         gtk_widget_set_direction(GTK_WIDGET(shell->window),
-  strncmp(locale, "ar", 2U) == 0 ? GTK_TEXT_DIR_RTL : GTK_TEXT_DIR_LTR);
+  link_i18n_selected_locale_is_rtl() ? GTK_TEXT_DIR_RTL : GTK_TEXT_DIR_LTR);
     refresh_visible_language(shell);
 }
 
@@ -640,11 +675,14 @@ static void activate(GtkApplication *application, gpointer user_data)
     GtkWidget *brand = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
     GtkWidget *content = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
     GtkStringList *language_model;
+    GtkWidget *language_row;
 
+    scan_language_pack_directories(shell);
+    initialise_selected_locale();
     shell->window = GTK_WINDOW(window);
     shell->current_section = 0U;
     gtk_widget_set_direction(window,
-        strncmp(link_i18n_locale(), "ar", 2U) == 0 ? GTK_TEXT_DIR_RTL : GTK_TEXT_DIR_LTR);
+        strncmp(link_i18n_selected_locale(), "ar", 2U) == 0 ? GTK_TEXT_DIR_RTL : GTK_TEXT_DIR_LTR);
     gtk_window_set_title(shell->window,
                          link_gtk_i18n_translate_text(d->window_title));
     gtk_window_set_default_size(shell->window, 1180, 760);
@@ -678,21 +716,24 @@ static void activate(GtkApplication *application, gpointer user_data)
     gtk_box_append(GTK_BOX(sidebar), shell->nav_list);
     rebuild_navigation(shell);
 
-    shell->language_label = left_label("Language", "link-language-label");
+    shell->language_label = left_label("🌐", "link-language-label");
+    language_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
     language_model = gtk_string_list_new(NULL);
     {
         size_t language_index;
         for (language_index = 0U;
-   language_index < link_i18n_supported_locale_count(); ++language_index) {
-  const char *name = link_i18n_supported_locale_name(language_index);
+   language_index < link_i18n_installed_locale_count(); ++language_index) {
+  const char *name = link_i18n_installed_locale_name(language_index);
   if (name != NULL) gtk_string_list_append(language_model, name);
         }
     }
     shell->language_combo = gtk_drop_down_new(G_LIST_MODEL(language_model), NULL);
     gtk_drop_down_set_selected(GTK_DROP_DOWN(shell->language_combo), selected_locale_index());
     g_object_unref(language_model);
-    gtk_box_append(GTK_BOX(sidebar), shell->language_label);
-    gtk_box_append(GTK_BOX(sidebar), shell->language_combo);
+    gtk_box_append(GTK_BOX(language_row), shell->language_label);
+    gtk_box_append(GTK_BOX(language_row), shell->language_combo);
+    gtk_widget_set_hexpand(shell->language_combo, TRUE);
+    gtk_box_append(GTK_BOX(sidebar), language_row);
     g_signal_connect(shell->language_combo, "notify::selected",
                      G_CALLBACK(language_changed), shell);
 

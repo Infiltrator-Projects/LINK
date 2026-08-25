@@ -1,0 +1,1 @@
+/usr/bin/cc -Wl,--dependency-file=CMakeFiles/link-test-uds.dir/link.d "CMakeFiles/link-test-uds.dir/tests/test_uds.c.o" -o link-test-uds  liblink-core.a src/infiltratr-common/libinfiltratr-portable.a -lm

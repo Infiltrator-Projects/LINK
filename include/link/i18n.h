@@ -22,7 +22,7 @@ extern "C" {
 /** Initialise the shared catalogue to en-AU. Safe to call repeatedly. */
 void link_i18n_init(void);
 
-/** Select a BCP-47 locale. The UI exposes 15 built-in choices; en-AU is canonical. */
+/** Select a built-in BCP-47 locale. en-AU is canonical; use link_i18n_select_locale for discovered packs. */
 bool link_i18n_set_locale(const char *locale);
 
 /**
@@ -43,6 +43,44 @@ const char *link_i18n_tr(const char *key);
 size_t link_i18n_format(char *destination, size_t capacity, const char *key,
                         const InfiltratrI18nArgument *arguments,
                         size_t argument_count);
+
+/** Select a built-in or discovered BCP-47 locale. */
+bool link_i18n_select_locale(const char *locale);
+
+/** Current selected locale, including an external pack. */
+const char *link_i18n_selected_locale(void);
+
+/** Translate using an external pack first, then the built-in catalogue. */
+const char *link_i18n_text(const char *key);
+
+/** Translate and interpolate using external-pack override semantics. */
+size_t link_i18n_format_text(char *destination, size_t capacity, const char *key,
+                             const InfiltratrI18nArgument *arguments,
+                             size_t argument_count);
+
+/** Load one UTF-8 data-only .lang file. */
+bool link_i18n_load_language_pack(const char *path);
+
+/** Scan one directory for *.lang files. Returns the number loaded. */
+size_t link_i18n_scan_language_directory(const char *directory);
+
+/** Release all externally loaded packs. Compiled en-AU remains available. */
+void link_i18n_clear_language_packs(void);
+
+/** Number of languages visible after combining built-ins and discovered packs. */
+size_t link_i18n_installed_locale_count(void);
+
+/** BCP-47 locale tag for one installed language. */
+const char *link_i18n_installed_locale(size_t index);
+
+/** Native-language label for one installed language. */
+const char *link_i18n_installed_locale_name(size_t index);
+
+/** Whether one installed language requests right-to-left layout. */
+bool link_i18n_installed_locale_is_rtl(size_t index);
+
+/** Whether the currently selected language requests right-to-left layout. */
+bool link_i18n_selected_locale_is_rtl(void);
 
 /** Number of selectable built-in LINK locales. */
 size_t link_i18n_supported_locale_count(void);

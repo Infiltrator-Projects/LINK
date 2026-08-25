@@ -1,0 +1,1 @@
+/usr/bin/cc -Wl,--dependency-file=CMakeFiles/link-test-ecu-probe.dir/link.d "CMakeFiles/link-test-ecu-probe.dir/tests/test_ecu_probe.c.o" -o link-test-ecu-probe  liblink-core.a src/infiltratr-common/libinfiltratr-portable.a -lm

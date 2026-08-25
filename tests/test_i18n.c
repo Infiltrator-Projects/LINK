@@ -98,6 +98,42 @@ int main(void)
     passed &= check(strcmp(link_i18n_supported_locale(14U), "id-ID") == 0,
           "15-language registry ordering mismatch");
 
+    {
+        const char *pack_path = "test-custom-language.lang";
+        FILE *pack_file = fopen(pack_path, "wb");
+        passed &= check(pack_file != NULL, "custom language pack file create failed");
+        if (pack_file != NULL) {
+            const char contents[] =
+                "locale=sv-SE\n"
+                "name=Svenska\n"
+                "direction=ltr\n"
+                "version=1\n"
+                "nav.vehicle=Fordon\n"
+                "Custom literal=Egen text\n";
+            passed &= check(fwrite(contents, 1U, sizeof(contents) - 1U, pack_file) == sizeof(contents) - 1U,
+                            "custom language pack write failed");
+            fclose(pack_file);
+            passed &= check(link_i18n_load_language_pack(pack_path),
+                            "custom language pack load failed");
+            passed &= check(link_i18n_installed_locale_count() == 16U,
+                            "custom language pack did not extend installed registry");
+            passed &= check(link_i18n_select_locale("sv-SE"),
+                            "custom language selection failed");
+            passed &= check(strcmp(link_i18n_selected_locale(), "sv-SE") == 0,
+                            "custom language identity mismatch");
+            passed &= check(strcmp(link_i18n_text("nav.vehicle"), "Fordon") == 0,
+                            "custom language translation mismatch");
+            passed &= check(strcmp(link_i18n_text("nav.faults"), "Faults") == 0,
+                            "custom language en-AU fallback mismatch");
+            passed &= check(strcmp(link_i18n_text("Custom literal"), "Egen text") == 0,
+                            "custom literal translation mismatch");
+            (void)remove(pack_path);
+            link_i18n_clear_language_packs();
+            passed &= check(link_i18n_installed_locale_count() == 15U,
+                            "language pack clear did not restore built-in registry");
+        }
+    }
+
     passed &= check(!link_i18n_set_locale("zz-ZZ"),
                     "unknown locale should not be accepted");
     passed &= check(strcmp(link_i18n_tr("nav.vehicle"), "Vehicle") == 0,
