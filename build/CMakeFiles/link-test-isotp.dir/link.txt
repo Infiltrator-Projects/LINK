@@ -1,1 +1,0 @@
-/usr/bin/cc -Wl,--dependency-file=CMakeFiles/link-test-isotp.dir/link.d "CMakeFiles/link-test-isotp.dir/tests/test_isotp.c.o" -o link-test-isotp  liblink-core.a src/infiltratr-common/libinfiltratr-portable.a -lm

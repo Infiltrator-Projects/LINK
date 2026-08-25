@@ -1,1 +1,0 @@
-/usr/bin/cc -Wl,--dependency-file=CMakeFiles/link-test-obd2.dir/link.d "CMakeFiles/link-test-obd2.dir/tests/test_obd2.c.o" -o link-test-obd2  liblink-core.a src/infiltratr-common/libinfiltratr-portable.a -lm

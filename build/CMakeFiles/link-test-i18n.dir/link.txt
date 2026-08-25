@@ -1,1 +1,0 @@
-/usr/bin/cc -Wl,--dependency-file=CMakeFiles/link-test-i18n.dir/link.d "CMakeFiles/link-test-i18n.dir/tests/test_i18n.c.o" -o link-test-i18n  liblink-core.a src/infiltratr-common/libinfiltratr-portable.a -lm
