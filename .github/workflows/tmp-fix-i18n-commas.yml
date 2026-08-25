@@ -26,8 +26,8 @@ jobs:
           s = p.read_text(encoding='utf-8')
           old = '\n    ENTRY("linux.no_adapter"'
           count = s.count(old)
-          if count != 12:
-              raise SystemExit(f'expected 12 catalogue insertion points, found {count}')
+          if count != 13:
+              raise SystemExit(f'expected 13 catalogue insertion points, found {count}')
           s = s.replace(old, ',\n    ENTRY("linux.no_adapter"')
           p.write_text(s, encoding='utf-8')
           PY
