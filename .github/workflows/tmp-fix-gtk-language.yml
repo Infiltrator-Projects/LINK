@@ -1,0 +1,48 @@
+name: Temporary fix GTK language build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/tmp-fix-gtk-language.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch GTK localisation build
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          i18n = Path('platform/linux/link-gtk-i18n.c')
+          s = i18n.read_text()
+          old = '#include <gtk/gtk.h>\n\n#include "link/i18n.h"\n'
+          new = '#define LINK_GTK_I18N_IMPLEMENTATION 1\n#include "link-gtk-i18n.h"\n\n#include "link/i18n.h"\n'
+          if s.count(old) != 1:
+              raise SystemExit('unexpected link-gtk-i18n.c include block')
+          i18n.write_text(s.replace(old, new, 1))
+
+          shell = Path('platform/linux/link-gtk-shell.c')
+          s = shell.read_text()
+          old = '''        if (connected)\n            set_connection_state(shell, true,\n                shell->diagnostic_valid ? diagnostic_stage_message(shell)\n                                        : "Linked · diagnostics active");\n        else\n'''
+          new = '''        if (connected)\n            set_connection_state(shell, true,\n                (shell->diagnostics_active || shell->diagnostics_ready ||\n                 shell->flow.stage == LINK_DIAGNOSTIC_FLOW_FAILED)\n                    ? diagnostic_stage_message(shell)\n                    : "Linked · diagnostic session idle");\n        else\n'''
+          if s.count(old) != 1:
+              raise SystemExit('unexpected language refresh diagnostic block')
+          shell.write_text(s.replace(old, new, 1))
+          PY
+      - name: Commit GTK build fix and remove helper
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/tmp-fix-gtk-language.yml
+          git add platform/linux/link-gtk-i18n.c platform/linux/link-gtk-shell.c
+          git commit -m "Fix GTK selectable-language build"
+          git push origin HEAD:main
