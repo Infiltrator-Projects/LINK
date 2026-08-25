@@ -32,9 +32,9 @@ typedef struct LinkGtkShell {
     bool diagnostics_active;
     bool diagnostics_ready;
     bool session_event_pending;
+    bool manufacturer_extension_active;
     size_t current_section;
 } LinkGtkShell;
-
 
 static const char link_gtk_base_css[] =
     ".link-root { background: transparent; }"
@@ -168,8 +168,6 @@ static void initialise_selected_locale(void)
     char *path;
     char *locale = NULL;
 
-    /* Let the existing adapter establish the OS locale once, then honour a
-       manual saved choice. Subsequent screen translations do not reset it. */
     (void)link_gtk_i18n_translate_text("");
 
     path = language_config_path();
@@ -191,7 +189,7 @@ static guint selected_locale_index(void)
     for (index = 0U; index < link_i18n_installed_locale_count(); ++index) {
         const char *candidate = link_i18n_installed_locale(index);
         if (locale != NULL && candidate != NULL && strcmp(locale, candidate) == 0)
-  return (guint)index;
+            return (guint)index;
     }
     return 0U;
 }
@@ -299,6 +297,15 @@ static void set_connection_state(LinkGtkShell *shell, bool connected, const char
     gtk_widget_set_sensitive(shell->device_combo, !connected);
 }
 
+static bool manufacturer_extension_available(const LinkGtkShell *shell)
+{
+    const LinkGtkManufacturerExtension *extension;
+    if (shell == NULL || shell->descriptor == NULL) return false;
+    extension = shell->descriptor->manufacturer_extension;
+    return extension != NULL && extension->begin != NULL &&
+           extension->next_command != NULL && extension->accept_response != NULL;
+}
+
 static const char *diagnostic_stage_message(const LinkGtkShell *shell)
 {
     if (shell == NULL) return "Diagnostic state unavailable";
@@ -310,7 +317,9 @@ static const char *diagnostic_stage_message(const LinkGtkShell *shell)
     case LINK_DIAGNOSTIC_FLOW_DISCOVERING_PIDS:
         return "Linked · discovering supported OBD-II PIDs";
     case LINK_DIAGNOSTIC_FLOW_MANUFACTURER_EXTENSION:
-        return "Linked · manufacturer extension pending";
+        return shell->manufacturer_extension_active
+            ? "Linked · running factory diagnostic extension"
+            : "Linked · manufacturer extension pending";
     case LINK_DIAGNOSTIC_FLOW_RESTORING_AFTER_MANUFACTURER:
         return "Linked · restoring standard OBD-II channel";
     case LINK_DIAGNOSTIC_FLOW_SCANNING_STORED_DTCS:
@@ -378,7 +387,7 @@ static void language_changed(GObject *object, GParamSpec *spec, gpointer user_da
     save_selected_locale(locale);
     if (shell->window != NULL)
         gtk_widget_set_direction(GTK_WIDGET(shell->window),
-  link_i18n_selected_locale_is_rtl() ? GTK_TEXT_DIR_RTL : GTK_TEXT_DIR_LTR);
+            link_i18n_selected_locale_is_rtl() ? GTK_TEXT_DIR_RTL : GTK_TEXT_DIR_LTR);
     refresh_visible_language(shell);
 }
 
@@ -386,6 +395,13 @@ static void fail_diagnostics(LinkGtkShell *shell,
                              LinkDiagnosticFlowResult failure)
 {
     if (shell == NULL) return;
+    if (shell->manufacturer_extension_active &&
+        shell->descriptor->manufacturer_extension != NULL &&
+        shell->descriptor->manufacturer_extension->finished != NULL) {
+        shell->descriptor->manufacturer_extension->finished(
+            false, shell->descriptor->context);
+    }
+    shell->manufacturer_extension_active = false;
     link_diagnostic_flow_fail(&shell->flow, failure);
     shell->diagnostics_active = false;
     shell->diagnostics_ready = false;
@@ -409,6 +425,78 @@ static void session_event(void *context,
     if (shell != NULL) shell->session_event_pending = true;
 }
 
+static bool drive_diagnostics(LinkGtkShell *shell);
+
+static bool finish_manufacturer_extension(LinkGtkShell *shell, bool complete)
+{
+    LinkDiagnosticFlowResult result;
+    if (shell == NULL || !shell->manufacturer_extension_active) return false;
+
+    shell->manufacturer_extension_active = false;
+    if (shell->descriptor->manufacturer_extension != NULL &&
+        shell->descriptor->manufacturer_extension->finished != NULL) {
+        shell->descriptor->manufacturer_extension->finished(
+            complete, shell->descriptor->context);
+    }
+
+    result = link_diagnostic_flow_resume_after_manufacturer(&shell->flow);
+    if (result != LINK_DIAGNOSTIC_FLOW_RESULT_OK) {
+        fail_diagnostics(shell, result);
+        return false;
+    }
+    set_connection_state(shell, true, diagnostic_stage_message(shell));
+    notify_diagnostic(shell, NULL);
+    return drive_diagnostics(shell);
+}
+
+static bool drive_manufacturer_extension(LinkGtkShell *shell)
+{
+    const LinkGtkManufacturerExtension *extension;
+    char command[LINK_ELM327_MAX_COMMAND] = {0};
+    size_t written = 0U;
+    uint64_t timeout_ms = LINK_DIAGNOSTIC_FLOW_DEFAULT_QUERY_TIMEOUT_MS;
+    LinkElm327SessionOpResult op;
+
+    if (shell == NULL || !shell->manufacturer_extension_active ||
+        !manufacturer_extension_available(shell)) return false;
+    if (shell->session.status == LINK_ELM327_SESSION_WAITING) return true;
+
+    extension = shell->descriptor->manufacturer_extension;
+    if (!extension->next_command(command, sizeof(command), &written,
+                                 &timeout_ms, shell->descriptor->context) ||
+        command[0] == '\0' || written == 0U || written >= sizeof(command)) {
+        return finish_manufacturer_extension(shell, false);
+    }
+    if (timeout_ms == 0U) timeout_ms = LINK_DIAGNOSTIC_FLOW_DEFAULT_QUERY_TIMEOUT_MS;
+
+    set_connection_state(shell, true, diagnostic_stage_message(shell));
+    op = link_elm327_session_begin(&shell->session, command,
+                                   monotonic_ms(), timeout_ms);
+    if (op != LINK_ELM327_SESSION_OP_OK) {
+        fail_diagnostics(shell, LINK_DIAGNOSTIC_FLOW_RESULT_ELM_ERROR);
+        return false;
+    }
+    notify_diagnostic(shell, NULL);
+    return true;
+}
+
+static bool begin_manufacturer_extension(LinkGtkShell *shell)
+{
+    const LinkGtkManufacturerExtension *extension;
+    if (shell == NULL || !manufacturer_extension_available(shell)) {
+        return false;
+    }
+    extension = shell->descriptor->manufacturer_extension;
+    if (!extension->begin(shell->descriptor->context)) {
+        shell->manufacturer_extension_active = true;
+        return finish_manufacturer_extension(shell, false);
+    }
+    shell->manufacturer_extension_active = true;
+    set_connection_state(shell, true, diagnostic_stage_message(shell));
+    notify_diagnostic(shell, NULL);
+    return drive_manufacturer_extension(shell);
+}
+
 static bool drive_diagnostics(LinkGtkShell *shell)
 {
     LinkDiagnosticFlowAction action;
@@ -416,6 +504,8 @@ static bool drive_diagnostics(LinkGtkShell *shell)
 
     if (shell == NULL || !shell->session_initialized || !shell->diagnostics_active)
         return false;
+    if (shell->manufacturer_extension_active)
+        return drive_manufacturer_extension(shell);
     if (shell->session.status == LINK_ELM327_SESSION_WAITING) return true;
 
     result = link_diagnostic_flow_next_action(&shell->flow, monotonic_ms(), &action);
@@ -451,8 +541,11 @@ static bool drive_diagnostics(LinkGtkShell *shell)
         return true;
 
     case LINK_DIAGNOSTIC_FLOW_ACTION_MANUFACTURER_EXTENSION:
-        fail_diagnostics(shell, LINK_DIAGNOSTIC_FLOW_RESULT_INVALID_STATE);
-        return false;
+        if (!manufacturer_extension_available(shell)) {
+            shell->manufacturer_extension_active = true;
+            return finish_manufacturer_extension(shell, false);
+        }
+        return begin_manufacturer_extension(shell);
 
     case LINK_DIAGNOSTIC_FLOW_ACTION_FAILED:
         fail_diagnostics(shell, shell->flow.failure);
@@ -471,29 +564,50 @@ static void process_session_event(LinkGtkShell *shell)
 
     if (status == LINK_ELM327_SESSION_COMPLETE) {
         const LinkElm327Response *response = link_elm327_session_response(&shell->session);
-        LinkDiagnosticFlowEvent event;
-        LinkDiagnosticFlowResult result;
         if (response == NULL) {
             fail_diagnostics(shell, LINK_DIAGNOSTIC_FLOW_RESULT_ELM_ERROR);
             return;
         }
-        result = link_diagnostic_flow_accept_response(&shell->flow,
-                                                      response,
-                                                      monotonic_ms(),
-                                                      &event);
-        if (result != LINK_DIAGNOSTIC_FLOW_RESULT_OK) {
-            fail_diagnostics(shell, result);
+
+        if (shell->manufacturer_extension_active) {
+            bool complete = false;
+            const LinkGtkManufacturerExtension *extension =
+                shell->descriptor->manufacturer_extension;
+            if (extension == NULL || extension->accept_response == NULL ||
+                !extension->accept_response(response, &complete,
+                                            shell->descriptor->context)) {
+                (void)finish_manufacturer_extension(shell, false);
+                return;
+            }
+            if (complete) {
+                (void)finish_manufacturer_extension(shell, true);
+            } else {
+                (void)drive_manufacturer_extension(shell);
+            }
             return;
         }
-        if (event.became_ready ||
-            event.kind == LINK_DIAGNOSTIC_FLOW_EVENT_LIVE_SAMPLE ||
-            event.kind == LINK_DIAGNOSTIC_FLOW_EVENT_LIVE_NO_DATA ||
-            event.kind == LINK_DIAGNOSTIC_FLOW_EVENT_LIVE_UNSUPPORTED) {
-            shell->diagnostics_ready = true;
+
+        {
+            LinkDiagnosticFlowEvent event;
+            LinkDiagnosticFlowResult result =
+                link_diagnostic_flow_accept_response(&shell->flow,
+                                                     response,
+                                                     monotonic_ms(),
+                                                     &event);
+            if (result != LINK_DIAGNOSTIC_FLOW_RESULT_OK) {
+                fail_diagnostics(shell, result);
+                return;
+            }
+            if (event.became_ready ||
+                event.kind == LINK_DIAGNOSTIC_FLOW_EVENT_LIVE_SAMPLE ||
+                event.kind == LINK_DIAGNOSTIC_FLOW_EVENT_LIVE_NO_DATA ||
+                event.kind == LINK_DIAGNOSTIC_FLOW_EVENT_LIVE_UNSUPPORTED) {
+                shell->diagnostics_ready = true;
+            }
+            set_connection_state(shell, true, diagnostic_stage_message(shell));
+            notify_diagnostic(shell, &event);
+            (void)drive_diagnostics(shell);
         }
-        set_connection_state(shell, true, diagnostic_stage_message(shell));
-        notify_diagnostic(shell, &event);
-        (void)drive_diagnostics(shell);
         return;
     }
 
@@ -512,6 +626,11 @@ static bool start_diagnostics(LinkGtkShell *shell)
 {
     LinkDiagnosticFlowConfig config = LINK_DIAGNOSTIC_FLOW_CONFIG_INIT;
     if (shell == NULL) return false;
+
+    if (manufacturer_extension_available(shell)) {
+        config.manufacturer_extension_after_pid_discovery = true;
+        config.restore_adapter_after_manufacturer_extension = true;
+    }
 
     if (!link_elm327_session_init(&shell->session,
                                   &shell->transport,
@@ -534,6 +653,7 @@ static bool start_diagnostics(LinkGtkShell *shell)
     shell->diagnostics_active = true;
     shell->diagnostics_ready = false;
     shell->session_event_pending = false;
+    shell->manufacturer_extension_active = false;
     set_connection_state(shell, true, diagnostic_stage_message(shell));
     notify_diagnostic(shell, NULL);
     return drive_diagnostics(shell);
@@ -542,6 +662,13 @@ static bool start_diagnostics(LinkGtkShell *shell)
 static void stop_diagnostics(LinkGtkShell *shell)
 {
     if (shell == NULL) return;
+    if (shell->manufacturer_extension_active &&
+        shell->descriptor->manufacturer_extension != NULL &&
+        shell->descriptor->manufacturer_extension->finished != NULL) {
+        shell->descriptor->manufacturer_extension->finished(
+            false, shell->descriptor->context);
+    }
+    shell->manufacturer_extension_active = false;
     if (shell->session_initialized) {
         if (link_elm327_session_is_connected(&shell->session))
             link_elm327_session_disconnect(&shell->session);
@@ -728,9 +855,10 @@ static void activate(GtkApplication *application, gpointer user_data)
     {
         size_t language_index;
         for (language_index = 0U;
-   language_index < link_i18n_installed_locale_count(); ++language_index) {
-  const char *name = link_i18n_installed_locale_name(language_index);
-  if (name != NULL) gtk_string_list_append(language_model, name);
+             language_index < link_i18n_installed_locale_count();
+             ++language_index) {
+            const char *name = link_i18n_installed_locale_name(language_index);
+            if (name != NULL) gtk_string_list_append(language_model, name);
         }
     }
     shell->language_combo = gtk_drop_down_new(G_LIST_MODEL(language_model), NULL);

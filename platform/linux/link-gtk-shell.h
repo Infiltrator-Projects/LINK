@@ -7,10 +7,33 @@
 #include <gtk/gtk.h>
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/**
+ * Product-owned manufacturer diagnostic extension for the shared Linux shell.
+ *
+ * LINK owns the surrounding SAE/OBD-II workflow and ELM327 session. A product
+ * may supply this bounded command/response adapter to run its own read-only
+ * manufacturer probe at LINK_DIAGNOSTIC_FLOW_MANUFACTURER_EXTENSION. The shell
+ * restores the generic ELM327 channel before continuing the standard DTC/live
+ * pass, so product-specific headers/protocol settings cannot leak into SAE OBD.
+ */
+typedef struct LinkGtkManufacturerExtension {
+    bool (*begin)(void *context);
+    bool (*next_command)(char *buffer,
+                         size_t buffer_size,
+                         size_t *written,
+                         uint64_t *timeout_ms,
+                         void *context);
+    bool (*accept_response)(const LinkElm327Response *response,
+                            bool *complete,
+                            void *context);
+    void (*finished)(bool complete, void *context);
+} LinkGtkManufacturerExtension;
 
 typedef struct LinkGtkShellDescriptor {
     const char *app_id;
@@ -31,6 +54,7 @@ typedef struct LinkGtkShellDescriptor {
                                bool active,
                                bool ready,
                                void *context);
+    const LinkGtkManufacturerExtension *manufacturer_extension;
     void *context;
 } LinkGtkShellDescriptor;
 
