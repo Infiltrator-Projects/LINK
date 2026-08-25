@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "link/i18n.h"
+#include "link/parameter.h"
 
 #include <ctype.h>
 #include <stdio.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -371,6 +373,31 @@ size_t link_i18n_format_text(char *destination, size_t capacity, const char *key
 {
     return infiltratr_i18n_format(destination, capacity, link_i18n_text(key),
                                   arguments, argument_count);
+}
+
+
+size_t link_i18n_format_obd2_pid_label(char *destination, size_t capacity,
+                                       unsigned int pid)
+{
+    const LinkParameterDefinition *definition;
+    const char *translated;
+    int written;
+
+    if (destination == NULL || capacity == 0U) return 0U;
+    destination[0] = '\0';
+    if (pid > UINT8_MAX) return 0U;
+
+    definition = link_parameter_obd2_definition((uint8_t)pid);
+    if (definition == NULL || definition->name == NULL || definition->name[0] == '\0') return 0U;
+    translated = link_i18n_text(definition->name);
+    if (translated == NULL || translated[0] == '\0') translated = definition->name;
+
+    written = snprintf(destination, capacity, "PID 0x%02X · %s", pid, translated);
+    if (written < 0) {
+        destination[0] = '\0';
+        return 0U;
+    }
+    return (size_t)written;
 }
 
 size_t link_i18n_installed_locale_count(void)

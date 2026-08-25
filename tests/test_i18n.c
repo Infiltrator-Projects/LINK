@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "link/i18n.h"
+#include "link/parameter.h"
 
 #include <stdbool.h>
 #include <stdio.h>
@@ -56,6 +57,40 @@ int main(void)
                     "Polish locale registry mismatch");
     passed &= check(strcmp(link_i18n_supported_locale_name(7U), "Polski") == 0,
                     "Polish display name mismatch");
+
+
+(void)link_i18n_format_obd2_pid_label(buffer, sizeof(buffer), 0x0CU);
+passed &= check(strcmp(buffer, "PID 0x0C · Prędkość obrotowa silnika") == 0,
+                "Polish compact PID label mismatch");
+{
+    size_t locale_index;
+    for (locale_index = 0U; locale_index < link_i18n_supported_locale_count(); ++locale_index) {
+        const char *locale = link_i18n_supported_locale(locale_index);
+        size_t parameter_index;
+        if (locale == NULL || strncmp(locale, "en-", 3U) == 0) continue;
+        passed &= check(link_i18n_set_locale(locale),
+                        "non-English compact-label locale selection failed");
+        for (parameter_index = 0U;
+             parameter_index < link_parameter_obd2_definition_count();
+             ++parameter_index) {
+            const LinkParameterDefinition *definition =
+                link_parameter_obd2_definition_at(parameter_index);
+            const char *translated_name;
+            if (definition == NULL) continue;
+            translated_name = link_i18n_text(definition->name);
+            passed &= check(translated_name != NULL &&
+                            strcmp(translated_name, definition->name) != 0,
+                            "non-English OBD-II parameter label fell back to English");
+            (void)link_i18n_format_obd2_pid_label(
+                buffer, sizeof(buffer), definition->key.identifier);
+            passed &= check(strncmp(buffer, "PID 0x", 6U) == 0,
+                            "compact PID label lost technical PID prefix");
+            passed &= check(translated_name == NULL ||
+                            strstr(buffer, translated_name) != NULL,
+                            "compact PID label did not use translated parameter name");
+        }
+    }
+}
 
     passed &= check(link_i18n_set_locale("fr-FR"), "French locale selection failed");
     passed &= check(strcmp(link_i18n_tr("nav.vehicle"), "Véhicule") == 0,

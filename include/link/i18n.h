@@ -58,6 +58,10 @@ size_t link_i18n_format_text(char *destination, size_t capacity, const char *key
                              const InfiltratrI18nArgument *arguments,
                              size_t argument_count);
 
+/** Format a compact OBD-II row label while preserving the technical PID. */
+size_t link_i18n_format_obd2_pid_label(char *destination, size_t capacity,
+                                       unsigned int pid);
+
 /** Load one UTF-8 data-only .lang file. */
 bool link_i18n_load_language_pack(const char *path);
 

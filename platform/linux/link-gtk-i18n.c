@@ -260,10 +260,20 @@ const char *link_gtk_i18n_translate_text(const char *text)
     key = translation_key(text);
     if (key != NULL) return link_i18n_text(key);
 
-    translated = literal_translate(text);
-    if (translated != text) return translated;
 
-    length = strlen(text);
+translated = literal_translate(text);
+if (translated != text) return translated;
+
+/* Compact parameter-table rows keep the technical PID while
+   replacing the English short label with the selected-language full name. */
+if (strncmp(text, "PID 0x", 6U) == 0 && strstr(text, " · ") != NULL) {
+    unsigned int pid;
+    if (sscanf(text, "PID 0x%2X", &pid) == 1 &&
+        link_i18n_format_obd2_pid_label(dynamic, sizeof(dynamic), pid) != 0U)
+        return dynamic;
+}
+
+length = strlen(text);
     prefix_length = sizeof(prefix) - 1U;
     suffix_length = sizeof(suffix) - 1U;
     if (length > prefix_length + suffix_length &&
