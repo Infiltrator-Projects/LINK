@@ -24,106 +24,114 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
+          from textwrap import dedent
 
           header = Path('include/link/i18n.h')
           text = header.read_text()
-          needle = '''size_t link_i18n_format_text(char *destination, size_t capacity, const char *key,\n                             const InfiltratrI18nArgument *arguments,\n                             size_t argument_count);\n'''
-          addition = needle + '''\n/** Format a compact OBD-II row label while preserving the technical PID. */\nsize_t link_i18n_format_obd2_pid_label(char *destination, size_t capacity,\n                                       unsigned int pid);\n'''
+          needle = 'size_t link_i18n_format_text(char *destination, size_t capacity, const char *key,\n                             const InfiltratrI18nArgument *arguments,\n                             size_t argument_count);\n'
+          addition = needle + '\n/** Format a compact OBD-II row label while preserving the technical PID. */\nsize_t link_i18n_format_obd2_pid_label(char *destination, size_t capacity,\n                                       unsigned int pid);\n'
           assert needle in text
-          text = text.replace(needle, addition, 1)
-          header.write_text(text)
+          header.write_text(text.replace(needle, addition, 1))
 
           packs = Path('src/core/language_pack.c')
           text = packs.read_text()
-          needle = '#include "link/i18n.h"\n'
+          assert '#include "link/i18n.h"\n' in text
+          text = text.replace('#include "link/i18n.h"\n', '#include "link/i18n.h"\n#include "link/parameter.h"\n', 1)
+          assert '#include <stdlib.h>\n' in text
+          text = text.replace('#include <stdlib.h>\n', '#include <stdint.h>\n#include <stdlib.h>\n', 1)
+          needle = 'size_t link_i18n_format_text(char *destination, size_t capacity, const char *key,\n                             const InfiltratrI18nArgument *arguments,\n                             size_t argument_count)\n{\n    return infiltratr_i18n_format(destination, capacity, link_i18n_text(key),\n                                  arguments, argument_count);\n}\n'
+          helper = dedent('''
+          
+          size_t link_i18n_format_obd2_pid_label(char *destination, size_t capacity,
+                                                 unsigned int pid)
+          {
+              const LinkParameterDefinition *definition;
+              const char *translated;
+              int written;
+          
+              if (destination == NULL || capacity == 0U) return 0U;
+              destination[0] = '\\0';
+              if (pid > UINT8_MAX) return 0U;
+          
+              definition = link_parameter_obd2_definition((uint8_t)pid);
+              if (definition == NULL || definition->name == NULL || definition->name[0] == '\\0') return 0U;
+              translated = link_i18n_text(definition->name);
+              if (translated == NULL || translated[0] == '\\0') translated = definition->name;
+          
+              written = snprintf(destination, capacity, "PID 0x%02X · %s", pid, translated);
+              if (written < 0) {
+                  destination[0] = '\\0';
+                  return 0U;
+              }
+              return (size_t)written;
+          }
+          ''')
           assert needle in text
-          text = text.replace(needle, needle + '#include "link/parameter.h"\n', 1)
-          needle = '#include <stdlib.h>\n'
-          assert needle in text
-          text = text.replace(needle, '#include <stdint.h>\n' + needle, 1)
-          needle = '''size_t link_i18n_format_text(char *destination, size_t capacity, const char *key,\n                             const InfiltratrI18nArgument *arguments,\n                             size_t argument_count)\n{\n    return infiltratr_i18n_format(destination, capacity, link_i18n_text(key),\n                                  arguments, argument_count);\n}\n'''
-          addition = needle + r'''
-
-size_t link_i18n_format_obd2_pid_label(char *destination, size_t capacity,
-                                       unsigned int pid)
-{
-    const LinkParameterDefinition *definition;
-    const char *translated;
-    int written;
-
-    if (destination == NULL || capacity == 0U) return 0U;
-    destination[0] = '\0';
-    if (pid > UINT8_MAX) return 0U;
-
-    definition = link_parameter_obd2_definition((uint8_t)pid);
-    if (definition == NULL || definition->name == NULL || definition->name[0] == '\0') return 0U;
-    translated = link_i18n_text(definition->name);
-    if (translated == NULL || translated[0] == '\0') translated = definition->name;
-
-    written = snprintf(destination, capacity, "PID 0x%02X · %s", pid, translated);
-    if (written < 0) {
-        destination[0] = '\0';
-        return 0U;
-    }
-    return (size_t)written;
-}
-'''
-          assert needle in text
-          text = text.replace(needle, addition, 1)
-          packs.write_text(text)
+          packs.write_text(text.replace(needle, needle + helper, 1))
 
           gtk = Path('platform/linux/link-gtk-i18n.c')
           text = gtk.read_text()
-          needle = '''    translated = literal_translate(text);\n    if (translated != text) return translated;\n\n    length = strlen(text);\n'''
-          addition = '''    translated = literal_translate(text);\n    if (translated != text) return translated;\n\n    /* Compact parameter-table rows deliberately keep the technical PID while\n       replacing the English short label with the selected-language full name. */\n    if (strncmp(text, "PID 0x", 6U) == 0 && strstr(text, " · ") != NULL) {\n        unsigned int pid;\n        if (sscanf(text, "PID 0x%2X", &pid) == 1 &&\n            link_i18n_format_obd2_pid_label(dynamic, sizeof(dynamic), pid) != 0U)\n            return dynamic;\n    }\n\n    length = strlen(text);\n'''
+          needle = '    translated = literal_translate(text);\n    if (translated != text) return translated;\n\n    length = strlen(text);\n'
+          replacement = dedent('''
+              translated = literal_translate(text);
+              if (translated != text) return translated;
+          
+              /* Compact parameter-table rows keep the technical PID while
+                 replacing the English short label with the selected-language full name. */
+              if (strncmp(text, "PID 0x", 6U) == 0 && strstr(text, " · ") != NULL) {
+                  unsigned int pid;
+                  if (sscanf(text, "PID 0x%2X", &pid) == 1 &&
+                      link_i18n_format_obd2_pid_label(dynamic, sizeof(dynamic), pid) != 0U)
+                      return dynamic;
+              }
+          
+              length = strlen(text);
+          ''')
           assert needle in text
-          text = text.replace(needle, addition, 1)
-          gtk.write_text(text)
+          gtk.write_text(text.replace(needle, replacement, 1))
 
           test = Path('tests/test_i18n.c')
           text = test.read_text()
-          needle = '#include "link/i18n.h"\n'
+          assert '#include "link/i18n.h"\n' in text
+          text = text.replace('#include "link/i18n.h"\n', '#include "link/i18n.h"\n#include "link/parameter.h"\n', 1)
+          needle = '    passed &= check(strcmp(link_i18n_supported_locale_name(7U), "Polski") == 0,\n                    "Polish display name mismatch");\n'
+          checks = dedent('''
+          
+              (void)link_i18n_format_obd2_pid_label(buffer, sizeof(buffer), 0x0CU);
+              passed &= check(strcmp(buffer, "PID 0x0C · Prędkość obrotowa silnika") == 0,
+                              "Polish compact PID label mismatch");
+              {
+                  size_t locale_index;
+                  for (locale_index = 0U; locale_index < link_i18n_supported_locale_count(); ++locale_index) {
+                      const char *locale = link_i18n_supported_locale(locale_index);
+                      size_t parameter_index;
+                      if (locale == NULL || strncmp(locale, "en-", 3U) == 0) continue;
+                      passed &= check(link_i18n_set_locale(locale),
+                                      "non-English compact-label locale selection failed");
+                      for (parameter_index = 0U;
+                           parameter_index < link_parameter_obd2_definition_count();
+                           ++parameter_index) {
+                          const LinkParameterDefinition *definition =
+                              link_parameter_obd2_definition_at(parameter_index);
+                          const char *translated_name;
+                          if (definition == NULL) continue;
+                          translated_name = link_i18n_text(definition->name);
+                          passed &= check(translated_name != NULL &&
+                                          strcmp(translated_name, definition->name) != 0,
+                                          "non-English OBD-II parameter label fell back to English");
+                          (void)link_i18n_format_obd2_pid_label(
+                              buffer, sizeof(buffer), definition->key.identifier);
+                          passed &= check(strncmp(buffer, "PID 0x", 6U) == 0,
+                                          "compact PID label lost technical PID prefix");
+                          passed &= check(translated_name == NULL ||
+                                          strstr(buffer, translated_name) != NULL,
+                                          "compact PID label did not use translated parameter name");
+                      }
+                  }
+              }
+          ''')
           assert needle in text
-          text = text.replace(needle, needle + '#include "link/parameter.h"\n', 1)
-          needle = '''    passed &= check(strcmp(link_i18n_supported_locale_name(7U), "Polski") == 0,\n                    "Polish display name mismatch");\n'''
-          addition = needle + r'''
-
-    (void)link_i18n_format_obd2_pid_label(buffer, sizeof(buffer), 0x0CU);
-    passed &= check(strcmp(buffer, "PID 0x0C · Prędkość obrotowa silnika") == 0,
-                    "Polish compact PID label mismatch");
-    {
-        size_t locale_index;
-        for (locale_index = 0U; locale_index < link_i18n_supported_locale_count(); ++locale_index) {
-            const char *locale = link_i18n_supported_locale(locale_index);
-            size_t parameter_index;
-            if (locale == NULL || strncmp(locale, "en-", 3U) == 0) continue;
-            passed &= check(link_i18n_set_locale(locale),
-                            "non-English compact-label locale selection failed");
-            for (parameter_index = 0U;
-                 parameter_index < link_parameter_obd2_definition_count();
-                 ++parameter_index) {
-                const LinkParameterDefinition *definition =
-                    link_parameter_obd2_definition_at(parameter_index);
-                const char *translated_name;
-                if (definition == NULL) continue;
-                translated_name = link_i18n_text(definition->name);
-                passed &= check(translated_name != NULL &&
-                                strcmp(translated_name, definition->name) != 0,
-                                "non-English OBD-II parameter label fell back to English");
-                (void)link_i18n_format_obd2_pid_label(
-                    buffer, sizeof(buffer), definition->key.identifier);
-                passed &= check(strncmp(buffer, "PID 0x", 6U) == 0,
-                                "compact PID label lost technical PID prefix");
-                passed &= check(translated_name == NULL ||
-                                strstr(buffer, translated_name) != NULL,
-                                "compact PID label did not use translated parameter name");
-            }
-        }
-    }
-'''
-          assert needle in text
-          text = text.replace(needle, addition, 1)
-          test.write_text(text)
+          test.write_text(text.replace(needle, needle + checks, 1))
 
           version = Path('VERSION')
           assert version.read_text().strip() == '0.13.7'
@@ -133,8 +141,8 @@ size_t link_i18n_format_obd2_pid_label(char *destination, size_t capacity,
           cmake -S . -B build-compact-i18n -DCMAKE_BUILD_TYPE=Release
           cmake --build build-compact-i18n --parallel
           ctest --test-dir build-compact-i18n --output-on-failure
-
           rm -rf build-compact-i18n
+
           rm -f .github/workflows/tmp-fix-compact-pid-localisation.yml
           git config user.name "Shannon Smith"
           git config user.email "infiltratr@yandex.com"
