@@ -1,5 +1,7 @@
 # Translation catalogues
 
-LINK ships seven built-in locales: `en-AU`, `en-US`, `de-DE`, `fr-FR`, `es-ES`, `it-IT` and `pl-PL`. The portable compiled catalogue in `src/core/i18n.c` is used at runtime; files in this directory are translator-facing metadata and future import/export surfaces only. Runtime code never parses JSON.
+LINK exposes 15 built-in selectable locales: `en-AU`, `en-US`, `en-GB`, `de-DE`, `fr-FR`, `es-419`, `it-IT`, `pl-PL`, `pt-BR`, `zh-CN`, `hi-IN`, `ar`, `ja-JP`, `ko-KR` and `id-ID`. Australian English (`en-AU`) is the canonical complete fallback and factory default.
 
-`en-AU` is the canonical complete fallback. German and Polish currently cover the shared navigation, connection, diagnostic, Windows Discover and fuel-economy text. Other locales fall back to canonical English for any newer keys not yet translated. New reusable UI text must be introduced as a semantic key in the LINK catalogue and translated where practical. Product-specific terminology stays in MBLINK or JAGLINK. Technical protocol identifiers, DTCs, CAN IDs, UDS service numbers, DIDs and ECU part numbers remain untranslated.
+The portable compiled catalogue in `src/core/i18n.c` is used at runtime; files in this directory are translator-facing metadata and future import/export surfaces only. Runtime code never parses JSON. English (United Kingdom) currently inherits the Australian wording where there is no regional difference, while Latin-American Spanish inherits the shared Spanish catalogue for common diagnostic terminology.
+
+Reusable human-readable UI text belongs in the LINK semantic catalogue. Product-specific terminology stays in MBLINK or JAGLINK. Technical protocol identifiers, DTCs, CAN IDs, UDS service numbers, DIDs, ECU part numbers, VINs and measured numerical values remain untranslated. Arabic is treated as right-to-left by graphical shells.

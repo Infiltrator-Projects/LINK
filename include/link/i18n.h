@@ -22,7 +22,7 @@ extern "C" {
 /** Initialise the shared catalogue to en-AU. Safe to call repeatedly. */
 void link_i18n_init(void);
 
-/** Select a locale such as en-AU, en-US, de-DE, fr-FR, es-ES or it-IT. */
+/** Select a BCP-47 locale. The UI exposes 15 built-in choices; en-AU is canonical. */
 bool link_i18n_set_locale(const char *locale);
 
 /**

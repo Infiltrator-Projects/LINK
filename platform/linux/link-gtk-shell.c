@@ -35,13 +35,6 @@ typedef struct LinkGtkShell {
     size_t current_section;
 } LinkGtkShell;
 
-static const char *const selectable_locales[] = {
-    "en-AU", "de-DE", "pl-PL"
-};
-
-static const char *const selectable_locale_names[] = {
-    "English", "Deutsch", "Polski", NULL
-};
 
 static const char link_gtk_base_css[] =
     ".link-root { background: transparent; }"
@@ -159,8 +152,12 @@ static void initialise_selected_locale(void)
 static guint selected_locale_index(void)
 {
     const char *locale = link_i18n_locale();
-    if (locale != NULL && strncmp(locale, "de", 2U) == 0) return 1U;
-    if (locale != NULL && strncmp(locale, "pl", 2U) == 0) return 2U;
+    size_t index;
+    for (index = 0U; index < link_i18n_supported_locale_count(); ++index) {
+        const char *candidate = link_i18n_supported_locale(index);
+        if (locale != NULL && candidate != NULL && strcmp(locale, candidate) == 0)
+  return (guint)index;
+    }
     return 0U;
 }
 
@@ -330,12 +327,17 @@ static void language_changed(GObject *object, GParamSpec *spec, gpointer user_da
 {
     LinkGtkShell *shell = user_data;
     guint selected;
+    const char *locale;
     (void)spec;
     if (shell == NULL || object == NULL) return;
     selected = gtk_drop_down_get_selected(GTK_DROP_DOWN(object));
-    if (selected >= sizeof(selectable_locales) / sizeof(selectable_locales[0])) return;
-    if (!link_i18n_set_locale(selectable_locales[selected])) return;
-    save_selected_locale(selectable_locales[selected]);
+    if ((size_t)selected >= link_i18n_supported_locale_count()) return;
+    locale = link_i18n_supported_locale((size_t)selected);
+    if (locale == NULL || !link_i18n_set_locale(locale)) return;
+    save_selected_locale(locale);
+    if (shell->window != NULL)
+        gtk_widget_set_direction(GTK_WIDGET(shell->window),
+  strncmp(locale, "ar", 2U) == 0 ? GTK_TEXT_DIR_RTL : GTK_TEXT_DIR_LTR);
     refresh_visible_language(shell);
 }
 
@@ -641,6 +643,8 @@ static void activate(GtkApplication *application, gpointer user_data)
 
     shell->window = GTK_WINDOW(window);
     shell->current_section = 0U;
+    gtk_widget_set_direction(window,
+        strncmp(link_i18n_locale(), "ar", 2U) == 0 ? GTK_TEXT_DIR_RTL : GTK_TEXT_DIR_LTR);
     gtk_window_set_title(shell->window,
                          link_gtk_i18n_translate_text(d->window_title));
     gtk_window_set_default_size(shell->window, 1180, 760);
@@ -675,7 +679,15 @@ static void activate(GtkApplication *application, gpointer user_data)
     rebuild_navigation(shell);
 
     shell->language_label = left_label("Language", "link-language-label");
-    language_model = gtk_string_list_new(selectable_locale_names);
+    language_model = gtk_string_list_new(NULL);
+    {
+        size_t language_index;
+        for (language_index = 0U;
+   language_index < link_i18n_supported_locale_count(); ++language_index) {
+  const char *name = link_i18n_supported_locale_name(language_index);
+  if (name != NULL) gtk_string_list_append(language_model, name);
+        }
+    }
     shell->language_combo = gtk_drop_down_new(G_LIST_MODEL(language_model), NULL);
     gtk_drop_down_set_selected(GTK_DROP_DOWN(shell->language_combo), selected_locale_index());
     g_object_unref(language_model);
