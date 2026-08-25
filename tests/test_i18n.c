@@ -99,6 +99,37 @@ int main(void)
           "15-language registry ordering mismatch");
 
     {
+        static const char *non_english_locales[] = {
+            "de-DE", "fr-FR", "es-419", "it-IT", "pl-PL", "pt-BR",
+            "zh-CN", "hi-IN", "ar", "ja-JP", "ko-KR", "id-ID"
+        };
+        static const char *parameter_labels[] = {
+            "Engine speed", "Vehicle speed", "Manifold pressure", "Throttle position",
+            "Calculated engine load", "Mass air flow", "Coolant temperature",
+            "Intake air temperature", "Fuel rail gauge pressure", "Commanded EGR",
+            "EGR error", "Barometric pressure", "Catalyst temperature B1S1",
+            "Control module voltage", "Ambient air temperature", "Engine oil temperature",
+            "Engine fuel rate", "Exhaust gas temperature B1S1",
+            "DPF bank 1 differential pressure", "DPF bank 1 inlet temperature"
+        };
+        size_t locale_index;
+        size_t label_index;
+        for (locale_index = 0U;
+             locale_index < sizeof(non_english_locales) / sizeof(non_english_locales[0]);
+             ++locale_index) {
+            passed &= check(link_i18n_set_locale(non_english_locales[locale_index]),
+                            "parameter-label locale selection failed");
+            for (label_index = 0U;
+                 label_index < sizeof(parameter_labels) / sizeof(parameter_labels[0]);
+                 ++label_index) {
+                passed &= check(strcmp(link_i18n_tr(parameter_labels[label_index]),
+                                       parameter_labels[label_index]) != 0,
+                                "live-data parameter label fell back to English");
+            }
+        }
+    }
+
+    {
         const char *pack_path = "test-custom-language.lang";
         FILE *pack_file = fopen(pack_path, "wb");
         passed &= check(pack_file != NULL, "custom language pack file create failed");

@@ -1,0 +1,1 @@
+/usr/bin/cc -O3 -DNDEBUG -Wl,--dependency-file=CMakeFiles/link-test-diagnostic-flow.dir/link.d "CMakeFiles/link-test-diagnostic-flow.dir/tests/test_diagnostic_flow.c.o" -o link-test-diagnostic-flow  liblink-core.a src/infiltratr-common/libinfiltratr-portable.a -lm
