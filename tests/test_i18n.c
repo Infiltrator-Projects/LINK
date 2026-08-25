@@ -134,6 +134,23 @@ int main(void)
         }
     }
 
+    passed &= check(link_i18n_set_locale("pt-BR"), "pt-BR Linux shell selection failed");
+    passed &= check(strcmp(link_i18n_tr("linux.vehicle.profile"), "PERFIL DO VEÍCULO") == 0,
+                    "pt-BR Linux vehicle-profile translation mismatch");
+    passed &= check(strcmp(link_i18n_tr("linux.connection.select_adapter"),
+                           "Selecione um adaptador acima e pressione CONECTAR") == 0,
+                    "pt-BR Linux connection guidance translation mismatch");
+    passed &= check(link_i18n_set_locale("zh-CN"), "zh-CN Linux shell selection failed");
+    passed &= check(strcmp(link_i18n_tr("linux.vehicle.evidence"), "车辆证据") == 0,
+                    "zh-CN Linux vehicle-evidence translation mismatch");
+    {
+        InfiltratrI18nArgument count_argument = {"count", "4"};
+        (void)link_i18n_format(buffer, sizeof(buffer), "linux.networks.defined",
+                               &count_argument, 1U);
+        passed &= check(strcmp(buffer, "已定义 4 个网络") == 0,
+                        "zh-CN network-count interpolation mismatch");
+    }
+
     passed &= check(!link_i18n_set_locale("zz-ZZ"),
                     "unknown locale should not be accepted");
     passed &= check(strcmp(link_i18n_tr("nav.vehicle"), "Vehicle") == 0,

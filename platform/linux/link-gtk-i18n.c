@@ -175,6 +175,28 @@ static const char *translation_key(const char *text)
         {"LINK UP", "connection.link_up"},
         {"LINK DOWN", "connection.link_down"},
         {"Adapter", "common.adapter"},
+        {"No adapter", "linux.no_adapter"},
+        {"NOT LINKED", "linux.status.not_linked"},
+        {"LINK OFFLINE", "linux.status.offline"},
+        {"VEHICLE EVIDENCE", "linux.vehicle.evidence"},
+        {"VEHICLE PROFILE", "linux.vehicle.profile"},
+        {"CONNECTION", "linux.section.connection"},
+        {"Linux diagnostic link", "linux.connection.title"},
+        {"Platform", "linux.label.platform"},
+        {"Engine", "linux.label.engine"},
+        {"Family", "linux.label.family"},
+        {"Profile", "linux.label.profile"},
+        {"Engine ECU", "linux.label.engine_ecu"},
+        {"Definition", "linux.label.definition"},
+        {"Physical CAN", "linux.label.physical_can"},
+        {"Model years", "linux.label.model_years"},
+        {"Network map", "linux.label.network_map"},
+        {"Select an adapter above and press LINK UP", "linux.connection.select_adapter"},
+        {"Diagnostic flow", "linux.label.diagnostic_flow"},
+        {"LINK carries the Linux connection directly into ELM initialisation, supported-PID discovery, stored/pending/permanent OBD-II fault inventory and live polling.", "linux.connection.description"},
+        {"source-corroborated", "linux.value.source_corroborated"},
+        {"Mercedes-Benz Diagnostics", "linux.title.mercedes"},
+        {"Jaguar X400 Diagnostics", "linux.title.jaguar"},
         {"About", "common.about"},
         {"No ELM327 serial device detected", "connection.no_device"},
         {"Invalid adapter configuration", "connection.invalid_config"},
@@ -266,32 +288,36 @@ const char *link_gtk_i18n_translate_text(const char *text)
         size_t stored_count, pending_count, permanent_count;
         if (sscanf(text, "COMPLETE · %zu stored · %zu pending · %zu permanent",
                    &stored_count, &pending_count, &permanent_count) == 3) {
-            if (selected_language() == 1) {
-                (void)snprintf(dynamic, sizeof(dynamic),
-                               "ABGESCHLOSSEN · %zu gespeichert · %zu anstehend · %zu permanent",
-                               stored_count, pending_count, permanent_count);
-                return dynamic;
-            }
-            if (selected_language() == 2) {
-                (void)snprintf(dynamic, sizeof(dynamic),
-                               "ZAKOŃCZONO · %zu zapisanych · %zu oczekujących · %zu trwałych",
-                               stored_count, pending_count, permanent_count);
-                return dynamic;
-            }
+            char stored_text[32];
+            char pending_text[32];
+            char permanent_text[32];
+            InfiltratrI18nArgument arguments[3];
+            (void)snprintf(stored_text, sizeof(stored_text), "%zu", stored_count);
+            (void)snprintf(pending_text, sizeof(pending_text), "%zu", pending_count);
+            (void)snprintf(permanent_text, sizeof(permanent_text), "%zu", permanent_count);
+            arguments[0].name = "stored";
+            arguments[0].value = stored_text;
+            arguments[1].name = "pending";
+            arguments[1].value = pending_text;
+            arguments[2].name = "permanent";
+            arguments[2].value = permanent_text;
+            (void)link_i18n_format_text(dynamic, sizeof(dynamic),
+                                        "linux.faults.complete", arguments, 3U);
+            return dynamic;
         }
     }
     {
         size_t network_count;
         if (sscanf(text, "%zu defined networks", &network_count) == 1 &&
             strstr(text, "defined networks") != NULL) {
-            if (selected_language() == 1) {
-                (void)snprintf(dynamic, sizeof(dynamic), "%zu definierte Netzwerke", network_count);
-                return dynamic;
-            }
-            if (selected_language() == 2) {
-                (void)snprintf(dynamic, sizeof(dynamic), "%zu zdefiniowanych sieci", network_count);
-                return dynamic;
-            }
+            char count_text[32];
+            InfiltratrI18nArgument argument;
+            (void)snprintf(count_text, sizeof(count_text), "%zu", network_count);
+            argument.name = "count";
+            argument.value = count_text;
+            (void)link_i18n_format_text(dynamic, sizeof(dynamic),
+                                        "linux.networks.defined", &argument, 1U);
+            return dynamic;
         }
     }
     return text;
