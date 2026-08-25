@@ -86,7 +86,7 @@ static const InfiltratrI18nEntry en_au[] = {
     ENTRY("discover.connect_first", "Connect to the OpenPort/J2534 device first."),
     ENTRY("discover.no_evidence", "No evidence has been recorded yet."),
     ENTRY("discover.about_line", "OpenPort 2.0 / SAE J2534 read-only discovery and evidence capture."),
-    ENTRY("discover.about_safety", "Unsafe and unknown diagnostic services are denied before transmission.")
+    ENTRY("discover.about_safety", "Unsafe and unknown diagnostic services are denied before transmission."),
     ENTRY("linux.no_adapter", "No adapter"),
     ENTRY("linux.status.not_linked", "NOT LINKED"),
     ENTRY("linux.status.offline", "LINK OFFLINE"),
@@ -197,7 +197,7 @@ static const InfiltratrI18nEntry de_de[] = {
     ENTRY("discover.connect_first", "Zuerst mit dem OpenPort/J2534-Gerät verbinden."),
     ENTRY("discover.no_evidence", "Es wurden noch keine Nachweise aufgezeichnet."),
     ENTRY("discover.about_line", "Schreibgeschützte OpenPort-2.0-/SAE-J2534-Erkennung und Nachweiserfassung."),
-    ENTRY("discover.about_safety", "Unsichere und unbekannte Diagnosedienste werden vor der Übertragung verweigert.")
+    ENTRY("discover.about_safety", "Unsichere und unbekannte Diagnosedienste werden vor der Übertragung verweigert."),
     ENTRY("linux.no_adapter", "Kein Adapter"),
     ENTRY("linux.status.not_linked", "NICHT VERBUNDEN"),
     ENTRY("linux.status.offline", "LINK GETRENNT"),
@@ -256,7 +256,7 @@ static const InfiltratrI18nEntry fr_fr[] = {
     ENTRY("discover.no_dll", "Aucune DLL FunctionLibrary J2534 n'est sélectionnée."), ENTRY("discover.evidence_failed", "Impossible de créer le fichier de preuves JSONL."),
     ENTRY("discover.connect_first", "Connectez d'abord le périphérique OpenPort/J2534."), ENTRY("discover.no_evidence", "Aucune preuve n'a encore été enregistrée."),
     ENTRY("discover.about_line", "Découverte OpenPort 2.0 / SAE J2534 en lecture seule et collecte de preuves."),
-    ENTRY("discover.about_safety", "Les services de diagnostic dangereux ou inconnus sont refusés avant transmission.")
+    ENTRY("discover.about_safety", "Les services de diagnostic dangereux ou inconnus sont refusés avant transmission."),
     ENTRY("linux.no_adapter", "Aucun adaptateur"),
     ENTRY("linux.status.not_linked", "NON CONNECTÉ"),
     ENTRY("linux.status.offline", "LINK HORS LIGNE"),
@@ -315,7 +315,7 @@ static const InfiltratrI18nEntry es_es[] = {
     ENTRY("discover.no_dll", "No se ha seleccionado ninguna DLL FunctionLibrary J2534."), ENTRY("discover.evidence_failed", "No se puede crear el archivo de evidencia JSONL."),
     ENTRY("discover.connect_first", "Conecte primero el dispositivo OpenPort/J2534."), ENTRY("discover.no_evidence", "Todavía no se ha registrado evidencia."),
     ENTRY("discover.about_line", "Descubrimiento OpenPort 2.0 / SAE J2534 de solo lectura y captura de evidencia."),
-    ENTRY("discover.about_safety", "Los servicios de diagnóstico inseguros o desconocidos se bloquean antes de transmitirlos.")
+    ENTRY("discover.about_safety", "Los servicios de diagnóstico inseguros o desconocidos se bloquean antes de transmitirlos."),
     ENTRY("linux.no_adapter", "Sin adaptador"),
     ENTRY("linux.status.not_linked", "NO CONECTADO"),
     ENTRY("linux.status.offline", "LINK SIN CONEXIÓN"),
@@ -374,7 +374,7 @@ static const InfiltratrI18nEntry it_it[] = {
     ENTRY("discover.no_dll", "Nessuna DLL FunctionLibrary J2534 selezionata."), ENTRY("discover.evidence_failed", "Impossibile creare il file prove JSONL."),
     ENTRY("discover.connect_first", "Connettere prima il dispositivo OpenPort/J2534."), ENTRY("discover.no_evidence", "Non sono ancora state registrate prove."),
     ENTRY("discover.about_line", "Rilevamento OpenPort 2.0 / SAE J2534 in sola lettura e acquisizione prove."),
-    ENTRY("discover.about_safety", "I servizi diagnostici non sicuri o sconosciuti vengono bloccati prima della trasmissione.")
+    ENTRY("discover.about_safety", "I servizi diagnostici non sicuri o sconosciuti vengono bloccati prima della trasmissione."),
     ENTRY("linux.no_adapter", "Nessun adattatore"),
     ENTRY("linux.status.not_linked", "NON CONNESSO"),
     ENTRY("linux.status.offline", "LINK OFFLINE"),
@@ -481,7 +481,7 @@ static const InfiltratrI18nEntry pl_pl[] = {
     ENTRY("discover.connect_first", "Najpierw połącz urządzenie OpenPort/J2534."),
     ENTRY("discover.no_evidence", "Nie zarejestrowano jeszcze danych dowodowych."),
     ENTRY("discover.about_line", "Wykrywanie OpenPort 2.0 / SAE J2534 tylko do odczytu i zapis danych dowodowych."),
-    ENTRY("discover.about_safety", "Niebezpieczne i nieznane usługi diagnostyczne są blokowane przed transmisją.")
+    ENTRY("discover.about_safety", "Niebezpieczne i nieznane usługi diagnostyczne są blokowane przed transmisją."),
     ENTRY("linux.no_adapter", "Brak adaptera"),
     ENTRY("linux.status.not_linked", "NIEPOŁĄCZONO"),
     ENTRY("linux.status.offline", "LINK ROZŁĄCZONY"),
@@ -588,7 +588,7 @@ static const InfiltratrI18nEntry pt_br[] = {
     ENTRY("discover.connect_first", "Conecte primeiro o dispositivo OpenPort/J2534."),
     ENTRY("discover.no_evidence", "Nenhuma evidência foi registrada ainda."),
     ENTRY("discover.about_line", "Descoberta OpenPort 2.0 / SAE J2534 somente leitura e captura de evidências."),
-    ENTRY("discover.about_safety", "Serviços de diagnóstico inseguros ou desconhecidos são bloqueados antes da transmissão.")
+    ENTRY("discover.about_safety", "Serviços de diagnóstico inseguros ou desconhecidos são bloqueados antes da transmissão."),
     ENTRY("linux.no_adapter", "Sem adaptador"),
     ENTRY("linux.status.not_linked", "NÃO CONECTADO"),
     ENTRY("linux.status.offline", "LINK OFFLINE"),
@@ -695,7 +695,7 @@ static const InfiltratrI18nEntry zh_cn[] = {
     ENTRY("discover.connect_first", "请先连接 OpenPort/J2534 设备。"),
     ENTRY("discover.no_evidence", "尚未记录任何证据。"),
     ENTRY("discover.about_line", "OpenPort 2.0 / SAE J2534 只读发现与证据采集。"),
-    ENTRY("discover.about_safety", "不安全或未知的诊断服务会在传输前被拒绝。")
+    ENTRY("discover.about_safety", "不安全或未知的诊断服务会在传输前被拒绝。"),
     ENTRY("linux.no_adapter", "无适配器"),
     ENTRY("linux.status.not_linked", "未连接"),
     ENTRY("linux.status.offline", "LINK 离线"),
@@ -802,7 +802,7 @@ static const InfiltratrI18nEntry hi_in[] = {
     ENTRY("discover.connect_first", "पहले OpenPort/J2534 डिवाइस कनेक्ट करें।"),
     ENTRY("discover.no_evidence", "अभी तक कोई साक्ष्य रिकॉर्ड नहीं किया गया है।"),
     ENTRY("discover.about_line", "OpenPort 2.0 / SAE J2534 केवल-पढ़ने योग्य खोज और साक्ष्य कैप्चर।"),
-    ENTRY("discover.about_safety", "असुरक्षित और अज्ञात डायग्नोस्टिक सेवाएँ प्रेषण से पहले रोक दी जाती हैं।")
+    ENTRY("discover.about_safety", "असुरक्षित और अज्ञात डायग्नोस्टिक सेवाएँ प्रेषण से पहले रोक दी जाती हैं।"),
     ENTRY("linux.no_adapter", "कोई अडैप्टर नहीं"),
     ENTRY("linux.status.not_linked", "कनेक्ट नहीं है"),
     ENTRY("linux.status.offline", "LINK ऑफ़लाइन"),
@@ -909,7 +909,7 @@ static const InfiltratrI18nEntry ar[] = {
     ENTRY("discover.connect_first", "قم بتوصيل جهاز OpenPort/J2534 أولاً."),
     ENTRY("discover.no_evidence", "لم يتم تسجيل أي دليل بعد."),
     ENTRY("discover.about_line", "اكتشاف OpenPort 2.0 / SAE J2534 للقراءة فقط والتقاط الأدلة."),
-    ENTRY("discover.about_safety", "يتم رفض خدمات التشخيص غير الآمنة أو غير المعروفة قبل الإرسال.")
+    ENTRY("discover.about_safety", "يتم رفض خدمات التشخيص غير الآمنة أو غير المعروفة قبل الإرسال."),
     ENTRY("linux.no_adapter", "لا يوجد محول"),
     ENTRY("linux.status.not_linked", "غير متصل"),
     ENTRY("linux.status.offline", "LINK غير متصل"),
@@ -1016,7 +1016,7 @@ static const InfiltratrI18nEntry ja_jp[] = {
     ENTRY("discover.connect_first", "先に OpenPort/J2534 デバイスへ接続してください。"),
     ENTRY("discover.no_evidence", "証拠はまだ記録されていません。"),
     ENTRY("discover.about_line", "OpenPort 2.0 / SAE J2534 の読み取り専用検出と証拠取得。"),
-    ENTRY("discover.about_safety", "安全でない、または不明な診断サービスは送信前に拒否されます。")
+    ENTRY("discover.about_safety", "安全でない、または不明な診断サービスは送信前に拒否されます。"),
     ENTRY("linux.no_adapter", "アダプターなし"),
     ENTRY("linux.status.not_linked", "未接続"),
     ENTRY("linux.status.offline", "LINK オフライン"),
@@ -1123,7 +1123,7 @@ static const InfiltratrI18nEntry ko_kr[] = {
     ENTRY("discover.connect_first", "먼저 OpenPort/J2534 장치에 연결하세요."),
     ENTRY("discover.no_evidence", "아직 기록된 증거가 없습니다."),
     ENTRY("discover.about_line", "OpenPort 2.0 / SAE J2534 읽기 전용 검색 및 증거 캡처."),
-    ENTRY("discover.about_safety", "안전하지 않거나 알 수 없는 진단 서비스는 전송 전에 차단됩니다.")
+    ENTRY("discover.about_safety", "안전하지 않거나 알 수 없는 진단 서비스는 전송 전에 차단됩니다."),
     ENTRY("linux.no_adapter", "어댑터 없음"),
     ENTRY("linux.status.not_linked", "연결되지 않음"),
     ENTRY("linux.status.offline", "LINK 오프라인"),
@@ -1230,7 +1230,7 @@ static const InfiltratrI18nEntry id_id[] = {
     ENTRY("discover.connect_first", "Hubungkan perangkat OpenPort/J2534 terlebih dahulu."),
     ENTRY("discover.no_evidence", "Belum ada bukti yang direkam."),
     ENTRY("discover.about_line", "Penemuan OpenPort 2.0 / SAE J2534 hanya-baca dan perekaman bukti."),
-    ENTRY("discover.about_safety", "Layanan diagnostik yang tidak aman atau tidak dikenal ditolak sebelum transmisi.")
+    ENTRY("discover.about_safety", "Layanan diagnostik yang tidak aman atau tidak dikenal ditolak sebelum transmisi."),
     ENTRY("linux.no_adapter", "Tanpa adaptor"),
     ENTRY("linux.status.not_linked", "TIDAK TERHUBUNG"),
     ENTRY("linux.status.offline", "LINK OFFLINE"),
