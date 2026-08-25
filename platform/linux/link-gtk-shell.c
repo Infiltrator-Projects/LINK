@@ -252,15 +252,20 @@ static void refresh_devices(LinkGtkShell *shell)
     GtkStringList *model = gtk_string_list_new(NULL);
     count = link_linux_serial_discover(paths, 32U);
     for (index = 0U; index < count; ++index) gtk_string_list_append(model, paths[index]);
+    if (count == 0U)
+        gtk_string_list_append(model, link_gtk_i18n_translate_text("No adapter"));
     gtk_drop_down_set_model(GTK_DROP_DOWN(shell->device_combo), G_LIST_MODEL(model));
-    if (count != 0U) gtk_drop_down_set_selected(GTK_DROP_DOWN(shell->device_combo), 0U);
+    gtk_drop_down_set_selected(GTK_DROP_DOWN(shell->device_combo), 0U);
     g_object_unref(model);
 }
 
 static const char *selected_device(LinkGtkShell *shell)
 {
     GObject *item = gtk_drop_down_get_selected_item(GTK_DROP_DOWN(shell->device_combo));
-    return item != NULL ? gtk_string_object_get_string(GTK_STRING_OBJECT(item)) : NULL;
+    const char *value = item != NULL ? gtk_string_object_get_string(GTK_STRING_OBJECT(item)) : NULL;
+    const char *placeholder = link_gtk_i18n_translate_text("No adapter");
+    if (value == NULL || (placeholder != NULL && strcmp(value, placeholder) == 0)) return NULL;
+    return value;
 }
 
 static void notify_connection(LinkGtkShell *shell, bool connected, const char *identity)
@@ -344,6 +349,7 @@ static void refresh_visible_language(LinkGtkShell *shell)
     if (shell->about_button != NULL)
         gtk_button_set_label(GTK_BUTTON(shell->about_button), "About");
 
+    refresh_devices(shell);
     rebuild_navigation(shell);
     if (shell->status != NULL && shell->link_button != NULL) {
         if (connected)

@@ -333,7 +333,8 @@ bool link_i18n_select_locale(const char *locale)
     if (locale == NULL || locale[0] == '\0') return false;
     pack = find_pack(locale);
     if (pack != NULL) {
-        (void)snprintf(selected_pack_locale, sizeof(selected_pack_locale), "%s", pack->locale);
+        memcpy(selected_pack_locale, pack->locale, sizeof(selected_pack_locale));
+        selected_pack_locale[sizeof(selected_pack_locale) - 1U] = '\0';
         if (!link_i18n_set_locale(pack->locale)) (void)link_i18n_set_locale("en-AU");
         return true;
     }
