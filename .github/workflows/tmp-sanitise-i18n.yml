@@ -1,0 +1,48 @@
+name: Temporary sanitise generated localisation source
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/tmp-sanitise-i18n.yml
+
+permissions:
+  contents: write
+
+jobs:
+  sanitise:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+      - name: Remove embedded NUL bytes and validate
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('platform/windows/link-discover-i18n.c')
+          data = p.read_bytes()
+          count = data.count(b'\x00')
+          if count:
+              data = data.replace(b'\x00', b'\\0')
+              p.write_bytes(data)
+          if b'\x00' in p.read_bytes():
+              raise SystemExit('embedded NUL remains')
+          print(f'removed {count} embedded NUL byte(s)')
+          PY
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
+          cmake --build build --parallel
+          ctest --test-dir build --output-on-failure
+      - name: Commit sanitised source and remove helper
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/tmp-sanitise-i18n.yml
+          git add platform/windows/link-discover-i18n.c
+          git commit -m "Sanitise generated Windows localisation source"
+          git push origin HEAD:main
