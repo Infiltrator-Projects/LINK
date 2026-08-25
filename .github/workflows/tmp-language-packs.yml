@@ -24,12 +24,17 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           p = Path('tools/tmp_language_packs.py')
-          s = p.read_text()
-          old = 'needle = "    ensure_locale();\\n    if (text == NULL) return NULL;\\n"'
-          new = 'needle = "    ensure_locale();\\n    if (text == NULL) return \\\"\\\\\\\";\\n"'
-          if old not in s:
-              raise SystemExit('GTK helper marker not found')
-          p.write_text(s.replace(old, new, 1))
+          lines = p.read_text().splitlines()
+          fixed = False
+          for i, line in enumerate(lines):
+              if line.strip().startswith('needle =') and 'ensure_locale' in line:
+                  lines[i] = r'    needle = "    ensure_locale();\n    if (text == NULL) return \"\";\n"'
+                  lines[i + 1] = r'    replacement = "    ensure_locale();\n    if (text == NULL) return \"\";\n    {\n        const char *packed_translation = link_i18n_text(text);\n        if (packed_translation != NULL && strcmp(packed_translation, text) != 0)\n            return packed_translation;\n    }\n"'
+                  fixed = True
+                  break
+          if not fixed:
+              raise SystemExit('GTK helper marker line not found')
+          p.write_text('\n'.join(lines) + '\n')
           PY
           python3 tools/tmp_language_packs.py
 
