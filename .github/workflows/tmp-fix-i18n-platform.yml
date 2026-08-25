@@ -24,57 +24,30 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
+          import re
 
-          # Windows: repair accidental embedded NULs from the generator, preserve
-          # the full selected locale (rather than collapsing everything except
-          # German/Polish to en-AU), and use the dynamic 15-language command range.
           p = Path('platform/windows/link-discover-i18n.c')
           s = p.read_text(encoding='utf-8')
           s = s.replace('\x00', r'\0')
-          old = '''static const char *selected_locale(void)
-          {
-              const char *locale;
-              ensure_locale();
-              locale = link_i18n_locale();
-              if (locale != NULL && strncmp(locale, "de", 2U) == 0) return "de-DE";
-              if (locale != NULL && strncmp(locale, "pl", 2U) == 0) return "pl-PL";
-              return "en-AU";
-          }
-          '''
-          new = '''static const char *selected_locale(void)
+          pattern = r'''static const char \*selected_locale\(void\)\s*\{.*?\n\}\n\nstatic UINT selected_language_command'''
+          replacement = '''static const char *selected_locale(void)
           {
               const char *locale;
               ensure_locale();
               locale = link_i18n_locale();
               return (locale != NULL && locale[0] != '\\0') ? locale : "en-AU";
           }
-          '''
-          if old not in s:
+
+          static UINT selected_language_command'''
+          s, n = re.subn(pattern, replacement, s, count=1, flags=re.S)
+          if n != 1:
               raise SystemExit('Windows selected_locale block not found')
-          s = s.replace(old, new, 1)
-          old = '''    if (language_menu != NULL)
-                  (void)CheckMenuRadioItem(language_menu,
-                                           IDM_LANGUAGE_ENGLISH, IDM_LANGUAGE_POLISH,
-                                           selected, MF_BYCOMMAND);
-          '''
-          new = '''    if (language_menu != NULL) {
-                  const size_t count = link_i18n_supported_locale_count();
-                  if (count != 0U)
-                      (void)CheckMenuRadioItem(language_menu,
-                                               IDM_LANGUAGE_FIRST,
-                                               IDM_LANGUAGE_FIRST + (UINT)count - 1U,
-                                               selected, MF_BYCOMMAND);
-              }
-          '''
-          if old not in s:
-              raise SystemExit('Windows radio range block not found')
-          s = s.replace(old, new, 1)
+          if 'IDM_LANGUAGE_ENGLISH, IDM_LANGUAGE_POLISH' not in s:
+              raise SystemExit('Windows legacy language range not found')
+          s = s.replace('IDM_LANGUAGE_ENGLISH, IDM_LANGUAGE_POLISH',
+                        'IDM_LANGUAGE_FIRST, IDM_LANGUAGE_FIRST + (UINT)link_i18n_supported_locale_count() - 1U', 1)
           p.write_text(s, encoding='utf-8')
 
-          # Linux: remove the English GTK empty-dropdown placeholder, make the
-          # disconnected LINK status genuinely Polish/German, and cover every
-          # Jaguar explanatory sentence so changing to Polish does not leave
-          # English prose elsewhere in the application.
           p = Path('platform/linux/link-gtk-i18n.c')
           s = p.read_text(encoding='utf-8')
           s = s.replace('{"LINK OFFLINE", "LINK OFFLINE", "LINK OFFLINE"},',
@@ -103,7 +76,7 @@ jobs:
                "Rohanforderungen, Antworten und Telemetrie verwenden den gemeinsamen Nachweispfad; synthetische Fahrzeugdaten werden nicht angezeigt.",
                "Surowe żądania, odpowiedzi i telemetria korzystają ze wspólnej ścieżki danych dowodowych; nie są wyświetlane żadne syntetyczne dane pojazdu."},
           '''
-          if additions.strip() not in s:
+          if 'LINK prowadzi połączenie Linux bezpośrednio' not in s:
               if anchor not in s:
                   raise SystemExit('Linux literal translation anchor not found')
               s = s.replace(anchor, anchor + additions, 1)
@@ -111,28 +84,18 @@ jobs:
 
           p = Path('platform/linux/link-gtk-shell.c')
           s = p.read_text(encoding='utf-8')
-          old = '''    count = link_linux_serial_discover(paths, 32U);
-              for (index = 0U; index < count; ++index) gtk_string_list_append(model, paths[index]);
-              gtk_drop_down_set_model(GTK_DROP_DOWN(shell->device_combo), G_LIST_MODEL(model));
-              if (count != 0U) gtk_drop_down_set_selected(GTK_DROP_DOWN(shell->device_combo), 0U);
-          '''
-          new = '''    count = link_linux_serial_discover(paths, 32U);
+          pattern = r'''count = link_linux_serial_discover\(paths, 32U\);\s*for \(index = 0U; index < count; \+\+index\) gtk_string_list_append\(model, paths\[index\]\);\s*gtk_drop_down_set_model\(GTK_DROP_DOWN\(shell->device_combo\), G_LIST_MODEL\(model\)\);\s*if \(count != 0U\) gtk_drop_down_set_selected\(GTK_DROP_DOWN\(shell->device_combo\), 0U\);'''
+          replacement = '''count = link_linux_serial_discover(paths, 32U);
               for (index = 0U; index < count; ++index) gtk_string_list_append(model, paths[index]);
               if (count == 0U)
                   gtk_string_list_append(model, link_gtk_i18n_translate_text("No adapter"));
               gtk_drop_down_set_model(GTK_DROP_DOWN(shell->device_combo), G_LIST_MODEL(model));
-              gtk_drop_down_set_selected(GTK_DROP_DOWN(shell->device_combo), 0U);
-          '''
-          if old not in s:
+              gtk_drop_down_set_selected(GTK_DROP_DOWN(shell->device_combo), 0U);'''
+          s, n = re.subn(pattern, replacement, s, count=1, flags=re.S)
+          if n != 1:
               raise SystemExit('Linux refresh_devices block not found')
-          s = s.replace(old, new, 1)
-          old = '''static const char *selected_device(LinkGtkShell *shell)
-          {
-              GObject *item = gtk_drop_down_get_selected_item(GTK_DROP_DOWN(shell->device_combo));
-              return item != NULL ? gtk_string_object_get_string(GTK_STRING_OBJECT(item)) : NULL;
-          }
-          '''
-          new = '''static const char *selected_device(LinkGtkShell *shell)
+          pattern = r'''static const char \*selected_device\(LinkGtkShell \*shell\)\s*\{.*?\n\}\n\nstatic void notify_connection'''
+          replacement = '''static const char *selected_device(LinkGtkShell *shell)
           {
               GObject *item = gtk_drop_down_get_selected_item(GTK_DROP_DOWN(shell->device_combo));
               const char *value = item != NULL ? gtk_string_object_get_string(GTK_STRING_OBJECT(item)) : NULL;
@@ -140,24 +103,17 @@ jobs:
               if (value == NULL || (placeholder != NULL && strcmp(value, placeholder) == 0)) return NULL;
               return value;
           }
-          '''
-          if old not in s:
+
+          static void notify_connection'''
+          s, n = re.subn(pattern, replacement, s, count=1, flags=re.S)
+          if n != 1:
               raise SystemExit('Linux selected_device block not found')
-          s = s.replace(old, new, 1)
-          old = '''    if (shell->about_button != NULL)
-                  gtk_button_set_label(GTK_BUTTON(shell->about_button), "About");
-
-              rebuild_navigation(shell);
-          '''
-          new = '''    if (shell->about_button != NULL)
-                  gtk_button_set_label(GTK_BUTTON(shell->about_button), "About");
-
-              refresh_devices(shell);
-              rebuild_navigation(shell);
-          '''
-          if old not in s:
+          marker = '    rebuild_navigation(shell);\n'
+          refresh = '    refresh_devices(shell);\n    rebuild_navigation(shell);\n'
+          pos = s.find(marker, s.find('static void refresh_visible_language'))
+          if pos < 0:
               raise SystemExit('Linux language refresh anchor not found')
-          s = s.replace(old, new, 1)
+          s = s[:pos] + refresh + s[pos + len(marker):]
           p.write_text(s, encoding='utf-8')
           PY
 
