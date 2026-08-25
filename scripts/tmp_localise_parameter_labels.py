@@ -1,0 +1,176 @@
+from pathlib import Path
+import json
+
+labels = [
+    "Engine speed",
+    "Vehicle speed",
+    "Manifold pressure",
+    "Throttle position",
+    "Calculated engine load",
+    "Mass air flow",
+    "Coolant temperature",
+    "Intake air temperature",
+    "Fuel rail gauge pressure",
+    "Commanded EGR",
+    "EGR error",
+    "Barometric pressure",
+    "Catalyst temperature B1S1",
+    "Control module voltage",
+    "Ambient air temperature",
+    "Engine oil temperature",
+    "Engine fuel rate",
+    "Exhaust gas temperature B1S1",
+    "DPF bank 1 differential pressure",
+    "DPF bank 1 inlet temperature",
+]
+
+translations = {
+    "en_au": labels,
+    "de_de": [
+        "Motordrehzahl", "Fahrzeuggeschwindigkeit", "Saugrohrdruck", "Drosselklappenstellung",
+        "Berechnete Motorlast", "Luftmassenstrom", "Kühlmitteltemperatur", "Ansauglufttemperatur",
+        "Kraftstoffrail-Relativdruck", "EGR-Sollwert", "EGR-Abweichung", "Barometrischer Druck",
+        "Katalysatortemperatur B1S1", "Steuergerätespannung", "Außentemperatur", "Motoröltemperatur",
+        "Motorkraftstoffrate", "Abgastemperatur B1S1", "DPF Bank 1 Differenzdruck", "DPF Bank 1 Einlasstemperatur",
+    ],
+    "fr_fr": [
+        "Régime moteur", "Vitesse du véhicule", "Pression du collecteur", "Position du papillon",
+        "Charge moteur calculée", "Débit massique d’air", "Température du liquide de refroidissement", "Température d’air d’admission",
+        "Pression relative de rampe de carburant", "Commande EGR", "Erreur EGR", "Pression barométrique",
+        "Température du catalyseur B1S1", "Tension du module de commande", "Température de l’air ambiant", "Température d’huile moteur",
+        "Débit de carburant moteur", "Température des gaz d’échappement B1S1", "Pression différentielle DPF banc 1", "Température d’entrée DPF banc 1",
+    ],
+    "es_es": [
+        "Régimen del motor", "Velocidad del vehículo", "Presión del múltiple", "Posición del acelerador",
+        "Carga calculada del motor", "Flujo de masa de aire", "Temperatura del refrigerante", "Temperatura del aire de admisión",
+        "Presión relativa del riel de combustible", "EGR comandada", "Error de EGR", "Presión barométrica",
+        "Temperatura del catalizador B1S1", "Voltaje del módulo de control", "Temperatura del aire ambiente", "Temperatura del aceite del motor",
+        "Caudal de combustible del motor", "Temperatura de gases de escape B1S1", "Presión diferencial DPF banco 1", "Temperatura de entrada DPF banco 1",
+    ],
+    "it_it": [
+        "Regime motore", "Velocità veicolo", "Pressione collettore", "Posizione farfalla",
+        "Carico motore calcolato", "Portata massica aria", "Temperatura liquido di raffreddamento", "Temperatura aria aspirata",
+        "Pressione relativa rail carburante", "EGR comandata", "Errore EGR", "Pressione barometrica",
+        "Temperatura catalizzatore B1S1", "Tensione modulo di controllo", "Temperatura aria ambiente", "Temperatura olio motore",
+        "Portata carburante motore", "Temperatura gas di scarico B1S1", "Pressione differenziale DPF banco 1", "Temperatura ingresso DPF banco 1",
+    ],
+    "pl_pl": [
+        "Prędkość obrotowa silnika", "Prędkość pojazdu", "Ciśnienie w kolektorze", "Położenie przepustnicy",
+        "Obliczone obciążenie silnika", "Masowy przepływ powietrza", "Temperatura płynu chłodzącego", "Temperatura powietrza dolotowego",
+        "Ciśnienie względne na listwie paliwowej", "Zadane EGR", "Błąd EGR", "Ciśnienie barometryczne",
+        "Temperatura katalizatora B1S1", "Napięcie modułu sterującego", "Temperatura powietrza otoczenia", "Temperatura oleju silnikowego",
+        "Przepływ paliwa silnika", "Temperatura spalin B1S1", "Ciśnienie różnicowe DPF bank 1", "Temperatura wlotowa DPF bank 1",
+    ],
+    "pt_br": [
+        "Rotação do motor", "Velocidade do veículo", "Pressão do coletor", "Posição da borboleta",
+        "Carga calculada do motor", "Fluxo de massa de ar", "Temperatura do líquido de arrefecimento", "Temperatura do ar de admissão",
+        "Pressão relativa do trilho de combustível", "EGR comandada", "Erro de EGR", "Pressão barométrica",
+        "Temperatura do catalisador B1S1", "Tensão do módulo de controle", "Temperatura do ar ambiente", "Temperatura do óleo do motor",
+        "Vazão de combustível do motor", "Temperatura dos gases de escape B1S1", "Pressão diferencial do DPF banco 1", "Temperatura de entrada do DPF banco 1",
+    ],
+    "zh_cn": [
+        "发动机转速", "车速", "进气歧管压力", "节气门位置",
+        "计算发动机负荷", "空气质量流量", "冷却液温度", "进气温度",
+        "燃油轨表压", "指令 EGR", "EGR 误差", "大气压力",
+        "催化器温度 B1S1", "控制模块电压", "环境空气温度", "发动机机油温度",
+        "发动机燃油流量", "排气温度 B1S1", "DPF 第1组差压", "DPF 第1组入口温度",
+    ],
+    "hi_in": [
+        "इंजन गति", "वाहन गति", "इनटेक मैनिफोल्ड दबाव", "थ्रॉटल स्थिति",
+        "गणितित इंजन लोड", "वायु द्रव्यमान प्रवाह", "कूलेंट तापमान", "इनटेक वायु तापमान",
+        "ईंधन रेल गेज दबाव", "कमांडेड EGR", "EGR त्रुटि", "बैरोमेट्रिक दबाव",
+        "कैटलिस्ट तापमान B1S1", "कंट्रोल मॉड्यूल वोल्टेज", "परिवेशी वायु तापमान", "इंजन ऑयल तापमान",
+        "इंजन ईंधन प्रवाह दर", "एग्जॉस्ट गैस तापमान B1S1", "DPF बैंक 1 डिफरेंशियल दबाव", "DPF बैंक 1 इनलेट तापमान",
+    ],
+    "ar": [
+        "سرعة دوران المحرك", "سرعة المركبة", "ضغط مجمع السحب", "موضع صمام الخانق",
+        "حمل المحرك المحسوب", "معدل تدفق كتلة الهواء", "درجة حرارة سائل التبريد", "درجة حرارة هواء السحب",
+        "ضغط سكة الوقود النسبي", "أمر EGR", "خطأ EGR", "الضغط الجوي",
+        "درجة حرارة المحفز B1S1", "جهد وحدة التحكم", "درجة حرارة الهواء المحيط", "درجة حرارة زيت المحرك",
+        "معدل تدفق وقود المحرك", "درجة حرارة غازات العادم B1S1", "فرق ضغط DPF للبنك 1", "درجة حرارة مدخل DPF للبنك 1",
+    ],
+    "ja_jp": [
+        "エンジン回転数", "車速", "インテークマニホールド圧", "スロットル開度",
+        "算出エンジン負荷", "吸入空気量", "冷却水温", "吸気温",
+        "燃料レールゲージ圧", "EGR 指令値", "EGR 誤差", "大気圧",
+        "触媒温度 B1S1", "コントロールモジュール電圧", "外気温", "エンジンオイル温度",
+        "エンジン燃料流量", "排気ガス温度 B1S1", "DPF バンク1 差圧", "DPF バンク1 入口温度",
+    ],
+    "ko_kr": [
+        "엔진 회전수", "차량 속도", "흡기 매니폴드 압력", "스로틀 위치",
+        "계산된 엔진 부하", "공기 질량 유량", "냉각수 온도", "흡기 온도",
+        "연료 레일 게이지 압력", "EGR 지령값", "EGR 오차", "대기압",
+        "촉매 온도 B1S1", "제어 모듈 전압", "외기 온도", "엔진 오일 온도",
+        "엔진 연료 유량", "배기가스 온도 B1S1", "DPF 뱅크 1 차압", "DPF 뱅크 1 입구 온도",
+    ],
+    "id_id": [
+        "Putaran mesin", "Kecepatan kendaraan", "Tekanan manifold", "Posisi throttle",
+        "Beban mesin terhitung", "Aliran massa udara", "Suhu cairan pendingin", "Suhu udara masuk",
+        "Tekanan relatif rel bahan bakar", "EGR diperintahkan", "Galat EGR", "Tekanan barometrik",
+        "Suhu katalis B1S1", "Tegangan modul kontrol", "Suhu udara sekitar", "Suhu oli mesin",
+        "Laju bahan bakar mesin", "Suhu gas buang B1S1", "Tekanan diferensial DPF bank 1", "Suhu masuk DPF bank 1",
+    ],
+}
+
+p = Path("src/core/i18n.c")
+s = p.read_text(encoding="utf-8")
+for array_name, values in translations.items():
+    if len(values) != len(labels):
+        raise SystemExit(f"translation count mismatch for {array_name}")
+    marker = f"static const InfiltratrI18nEntry {array_name}[] = {{"
+    start = s.find(marker)
+    if start < 0:
+        raise SystemExit(f"catalogue not found: {array_name}")
+    end = s.find("\n};", start)
+    if end < 0:
+        raise SystemExit(f"catalogue end not found: {array_name}")
+    section = s[start:end]
+    if 'ENTRY("Engine speed",' in section:
+        raise SystemExit(f"parameter labels already present in {array_name}")
+    block = "\n" + "\n".join(
+        f"    ENTRY({json.dumps(key, ensure_ascii=False)}, {json.dumps(value, ensure_ascii=False)}),"
+        for key, value in zip(labels, values)
+    )
+    s = s[:end] + block + s[end:]
+p.write_text(s, encoding="utf-8")
+
+test = Path("tests/test_i18n.c")
+t = test.read_text(encoding="utf-8")
+marker = "    {\n        const char *pack_path = \"test-custom-language.lang\";"
+if marker not in t:
+    raise SystemExit("test insertion point not found")
+test_block = '''    {
+        static const char *non_english_locales[] = {
+            "de-DE", "fr-FR", "es-419", "it-IT", "pl-PL", "pt-BR",
+            "zh-CN", "hi-IN", "ar", "ja-JP", "ko-KR", "id-ID"
+        };
+        static const char *parameter_labels[] = {
+            "Engine speed", "Vehicle speed", "Manifold pressure", "Throttle position",
+            "Calculated engine load", "Mass air flow", "Coolant temperature",
+            "Intake air temperature", "Fuel rail gauge pressure", "Commanded EGR",
+            "EGR error", "Barometric pressure", "Catalyst temperature B1S1",
+            "Control module voltage", "Ambient air temperature", "Engine oil temperature",
+            "Engine fuel rate", "Exhaust gas temperature B1S1",
+            "DPF bank 1 differential pressure", "DPF bank 1 inlet temperature"
+        };
+        size_t locale_index;
+        size_t label_index;
+        for (locale_index = 0U;
+             locale_index < sizeof(non_english_locales) / sizeof(non_english_locales[0]);
+             ++locale_index) {
+            passed &= check(link_i18n_set_locale(non_english_locales[locale_index]),
+                            "parameter-label locale selection failed");
+            for (label_index = 0U;
+                 label_index < sizeof(parameter_labels) / sizeof(parameter_labels[0]);
+                 ++label_index) {
+                passed &= check(strcmp(link_i18n_tr(parameter_labels[label_index]),
+                                       parameter_labels[label_index]) != 0,
+                                "live-data parameter label fell back to English");
+            }
+        }
+    }
+
+'''
+t = t.replace(marker, test_block + marker, 1)
+test.write_text(t, encoding="utf-8")
+Path("VERSION").write_text("0.13.7\n", encoding="utf-8")
