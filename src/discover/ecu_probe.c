@@ -309,13 +309,15 @@ static LinkEcuProbeResult link_ecu_probe_accept_tester_present(
         return link_ecu_probe_fail(probe, LINK_ECU_PROBE_RESULT_PDU_ERROR);
     }
     uds_result = link_uds_decode_tester_present_response(pdu, pdu_length);
+    if (uds_result == LINK_UDS_RESULT_NEGATIVE_RESPONSE) {
+        probe->uds_failure = uds_result;
+        link_ecu_probe_record_negative_response(
+            LINK_UDS_SERVICE_TESTER_PRESENT,
+            pdu, pdu_length, &probe->uds_negative_response_code);
+        return link_ecu_probe_begin_reads(probe);
+    }
     if (uds_result != LINK_UDS_RESULT_OK) {
         probe->uds_failure = uds_result;
-        if (uds_result == LINK_UDS_RESULT_NEGATIVE_RESPONSE) {
-            link_ecu_probe_record_negative_response(
-                LINK_UDS_SERVICE_TESTER_PRESENT,
-                pdu, pdu_length, &probe->uds_negative_response_code);
-        }
         return link_ecu_probe_fail(probe, LINK_ECU_PROBE_RESULT_UDS_ERROR);
     }
     return link_ecu_probe_begin_reads(probe);

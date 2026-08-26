@@ -74,6 +74,15 @@ int main(void)
     REQUIRE(link_elm327_can_decode_pdu(&response, pdu, sizeof(pdu), &pdu_length) == LINK_ELM327_CAN_RESULT_OK);
     REQUIRE(pdu_length == 4U && pdu[0] == 0x62U && pdu[1] == 0xf1U);
 
+    memset(&response, 0, sizeof(response));
+    response.result = LINK_ELM327_RESULT_OK;
+    memcpy(response.text, "7F1978\n5902FF", sizeof("7F1978\n5902FF"));
+    response.length = strlen(response.text);
+    response.line_count = 2U;
+    REQUIRE(link_elm327_can_decode_pdu(&response, pdu, sizeof(pdu), &pdu_length) ==
+            LINK_ELM327_CAN_RESULT_OK);
+    REQUIRE(pdu_length == 3U && pdu[0] == 0x59U && pdu[1] == 0x02U && pdu[2] == 0xffU);
+
     transport.context = &mock; transport.connect = mock_connect; transport.disconnect = mock_disconnect; transport.is_connected = mock_is_connected; transport.write = mock_write; transport.set_receiver = mock_set_receiver;
     REQUIRE(link_transport_is_valid(&transport));
     REQUIRE(link_elm327_session_init(&session, &transport, NULL, NULL));

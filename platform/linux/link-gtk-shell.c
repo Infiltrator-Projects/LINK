@@ -41,6 +41,10 @@ typedef struct LinkGtkShell {
     size_t exchange_count;
     bool exchange_truncated;
     uint64_t exchange_started_ms;
+    unsigned int diagnostic_retry_count;
+    bool diagnostic_retry_pending;
+    uint64_t diagnostic_retry_at_ms;
+    bool diagnostic_had_failure;
 } LinkGtkShell;
 
 static const char link_gtk_base_css[] =
@@ -112,6 +116,8 @@ static void reset_session_capture(LinkGtkShell *shell)
     if(shell->exchange_json==NULL)shell->exchange_json=g_string_sized_new(8192U);else g_string_truncate(shell->exchange_json,0U);
     shell->exchange_count=0U;shell->exchange_truncated=false;shell->exchange_started_ms=monotonic_ms();
     shell->adapter_identity[0]='\0';shell->adapter_device[0]='\0';
+    shell->diagnostic_retry_count=0U;shell->diagnostic_retry_pending=false;
+    shell->diagnostic_retry_at_ms=0U;shell->diagnostic_had_failure=false;
 }
 static void record_session_exchange(LinkGtkShell *shell)
 {
@@ -138,6 +144,15 @@ static GString *build_session_json(const LinkGtkShell *shell)
     GString *o=g_string_sized_new(2048U+(shell->exchange_json!=NULL?shell->exchange_json->len:0U));GDateTime *now=g_date_time_new_now_utc();char *ts=now!=NULL?g_date_time_format_iso8601(now):NULL;
     g_string_append(o,"{\n\"schema\":\"link-diagnostic-session/v1\",\n\"generated_utc\":");json_string(o,ts!=NULL?ts:"unknown");g_string_append(o,",\n\"product\":");json_string(o,shell->descriptor->brand_name);g_string_append(o,",\n\"version\":");json_string(o,shell->descriptor->version);
     g_string_append(o,",\n\"adapter_device\":");json_string(o,shell->adapter_device);g_string_append(o,",\n\"adapter_identity\":");json_string(o,shell->adapter_identity);g_string_append(o,",\n\"diagnostic_stage\":");json_string(o,link_diagnostic_flow_stage_name(shell->flow.stage));
+    g_string_append_printf(o,",\n\"session_complete\":%s,\n\"diagnostics_active\":%s,\n\"diagnostics_ready\":%s,\n\"manufacturer_extension_active\":%s,\n\"diagnostic_had_failure\":%s,\n\"automatic_retries\":%u",
+        shell->diagnostics_ready && !shell->manufacturer_extension_active ? "true" : "false",
+        shell->diagnostics_active ? "true" : "false",
+        shell->diagnostics_ready ? "true" : "false",
+        shell->manufacturer_extension_active ? "true" : "false",
+        shell->diagnostic_had_failure ? "true" : "false",
+        shell->diagnostic_retry_count);
+    if(shell->flow.stage==LINK_DIAGNOSTIC_FLOW_FAILED){g_string_append(o,",\n\"diagnostic_failure\":");json_string(o,link_diagnostic_flow_result_name(shell->flow.failure));}
+    if(shell->descriptor->append_session_state_json!=NULL){g_string_append(o,",\n\"product_state\":");shell->descriptor->append_session_state_json(o,shell->descriptor->context);}
     g_string_append_printf(o,",\n\"elm_exchanges\":{\"captured\":%zu,\"truncated\":%s,\"records\":[",shell->exchange_count,shell->exchange_truncated?"true":"false");if(shell->exchange_json!=NULL)g_string_append_len(o,shell->exchange_json->str,(gssize)shell->exchange_json->len);g_string_append(o,"]}\n}\n");
     g_free(ts);if(now!=NULL)g_date_time_unref(now);return o;
 }
@@ -389,6 +404,14 @@ static void set_connection_state(LinkGtkShell *shell, bool connected, const char
     gtk_label_set_text(GTK_LABEL(shell->status), message);
     gtk_button_set_label(GTK_BUTTON(shell->link_button), connected ? "LINK DOWN" : "LINK UP");
     gtk_widget_set_sensitive(shell->device_combo, !connected);
+    if (shell->save_session_button != NULL) {
+        const char *label = "SAVE SESSION";
+        if (connected && shell->flow.stage == LINK_DIAGNOSTIC_FLOW_FAILED)
+            label = "SAVE FAILED SESSION";
+        else if (connected && !shell->diagnostics_ready)
+            label = "SAVE PARTIAL SESSION";
+        gtk_button_set_label(GTK_BUTTON(shell->save_session_button), label);
+    }
 }
 
 static bool manufacturer_extension_available(const LinkGtkShell *shell)
@@ -501,8 +524,19 @@ static void fail_diagnostics(LinkGtkShell *shell,
     link_diagnostic_flow_fail(&shell->flow, failure);
     shell->diagnostics_active = false;
     shell->diagnostics_ready = false;
-    set_connection_state(shell, true,
-                         "Linked · diagnostic session failed · LINK DOWN / LINK UP to retry");
+    shell->diagnostic_had_failure = true;
+    if (shell->diagnostic_retry_count < 1U &&
+        shell->transport.is_connected != NULL &&
+        shell->transport.is_connected(shell->transport.context)) {
+        shell->diagnostic_retry_count++;
+        shell->diagnostic_retry_pending = true;
+        shell->diagnostic_retry_at_ms = monotonic_ms() + UINT64_C(300);
+        set_connection_state(shell, true,
+                             "Linked · diagnostic attempt failed · retrying automatically");
+    } else {
+        set_connection_state(shell, true,
+                             "Linked · diagnostic session failed · SAVE FAILED SESSION or LINK DOWN / LINK UP");
+    }
     if (shell->descriptor->diagnostic_changed != NULL) {
         shell->descriptor->diagnostic_changed(&shell->flow,
                                               NULL,
@@ -725,7 +759,7 @@ static bool start_diagnostics(LinkGtkShell *shell)
     if (shell == NULL) return false;
 
     if (manufacturer_extension_available(shell)) {
-        config.manufacturer_extension_after_pid_discovery = true;
+        config.manufacturer_extension_after_standard_dtcs = true;
         config.restore_adapter_after_manufacturer_extension = true;
     }
 
@@ -845,7 +879,16 @@ static void refresh_clicked(GtkButton *button, gpointer user_data)
 static gboolean pump_serial(gpointer user_data)
 {
     LinkGtkShell *shell = user_data;
+    const uint64_t now_ms = monotonic_ms();
     link_linux_serial_pump(&shell->serial);
+    if (shell->diagnostic_retry_pending && now_ms >= shell->diagnostic_retry_at_ms &&
+        shell->transport.is_connected != NULL &&
+        shell->transport.is_connected(shell->transport.context)) {
+        shell->diagnostic_retry_pending = false;
+        stop_diagnostics(shell);
+        if (!start_diagnostics(shell))
+            fail_diagnostics(shell, LINK_DIAGNOSTIC_FLOW_RESULT_ELM_ERROR);
+    }
     if (shell->session_initialized) {
         (void)link_elm327_session_tick(&shell->session, monotonic_ms());
         if (shell->session_event_pending) process_session_event(shell);

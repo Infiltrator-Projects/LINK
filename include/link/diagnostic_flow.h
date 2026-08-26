@@ -73,6 +73,7 @@ typedef enum {
 
 typedef struct {
     bool manufacturer_extension_after_pid_discovery;
+    bool manufacturer_extension_after_standard_dtcs;
     bool restore_adapter_after_manufacturer_extension;
     uint64_t init_timeout_ms;
     uint64_t query_timeout_ms;
@@ -82,6 +83,7 @@ typedef struct {
 #define LINK_DIAGNOSTIC_FLOW_CONFIG_INIT \
     { \
         .manufacturer_extension_after_pid_discovery = false, \
+        .manufacturer_extension_after_standard_dtcs = false, \
         .restore_adapter_after_manufacturer_extension = false, \
         .init_timeout_ms = LINK_DIAGNOSTIC_FLOW_DEFAULT_INIT_TIMEOUT_MS, \
         .query_timeout_ms = LINK_DIAGNOSTIC_FLOW_DEFAULT_QUERY_TIMEOUT_MS, \
@@ -122,6 +124,7 @@ typedef struct {
     size_t active_schedule_index;
     uint8_t active_pid;
     bool awaiting_response;
+    bool standard_dtc_inventory_complete;
 } LinkDiagnosticFlow;
 
 const char *link_diagnostic_flow_result_name(LinkDiagnosticFlowResult result);

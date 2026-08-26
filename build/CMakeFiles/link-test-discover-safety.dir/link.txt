@@ -1,0 +1,1 @@
+/usr/bin/cc -O3 -DNDEBUG -Wl,--dependency-file=CMakeFiles/link-test-discover-safety.dir/link.d "CMakeFiles/link-test-discover-safety.dir/tests/test_discover_safety.c.o" -o link-test-discover-safety  liblink-core.a src/infiltratr-common/libinfiltratr-portable.a -lm

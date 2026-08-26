@@ -354,7 +354,9 @@ LinkDiagnosticFlowResult link_diagnostic_flow_accept_response(
         }
         if (flow->initialization.stage == LINK_ELM327_INIT_COMPLETE) {
             if (stage == LINK_DIAGNOSTIC_FLOW_RESTORING_AFTER_MANUFACTURER) {
-                flow->stage = LINK_DIAGNOSTIC_FLOW_SCANNING_STORED_DTCS;
+                flow->stage = flow->standard_dtc_inventory_complete
+                    ? LINK_DIAGNOSTIC_FLOW_LIVE
+                    : LINK_DIAGNOSTIC_FLOW_SCANNING_STORED_DTCS;
             } else {
                 flow->supported_pid_base = 0x00U;
                 flow->stage = LINK_DIAGNOSTIC_FLOW_DISCOVERING_PIDS;
@@ -420,7 +422,13 @@ LinkDiagnosticFlowResult link_diagnostic_flow_accept_response(
             if (schedule_result != LINK_SCHEDULER_RESULT_OK) {
                 return flow_fail_scheduler(flow, schedule_result);
             }
-            event->became_ready = true;
+            flow->standard_dtc_inventory_complete = true;
+            if (flow->config.manufacturer_extension_after_standard_dtcs) {
+                flow->stage = LINK_DIAGNOSTIC_FLOW_MANUFACTURER_EXTENSION;
+                event->became_ready = false;
+            } else {
+                event->became_ready = true;
+            }
         }
         return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
     }
@@ -472,7 +480,9 @@ LinkDiagnosticFlowResult link_diagnostic_flow_resume_after_manufacturer(
         link_elm327_init_begin(&flow->initialization);
         flow->stage = LINK_DIAGNOSTIC_FLOW_RESTORING_AFTER_MANUFACTURER;
     } else {
-        flow->stage = LINK_DIAGNOSTIC_FLOW_SCANNING_STORED_DTCS;
+        flow->stage = flow->standard_dtc_inventory_complete
+            ? LINK_DIAGNOSTIC_FLOW_LIVE
+            : LINK_DIAGNOSTIC_FLOW_SCANNING_STORED_DTCS;
     }
     return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
 }

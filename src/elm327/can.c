@@ -263,6 +263,68 @@ static LinkElm327CanResult elm327_can_decode_indexed(
     return LINK_ELM327_CAN_RESULT_OK;
 }
 
+static LinkElm327CanResult elm327_can_decode_unindexed(
+    const LinkElm327Response *response,
+    uint8_t *temporary,
+    size_t temporary_size,
+    size_t *decoded_length)
+{
+    const char *cursor;
+    bool pending_seen = false;
+    bool final_seen = false;
+    uint8_t pending_service = 0U;
+
+    if (response == NULL || temporary == NULL || decoded_length == NULL) {
+        return LINK_ELM327_CAN_RESULT_INVALID_ARGUMENT;
+    }
+    *decoded_length = 0U;
+    cursor = response->text;
+    while (*cursor != '\0') {
+        const char *end = strchr(cursor, '\n');
+        const size_t line_length = end == NULL ? strlen(cursor) : (size_t)(end - cursor);
+        size_t first = 0U;
+        size_t last = line_length;
+        uint8_t line_bytes[ELM327_CAN_MAX_DECODED_PDU];
+        size_t line_byte_count = 0U;
+        LinkElm327CanResult result;
+
+        while (first < last && elm327_can_space(cursor[first])) first++;
+        while (last > first && elm327_can_space(cursor[last - 1U])) last--;
+        if (first != last) {
+            result = elm327_can_parse_hex_line(
+                cursor + first, last - first,
+                line_bytes, sizeof(line_bytes), &line_byte_count);
+            if (result != LINK_ELM327_CAN_RESULT_OK) return result;
+
+            if (line_byte_count == 3U && line_bytes[0] == 0x7fU &&
+                line_bytes[2] == 0x78U && !final_seen) {
+                if (pending_seen && pending_service != line_bytes[1])
+                    return LINK_ELM327_CAN_RESULT_UNEXPECTED_RESPONSE;
+                pending_seen = true;
+                pending_service = line_bytes[1];
+            } else {
+                if (final_seen) return LINK_ELM327_CAN_RESULT_UNEXPECTED_RESPONSE;
+                if (pending_seen) {
+                    const bool matching_positive = line_bytes[0] == (uint8_t)(pending_service + 0x40U);
+                    const bool matching_negative = line_byte_count >= 3U &&
+                        line_bytes[0] == 0x7fU && line_bytes[1] == pending_service;
+                    if (!matching_positive && !matching_negative)
+                        return LINK_ELM327_CAN_RESULT_UNEXPECTED_RESPONSE;
+                }
+                if (line_byte_count > temporary_size)
+                    return LINK_ELM327_CAN_RESULT_PDU_TOO_LARGE;
+                memcpy(temporary, line_bytes, line_byte_count);
+                *decoded_length = line_byte_count;
+                final_seen = true;
+            }
+        }
+        if (end == NULL) break;
+        cursor = end + 1;
+    }
+    return final_seen ? LINK_ELM327_CAN_RESULT_OK
+                      : LINK_ELM327_CAN_RESULT_UNEXPECTED_RESPONSE;
+}
+
 const char *link_elm327_can_result_name(LinkElm327CanResult result)
 {
     switch (result) {
@@ -472,15 +534,8 @@ LinkElm327CanResult link_elm327_can_decode_pdu(
     }
 
     if (!indexed) {
-        const char *newline = strchr(response->text, '\n');
-        if (newline != NULL && newline[1] != '\0') {
-            return LINK_ELM327_CAN_RESULT_UNEXPECTED_RESPONSE;
-        }
-        result = elm327_can_parse_hex_line(
-            response->text,
-            newline == NULL ? strlen(response->text)
-                            : (size_t)(newline - response->text),
-            temporary, sizeof(temporary), &decoded_length);
+        result = elm327_can_decode_unindexed(
+            response, temporary, sizeof(temporary), &decoded_length);
         if (result != LINK_ELM327_CAN_RESULT_OK) {
             return result;
         }

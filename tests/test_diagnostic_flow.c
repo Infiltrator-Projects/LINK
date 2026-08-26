@@ -198,6 +198,46 @@ static int test_manufacturer_extension_restore(void)
     return 0;
 }
 
+static int test_manufacturer_extension_after_standard_dtcs(void)
+{
+    LinkDiagnosticFlow flow;
+    LinkDiagnosticFlowConfig config = LINK_DIAGNOSTIC_FLOW_CONFIG_INIT;
+    LinkDiagnosticFlowAction action;
+    LinkDiagnosticFlowEvent event;
+    LinkElm327Response response;
+
+    config.manufacturer_extension_after_standard_dtcs = true;
+    config.restore_adapter_after_manufacturer_extension = true;
+    CHECK(link_diagnostic_flow_init(&flow, &config) == LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(link_diagnostic_flow_start(&flow) == LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(complete_initialization(&flow) == 0);
+    CHECK(link_diagnostic_flow_next_action(&flow, 500U, &action) == LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(strcmp(action.command, "0100") == 0);
+    response = response_ok("410000000000", false);
+    CHECK(link_diagnostic_flow_accept_response(&flow, &response, 500U, &event) == LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(flow.stage == LINK_DIAGNOSTIC_FLOW_SCANNING_STORED_DTCS);
+    response = response_no_data();
+    CHECK(link_diagnostic_flow_next_action(&flow, 600U, &action) == LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(strcmp(action.command, "03") == 0);
+    CHECK(link_diagnostic_flow_accept_response(&flow, &response, 600U, &event) == LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(link_diagnostic_flow_next_action(&flow, 700U, &action) == LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(strcmp(action.command, "07") == 0);
+    CHECK(link_diagnostic_flow_accept_response(&flow, &response, 700U, &event) == LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(link_diagnostic_flow_next_action(&flow, 800U, &action) == LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(strcmp(action.command, "0A") == 0);
+    CHECK(link_diagnostic_flow_accept_response(&flow, &response, 800U, &event) == LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(flow.standard_dtc_inventory_complete);
+    CHECK(flow.stage == LINK_DIAGNOSTIC_FLOW_MANUFACTURER_EXTENSION);
+    CHECK(!event.became_ready);
+    CHECK(link_diagnostic_flow_next_action(&flow, 801U, &action) == LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(action.kind == LINK_DIAGNOSTIC_FLOW_ACTION_MANUFACTURER_EXTENSION);
+    CHECK(link_diagnostic_flow_resume_after_manufacturer(&flow) == LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(flow.stage == LINK_DIAGNOSTIC_FLOW_RESTORING_AFTER_MANUFACTURER);
+    CHECK(complete_initialization(&flow) == 0);
+    CHECK(flow.stage == LINK_DIAGNOSTIC_FLOW_LIVE);
+    return 0;
+}
+
 static int test_invalid_response_order(void)
 {
     LinkDiagnosticFlow flow;
@@ -217,6 +257,7 @@ int main(void)
 {
     if (test_standard_sequence() != 0) return 1;
     if (test_manufacturer_extension_restore() != 0) return 1;
+    if (test_manufacturer_extension_after_standard_dtcs() != 0) return 1;
     if (test_invalid_response_order() != 0) return 1;
     puts("diagnostic flow tests passed");
     return 0;

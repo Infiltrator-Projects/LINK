@@ -54,6 +54,7 @@ typedef struct LinkGtkShellDescriptor {
                                bool active,
                                bool ready,
                                void *context);
+    void (*append_session_state_json)(GString *json, void *context);
     const LinkGtkManufacturerExtension *manufacturer_extension;
     void *context;
 } LinkGtkShellDescriptor;

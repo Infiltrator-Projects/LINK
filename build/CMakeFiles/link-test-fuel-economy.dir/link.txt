@@ -1,0 +1,1 @@
+/usr/bin/cc -O3 -DNDEBUG -Wl,--dependency-file=CMakeFiles/link-test-fuel-economy.dir/link.d "CMakeFiles/link-test-fuel-economy.dir/tests/test_fuel_economy.c.o" -o link-test-fuel-economy  liblink-core.a src/infiltratr-common/libinfiltratr-portable.a -lm
