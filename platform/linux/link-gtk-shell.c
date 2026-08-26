@@ -436,6 +436,8 @@ static const char *diagnostic_stage_message(const LinkGtkShell *shell)
         return "Linked · initialising ELM327 adapter";
     case LINK_DIAGNOSTIC_FLOW_DISCOVERING_PIDS:
         return "Linked · discovering supported OBD-II PIDs";
+    case LINK_DIAGNOSTIC_FLOW_READING_STANDARD_VIN:
+        return "Linked · reading standard vehicle VIN";
     case LINK_DIAGNOSTIC_FLOW_MANUFACTURER_EXTENSION:
         return shell->manufacturer_extension_active
             ? "Linked · running factory diagnostic extension"
