@@ -1,0 +1,373 @@
+name: Temporary Linux session export maintenance
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/session-export-maintenance.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Patch shared Linux diagnostic session capture/export
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path('platform/linux/link-gtk-shell.c')
+          s = p.read_text()
+
+          old = '''    GtkWidget *status;\n    GtkWidget *link_button;\n    LinkLinuxSerialTransport serial;'''
+          new = '''    GtkWidget *status;\n    GtkWidget *link_button;\n    GtkWidget *save_session_button;\n    LinkLinuxSerialTransport serial;'''
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          old = '''    bool manufacturer_extension_active;\n    size_t current_section;\n} LinkGtkShell;'''
+          new = '''    bool manufacturer_extension_active;\n    size_t current_section;\n    char adapter_identity[160];\n    char adapter_device[256];\n    GString *exchange_json;\n    size_t exchange_count;\n    bool exchange_truncated;\n    uint64_t exchange_started_ms;\n    bool sample_valid[256];\n    LinkObd2Sample samples[256];\n} LinkGtkShell;'''
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          old = '''    ".link-link-button { font-weight: 800; padding: 8px 18px; }"\n    ".link-connection-status { font-weight: 700; }"'''
+          new = '''    ".link-link-button { font-weight: 800; padding: 8px 18px; }"\n    ".link-save-session-button { font-weight: 700; padding: 8px 14px; }"\n    ".link-connection-status { font-weight: 700; }"'''
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          marker = '''static GtkWidget *left_label(const char *text, const char *css)\n{'''
+          assert marker in s
+          helpers = r'''#define LINK_GTK_SESSION_TRACE_LIMIT (16U * 1024U * 1024U)
+
+static const char *session_status_name(LinkElm327SessionStatus status)
+{
+    switch (status) {
+    case LINK_ELM327_SESSION_IDLE: return "idle";
+    case LINK_ELM327_SESSION_WAITING: return "waiting";
+    case LINK_ELM327_SESSION_COMPLETE: return "complete";
+    case LINK_ELM327_SESSION_TIMED_OUT: return "timed-out";
+    case LINK_ELM327_SESSION_CANCELLED: return "cancelled";
+    case LINK_ELM327_SESSION_FAILED: return "failed";
+    }
+    return "unknown";
+}
+
+static void json_append_escaped(GString *out, const char *text)
+{
+    const unsigned char *cursor = (const unsigned char *)(text != NULL ? text : "");
+    g_string_append_c(out, '"');
+    while (*cursor != 0U) {
+        switch (*cursor) {
+        case '"': g_string_append(out, "\\\""); break;
+        case '\\': g_string_append(out, "\\\\"); break;
+        case '\b': g_string_append(out, "\\b"); break;
+        case '\f': g_string_append(out, "\\f"); break;
+        case '\n': g_string_append(out, "\\n"); break;
+        case '\r': g_string_append(out, "\\r"); break;
+        case '\t': g_string_append(out, "\\t"); break;
+        default:
+            if (*cursor < 0x20U)
+                g_string_append_printf(out, "\\u%04x", (unsigned int)*cursor);
+            else
+                g_string_append_c(out, (char)*cursor);
+            break;
+        }
+        ++cursor;
+    }
+    g_string_append_c(out, '"');
+}
+
+static void json_append_hex(GString *out, const uint8_t *data, size_t length)
+{
+    static const char digits[] = "0123456789ABCDEF";
+    size_t index;
+    g_string_append_c(out, '"');
+    if (data != NULL) {
+        for (index = 0U; index < length; ++index) {
+            const uint8_t value = data[index];
+            g_string_append_c(out, digits[(value >> 4U) & 0x0FU]);
+            g_string_append_c(out, digits[value & 0x0FU]);
+        }
+    }
+    g_string_append_c(out, '"');
+}
+
+static void reset_session_capture(LinkGtkShell *shell)
+{
+    if (shell == NULL) return;
+    if (shell->exchange_json == NULL)
+        shell->exchange_json = g_string_sized_new(8192U);
+    else
+        g_string_truncate(shell->exchange_json, 0U);
+    shell->exchange_count = 0U;
+    shell->exchange_truncated = false;
+    shell->exchange_started_ms = monotonic_ms();
+    shell->adapter_identity[0] = '\0';
+    shell->adapter_device[0] = '\0';
+    memset(shell->sample_valid, 0, sizeof(shell->sample_valid));
+    memset(shell->samples, 0, sizeof(shell->samples));
+}
+
+static void record_session_exchange(LinkGtkShell *shell)
+{
+    const LinkElm327Session *session;
+    const LinkElm327Response *response;
+    GString *entry;
+    uint64_t now;
+    uint64_t elapsed;
+    if (shell == NULL || !shell->session_initialized) return;
+    session = &shell->session;
+    if (session->status != LINK_ELM327_SESSION_COMPLETE &&
+        session->status != LINK_ELM327_SESSION_TIMED_OUT &&
+        session->status != LINK_ELM327_SESSION_CANCELLED &&
+        session->status != LINK_ELM327_SESSION_FAILED) return;
+    if (shell->exchange_json == NULL) reset_session_capture(shell);
+    if (shell->exchange_truncated) return;
+
+    now = monotonic_ms();
+    elapsed = now >= shell->exchange_started_ms ? now - shell->exchange_started_ms : 0U;
+    entry = g_string_sized_new(512U + session->parser.raw_length * 2U);
+    g_string_append_printf(entry, "{\"elapsed_ms\":%llu,\"sequence\":%llu,\"status\":",
+                           (unsigned long long)elapsed,
+                           (unsigned long long)session->sequence);
+    json_append_escaped(entry, session_status_name(session->status));
+    g_string_append(entry, ",\"command\":");
+    json_append_escaped(entry, session->parser.command);
+    g_string_append(entry, ",\"raw_hex\":");
+    json_append_hex(entry, session->parser.raw, session->parser.raw_length);
+    g_string_append_printf(entry,
+        ",\"transport_status\":%d,\"elm_result\":",
+        (int)session->transport_status);
+    json_append_escaped(entry, link_elm327_result_name(session->elm_result));
+    response = session->status == LINK_ELM327_SESSION_COMPLETE
+        ? link_elm327_session_response(session) : NULL;
+    if (response != NULL) {
+        g_string_append(entry, ",\"response\":{\"result\":");
+        json_append_escaped(entry, link_elm327_result_name(response->result));
+        g_string_append_printf(entry,
+            ",\"prompt_seen\":%s,\"echo_removed\":%s,\"searching_seen\":%s,\"ok_seen\":%s,\"line_count\":%zu,\"text\":",
+            response->prompt_seen ? "true" : "false",
+            response->echo_removed ? "true" : "false",
+            response->searching_seen ? "true" : "false",
+            response->ok_seen ? "true" : "false",
+            response->line_count);
+        json_append_escaped(entry, response->text);
+        g_string_append_c(entry, '}');
+    } else {
+        g_string_append(entry, ",\"response\":null");
+    }
+    g_string_append_c(entry, '}');
+
+    if (shell->exchange_json->len + entry->len + 2U > LINK_GTK_SESSION_TRACE_LIMIT) {
+        shell->exchange_truncated = true;
+        g_string_free(entry, TRUE);
+        return;
+    }
+    if (shell->exchange_count != 0U) g_string_append_c(shell->exchange_json, ',');
+    g_string_append_len(shell->exchange_json, entry->str, (gssize)entry->len);
+    ++shell->exchange_count;
+    g_string_free(entry, TRUE);
+}
+
+static void append_dtc_json(GString *out, const LinkObd2DtcList *list)
+{
+    size_t index;
+    g_string_append_c(out, '[');
+    if (list != NULL) {
+        for (index = 0U; index < list->count; ++index) {
+            if (index != 0U) g_string_append_c(out, ',');
+            json_append_escaped(out, list->entries[index].code);
+        }
+    }
+    g_string_append_c(out, ']');
+}
+
+static GString *build_session_json(const LinkGtkShell *shell)
+{
+    GString *out = g_string_sized_new(
+        4096U + (shell != NULL && shell->exchange_json != NULL ? shell->exchange_json->len : 0U));
+    GDateTime *now = g_date_time_new_now_utc();
+    char *timestamp = now != NULL ? g_date_time_format_iso8601(now) : NULL;
+    size_t pid;
+    bool first_sample = true;
+    bool connected = shell != NULL && shell->transport.is_connected != NULL &&
+        shell->transport.is_connected(shell->transport.context);
+
+    g_string_append(out, "{\n  \"schema\":\"link-diagnostic-session/v1\",\n  \"generated_utc\":");
+    json_append_escaped(out, timestamp != NULL ? timestamp : "unknown");
+    g_string_append(out, ",\n  \"product\":{");
+    g_string_append(out, "\"name\":");
+    json_append_escaped(out, shell != NULL ? shell->descriptor->brand_name : "LINK");
+    g_string_append(out, ",\"version\":");
+    json_append_escaped(out, shell != NULL ? shell->descriptor->version : "unknown");
+    g_string_append(out, ",\"subtitle\":");
+    json_append_escaped(out, shell != NULL ? shell->descriptor->brand_subtitle : "");
+    g_string_append(out, "},\n  \"adapter\":{\"connected\":");
+    g_string_append(out, connected ? "true" : "false");
+    g_string_append(out, ",\"device\":");
+    json_append_escaped(out, shell != NULL ? shell->adapter_device : "");
+    g_string_append(out, ",\"identity\":");
+    json_append_escaped(out, shell != NULL ? shell->adapter_identity : "");
+    g_string_append(out, "},\n  \"diagnostic\":{\"active\":");
+    g_string_append(out, shell != NULL && shell->diagnostics_active ? "true" : "false");
+    g_string_append(out, ",\"ready\":");
+    g_string_append(out, shell != NULL && shell->diagnostics_ready ? "true" : "false");
+    g_string_append(out, ",\"stage\":");
+    json_append_escaped(out, shell != NULL ? link_diagnostic_flow_stage_name(shell->flow.stage) : "idle");
+    g_string_append(out, ",\"failure\":");
+    json_append_escaped(out, shell != NULL ? link_diagnostic_flow_result_name(shell->flow.failure) : "ok");
+    g_string_append(out, ",\"stored_dtcs\":");
+    append_dtc_json(out, shell != NULL ? &shell->flow.stored_dtcs : NULL);
+    g_string_append(out, ",\"pending_dtcs\":");
+    append_dtc_json(out, shell != NULL ? &shell->flow.pending_dtcs : NULL);
+    g_string_append(out, ",\"permanent_dtcs\":");
+    append_dtc_json(out, shell != NULL ? &shell->flow.permanent_dtcs : NULL);
+    g_string_append(out, "},\n  \"live_samples\":[");
+    if (shell != NULL) {
+        for (pid = 0U; pid < 256U; ++pid) {
+            const LinkObd2Sample *sample;
+            const char *unit;
+            if (!shell->sample_valid[pid]) continue;
+            sample = &shell->samples[pid];
+            unit = link_obd2_unit_name(sample->unit);
+            if (!first_sample) g_string_append_c(out, ',');
+            first_sample = false;
+            g_string_append_printf(out, "{\"pid\":%u,\"value\":%.17g,\"unit\":",
+                                   (unsigned int)sample->pid, sample->value);
+            json_append_escaped(out, unit != NULL ? unit : "");
+            g_string_append_c(out, '}');
+        }
+    }
+    g_string_append(out, "],\n  \"elm_exchanges\":{");
+    g_string_append_printf(out, "\"captured\":%zu,\"truncated\":%s,\"records\":[",
+        shell != NULL ? shell->exchange_count : 0U,
+        shell != NULL && shell->exchange_truncated ? "true" : "false");
+    if (shell != NULL && shell->exchange_json != NULL)
+        g_string_append_len(out, shell->exchange_json->str, (gssize)shell->exchange_json->len);
+    g_string_append(out, "]}\n}\n");
+    g_free(timestamp);
+    if (now != NULL) g_date_time_unref(now);
+    return out;
+}
+
+static void save_session_dialog_response(GtkNativeDialog *dialog,
+                                         int response_id,
+                                         gpointer user_data)
+{
+    LinkGtkShell *shell = user_data;
+    if (response_id == GTK_RESPONSE_ACCEPT && shell != NULL) {
+        GFile *file = gtk_file_chooser_get_file(GTK_FILE_CHOOSER(dialog));
+        char *path = file != NULL ? g_file_get_path(file) : NULL;
+        GString *json = build_session_json(shell);
+        GError *error = NULL;
+        if (path != NULL && g_file_set_contents(path, json->str, (gssize)json->len, &error)) {
+            char message[512];
+            (void)snprintf(message, sizeof(message), "Session saved · %s", path);
+            set_connection_state(shell,
+                shell->transport.is_connected != NULL && shell->transport.is_connected(shell->transport.context),
+                message);
+        } else {
+            char message[512];
+            (void)snprintf(message, sizeof(message), "Session save failed%s%s",
+                           error != NULL ? " · " : "",
+                           error != NULL ? error->message : "");
+            set_connection_state(shell,
+                shell->transport.is_connected != NULL && shell->transport.is_connected(shell->transport.context),
+                message);
+        }
+        if (error != NULL) g_error_free(error);
+        g_string_free(json, TRUE);
+        g_free(path);
+        if (file != NULL) g_object_unref(file);
+    }
+    g_object_unref(dialog);
+}
+
+static void save_session_clicked(GtkButton *button, gpointer user_data)
+{
+    LinkGtkShell *shell = user_data;
+    GtkFileChooserNative *dialog;
+    GDateTime *now;
+    char *stamp;
+    char *filename;
+    (void)button;
+    if (shell == NULL) return;
+    now = g_date_time_new_now_local();
+    stamp = now != NULL ? g_date_time_format(now, "%Y%m%d-%H%M%S") : g_strdup("session");
+    filename = g_strdup_printf("%s-session-%s.json",
+        shell->descriptor->brand_name != NULL ? shell->descriptor->brand_name : "LINK",
+        stamp != NULL ? stamp : "session");
+    dialog = gtk_file_chooser_native_new("Save Diagnostic Session",
+        shell->window, GTK_FILE_CHOOSER_ACTION_SAVE, "Save", "Cancel");
+    gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(dialog), filename);
+    g_signal_connect(dialog, "response", G_CALLBACK(save_session_dialog_response), shell);
+    gtk_native_dialog_show(GTK_NATIVE_DIALOG(dialog));
+    g_free(filename);
+    g_free(stamp);
+    if (now != NULL) g_date_time_unref(now);
+}
+
+'''
+          s = s.replace(marker, helpers + marker, 1)
+
+          old = '''static void process_session_event(LinkGtkShell *shell)\n{\n    LinkElm327SessionStatus status;\n    if (shell == NULL || !shell->session_initialized || !shell->session_event_pending) return;\n    shell->session_event_pending = false;\n    status = shell->session.status;'''
+          new = '''static void process_session_event(LinkGtkShell *shell)\n{\n    LinkElm327SessionStatus status;\n    if (shell == NULL || !shell->session_initialized || !shell->session_event_pending) return;\n    shell->session_event_pending = false;\n    status = shell->session.status;\n    record_session_exchange(shell);'''
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          old = '''            if (event.became_ready ||\n                event.kind == LINK_DIAGNOSTIC_FLOW_EVENT_LIVE_SAMPLE ||'''
+          new = '''            if (event.kind == LINK_DIAGNOSTIC_FLOW_EVENT_LIVE_SAMPLE) {\n                shell->samples[event.sample.pid] = event.sample;\n                shell->sample_valid[event.sample.pid] = true;\n            }\n            if (event.became_ready ||\n                event.kind == LINK_DIAGNOSTIC_FLOW_EVENT_LIVE_SAMPLE ||'''
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          old = '''    if (identity[0] == '\\0') (void)snprintf(identity, sizeof(identity), "ELM327-compatible adapter");\n\n    {\n        char message[256];'''
+          new = '''    if (identity[0] == '\\0') (void)snprintf(identity, sizeof(identity), "ELM327-compatible adapter");\n    reset_session_capture(shell);\n    (void)snprintf(shell->adapter_device, sizeof(shell->adapter_device), "%s", device);\n    (void)snprintf(shell->adapter_identity, sizeof(shell->adapter_identity), "%s", identity);\n\n    {\n        char message[256];'''
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          old = '''    shell->status = left_label("Disconnected", "link-connection-status");\n    shell->link_button = gtk_button_new_with_label("LINK UP");\n    gtk_widget_set_hexpand(shell->status, TRUE);'''
+          new = '''    shell->status = left_label("Disconnected", "link-connection-status");\n    shell->save_session_button = gtk_button_new_with_label("SAVE SESSION");\n    shell->link_button = gtk_button_new_with_label("LINK UP");\n    gtk_widget_set_hexpand(shell->status, TRUE);'''
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          old = '''    gtk_widget_add_css_class(bar, "link-connection-bar");\n    gtk_widget_add_css_class(shell->link_button, "link-link-button");\n    g_signal_connect(shell->refresh_button, "clicked", G_CALLBACK(refresh_clicked), shell);\n    g_signal_connect(shell->link_button, "clicked", G_CALLBACK(link_clicked), shell);'''
+          new = '''    gtk_widget_add_css_class(bar, "link-connection-bar");\n    gtk_widget_add_css_class(shell->link_button, "link-link-button");\n    gtk_widget_add_css_class(shell->save_session_button, "link-save-session-button");\n    g_signal_connect(shell->refresh_button, "clicked", G_CALLBACK(refresh_clicked), shell);\n    g_signal_connect(shell->save_session_button, "clicked", G_CALLBACK(save_session_clicked), shell);\n    g_signal_connect(shell->link_button, "clicked", G_CALLBACK(link_clicked), shell);'''
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          old = '''    gtk_box_append(GTK_BOX(bar), shell->refresh_button);\n    gtk_box_append(GTK_BOX(bar), shell->status);\n    gtk_box_append(GTK_BOX(bar), shell->link_button);'''
+          new = '''    gtk_box_append(GTK_BOX(bar), shell->refresh_button);\n    gtk_box_append(GTK_BOX(bar), shell->save_session_button);\n    gtk_box_append(GTK_BOX(bar), shell->status);\n    gtk_box_append(GTK_BOX(bar), shell->link_button);'''
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          old = '''    if (shell->about_button != NULL)\n        gtk_button_set_label(GTK_BUTTON(shell->about_button), "About");'''
+          new = '''    if (shell->about_button != NULL)\n        gtk_button_set_label(GTK_BUTTON(shell->about_button), "About");\n    if (shell->save_session_button != NULL)\n        gtk_button_set_label(GTK_BUTTON(shell->save_session_button), "SAVE SESSION");'''
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          old = '''    shell.descriptor = descriptor;\n    initialise_selected_locale();\n    link_linux_serial_init(&shell.serial);'''
+          new = '''    shell.descriptor = descriptor;\n    initialise_selected_locale();\n    reset_session_capture(&shell);\n    link_linux_serial_init(&shell.serial);'''
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          old = '''    if (shell.transport.is_connected(shell.transport.context))\n        shell.transport.disconnect(shell.transport.context);\n    g_object_unref(application);\n    return status;'''
+          new = '''    if (shell.transport.is_connected(shell.transport.context))\n        shell.transport.disconnect(shell.transport.context);\n    if (shell.exchange_json != NULL) g_string_free(shell.exchange_json, TRUE);\n    g_object_unref(application);\n    return status;'''
+          assert old in s
+          s = s.replace(old, new, 1)
+
+          p.write_text(s)
+          Path('VERSION').write_text('0.14.1\n')
+          Path('.github/workflows/session-export-maintenance.yml').unlink()
+          PY
+
+          git diff --check
+          git config user.name "Shannon Smith"
+          git config user.email "infiltratr@yandex.com"
+          git add platform/linux/link-gtk-shell.c VERSION .github/workflows/session-export-maintenance.yml
+          git commit -m "Add shared Linux diagnostic session export"
+          git push origin HEAD:main
