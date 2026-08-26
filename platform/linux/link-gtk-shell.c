@@ -117,7 +117,9 @@ static void record_session_exchange(LinkGtkShell *shell)
 {
     const LinkElm327Session *x=&shell->session; const LinkElm327Response *r; GString *e; uint64_t now,elapsed;
     if(x->status!=LINK_ELM327_SESSION_COMPLETE&&x->status!=LINK_ELM327_SESSION_TIMED_OUT&&x->status!=LINK_ELM327_SESSION_CANCELLED&&x->status!=LINK_ELM327_SESSION_FAILED)return;
-    if(shell->exchange_truncated)return; now=monotonic_ms(); elapsed=now>=shell->exchange_started_ms?now-shell->exchange_started_ms:0U;
+    if (shell->exchange_truncated) return;
+    now = monotonic_ms();
+    elapsed = now >= shell->exchange_started_ms ? now - shell->exchange_started_ms : 0U;
     e=g_string_sized_new(512U+x->parser.raw_length*2U);
     g_string_append_printf(e,"{\"elapsed_ms\":%llu,\"sequence\":%llu,\"status\":",(unsigned long long)elapsed,(unsigned long long)x->sequence);
     json_string(e,session_status_name(x->status));g_string_append(e,",\"command\":");json_string(e,x->parser.command);g_string_append(e,",\"raw_hex\":");json_hex(e,x->parser.raw,x->parser.raw_length);
@@ -126,7 +128,10 @@ static void record_session_exchange(LinkGtkShell *shell)
     if(r!=NULL){g_string_append(e,",\"response\":{\"result\":");json_string(e,link_elm327_result_name(r->result));g_string_append(e,",\"text\":");json_string(e,r->text);g_string_append_c(e,'}');}else g_string_append(e,",\"response\":null");
     g_string_append_c(e,'}');
     if(shell->exchange_json->len+e->len+2U>LINK_GTK_SESSION_TRACE_LIMIT){shell->exchange_truncated=true;g_string_free(e,TRUE);return;}
-    if(shell->exchange_count!=0U)g_string_append_c(shell->exchange_json,',');g_string_append_len(shell->exchange_json,e->str,(gssize)e->len);++shell->exchange_count;g_string_free(e,TRUE);
+    if (shell->exchange_count != 0U) g_string_append_c(shell->exchange_json, ',');
+    g_string_append_len(shell->exchange_json, e->str, (gssize)e->len);
+    ++shell->exchange_count;
+    g_string_free(e, TRUE);
 }
 static GString *build_session_json(const LinkGtkShell *shell)
 {
@@ -136,6 +141,7 @@ static GString *build_session_json(const LinkGtkShell *shell)
     g_string_append_printf(o,",\n\"elm_exchanges\":{\"captured\":%zu,\"truncated\":%s,\"records\":[",shell->exchange_count,shell->exchange_truncated?"true":"false");if(shell->exchange_json!=NULL)g_string_append_len(o,shell->exchange_json->str,(gssize)shell->exchange_json->len);g_string_append(o,"]}\n}\n");
     g_free(ts);if(now!=NULL)g_date_time_unref(now);return o;
 }
+G_GNUC_BEGIN_IGNORE_DEPRECATIONS
 static void save_session_response(GtkNativeDialog *dialog,int response,gpointer data)
 {
     LinkGtkShell *shell=data;if(response==GTK_RESPONSE_ACCEPT){GFile *f=gtk_file_chooser_get_file(GTK_FILE_CHOOSER(dialog));char *path=f!=NULL?g_file_get_path(f):NULL;GString *json=build_session_json(shell);GError *err=NULL;char msg[512];
@@ -148,6 +154,8 @@ static void save_session_clicked(GtkButton *button,gpointer data)
     LinkGtkShell *shell=data;GDateTime *now=g_date_time_new_now_local();char *stamp=now!=NULL?g_date_time_format(now,"%Y%m%d-%H%M%S"):g_strdup("session");char *name=g_strdup_printf("%s-session-%s.json",shell->descriptor->brand_name,stamp);GtkFileChooserNative *d; (void)button;
     d=gtk_file_chooser_native_new("Save Diagnostic Session",shell->window,GTK_FILE_CHOOSER_ACTION_SAVE,"Save","Cancel");gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(d),name);g_signal_connect(d,"response",G_CALLBACK(save_session_response),shell);gtk_native_dialog_show(GTK_NATIVE_DIALOG(d));g_free(name);g_free(stamp);if(now!=NULL)g_date_time_unref(now);
 }
+
+G_GNUC_END_IGNORE_DEPRECATIONS
 
 static GtkWidget *left_label(const char *text, const char *css)
 {
