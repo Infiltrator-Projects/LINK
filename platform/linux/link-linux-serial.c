@@ -512,7 +512,7 @@ static size_t ble_discover_devices(char paths[][256], size_t capacity)
         for (index = 0U; index < device_count && written_count < capacity; ++index) {
             if (!devices[index].likely_elm ||
                 bluetooth_name_prefers_classic(devices[index].name)) continue;
-            (void)snprintf(paths[written_count], 256U, "BLE:%s %s",
+            (void)snprintf(paths[written_count], 256U, "BLE:%.17s %.127s",
                            devices[index].address, devices[index].name);
             written_count++;
         }
@@ -623,7 +623,7 @@ static size_t classic_discover_devices(char paths[][256], size_t capacity)
     for (index = 0U; index < device_count && written_count < capacity; ++index) {
         if (!devices[index].likely_elm ||
             bluetooth_name_prefers_ble(devices[index].name)) continue;
-        (void)snprintf(paths[written_count], 256U, "BT:%s %s",
+        (void)snprintf(paths[written_count], 256U, "BT:%.17s %.127s",
                        devices[index].address, devices[index].name);
         written_count++;
     }
