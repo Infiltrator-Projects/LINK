@@ -24,6 +24,7 @@ typedef struct LinkGtkShell {
     GtkWidget *device_combo;
     GtkWidget *status;
     GtkWidget *link_button;
+    GtkWidget *save_session_button;
     LinkLinuxSerialTransport serial;
     LinkTransport transport;
     LinkElm327Session session;
@@ -34,6 +35,12 @@ typedef struct LinkGtkShell {
     bool session_event_pending;
     bool manufacturer_extension_active;
     size_t current_section;
+    char adapter_identity[160];
+    char adapter_device[256];
+    GString *exchange_json;
+    size_t exchange_count;
+    bool exchange_truncated;
+    uint64_t exchange_started_ms;
 } LinkGtkShell;
 
 static const char link_gtk_base_css[] =
@@ -48,6 +55,7 @@ static const char link_gtk_base_css[] =
     ".link-language-label { opacity: 0.72; font-size: 11px; font-weight: 700; }"
     ".link-connection-bar { padding: 12px; border-radius: 14px; }"
     ".link-link-button { font-weight: 800; padding: 8px 18px; }"
+    ".link-save-session-button { font-weight: 700; padding: 8px 14px; }"
     ".link-connection-status { font-weight: 700; }"
     ".link-brand { font-size: 28px; font-weight: 900; letter-spacing: 3px; }"
     ".link-brand-subtitle { font-size: 11px; font-weight: 800; }"
@@ -61,6 +69,84 @@ static uint64_t monotonic_ms(void)
 {
     const gint64 value = g_get_monotonic_time();
     return value <= 0 ? 0U : (uint64_t)(value / 1000);
+}
+
+#define LINK_GTK_SESSION_TRACE_LIMIT (16U * 1024U * 1024U)
+static void set_connection_state(LinkGtkShell *shell, bool connected, const char *message);
+static const char *session_status_name(LinkElm327SessionStatus status)
+{
+    switch (status) {
+    case LINK_ELM327_SESSION_IDLE: return "idle";
+    case LINK_ELM327_SESSION_WAITING: return "waiting";
+    case LINK_ELM327_SESSION_COMPLETE: return "complete";
+    case LINK_ELM327_SESSION_TIMED_OUT: return "timed-out";
+    case LINK_ELM327_SESSION_CANCELLED: return "cancelled";
+    case LINK_ELM327_SESSION_FAILED: return "failed";
+    }
+    return "unknown";
+}
+static void json_string(GString *out, const char *text)
+{
+    const unsigned char *p=(const unsigned char *)(text!=NULL?text:"");
+    g_string_append_c(out,'"');
+    for (;*p!=0U;++p) {
+        if (*p=='"') g_string_append(out,"\\\"");
+        else if (*p=='\\') g_string_append(out,"\\\\");
+        else if (*p=='\n') g_string_append(out,"\\n");
+        else if (*p=='\r') g_string_append(out,"\\r");
+        else if (*p=='\t') g_string_append(out,"\\t");
+        else if (*p<0x20U) g_string_append_printf(out,"\\u%04x",(unsigned int)*p);
+        else g_string_append_c(out,(char)*p);
+    }
+    g_string_append_c(out,'"');
+}
+static void json_hex(GString *out,const uint8_t *data,size_t n)
+{
+    static const char h[]="0123456789ABCDEF"; size_t i;
+    g_string_append_c(out,'"');
+    for(i=0U;data!=NULL&&i<n;++i){g_string_append_c(out,h[data[i]>>4U]);g_string_append_c(out,h[data[i]&15U]);}
+    g_string_append_c(out,'"');
+}
+static void reset_session_capture(LinkGtkShell *shell)
+{
+    if(shell->exchange_json==NULL)shell->exchange_json=g_string_sized_new(8192U);else g_string_truncate(shell->exchange_json,0U);
+    shell->exchange_count=0U;shell->exchange_truncated=false;shell->exchange_started_ms=monotonic_ms();
+    shell->adapter_identity[0]='\0';shell->adapter_device[0]='\0';
+}
+static void record_session_exchange(LinkGtkShell *shell)
+{
+    const LinkElm327Session *x=&shell->session; const LinkElm327Response *r; GString *e; uint64_t now,elapsed;
+    if(x->status!=LINK_ELM327_SESSION_COMPLETE&&x->status!=LINK_ELM327_SESSION_TIMED_OUT&&x->status!=LINK_ELM327_SESSION_CANCELLED&&x->status!=LINK_ELM327_SESSION_FAILED)return;
+    if(shell->exchange_truncated)return; now=monotonic_ms(); elapsed=now>=shell->exchange_started_ms?now-shell->exchange_started_ms:0U;
+    e=g_string_sized_new(512U+x->parser.raw_length*2U);
+    g_string_append_printf(e,"{\"elapsed_ms\":%llu,\"sequence\":%llu,\"status\":",(unsigned long long)elapsed,(unsigned long long)x->sequence);
+    json_string(e,session_status_name(x->status));g_string_append(e,",\"command\":");json_string(e,x->parser.command);g_string_append(e,",\"raw_hex\":");json_hex(e,x->parser.raw,x->parser.raw_length);
+    g_string_append(e,",\"elm_result\":");json_string(e,link_elm327_result_name(x->elm_result));
+    r=x->status==LINK_ELM327_SESSION_COMPLETE?link_elm327_session_response(x):NULL;
+    if(r!=NULL){g_string_append(e,",\"response\":{\"result\":");json_string(e,link_elm327_result_name(r->result));g_string_append(e,",\"text\":");json_string(e,r->text);g_string_append_c(e,'}');}else g_string_append(e,",\"response\":null");
+    g_string_append_c(e,'}');
+    if(shell->exchange_json->len+e->len+2U>LINK_GTK_SESSION_TRACE_LIMIT){shell->exchange_truncated=true;g_string_free(e,TRUE);return;}
+    if(shell->exchange_count!=0U)g_string_append_c(shell->exchange_json,',');g_string_append_len(shell->exchange_json,e->str,(gssize)e->len);++shell->exchange_count;g_string_free(e,TRUE);
+}
+static GString *build_session_json(const LinkGtkShell *shell)
+{
+    GString *o=g_string_sized_new(2048U+(shell->exchange_json!=NULL?shell->exchange_json->len:0U));GDateTime *now=g_date_time_new_now_utc();char *ts=now!=NULL?g_date_time_format_iso8601(now):NULL;
+    g_string_append(o,"{\n\"schema\":\"link-diagnostic-session/v1\",\n\"generated_utc\":");json_string(o,ts!=NULL?ts:"unknown");g_string_append(o,",\n\"product\":");json_string(o,shell->descriptor->brand_name);g_string_append(o,",\n\"version\":");json_string(o,shell->descriptor->version);
+    g_string_append(o,",\n\"adapter_device\":");json_string(o,shell->adapter_device);g_string_append(o,",\n\"adapter_identity\":");json_string(o,shell->adapter_identity);g_string_append(o,",\n\"diagnostic_stage\":");json_string(o,link_diagnostic_flow_stage_name(shell->flow.stage));
+    g_string_append_printf(o,",\n\"elm_exchanges\":{\"captured\":%zu,\"truncated\":%s,\"records\":[",shell->exchange_count,shell->exchange_truncated?"true":"false");if(shell->exchange_json!=NULL)g_string_append_len(o,shell->exchange_json->str,(gssize)shell->exchange_json->len);g_string_append(o,"]}\n}\n");
+    g_free(ts);if(now!=NULL)g_date_time_unref(now);return o;
+}
+static void save_session_response(GtkNativeDialog *dialog,int response,gpointer data)
+{
+    LinkGtkShell *shell=data;if(response==GTK_RESPONSE_ACCEPT){GFile *f=gtk_file_chooser_get_file(GTK_FILE_CHOOSER(dialog));char *path=f!=NULL?g_file_get_path(f):NULL;GString *json=build_session_json(shell);GError *err=NULL;char msg[512];
+        if(path!=NULL&&g_file_set_contents(path,json->str,(gssize)json->len,&err))(void)snprintf(msg,sizeof(msg),"Session saved · %s",path);else (void)snprintf(msg,sizeof(msg),"Session save failed%s%s",err!=NULL?" · ":"",err!=NULL?err->message:"");
+        set_connection_state(shell,shell->transport.is_connected!=NULL&&shell->transport.is_connected(shell->transport.context),msg);if(err!=NULL)g_error_free(err);g_string_free(json,TRUE);g_free(path);if(f!=NULL)g_object_unref(f);}
+    g_object_unref(dialog);
+}
+static void save_session_clicked(GtkButton *button,gpointer data)
+{
+    LinkGtkShell *shell=data;GDateTime *now=g_date_time_new_now_local();char *stamp=now!=NULL?g_date_time_format(now,"%Y%m%d-%H%M%S"):g_strdup("session");char *name=g_strdup_printf("%s-session-%s.json",shell->descriptor->brand_name,stamp);GtkFileChooserNative *d; (void)button;
+    d=gtk_file_chooser_native_new("Save Diagnostic Session",shell->window,GTK_FILE_CHOOSER_ACTION_SAVE,"Save","Cancel");gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(d),name);g_signal_connect(d,"response",G_CALLBACK(save_session_response),shell);gtk_native_dialog_show(GTK_NATIVE_DIALOG(d));g_free(name);g_free(stamp);if(now!=NULL)g_date_time_unref(now);
 }
 
 static GtkWidget *left_label(const char *text, const char *css)
@@ -357,6 +443,8 @@ static void refresh_visible_language(LinkGtkShell *shell)
         gtk_button_set_label(GTK_BUTTON(shell->refresh_button), "Refresh");
     if (shell->about_button != NULL)
         gtk_button_set_label(GTK_BUTTON(shell->about_button), "About");
+    if (shell->save_session_button != NULL)
+        gtk_button_set_label(GTK_BUTTON(shell->save_session_button), "SAVE SESSION");
 
     refresh_devices(shell);
     rebuild_navigation(shell);
@@ -561,6 +649,7 @@ static void process_session_event(LinkGtkShell *shell)
     if (shell == NULL || !shell->session_initialized || !shell->session_event_pending) return;
     shell->session_event_pending = false;
     status = shell->session.status;
+    record_session_exchange(shell);
 
     if (status == LINK_ELM327_SESSION_COMPLETE) {
         const LinkElm327Response *response = link_elm327_session_response(&shell->session);
@@ -724,6 +813,9 @@ static void link_clicked(GtkButton *button, gpointer user_data)
         return;
     }
     if (identity[0] == '\0') (void)snprintf(identity, sizeof(identity), "ELM327-compatible adapter");
+    reset_session_capture(shell);
+    (void)snprintf(shell->adapter_device, sizeof(shell->adapter_device), "%s", device);
+    (void)snprintf(shell->adapter_identity, sizeof(shell->adapter_identity), "%s", identity);
 
     {
         char message[256];
@@ -782,15 +874,19 @@ static GtkWidget *build_connection_bar(LinkGtkShell *shell)
     shell->adapter_label = left_label("Adapter", NULL);
     shell->device_combo = gtk_drop_down_new(NULL, NULL);
     shell->status = left_label("Disconnected", "link-connection-status");
+    shell->save_session_button = gtk_button_new_with_label("SAVE SESSION");
     shell->link_button = gtk_button_new_with_label("LINK UP");
     gtk_widget_set_hexpand(shell->status, TRUE);
     gtk_widget_add_css_class(bar, "link-connection-bar");
     gtk_widget_add_css_class(shell->link_button, "link-link-button");
+    gtk_widget_add_css_class(shell->save_session_button, "link-save-session-button");
     g_signal_connect(shell->refresh_button, "clicked", G_CALLBACK(refresh_clicked), shell);
+    g_signal_connect(shell->save_session_button, "clicked", G_CALLBACK(save_session_clicked), shell);
     g_signal_connect(shell->link_button, "clicked", G_CALLBACK(link_clicked), shell);
     gtk_box_append(GTK_BOX(bar), shell->adapter_label);
     gtk_box_append(GTK_BOX(bar), shell->device_combo);
     gtk_box_append(GTK_BOX(bar), shell->refresh_button);
+    gtk_box_append(GTK_BOX(bar), shell->save_session_button);
     gtk_box_append(GTK_BOX(bar), shell->status);
     gtk_box_append(GTK_BOX(bar), shell->link_button);
     refresh_devices(shell);
@@ -913,6 +1009,7 @@ int link_gtk_shell_run(int argc, char **argv,
     if (descriptor == NULL || descriptor->app_id == NULL) return 2;
     shell.descriptor = descriptor;
     initialise_selected_locale();
+    reset_session_capture(&shell);
     link_linux_serial_init(&shell.serial);
     shell.transport = link_linux_serial_as_transport(&shell.serial);
     if (!link_transport_is_valid(&shell.transport)) return 3;
@@ -922,6 +1019,7 @@ int link_gtk_shell_run(int argc, char **argv,
     stop_diagnostics(&shell);
     if (shell.transport.is_connected(shell.transport.context))
         shell.transport.disconnect(shell.transport.context);
+    if (shell.exchange_json != NULL) g_string_free(shell.exchange_json, TRUE);
     g_object_unref(application);
     return status;
 }
