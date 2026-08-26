@@ -25,6 +25,7 @@ typedef struct LinkGtkShell {
     GtkWidget *status;
     GtkWidget *link_button;
     GtkWidget *save_session_button;
+    GtkWidget *diagnostic_restart_button;
     LinkLinuxSerialTransport serial;
     LinkTransport transport;
     LinkElm327Session session;
@@ -404,6 +405,8 @@ static void set_connection_state(LinkGtkShell *shell, bool connected, const char
     gtk_label_set_text(GTK_LABEL(shell->status), message);
     gtk_button_set_label(GTK_BUTTON(shell->link_button), connected ? "LINK DOWN" : "LINK UP");
     gtk_widget_set_sensitive(shell->device_combo, !connected);
+    if (shell->diagnostic_restart_button != NULL)
+        gtk_widget_set_sensitive(shell->diagnostic_restart_button, connected);
     if (shell->save_session_button != NULL) {
         const char *label = "SAVE SESSION";
         if (connected && shell->flow.stage == LINK_DIAGNOSTIC_FLOW_FAILED)
@@ -476,6 +479,11 @@ static void refresh_visible_language(LinkGtkShell *shell)
         gtk_button_set_label(GTK_BUTTON(shell->about_button), "About");
     if (shell->save_session_button != NULL)
         gtk_button_set_label(GTK_BUTTON(shell->save_session_button), "SAVE SESSION");
+    if (shell->diagnostic_restart_button != NULL &&
+        shell->descriptor->diagnostic_restart_action_label != NULL)
+        gtk_button_set_label(
+            GTK_BUTTON(shell->diagnostic_restart_button),
+            shell->descriptor->diagnostic_restart_action_label);
 
     refresh_devices(shell);
     rebuild_navigation(shell);
@@ -880,6 +888,34 @@ static void refresh_clicked(GtkButton *button, gpointer user_data)
     refresh_devices((LinkGtkShell *)user_data);
 }
 
+static void diagnostic_restart_action_clicked(
+    GtkButton *button, gpointer user_data)
+{
+    LinkGtkShell *shell = user_data;
+    (void)button;
+
+    if (shell == NULL || shell->descriptor == NULL ||
+        shell->descriptor->diagnostic_restart_action == NULL) return;
+    if (shell->transport.is_connected == NULL ||
+        !shell->transport.is_connected(shell->transport.context)) {
+        set_connection_state(shell, false, "Connect an adapter before restarting diagnostics");
+        return;
+    }
+
+    /*
+     * Stop the current session cleanly, let the product mark the next
+     * manufacturer extension mode, then restart on the already-open transport.
+     */
+    stop_diagnostics(shell);
+    shell->descriptor->diagnostic_restart_action(shell->descriptor->context);
+    shell->diagnostic_retry_count = 0U;
+    shell->diagnostic_retry_pending = false;
+    shell->diagnostic_retry_at_ms = 0U;
+    set_connection_state(shell, true, "Linked · restarting diagnostics");
+    if (!start_diagnostics(shell))
+        fail_diagnostics(shell, LINK_DIAGNOSTIC_FLOW_RESULT_ELM_ERROR);
+}
+
 static gboolean pump_serial(gpointer user_data)
 {
     LinkGtkShell *shell = user_data;
@@ -930,18 +966,31 @@ static GtkWidget *build_connection_bar(LinkGtkShell *shell)
     shell->device_combo = gtk_drop_down_new(NULL, NULL);
     shell->status = left_label("Disconnected", "link-connection-status");
     shell->save_session_button = gtk_button_new_with_label("SAVE SESSION");
+    if (shell->descriptor->diagnostic_restart_action_label != NULL &&
+        shell->descriptor->diagnostic_restart_action != NULL) {
+        shell->diagnostic_restart_button = gtk_button_new_with_label(
+            shell->descriptor->diagnostic_restart_action_label);
+        gtk_widget_set_sensitive(shell->diagnostic_restart_button, FALSE);
+    }
     shell->link_button = gtk_button_new_with_label("LINK UP");
     gtk_widget_set_hexpand(shell->status, TRUE);
     gtk_widget_add_css_class(bar, "link-connection-bar");
     gtk_widget_add_css_class(shell->link_button, "link-link-button");
     gtk_widget_add_css_class(shell->save_session_button, "link-save-session-button");
+    if (shell->diagnostic_restart_button != NULL)
+        gtk_widget_add_css_class(shell->diagnostic_restart_button, "link-save-session-button");
     g_signal_connect(shell->refresh_button, "clicked", G_CALLBACK(refresh_clicked), shell);
     g_signal_connect(shell->save_session_button, "clicked", G_CALLBACK(save_session_clicked), shell);
+    if (shell->diagnostic_restart_button != NULL)
+        g_signal_connect(shell->diagnostic_restart_button, "clicked",
+                         G_CALLBACK(diagnostic_restart_action_clicked), shell);
     g_signal_connect(shell->link_button, "clicked", G_CALLBACK(link_clicked), shell);
     gtk_box_append(GTK_BOX(bar), shell->adapter_label);
     gtk_box_append(GTK_BOX(bar), shell->device_combo);
     gtk_box_append(GTK_BOX(bar), shell->refresh_button);
     gtk_box_append(GTK_BOX(bar), shell->save_session_button);
+    if (shell->diagnostic_restart_button != NULL)
+        gtk_box_append(GTK_BOX(bar), shell->diagnostic_restart_button);
     gtk_box_append(GTK_BOX(bar), shell->status);
     gtk_box_append(GTK_BOX(bar), shell->link_button);
     refresh_devices(shell);
