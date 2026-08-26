@@ -11,13 +11,24 @@
 extern "C" {
 #endif
 
+/**
+ * Linux ELM-compatible transport.
+ *
+ * The historical name is retained for source compatibility.  The provider
+ * accepts ordinary tty/rfcomm paths and native BlueZ BLE selections returned
+ * by link_linux_serial_discover().  BLE is implemented through BlueZ D-Bus
+ * and GATT; no rfcomm bridge, bluetoothctl subprocess or adapter-specific
+ * UUID is required.
+ */
 typedef struct LinkLinuxSerialTransport {
     int fd;
     char device[256];
     unsigned int baud_rate;
     LinkTransportReceiveFn receiver;
     void *receiver_context;
+    void *provider_context;
     bool connected;
+    bool bluetooth_le;
 } LinkLinuxSerialTransport;
 
 void link_linux_serial_init(LinkLinuxSerialTransport *transport);
