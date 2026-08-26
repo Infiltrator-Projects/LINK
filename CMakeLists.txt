@@ -134,7 +134,10 @@ function(link_enable_linux_gtk_shell target)
         COMPILE_OPTIONS "-include;${link_gtk_i18n_header}")
     target_include_directories(${target} PRIVATE
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platform/linux")
-    target_link_libraries(${target} PRIVATE LINK::Core)
+    find_path(LINK_BLUEZ_INCLUDE_DIR bluetooth/bluetooth.h REQUIRED)
+    find_library(LINK_BLUEZ_LIBRARY bluetooth REQUIRED)
+    target_include_directories(${target} PRIVATE "${LINK_BLUEZ_INCLUDE_DIR}")
+    target_link_libraries(${target} PRIVATE LINK::Core "${LINK_BLUEZ_LIBRARY}")
 endfunction()
 
 function(link_add_windows_discover target)

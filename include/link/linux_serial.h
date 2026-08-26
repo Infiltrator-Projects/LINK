@@ -15,10 +15,10 @@ extern "C" {
  * Linux ELM-compatible transport.
  *
  * The historical name is retained for source compatibility.  The provider
- * accepts ordinary tty/rfcomm paths and native BlueZ BLE selections returned
- * by link_linux_serial_discover().  BLE is implemented through BlueZ D-Bus
- * and GATT; no rfcomm bridge, bluetoothctl subprocess or adapter-specific
- * UUID is required.
+ * accepts ordinary tty/rfcomm paths plus native BlueZ BLE and Bluetooth
+ * Classic SPP selections returned by link_linux_serial_discover(). BLE uses
+ * BlueZ D-Bus/GATT. Classic SPP uses a native RFCOMM socket with SDP service
+ * discovery, so callers do not need to create /dev/rfcomm* manually.
  */
 typedef struct LinkLinuxSerialTransport {
     int fd;
@@ -29,6 +29,7 @@ typedef struct LinkLinuxSerialTransport {
     void *provider_context;
     bool connected;
     bool bluetooth_le;
+    bool bluetooth_classic;
 } LinkLinuxSerialTransport;
 
 void link_linux_serial_init(LinkLinuxSerialTransport *transport);
