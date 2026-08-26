@@ -19,143 +19,18 @@ jobs:
           submodules: recursive
       - name: Install Linux build dependencies
         run: sudo apt-get update && sudo apt-get install -y libgtk-4-dev libbluetooth-dev
-      - name: Add native Bluetooth Classic SPP
-        shell: bash
+      - name: Apply transport repair
+        run: python3 .github/apply-classic-bluetooth.py
+      - name: Build and test
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
-
-          def replace(path, old, new):
-              p = Path(path)
-              s = p.read_text()
-              if old not in s:
-                  raise SystemExit(f'expected block not found in {path}: {old[:120]!r}')
-              p.write_text(s.replace(old, new, 1))
-
-          Path('VERSION').write_text('0.14.3\n')
-
-          # Public transport state: distinguish native BLE from native Classic SPP.
-          replace('include/link/linux_serial.h',
-          ''' * accepts ordinary tty/rfcomm paths and native BlueZ BLE selections returned\n * by link_linux_serial_discover().  BLE is implemented through BlueZ D-Bus\n * and GATT; no rfcomm bridge, bluetoothctl subprocess or adapter-specific\n * UUID is required.\n''',
-          ''' * accepts ordinary tty/rfcomm paths plus native BlueZ BLE and Bluetooth\n * Classic SPP selections returned by link_linux_serial_discover(). BLE uses\n * BlueZ D-Bus/GATT. Classic SPP uses a native RFCOMM socket with SDP service\n * discovery, so callers do not need to create /dev/rfcomm* manually.\n''')
-          replace('include/link/linux_serial.h',
-          '''    bool connected;\n    bool bluetooth_le;\n''',
-          '''    bool connected;\n    bool bluetooth_le;\n    bool bluetooth_classic;\n''')
-
-          # Product Linux faces now link libbluetooth for native RFCOMM + SDP.
-          replace('CMakeLists.txt',
-          '''    target_include_directories(${target} PRIVATE\n        "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platform/linux")\n    target_link_libraries(${target} PRIVATE LINK::Core)\n''',
-          '''    target_include_directories(${target} PRIVATE\n        "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platform/linux")\n    find_path(LINK_BLUEZ_INCLUDE_DIR bluetooth/bluetooth.h REQUIRED)\n    find_library(LINK_BLUEZ_LIBRARY bluetooth REQUIRED)\n    target_include_directories(${target} PRIVATE "${LINK_BLUEZ_INCLUDE_DIR}")\n    target_link_libraries(${target} PRIVATE LINK::Core "${LINK_BLUEZ_LIBRARY}")\n''')
-
-          p = Path('platform/linux/link-linux-serial.c')
-          s = p.read_text()
-          s = s.replace('#include <gio/gio.h>\n#include <poll.h>\n',
-                        '#include <gio/gio.h>\n#include <bluetooth/bluetooth.h>\n#include <bluetooth/rfcomm.h>\n#include <bluetooth/sdp.h>\n#include <bluetooth/sdp_lib.h>\n#include <poll.h>\n', 1)
-          s = s.replace('#include <stdlib.h>\n#include <termios.h>\n',
-                        '#include <stdlib.h>\n#include <sys/socket.h>\n#include <termios.h>\n', 1)
-          s = s.replace('#define LINK_BLE_SCAN_MS 1000\n',
-                        '#define LINK_BLE_SCAN_MS 1000\n#define LINK_CLASSIC_SCAN_MS 1200\n#define LINK_CLASSIC_CONNECT_TIMEOUT_MS 8000\n', 1)
-
-          s = s.replace('''static bool ble_extract_address(const char *device,\n                                char address[18]);\nstatic bool ble_name_likely_elm(const char *name);\n''',
-          '''static bool ble_extract_address(const char *device,\n                                char address[18]);\nstatic bool classic_extract_address(const char *device,\n                                    char address[18]);\nstatic bool ble_name_likely_elm(const char *name);\nstatic bool bluetooth_name_prefers_classic(const char *name);\nstatic bool bluetooth_name_prefers_ble(const char *name);\n''', 1)
-          s = s.replace('''static size_t ble_discover_devices(char paths[][256], size_t capacity);\nstatic bool ble_refresh_le_presence''',
-          '''static size_t ble_discover_devices(char paths[][256], size_t capacity);\nstatic size_t classic_discover_devices(char paths[][256], size_t capacity);\nstatic int classic_spp_channel(const char *address);\nstatic LinkTransportStatus classic_connect(LinkLinuxSerialTransport *transport);\nstatic bool ble_refresh_le_presence''', 1)
-
-          marker = '''static bool ble_name_likely_elm(const char *name)\n'''
-          helper = r'''static bool classic_extract_address(const char *device,
-                                    char address[18])
-{
-    size_t index;
-    if (device == NULL || address == NULL || strncmp(device, "BT:", 3U) != 0)
-        return false;
-    for (index = 0U; index < 17U; ++index) {
-        const char c = device[3U + index];
-        if (c == '\0') return false;
-        if ((index + 1U) % 3U == 0U) {
-            if (c != ':') return false;
-        } else if (!g_ascii_isxdigit(c)) {
-            return false;
-        }
-        address[index] = c;
-    }
-    address[17] = '\0';
-    return device[20] == '\0' || device[20] == ' ';
-}
-
-'''
-          if marker not in s: raise SystemExit('BLE name marker missing')
-          s = s.replace(marker, helper + marker, 1)
-
-          marker = '''static int ble_discovered_compare(const void *left, const void *right)\n'''
-          helper = r'''static bool bluetooth_name_contains(const char *name, const char *needle)
-{
-    gchar *lower_name;
-    gchar *lower_needle;
-    bool found;
-    if (name == NULL || needle == NULL) return false;
-    lower_name = g_ascii_strdown(name, -1);
-    lower_needle = g_ascii_strdown(needle, -1);
-    if (lower_name == NULL || lower_needle == NULL) {
-        g_free(lower_name);
-        g_free(lower_needle);
-        return false;
-    }
-    found = strstr(lower_name, lower_needle) != NULL;
-    g_free(lower_name);
-    g_free(lower_needle);
-    return found;
-}
-
-static bool bluetooth_name_prefers_classic(const char *name)
-{
-    return bluetooth_name_contains(name, "android-vlink") ||
-           bluetooth_name_contains(name, "android vlink") ||
-           bluetooth_name_contains(name, "android_vlink");
-}
-
-static bool bluetooth_name_prefers_ble(const char *name)
-{
-    return bluetooth_name_contains(name, "ios-vlink") ||
-           bluetooth_name_contains(name, "ios vlink") ||
-           bluetooth_name_contains(name, "ios_vlink");
-}
-
-'''
-          if marker not in s: raise SystemExit('compare marker missing')
-          s = s.replace(marker, helper + marker, 1)
-
-          old = '''    qsort(devices, device_count, sizeof(devices[0]), ble_discovered_compare);\n    if (device_count > capacity) device_count = capacity;\n    for (index = 0U; index < device_count; ++index) {\n        (void)snprintf(paths[index], 256U, "BLE:%s %s",\n                       devices[index].address, devices[index].name);\n    }\n    return device_count;\n}\n\nstatic bool ble_refresh_le_presence'''
-          new = '''    qsort(devices, device_count, sizeof(devices[0]), ble_discovered_compare);\n    {\n        size_t written_count = 0U;\n        for (index = 0U; index < device_count && written_count < capacity; ++index) {\n            if (!devices[index].likely_elm ||\n                bluetooth_name_prefers_classic(devices[index].name)) continue;\n            (void)snprintf(paths[written_count], 256U, "BLE:%s %s",\n                           devices[index].address, devices[index].name);\n            written_count++;\n        }\n        return written_count;\n    }\n}\n\nstatic size_t classic_discover_devices(char paths[][256], size_t capacity)\n{\n    GError *error = NULL;\n    GDBusConnection *bus;\n    char adapter_path[256];\n    GVariant *reply;\n    bool discovery_started = false;\n    gint64 deadline;\n    GVariant *objects;\n    GVariantIter iterator;\n    const gchar *object_path;\n    GVariant *interfaces;\n    LinkLinuxBleDiscovered devices[LINK_BLE_MAX_DISCOVERED];\n    size_t device_count = 0U;\n    size_t index;\n    size_t written_count = 0U;\n\n    if (paths == NULL || capacity == 0U) return 0U;\n    bus = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &error);\n    if (error != NULL) g_error_free(error);\n    if (bus == NULL) return 0U;\n    if (!bluez_find_adapter(bus, adapter_path, sizeof(adapter_path))) {\n        g_object_unref(bus);\n        return 0U;\n    }\n\n    {\n        GVariantBuilder filter;\n        g_variant_builder_init(&filter, G_VARIANT_TYPE("a{sv}"));\n        g_variant_builder_add(&filter, "{sv}", "Transport",\n                              g_variant_new_string("bredr"));\n        reply = bluez_call(bus, adapter_path, LINK_BLUEZ_ADAPTER,\n                           "SetDiscoveryFilter",\n                           g_variant_new("(a{sv})", &filter),\n                           G_VARIANT_TYPE("()"),\n                           LINK_BLE_CALL_TIMEOUT_MS);\n        if (reply != NULL) g_variant_unref(reply);\n    }\n    reply = bluez_call(bus, adapter_path, LINK_BLUEZ_ADAPTER,\n                       "StartDiscovery", NULL, G_VARIANT_TYPE("()"),\n                       LINK_BLE_CALL_TIMEOUT_MS);\n    if (reply != NULL) {\n        discovery_started = true;\n        g_variant_unref(reply);\n    }\n\n    deadline = g_get_monotonic_time() + (gint64)LINK_CLASSIC_SCAN_MS * 1000;\n    while (g_get_monotonic_time() < deadline) {\n        while (g_main_context_pending(NULL))\n            (void)g_main_context_iteration(NULL, FALSE);\n        g_usleep(25000U);\n    }\n\n    objects = bluez_managed_objects(bus);\n    if (objects != NULL) {\n        g_variant_iter_init(&iterator, objects);\n        while (g_variant_iter_next(&iterator, "{&o@a{sa{sv}}}",\n                                   &object_path, &interfaces)) {\n            GVariant *properties;\n            const gchar *address = NULL;\n            const gchar *name = NULL;\n            gint16 rssi = 0;\n            bool has_rssi = false;\n            (void)object_path;\n            properties = g_variant_lookup_value(\n                interfaces, LINK_BLUEZ_DEVICE, G_VARIANT_TYPE("a{sv}"));\n            if (properties != NULL && device_count < LINK_BLE_MAX_DISCOVERED &&\n                g_variant_lookup(properties, "Address", "&s", &address) &&\n                address != NULL && strlen(address) == 17U) {\n                if (!g_variant_lookup(properties, "Alias", "&s", &name) ||\n                    name == NULL || name[0] == '\\0') {\n                    (void)g_variant_lookup(properties, "Name", "&s", &name);\n                }\n                has_rssi = g_variant_lookup(properties, "RSSI", "n", &rssi) != FALSE;\n                (void)snprintf(devices[device_count].address,\n                               sizeof(devices[device_count].address), "%s", address);\n                (void)snprintf(devices[device_count].name,\n                               sizeof(devices[device_count].name), "%s",\n                               name != NULL && name[0] != '\\0'\n                                   ? name : "Bluetooth Classic device");\n                devices[device_count].likely_elm = ble_name_likely_elm(name);\n                devices[device_count].has_rssi = has_rssi;\n                devices[device_count].rssi = rssi;\n                device_count++;\n            }\n            if (properties != NULL) g_variant_unref(properties);\n            g_variant_unref(interfaces);\n        }\n        g_variant_unref(objects);\n    }\n\n    if (discovery_started) {\n        reply = bluez_call(bus, adapter_path, LINK_BLUEZ_ADAPTER,\n                           "StopDiscovery", NULL, G_VARIANT_TYPE("()"),\n                           LINK_BLE_CALL_TIMEOUT_MS);\n        if (reply != NULL) g_variant_unref(reply);\n    }\n    g_object_unref(bus);\n\n    qsort(devices, device_count, sizeof(devices[0]), ble_discovered_compare);\n    for (index = 0U; index < device_count && written_count < capacity; ++index) {\n        if (!devices[index].likely_elm ||\n            bluetooth_name_prefers_ble(devices[index].name)) continue;\n        (void)snprintf(paths[written_count], 256U, "BT:%s %s",\n                       devices[index].address, devices[index].name);\n        written_count++;\n    }\n    return written_count;\n}\n\nstatic int classic_spp_channel(const char *address)\n{\n    bdaddr_t target;\n    uuid_t service_uuid;\n    uint32_t attribute_range = UINT32_C(0x0000ffff);\n    sdp_session_t *session;\n    sdp_list_t *search_list = NULL;\n    sdp_list_t *attribute_list = NULL;\n    sdp_list_t *records = NULL;\n    sdp_list_t *item;\n    int channel = -1;\n\n    if (address == NULL || str2ba(address, &target) != 0) return -1;\n    session = sdp_connect(BDADDR_ANY, &target, SDP_RETRY_IF_BUSY);\n    if (session == NULL) return -1;\n    sdp_uuid16_create(&service_uuid, SERIAL_PORT_SVCLASS_ID);\n    search_list = sdp_list_append(NULL, &service_uuid);\n    attribute_list = sdp_list_append(NULL, &attribute_range);\n    if (search_list != NULL && attribute_list != NULL &&\n        sdp_service_search_attr_req(session, search_list, SDP_ATTR_REQ_RANGE,\n                                    attribute_list, &records) == 0) {\n        for (item = records; item != NULL; item = item->next) {\n            const sdp_record_t *record = item->data;\n            const int port = record != NULL\n                ? sdp_get_proto_port(record, RFCOMM_UUID) : -1;\n            if (port > 0 && port <= 30) {\n                channel = port;\n                break;\n            }\n        }\n    }\n    for (item = records; item != NULL; item = item->next) {\n        if (item->data != NULL) sdp_record_free(item->data);\n    }\n    sdp_list_free(records, NULL);\n    sdp_list_free(attribute_list, NULL);\n    sdp_list_free(search_list, NULL);\n    sdp_close(session);\n    return channel;\n}\n\nstatic LinkTransportStatus classic_connect(LinkLinuxSerialTransport *transport)\n{\n    char address[18];\n    bdaddr_t target;\n    struct sockaddr_rc remote;\n    struct pollfd descriptor;\n    int channel;\n    int fd;\n    int flags;\n    int socket_error = 0;\n    socklen_t socket_error_size = sizeof(socket_error);\n\n    if (transport == NULL || !transport->bluetooth_classic)\n        return LINK_TRANSPORT_INVALID_ARGUMENT;\n    if (transport->connected) return LINK_TRANSPORT_OK;\n    if (!classic_extract_address(transport->device, address) ||\n        str2ba(address, &target) != 0) return LINK_TRANSPORT_INVALID_ARGUMENT;\n\n    channel = classic_spp_channel(address);\n    if (channel <= 0) channel = 1;\n    fd = socket(AF_BLUETOOTH, SOCK_STREAM, BTPROTO_RFCOMM);\n    if (fd < 0) return LINK_TRANSPORT_IO_ERROR;\n    flags = fcntl(fd, F_GETFL, 0);\n    if (flags >= 0) (void)fcntl(fd, F_SETFL, flags | O_NONBLOCK);\n    (void)fcntl(fd, F_SETFD, FD_CLOEXEC);\n\n    memset(&remote, 0, sizeof(remote));\n    remote.rc_family = AF_BLUETOOTH;\n    remote.rc_bdaddr = target;\n    remote.rc_channel = (uint8_t)channel;\n    if (connect(fd, (struct sockaddr *)&remote, sizeof(remote)) != 0) {\n        if (errno != EINPROGRESS) {\n            close(fd);\n            return LINK_TRANSPORT_NOT_CONNECTED;\n        }\n        descriptor.fd = fd;\n        descriptor.events = POLLOUT;\n        descriptor.revents = 0;\n        if (poll(&descriptor, 1, LINK_CLASSIC_CONNECT_TIMEOUT_MS) <= 0 ||\n            getsockopt(fd, SOL_SOCKET, SO_ERROR, &socket_error,\n                       &socket_error_size) != 0 || socket_error != 0) {\n            close(fd);\n            return LINK_TRANSPORT_NOT_CONNECTED;\n        }\n    }\n    transport->fd = fd;\n    transport->connected = true;\n    return LINK_TRANSPORT_OK;\n}\n\nstatic bool ble_refresh_le_presence'''
-          if old not in s: raise SystemExit('BLE discovery tail missing')
-          s = s.replace(old, new, 1)
-
-          s = s.replace('''    if (transport->bluetooth_le) return ble_connect(transport);\n    if (transport->connected) return LINK_TRANSPORT_OK;\n''',
-          '''    if (transport->bluetooth_le) return ble_connect(transport);\n    if (transport->bluetooth_classic) return classic_connect(transport);\n    if (transport->connected) return LINK_TRANSPORT_OK;\n''', 1)
-
-          old = '''    char address[18];\n    if (transport == NULL || device == NULL || device[0] == '\\0') return false;\n    if (transport->connected) link_linux_serial_disconnect(transport);\n    if (transport->provider_context != NULL) ble_state_destroy(transport);\n    transport->bluetooth_le = ble_extract_address(device, address);\n    if (strncmp(device, "BLE:", 4U) == 0 && !transport->bluetooth_le) return false;\n'''
-          new = '''    char address[18];\n    char classic_address[18];\n    if (transport == NULL || device == NULL || device[0] == '\\0') return false;\n    if (transport->connected) link_linux_serial_disconnect(transport);\n    if (transport->provider_context != NULL) ble_state_destroy(transport);\n    transport->bluetooth_le = ble_extract_address(device, address);\n    transport->bluetooth_classic = classic_extract_address(device, classic_address);\n    if (strncmp(device, "BLE:", 4U) == 0 && !transport->bluetooth_le) return false;\n    if (strncmp(device, "BT:", 3U) == 0 && !transport->bluetooth_classic) return false;\n'''
-          if old not in s: raise SystemExit('configure block missing')
-          s = s.replace(old, new, 1)
-
-          s = s.replace('''    if (transport->bluetooth_le)\n        return ble_probe_elm327(transport, identity, identity_capacity);\n    (void)tcflush(transport->fd, TCIFLUSH);\n''',
-          '''    if (transport->bluetooth_le)\n        return ble_probe_elm327(transport, identity, identity_capacity);\n    if (!transport->bluetooth_classic) (void)tcflush(transport->fd, TCIFLUSH);\n''', 1)
-
-          s = s.replace('''    if (count < capacity)\n        count += ble_discover_devices(paths + count, capacity - count);\n    return count;\n''',
-          '''    if (count < capacity)\n        count += classic_discover_devices(paths + count, capacity - count);\n    if (count < capacity)\n        count += ble_discover_devices(paths + count, capacity - count);\n    return count;\n''', 1)
-          p.write_text(s)
-
-          # Keep the transport documentation aligned with actual behaviour.
-          Path('docs/LINUX-BLUETOOTH.md').write_text('''<!-- SPDX-License-Identifier: GPL-3.0-or-later -->\n# Linux Bluetooth transport\n\nLINK 0.14.3 provides native BlueZ Bluetooth Low Energy (GATT) and Bluetooth Classic Serial Port Profile (RFCOMM) transports alongside ordinary Linux tty devices.\n\nThe GTK shell discovers `/dev/ttyUSB*`, `/dev/ttyACM*`, existing `/dev/rfcomm*`, likely ELM/OBD BLE devices and likely ELM/OBD Bluetooth Classic devices. BLE selections are represented as `BLE:<address> <name>` and Classic selections as `BT:<address> <name>`. Unrelated phones, mice and generic BLE beacons are no longer emitted into the diagnostic-adapter chooser.\n\nSelecting a BLE adapter performs an LE refresh, connects through `org.bluez.Device1`, waits for GATT service resolution, chooses a writable/notifiable characteristic pair, enables notifications and verifies the adapter with `ATI`. No Vgate-specific GATT UUID is required.\n\nSelecting a Bluetooth Classic adapter performs native SDP discovery for the Serial Port Profile and opens an RFCOMM socket directly. If a device does not expose SDP before connection, LINK falls back to RFCOMM channel 1, which is common for ELM327-compatible adapters. No manual `rfcomm bind` or `/dev/rfcomm0` setup is required. Existing `/dev/rfcomm*` devices remain supported for compatibility.\n\nVgate dual-mode adapters can therefore expose both sides independently: a name such as `IOS-Vlink` is normally reached over BLE/GATT, while `ANDROID-Vlink` is normally reached over Bluetooth Classic/SPP. The product UI uses the selected transport rather than assuming that either advertising name is tied to the host operating system.\n\nThe ELM layer above both providers owns command framing, parser state, timeouts and diagnostic semantics. Mercedes- and Jaguar-specific diagnostic knowledge remains outside LINK.\n''')
-          PY
-
-          rm -f .github/workflows/add-classic-bluetooth.yml
           git diff --check
-          cc -std=c11 -Wall -Wextra -Wpedantic -Wshadow -Wformat=2 -Wstrict-prototypes -Wmissing-prototypes -Werror \
-            $(pkg-config --cflags gio-2.0 bluez) -Iinclude \
-            -c platform/linux/link-linux-serial.c -o /tmp/link-linux-serial.o
+          cc -std=c11 -Wall -Wextra -Wpedantic -Wshadow -Wformat=2 -Wstrict-prototypes -Wmissing-prototypes -Werror $(pkg-config --cflags gio-2.0 bluez) -Iinclude -c platform/linux/link-linux-serial.c -o /tmp/link-linux-serial.o
           cmake -S . -B build -DBUILD_TESTING=ON -DCMAKE_BUILD_TYPE=Release
           cmake --build build --parallel 2
           ctest --test-dir build --output-on-failure
+      - name: Publish repaired main
+        run: |
+          rm -f .github/workflows/add-classic-bluetooth.yml .github/apply-classic-bluetooth.py
           git config user.name 'Shannon Smith'
           git config user.email 'infiltratr@yandex.com'
           git add -A
