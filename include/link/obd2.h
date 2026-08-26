@@ -135,6 +135,10 @@ LinkObd2Result link_obd2_decode_readiness(
 LinkObd2Result link_obd2_decode_vin(
     const LinkElm327Response *response,
     char vin[LINK_OBD2_VIN_LENGTH + 1U]);
+LinkObd2Result link_obd2_decode_vin_pdu(
+    const uint8_t *pdu,
+    size_t pdu_length,
+    char vin[LINK_OBD2_VIN_LENGTH + 1U]);
 LinkObd2Result link_obd2_decode_dtcs(
     const LinkElm327Response *response,
     LinkObd2DtcKind kind,

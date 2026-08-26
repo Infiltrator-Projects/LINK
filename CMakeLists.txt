@@ -154,7 +154,7 @@ function(link_add_windows_discover target)
         set(one_value_args
             PRODUCT_NAME PRODUCT_SLUG WINDOW_CLASS PRODUCT_VERSION
             PRODUCT_COPYRIGHT PRODUCT_SUBTITLE PRODUCT_WEBSITE PRODUCT_ICON_PNG
-            FULL_SWEEP_PLAN_FUNCTION)
+            FULL_SWEEP_PLAN_FUNCTION INVENTORY_VIN_FORMATTER_FUNCTION)
         cmake_parse_arguments(LINK_FACE "" "${one_value_args}" "" ${ARGN})
         if(LINK_FACE_UNPARSED_ARGUMENTS)
             message(FATAL_ERROR "Unknown link_add_windows_discover arguments: ${LINK_FACE_UNPARSED_ARGUMENTS}")
@@ -198,6 +198,10 @@ function(link_add_windows_discover target)
         target_compile_definitions(${target} PRIVATE
             LINK_ENABLE_FULL_SWEEP=1
             LINK_FULL_SWEEP_PLAN_FUNCTION=${LINK_FACE_FULL_SWEEP_PLAN_FUNCTION})
+    endif()
+    if(LINK_FACE_INVENTORY_VIN_FORMATTER_FUNCTION)
+        target_compile_definitions(${target} PRIVATE
+            LINK_INVENTORY_VIN_FORMATTER_FUNCTION=${LINK_FACE_INVENTORY_VIN_FORMATTER_FUNCTION})
     endif()
     if(MSVC)
         set_property(TARGET ${target} PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")

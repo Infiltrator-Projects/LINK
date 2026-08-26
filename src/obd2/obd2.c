@@ -649,6 +649,35 @@ LinkObd2Result link_obd2_decode_readiness(
     return LINK_OBD2_RESULT_OK;
 }
 
+LinkObd2Result link_obd2_decode_vin_pdu(
+    const uint8_t *pdu,
+    size_t pdu_length,
+    char vin[LINK_OBD2_VIN_LENGTH + 1U])
+{
+    char decoded[LINK_OBD2_VIN_LENGTH + 1U];
+    size_t index;
+
+    if (pdu == NULL || vin == NULL) return LINK_OBD2_RESULT_INVALID_ARGUMENT;
+    vin[0] = '\0';
+    if (pdu_length < 3U ||
+        pdu[0] != UINT8_C(0x49) ||
+        pdu[1] != UINT8_C(0x02)) {
+        return LINK_OBD2_RESULT_UNEXPECTED_RESPONSE;
+    }
+    if (pdu_length < 3U + LINK_OBD2_VIN_LENGTH) {
+        return LINK_OBD2_RESULT_UNEXPECTED_RESPONSE;
+    }
+    for (index = 0U; index < LINK_OBD2_VIN_LENGTH; ++index) {
+        const uint8_t value = pdu[index + 3U];
+        if (!obd2_vin_character_valid(value))
+            return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
+        decoded[index] = (char)value;
+    }
+    decoded[LINK_OBD2_VIN_LENGTH] = '\0';
+    memcpy(vin, decoded, sizeof(decoded));
+    return LINK_OBD2_RESULT_OK;
+}
+
 LinkObd2Result link_obd2_decode_vin(
     const LinkElm327Response *response, char vin[LINK_OBD2_VIN_LENGTH + 1U])
 {
@@ -666,17 +695,7 @@ LinkObd2Result link_obd2_decode_vin(
     if (result != LINK_OBD2_RESULT_OK) return result;
 
     if (indexed_found) {
-        size_t index;
-        if (indexed_length < 3U || indexed[0] != 0x49U || indexed[1] != 0x02U) {
-            return LINK_OBD2_RESULT_UNEXPECTED_RESPONSE;
-        }
-        for (index = 3U; index < indexed_length && written < LINK_OBD2_VIN_LENGTH;
-             ++index) {
-            if (!obd2_vin_character_valid(indexed[index])) {
-                return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
-            }
-            decoded[written++] = (char)indexed[index];
-        }
+        return link_obd2_decode_vin_pdu(indexed, indexed_length, vin);
     } else {
         const char *cursor;
         result = obd2_response_ready(response);

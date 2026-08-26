@@ -32,8 +32,36 @@ static LinkElm327Response parse_response(const char *command, const char *wire)
     return response;
 }
 
+static int test_raw_vin_pdu(void)
+{
+    static const uint8_t pdu[] = {
+        0x49U, 0x02U, 0x01U,
+        'S','A','J','A','D','5','6','L','6','4','W','D','7','8','4','3','5'
+    };
+    char vin[LINK_OBD2_VIN_LENGTH + 1U];
+    uint8_t bad[sizeof(pdu)];
+
+    CHECK(link_obd2_decode_vin_pdu(pdu, sizeof(pdu), vin) ==
+          LINK_OBD2_RESULT_OK);
+    CHECK(strcmp(vin, "SAJAD56L64WD78435") == 0);
+    CHECK(link_obd2_decode_vin_pdu(pdu, sizeof(pdu) - 1U, vin) ==
+          LINK_OBD2_RESULT_UNEXPECTED_RESPONSE);
+
+    memcpy(bad, pdu, sizeof(bad));
+    bad[3U] = (uint8_t)'I';
+    CHECK(link_obd2_decode_vin_pdu(bad, sizeof(bad), vin) ==
+          LINK_OBD2_RESULT_MALFORMED_RESPONSE);
+    CHECK(vin[0] == '\0');
+
+    bad[0] = 0x48U;
+    CHECK(link_obd2_decode_vin_pdu(bad, sizeof(bad), vin) ==
+          LINK_OBD2_RESULT_UNEXPECTED_RESPONSE);
+    return 0;
+}
+
 int main(void)
 {
+    if (test_raw_vin_pdu() != 0) return 1;
     char command[16];
     LinkObd2Sample sample;
     LinkObd2ClearAuthorization authorization = LINK_OBD2_CLEAR_AUTHORIZATION_INIT;

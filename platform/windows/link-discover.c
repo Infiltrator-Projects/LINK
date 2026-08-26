@@ -9,6 +9,7 @@
 #include <string.h>
 
 #include "link/discover.h"
+#include "link/obd2.h"
 
 #ifndef LINK_PRODUCT_NAME
 #define LINK_PRODUCT_NAME "LINK"
@@ -31,6 +32,11 @@
 
 #ifndef LINK_ENABLE_FULL_SWEEP
 #define LINK_ENABLE_FULL_SWEEP 0
+#endif
+
+#ifdef LINK_INVENTORY_VIN_FORMATTER_FUNCTION
+extern int LINK_INVENTORY_VIN_FORMATTER_FUNCTION(
+    const char *vin, char *buffer, size_t capacity);
 #endif
 
 #define IDC_DLL 1001
@@ -741,6 +747,29 @@ static void run_inventory(void)
                 evidence_frame("rx", &rx[i], "bounded standard OBD inventory response");
                 post_logf("OBD RX %03lX  %lu bytes", (unsigned long)message_can_id(&rx[i]),
                           rx[i].DataSize > 4UL ? rx[i].DataSize - 4UL : rx[i].DataSize);
+                if (queries[q][0] == UINT8_C(0x09) &&
+                    queries[q][1] == UINT8_C(0x02) &&
+                    rx[i].DataSize > 4UL) {
+                    char vin[LINK_OBD2_VIN_LENGTH + 1U];
+                    LinkObd2Result vin_result = link_obd2_decode_vin_pdu(
+                        rx[i].Data + 4U,
+                        (size_t)(rx[i].DataSize - 4UL),
+                        vin);
+                    if (vin_result == LINK_OBD2_RESULT_OK) {
+                        post_logf("STANDARD VIN: %s", vin);
+#ifdef LINK_INVENTORY_VIN_FORMATTER_FUNCTION
+                        {
+                            char identity[384];
+                            identity[0] = '\0';
+                            if (LINK_INVENTORY_VIN_FORMATTER_FUNCTION(
+                                    vin, identity, sizeof(identity)) &&
+                                identity[0] != '\0') {
+                                post_logf("VEHICLE IDENTITY: %s", identity);
+                            }
+                        }
+#endif
+                    }
+                }
             }
         }
     }
