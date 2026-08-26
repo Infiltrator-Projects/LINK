@@ -255,10 +255,16 @@ static LinkElm327CanResult elm327_can_decode_indexed(
 
     if (*found) {
         if (written == 0U ||
-            (declared_length_seen && written != declared_length)) {
+            (declared_length_seen && written < declared_length)) {
             return LINK_ELM327_CAN_RESULT_MALFORMED_RESPONSE;
         }
-        *decoded_length = written;
+        /*
+         * ELM327-family adapters may pad the last indexed line (commonly
+         * with 0xFF) beyond the declared ISO-TP payload length.  The length
+         * preamble is authoritative; retain the payload and discard only
+         * adapter-added trailing padding.
+         */
+        *decoded_length = declared_length_seen ? declared_length : written;
     }
     return LINK_ELM327_CAN_RESULT_OK;
 }
