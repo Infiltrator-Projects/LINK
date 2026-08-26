@@ -606,7 +606,11 @@ static bool drive_manufacturer_extension(LinkGtkShell *shell)
         fail_diagnostics(shell, LINK_DIAGNOSTIC_FLOW_RESULT_ELM_ERROR);
         return false;
     }
-    notify_diagnostic(shell, NULL);
+    /*
+     * Keep the compact connection status current, but do not rebuild the
+     * product workspace for every raw manufacturer command.  Long bounded
+     * scans otherwise create visible flicker and needless GTK churn.
+     */
     return true;
 }
 
