@@ -114,16 +114,18 @@ static int test_standard_sequence(void)
           LINK_DIAGNOSTIC_FLOW_RESULT_OK);
     CHECK(strcmp(action.command, "0902") == 0);
     response = response_ok(
-        "014\n0:490201574646\n1:315858474344\n2:414139393030\n3:30303031", false);
+        "49020153414A414435\n"
+        "490202364C36345744\n"
+        "4902033738343335", false);
     CHECK(link_diagnostic_flow_accept_response(
               &flow, &response, 550U, &event) ==
           LINK_DIAGNOSTIC_FLOW_RESULT_OK);
     CHECK(event.kind == LINK_DIAGNOSTIC_FLOW_EVENT_STANDARD_VIN);
     CHECK(event.vin_available);
     CHECK(event.vin != NULL);
-    CHECK(strcmp(event.vin, "WF61XXGCDAA990001") == 0);
+    CHECK(strcmp(event.vin, "SAJAD56L64WD78435") == 0);
     CHECK(strcmp(link_diagnostic_flow_standard_vin(&flow),
-                 "WF61XXGCDAA990001") == 0);
+                 "SAJAD56L64WD78435") == 0);
     CHECK(flow.stage == LINK_DIAGNOSTIC_FLOW_SCANNING_STORED_DTCS);
 
     CHECK(link_diagnostic_flow_next_action(&flow, 600U, &action) ==
