@@ -92,19 +92,19 @@ int main(void)
     CHECK(link_ecu_probe_command(&probe, command, sizeof(command), &written) ==
           LINK_ECU_PROBE_RESULT_OK);
     CHECK(strcmp(command, "22F18C") == 0);
-    memset(&response, 0, sizeof(response));
-    response.result = LINK_ELM327_RESULT_NO_DATA;
+    response = ok_response("00B\n0:62F18C333134\n1:3932333333FFFF");
     CHECK(link_ecu_probe_accept(&probe, &response) == LINK_ECU_PROBE_RESULT_OK);
 
     did_result = link_ecu_probe_did_result_at(&probe, 1U);
     CHECK(did_result != NULL);
-    CHECK(did_result->status == LINK_ECU_PROBE_READ_NO_RESPONSE);
+    CHECK(did_result->status == LINK_ECU_PROBE_READ_AVAILABLE);
+    CHECK(did_result->data_length == 8U);
     CHECK(probe.stage == LINK_ECU_PROBE_STAGE_READ_DTC_INFORMATION);
 
     CHECK(link_ecu_probe_command(&probe, command, sizeof(command), &written) ==
           LINK_ECU_PROBE_RESULT_OK);
     CHECK(strcmp(command, "1902FF") == 0);
-    response = ok_response("5902FF0112345609");
+    response = ok_response("7F1978\n5902FF0112345609");
     CHECK(link_ecu_probe_accept(&probe, &response) ==
           LINK_ECU_PROBE_RESULT_COMPLETE);
     CHECK(probe.stage == LINK_ECU_PROBE_STAGE_COMPLETE);
