@@ -1,1 +1,0 @@
-/usr/bin/cc -O3 -DNDEBUG -Wl,--dependency-file=CMakeFiles/link-test-dtc-knowledge.dir/link.d "CMakeFiles/link-test-dtc-knowledge.dir/tests/test_dtc_knowledge.c.o" -o link-test-dtc-knowledge  liblink-core.a src/infiltratr-common/libinfiltratr-portable.a -lm

@@ -1,1 +1,0 @@
-/usr/bin/cc -O3 -DNDEBUG -Wl,--dependency-file=CMakeFiles/link-test-runtime.dir/link.d "CMakeFiles/link-test-runtime.dir/tests/test_runtime.c.o" -o link-test-runtime  liblink-core.a src/infiltratr-common/libinfiltratr-portable.a -lm
