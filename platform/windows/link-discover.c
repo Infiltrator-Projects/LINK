@@ -26,7 +26,18 @@
 #define J2534_ISO15765 6UL
 #define J2534_FLOW_CONTROL_FILTER 3UL
 #define J2534_ISO15765_FRAME_PAD 0x00000040UL
+#define J2534_CAN_29BIT_ID 0x00000100UL
 #define J2534_MAX_DATA 4128U
+
+#ifndef LINK_ENABLE_FULL_SWEEP
+#define LINK_ENABLE_FULL_SWEEP 0
+#endif
+#ifndef LINK_FULL_SWEEP_LABEL_7E0
+#define LINK_FULL_SWEEP_LABEL_7E0 "Primary powertrain ECU"
+#endif
+#ifndef LINK_FULL_SWEEP_LABEL_7E1
+#define LINK_FULL_SWEEP_LABEL_7E1 "Secondary EOBD powertrain ECU"
+#endif
 
 #define IDC_DLL 1001
 #define IDC_CONNECT 1002
@@ -37,7 +48,9 @@
 #define IDC_ADDNOTE 1007
 #define IDC_LOG 1008
 #define IDC_STATUS 1009
+#define IDC_FULL_SWEEP 1011
 #define WM_LINK_LOG (WM_APP + 1)
+#define WM_LINK_STATUS (WM_APP + 2)
 
 typedef struct PASSTHRU_MSG_ {
     unsigned long ProtocolID;
@@ -56,6 +69,7 @@ typedef unsigned long (WINAPI *PassThruDisconnectFn)(unsigned long);
 typedef unsigned long (WINAPI *PassThruReadMsgsFn)(unsigned long, PASSTHRU_MSG *, unsigned long *, unsigned long);
 typedef unsigned long (WINAPI *PassThruWriteMsgsFn)(unsigned long, PASSTHRU_MSG *, unsigned long *, unsigned long);
 typedef unsigned long (WINAPI *PassThruStartMsgFilterFn)(unsigned long, unsigned long, PASSTHRU_MSG *, PASSTHRU_MSG *, PASSTHRU_MSG *, unsigned long *);
+typedef unsigned long (WINAPI *PassThruStopMsgFilterFn)(unsigned long, unsigned long);
 
 typedef struct j2534_api_ {
     HMODULE dll;
@@ -66,6 +80,7 @@ typedef struct j2534_api_ {
     PassThruReadMsgsFn read_msgs;
     PassThruWriteMsgsFn write_msgs;
     PassThruStartMsgFilterFn start_filter;
+    PassThruStopMsgFilterFn stop_filter;
 } j2534_api;
 
 typedef struct app_state_ {
@@ -101,6 +116,15 @@ static uint64_t unix_time_ns(void)
 static void set_status(const char *text)
 {
     SetWindowTextA(g_app.status, text != NULL ? text : "");
+}
+
+static void post_status(const char *text)
+{
+    char *copy;
+    if (text == NULL) text = "";
+    copy = _strdup(text);
+    if (copy == NULL) return;
+    if (!PostMessageA(g_app.window, WM_LINK_STATUS, 0U, (LPARAM)copy)) free(copy);
 }
 
 static void post_logf(const char *format, ...)
@@ -232,6 +256,7 @@ static int load_j2534(const char *path)
     LOAD_FN(read_msgs, "PassThruReadMsgs");
     LOAD_FN(write_msgs, "PassThruWriteMsgs");
     LOAD_FN(start_filter, "PassThruStartMsgFilter");
+    LOAD_FN(stop_filter, "PassThruStopMsgFilter");
 #undef LOAD_FN
     return 1;
 fail:
@@ -325,12 +350,18 @@ static int connect_passive(void)
     return 1;
 }
 
-static int send_read_only_obd(const unsigned char *payload, size_t payload_length)
+static int send_read_only_target(
+    uint32_t can_id,
+    int extended,
+    const unsigned char *payload,
+    size_t payload_length,
+    const char *annotation)
 {
     PASSTHRU_MSG tx;
     link_safety_result safety;
     unsigned long count = 1UL;
     unsigned long rc;
+
     safety = link_safety_classify(payload, payload_length);
     if (safety.decision != LINK_SAFETY_ALLOW_READ_ONLY) {
         post_logf("BLOCKED service 0x%02X: %s", (unsigned int)safety.service,
@@ -338,30 +369,46 @@ static int send_read_only_obd(const unsigned char *payload, size_t payload_lengt
         return 0;
     }
     if (payload_length + 4U > sizeof(tx.Data)) return 0;
+
     memset(&tx, 0, sizeof(tx));
     tx.ProtocolID = J2534_ISO15765;
-    tx.TxFlags = J2534_ISO15765_FRAME_PAD;
-    tx.Data[0] = 0x00U; tx.Data[1] = 0x00U; tx.Data[2] = 0x07U; tx.Data[3] = 0xDFU;
+    tx.TxFlags = J2534_ISO15765_FRAME_PAD |
+                 (extended ? J2534_CAN_29BIT_ID : 0UL);
+    tx.Data[0] = (unsigned char)((can_id >> 24U) & 0xFFU);
+    tx.Data[1] = (unsigned char)((can_id >> 16U) & 0xFFU);
+    tx.Data[2] = (unsigned char)((can_id >> 8U) & 0xFFU);
+    tx.Data[3] = (unsigned char)(can_id & 0xFFU);
     memcpy(tx.Data + 4U, payload, payload_length);
     tx.DataSize = (unsigned long)(payload_length + 4U);
+
     rc = g_app.api.write_msgs(g_app.channel_id, &tx, &count, 250UL);
-    if (rc != J2534_STATUS_NOERROR || count != 1UL) {
-        post_logf("Read-only OBD request failed: 0x%08lX", rc);
-        return 0;
-    }
-    evidence_frame("tx", &tx, "bounded standard OBD inventory request");
+    if (rc != J2534_STATUS_NOERROR || count != 1UL) return 0;
+    evidence_frame("tx", &tx, annotation);
     return 1;
 }
 
-static void make_iso_msg(PASSTHRU_MSG *msg, uint32_t id)
+static int send_read_only_obd(const unsigned char *payload, size_t payload_length)
+{
+    return send_read_only_target(
+        UINT32_C(0x7df), 0, payload, payload_length,
+        "bounded standard OBD inventory request");
+}
+
+static void make_iso_msg_ex(PASSTHRU_MSG *msg, uint32_t id, int extended)
 {
     memset(msg, 0, sizeof(*msg));
     msg->ProtocolID = J2534_ISO15765;
+    msg->TxFlags = extended ? J2534_CAN_29BIT_ID : 0UL;
     msg->DataSize = 4UL;
     msg->Data[0] = (unsigned char)((id >> 24U) & 0xFFU);
     msg->Data[1] = (unsigned char)((id >> 16U) & 0xFFU);
     msg->Data[2] = (unsigned char)((id >> 8U) & 0xFFU);
     msg->Data[3] = (unsigned char)(id & 0xFFU);
+}
+
+static void make_iso_msg(PASSTHRU_MSG *msg, uint32_t id)
+{
+    make_iso_msg_ex(msg, id, 0);
 }
 
 static void install_obd_flow_filters(void)
@@ -382,6 +429,259 @@ static void install_obd_flow_filters(void)
             post_logf("Flow-control filter %lu not installed (0x%08lX)", (unsigned long)i, rc);
     }
 }
+
+
+#if LINK_ENABLE_FULL_SWEEP
+static int full_sweep_cancelled(void)
+{
+    return g_app.stop_event != NULL &&
+           WaitForSingleObject(g_app.stop_event, 0U) != WAIT_TIMEOUT;
+}
+
+static int full_sweep_start_filter(
+    uint32_t tx_id, uint32_t rx_id, int extended, unsigned long *filter_id)
+{
+    PASSTHRU_MSG mask;
+    PASSTHRU_MSG pattern;
+    PASSTHRU_MSG flow;
+    const uint32_t mask_id = extended ? UINT32_C(0x1fffffff) : UINT32_C(0x7ff);
+    unsigned long rc;
+
+    make_iso_msg_ex(&mask, mask_id, extended);
+    make_iso_msg_ex(&pattern, rx_id, extended);
+    make_iso_msg_ex(&flow, tx_id, extended);
+    *filter_id = 0UL;
+    rc = g_app.api.start_filter(
+        g_app.channel_id, J2534_FLOW_CONTROL_FILTER,
+        &mask, &pattern, &flow, filter_id);
+    return rc == J2534_STATUS_NOERROR;
+}
+
+static int full_sweep_read_target(
+    uint32_t rx_id,
+    unsigned long timeout_ms,
+    const char *annotation,
+    PASSTHRU_MSG *matched)
+{
+    const DWORD deadline = GetTickCount() + timeout_ms;
+    while ((LONG)(deadline - GetTickCount()) > 0) {
+        PASSTHRU_MSG rx[8];
+        unsigned long count = 8UL;
+        unsigned long i;
+        unsigned long rc;
+        if (full_sweep_cancelled()) return 0;
+        memset(rx, 0, sizeof(rx));
+        rc = g_app.api.read_msgs(g_app.channel_id, rx, &count, 25UL);
+        if (rc != J2534_STATUS_NOERROR && rc != J2534_ERR_TIMEOUT) return 0;
+        for (i = 0UL; i < count; ++i) {
+            evidence_frame("rx", &rx[i], annotation);
+            if (message_can_id(&rx[i]) == rx_id) {
+                if (matched != NULL) *matched = rx[i];
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+
+static int full_sweep_extract_f197(
+    const PASSTHRU_MSG *msg, char *label, size_t capacity)
+{
+    const unsigned char *payload;
+    size_t length;
+    size_t start = SIZE_MAX;
+    size_t i;
+    size_t written = 0U;
+
+    if (msg == NULL || label == NULL || capacity == 0U || msg->DataSize <= 4UL)
+        return 0;
+    label[0] = '\0';
+    payload = msg->Data + 4U;
+    length = (size_t)(msg->DataSize - 4UL);
+    for (i = 0U; i + 2U < length; ++i) {
+        if (payload[i] == 0x62U && payload[i + 1U] == 0xF1U &&
+            payload[i + 2U] == 0x97U) {
+            start = i + 3U;
+            break;
+        }
+    }
+    if (start == SIZE_MAX) return 0;
+    for (i = start; i < length && written + 1U < capacity; ++i) {
+        const unsigned char value = payload[i];
+        if (value == 0U || value == 0xFFU) break;
+        if (value < 0x20U || value > 0x7EU) return 0;
+        label[written++] = (char)value;
+    }
+    while (written != 0U && label[written - 1U] == ' ') --written;
+    label[written] = '\0';
+    return written != 0U;
+}
+
+static const char *full_sweep_fallback_label(uint32_t tx_id, int extended)
+{
+    if (!extended && tx_id == UINT32_C(0x7e0)) return LINK_FULL_SWEEP_LABEL_7E0;
+    if (!extended && tx_id == UINT32_C(0x7e1)) return LINK_FULL_SWEEP_LABEL_7E1;
+    return "Unidentified ECU";
+}
+
+static int full_sweep_probe_target(
+    uint32_t tx_id, uint32_t rx_id, int extended)
+{
+    static const unsigned char probes[][3] = {
+        {0x3EU, 0x00U, 0x00U},
+        {0x19U, 0x02U, 0xFFU},
+        {0x22U, 0xF1U, 0x90U}
+    };
+    static const size_t probe_lengths[] = {2U, 3U, 3U};
+    static const unsigned char identity[] = {0x22U, 0xF1U, 0x97U};
+    unsigned long filter_id = 0UL;
+    size_t i;
+    int found = 0;
+    char identity_label[96] = "";
+    PASSTHRU_MSG matched;
+
+    if (!full_sweep_start_filter(tx_id, rx_id, extended, &filter_id)) return 0;
+
+    for (i = 0U; i < sizeof(probe_lengths) / sizeof(probe_lengths[0]); ++i) {
+        if (full_sweep_cancelled()) break;
+        if (!send_read_only_target(
+                tx_id, extended, probes[i], probe_lengths[i],
+                "explicit full-sweep read-only diagnostic probe")) {
+            continue;
+        }
+        if (full_sweep_read_target(
+                rx_id, 110UL,
+                "explicit full-sweep diagnostic response", &matched)) {
+            found = 1;
+            break;
+        }
+    }
+
+    if (found && !full_sweep_cancelled() &&
+        send_read_only_target(
+            tx_id, extended, identity, sizeof(identity),
+            "explicit full-sweep F197 identity read") &&
+        full_sweep_read_target(
+            rx_id, 180UL, "explicit full-sweep F197 response", &matched)) {
+        (void)full_sweep_extract_f197(
+            &matched, identity_label, sizeof(identity_label));
+    }
+
+    if (g_app.api.stop_filter != NULL && filter_id != 0UL)
+        (void)g_app.api.stop_filter(g_app.channel_id, filter_id);
+
+    if (found) {
+        const char *label = identity_label[0] != '\0'
+            ? identity_label : full_sweep_fallback_label(tx_id, extended);
+        if (extended) {
+            post_logf("FULL SWEEP FOUND: %s  0x%08lX -> 0x%08lX",
+                      label, (unsigned long)tx_id, (unsigned long)rx_id);
+        } else {
+            post_logf("FULL SWEEP FOUND: %s  0x%03lX -> 0x%03lX",
+                      label, (unsigned long)tx_id, (unsigned long)rx_id);
+        }
+    }
+    return found;
+}
+
+static int full_sweep_connect_iso15765(int extended)
+{
+    unsigned long rc;
+    disconnect_channel();
+    rc = g_app.api.connect(
+        g_app.device_id, J2534_ISO15765,
+        extended ? J2534_CAN_29BIT_ID : 0UL,
+        500000UL, &g_app.channel_id);
+    if (rc != J2534_STATUS_NOERROR) {
+        post_logf("FULL SWEEP PassThruConnect(%s) failed: 0x%08lX",
+                  extended ? "29-bit ISO15765" : "11-bit ISO15765", rc);
+        g_app.channel_id = 0UL;
+        return 0;
+    }
+    return 1;
+}
+
+static DWORD WINAPI full_sweep_worker(LPVOID unused)
+{
+    uint32_t tx;
+    unsigned int target;
+    size_t found = 0U;
+    (void)unused;
+
+    post_status("FULL SWEEP - 11-bit Mercedes diagnostic range 0x600-0x7F7");
+    post_logf("FULL SWEEP started: explicit read-only 11-bit and 29-bit diagnostic discovery.");
+
+    if (full_sweep_connect_iso15765(0)) {
+        for (tx = UINT32_C(0x600); tx <= UINT32_C(0x7f7); ++tx) {
+            if (full_sweep_cancelled()) break;
+            found += (size_t)full_sweep_probe_target(tx, tx + UINT32_C(8), 0);
+            if (((tx - UINT32_C(0x600)) & UINT32_C(0x1f)) == 0U)
+                post_logf("FULL SWEEP progress: 11-bit target 0x%03lX",
+                          (unsigned long)tx);
+        }
+    }
+
+    if (!full_sweep_cancelled()) {
+        post_status("FULL SWEEP - ISO 15765 normal-fixed 29-bit targets");
+        if (full_sweep_connect_iso15765(1)) {
+            for (target = 0U; target <= 0xFFU; ++target) {
+                uint32_t tx_id;
+                uint32_t rx_id;
+                if (target == 0xF1U) continue;
+                if (full_sweep_cancelled()) break;
+                tx_id = UINT32_C(0x18da00f1) | ((uint32_t)target << 8U);
+                rx_id = UINT32_C(0x18daf100) | (uint32_t)target;
+                found += (size_t)full_sweep_probe_target(tx_id, rx_id, 1);
+                if ((target & 0x1FU) == 0U)
+                    post_logf("FULL SWEEP progress: 29-bit target 0x%02X", target);
+            }
+        }
+    }
+
+    disconnect_channel();
+    if (full_sweep_cancelled()) {
+        post_status("FULL SWEEP cancelled - passive capture is stopped");
+        post_logf("FULL SWEEP cancelled after %lu responder(s).",
+                  (unsigned long)found);
+    } else {
+        char status[160];
+        (void)snprintf(status, sizeof(status),
+                       "FULL SWEEP complete - %lu responder(s) - reconnect passive capture when ready",
+                       (unsigned long)found);
+        post_status(status);
+        post_logf("FULL SWEEP complete: %lu responding diagnostic endpoint(s).",
+                  (unsigned long)found);
+    }
+    return 0U;
+}
+
+static void run_full_sweep(void)
+{
+    if (g_app.device_id == 0UL) {
+        MessageBoxA(g_app.window,
+                    "Connect to the OpenPort/J2534 device first.",
+                    LINK_PRODUCT_NAME " Discover",
+                    MB_OK | MB_ICONINFORMATION);
+        return;
+    }
+
+    stop_reader();
+    disconnect_channel();
+    g_app.stop_event = CreateEventA(NULL, TRUE, FALSE, NULL);
+    if (g_app.stop_event == NULL) {
+        post_logf("FULL SWEEP could not create stop event.");
+        return;
+    }
+    g_app.reader_thread = CreateThread(
+        NULL, 0U, full_sweep_worker, NULL, 0U, NULL);
+    if (g_app.reader_thread == NULL) {
+        CloseHandle(g_app.stop_event);
+        g_app.stop_event = NULL;
+        post_logf("FULL SWEEP could not create worker thread.");
+        return;
+    }
+}
+#endif
 
 static void run_inventory(void)
 {
@@ -515,6 +815,11 @@ static void create_controls(HWND window)
     button = CreateWindowA("BUTTON", "Read-only OBD inventory", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
                            180, 68, 180, 30, window, (HMENU)(INT_PTR)IDC_INVENTORY, NULL, NULL);
     SendMessageA(button, WM_SETFONT, (WPARAM)font, TRUE);
+#if LINK_ENABLE_FULL_SWEEP
+    button = CreateWindowA("BUTTON", "FULL SWEEP", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+                           368, 68, 120, 30, window, (HMENU)(INT_PTR)IDC_FULL_SWEEP, NULL, NULL);
+    SendMessageA(button, WM_SETFONT, (WPARAM)font, TRUE);
+#endif
     button = CreateWindowA("BUTTON", "Stop", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
                            368, 68, 80, 30, window, (HMENU)(INT_PTR)IDC_STOP, NULL, NULL);
     SendMessageA(button, WM_SETFONT, (WPARAM)font, TRUE);
@@ -547,6 +852,9 @@ static LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wparam, LP
         switch (LOWORD(wparam)) {
         case IDC_CONNECT: connect_device(); return 0;
         case IDC_INVENTORY: run_inventory(); return 0;
+#if LINK_ENABLE_FULL_SWEEP
+        case IDC_FULL_SWEEP: run_full_sweep(); return 0;
+#endif
         case IDC_STOP:
             close_device();
             set_status("DISCONNECTED — deny-by-default safety policy active");
@@ -563,6 +871,12 @@ static LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wparam, LP
         SendMessageA(g_app.log, LB_ADDSTRING, 0U, (LPARAM)text);
         count = SendMessageA(g_app.log, LB_GETCOUNT, 0U, 0U);
         if (count > 0) SendMessageA(g_app.log, LB_SETTOPINDEX, (WPARAM)(count - 1), 0U);
+        free(text);
+        return 0;
+    }
+    case WM_LINK_STATUS: {
+        char *text = (char *)lparam;
+        set_status(text);
         free(text);
         return 0;
     }
