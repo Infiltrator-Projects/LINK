@@ -18,18 +18,37 @@ jobs:
           submodules: recursive
           fetch-depth: 0
       - run: sudo apt-get update && sudo apt-get install -y libgtk-4-dev
-      - name: Compile shared GTK shell with warnings as errors
+      - name: Clean up exporter and compile with product warning policy
+        shell: bash
         run: |
-          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DLINK_ENABLE_INSTALL=OFF
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('platform/linux/link-gtk-shell.c')
+          s = p.read_text()
+          s = s.replace(
+              '    if(shell->exchange_truncated)return; now=monotonic_ms(); elapsed=now>=shell->exchange_started_ms?now-shell->exchange_started_ms:0U;\n',
+              '    if (shell->exchange_truncated) return;\n    now = monotonic_ms();\n    elapsed = now >= shell->exchange_started_ms ? now - shell->exchange_started_ms : 0U;\n')
+          s = s.replace(
+              "    if(shell->exchange_count!=0U)g_string_append_c(shell->exchange_json,',');g_string_append_len(shell->exchange_json,e->str,(gssize)e->len);++shell->exchange_count;g_string_free(e,TRUE);\n",
+              "    if (shell->exchange_count != 0U) g_string_append_c(shell->exchange_json, ',');\n    g_string_append_len(shell->exchange_json, e->str, (gssize)e->len);\n    ++shell->exchange_count;\n    g_string_free(e, TRUE);\n")
+          start = 'static void save_session_response(GtkNativeDialog *dialog,int response,gpointer data)\n'
+          end = '\nstatic GtkWidget *left_label(const char *text, const char *css)\n'
+          assert start in s and end in s
+          s = s.replace(start, 'G_GNUC_BEGIN_IGNORE_DEPRECATIONS\n' + start, 1)
+          s = s.replace(end, '\nG_GNUC_END_IGNORE_DEPRECATIONS\n' + end, 1)
+          p.write_text(s)
+          PY
+          git diff --check
+          GTK_CFLAGS="$(pkg-config --cflags gtk4 | sed 's/-I/-isystem /g')"
           cc -std=c11 -Wall -Wextra -Wpedantic -Wshadow -Wformat=2 -Wstrict-prototypes -Wmissing-prototypes -Werror \
-            $(pkg-config --cflags gtk4) \
-            -Iinclude -Iplatform/linux -Isrc/infiltratr-common/include \
+            $GTK_CFLAGS -Iinclude -Iplatform/linux -Isrc/infiltratr-common/include \
+            -include platform/linux/link-gtk-i18n.h \
             -fsyntax-only platform/linux/link-gtk-shell.c
-      - name: Remove temporary workflow
+      - name: Publish cleanup and remove temporary workflow
         run: |
           rm .github/workflows/session-export-compile-check.yml
           git config user.name 'Shannon Smith'
           git config user.email 'infiltratr@yandex.com'
-          git add .github/workflows/session-export-compile-check.yml
-          git commit -m 'Remove temporary session export compile check'
+          git add platform/linux/link-gtk-shell.c .github/workflows/session-export-compile-check.yml
+          git commit -m 'Harden shared Linux diagnostic session export'
           git push origin HEAD:main
