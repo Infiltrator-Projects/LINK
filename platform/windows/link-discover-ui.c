@@ -119,6 +119,9 @@ static HWND g_dll_label;
 static HWND g_browse_button;
 static HWND g_connect_button;
 static HWND g_inventory_button;
+#if LINK_ENABLE_FULL_SWEEP
+static HWND g_full_sweep_button;
+#endif
 static HWND g_stop_button;
 static HWND g_export_button;
 static HWND g_log_label;
@@ -361,9 +364,16 @@ static void layout_controls(HWND window)
                PX(80), PX(30), TRUE);
 
     MoveWindow(g_connect_button, margin + PX(16), PX(193), PX(184), PX(34), TRUE);
+#if LINK_ENABLE_FULL_SWEEP
+    MoveWindow(g_inventory_button, margin + PX(210), PX(193), PX(190), PX(34), TRUE);
+    MoveWindow(g_full_sweep_button, margin + PX(410), PX(193), PX(160), PX(34), TRUE);
+    MoveWindow(g_stop_button, margin + PX(580), PX(193), PX(76), PX(34), TRUE);
+    MoveWindow(g_export_button, margin + PX(666), PX(193), PX(160), PX(34), TRUE);
+#else
     MoveWindow(g_inventory_button, margin + PX(210), PX(193), PX(204), PX(34), TRUE);
     MoveWindow(g_stop_button, margin + PX(424), PX(193), PX(86), PX(34), TRUE);
     MoveWindow(g_export_button, margin + PX(520), PX(193), PX(146), PX(34), TRUE);
+#endif
 
     MoveWindow(g_app.status, margin, PX(258), content_width, PX(30), TRUE);
     MoveWindow(g_log_label, margin, PX(284), PX(190), PX(20), TRUE);
@@ -443,6 +453,13 @@ static void create_controls(HWND window)
                                             BS_PUSHBUTTON,
                                         0, 0, 0, 0, window,
                                         (HMENU)(INT_PTR)IDC_INVENTORY, instance, NULL);
+#if LINK_ENABLE_FULL_SWEEP
+    g_full_sweep_button = CreateWindowA("BUTTON", "FULL SWEEP",
+                                        WS_CHILD | WS_VISIBLE | WS_TABSTOP |
+                                            BS_PUSHBUTTON,
+                                        0, 0, 0, 0, window,
+                                        (HMENU)(INT_PTR)IDC_FULL_SWEEP, instance, NULL);
+#endif
     g_stop_button = CreateWindowA("BUTTON", "Stop",
                                    WS_CHILD | WS_VISIBLE | WS_TABSTOP |
                                        BS_PUSHBUTTON,
@@ -487,6 +504,9 @@ static void create_controls(HWND window)
     apply_font(g_browse_button, g_ui_font);
     apply_font(g_connect_button, g_ui_font);
     apply_font(g_inventory_button, g_ui_font);
+#if LINK_ENABLE_FULL_SWEEP
+    apply_font(g_full_sweep_button, g_ui_font);
+#endif
     apply_font(g_stop_button, g_ui_font);
     apply_font(g_export_button, g_ui_font);
     apply_font(g_app.status, g_status_font);
