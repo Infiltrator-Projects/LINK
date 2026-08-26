@@ -1,0 +1,35 @@
+name: Temporary Linux session export compile check
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/session-export-compile-check.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+      - run: sudo apt-get update && sudo apt-get install -y libgtk-4-dev
+      - name: Compile shared GTK shell with warnings as errors
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DLINK_ENABLE_INSTALL=OFF
+          cc -std=c11 -Wall -Wextra -Wpedantic -Wshadow -Wformat=2 -Wstrict-prototypes -Wmissing-prototypes -Werror \
+            $(pkg-config --cflags gtk4) \
+            -Iinclude -Iplatform/linux -Isrc/infiltratr-common/include \
+            -fsyntax-only platform/linux/link-gtk-shell.c
+      - name: Remove temporary workflow
+        run: |
+          rm .github/workflows/session-export-compile-check.yml
+          git config user.name 'Shannon Smith'
+          git config user.email 'infiltratr@yandex.com'
+          git add .github/workflows/session-export-compile-check.yml
+          git commit -m 'Remove temporary session export compile check'
+          git push origin HEAD:main
