@@ -2,6 +2,7 @@
 #ifndef LINK_DISCOVER_H
 #define LINK_DISCOVER_H
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -52,6 +53,59 @@ int link_evidence_write_annotation(link_evidence_writer *writer,
                                    const char *text);
 int link_evidence_flush(link_evidence_writer *writer);
 void link_evidence_close(link_evidence_writer *writer);
+
+/*
+ * Product-neutral exhaustive discovery contract.
+ *
+ * LINK owns iteration, transport, safety enforcement, cancellation, evidence
+ * recording and progress reporting. Product repositories own the actual target
+ * map, probe choices and identity interpretation. This prevents one
+ * manufacturer's CAN assumptions leaking into another product face.
+ */
+#define LINK_DISCOVER_SWEEP_MAX_PAYLOAD 8U
+
+typedef struct link_discover_sweep_target {
+    uint32_t tx_can_id;
+    uint32_t rx_can_id;
+    uint32_t bitrate;
+    bool extended_id;
+} link_discover_sweep_target;
+
+typedef struct link_discover_sweep_probe {
+    uint8_t payload[LINK_DISCOVER_SWEEP_MAX_PAYLOAD];
+    size_t payload_length;
+    const char *annotation;
+} link_discover_sweep_probe;
+
+typedef int (*link_discover_sweep_target_at_fn)(
+    size_t index, link_discover_sweep_target *target);
+
+typedef int (*link_discover_sweep_decode_identity_fn)(
+    const uint8_t *payload, size_t payload_length,
+    char *label, size_t label_capacity);
+
+typedef const char *(*link_discover_sweep_fallback_label_fn)(
+    const link_discover_sweep_target *target);
+
+typedef struct link_discover_sweep_plan {
+    const char *name;
+    size_t target_count;
+    link_discover_sweep_target_at_fn target_at;
+    const link_discover_sweep_probe *presence_probes;
+    size_t presence_probe_count;
+    const link_discover_sweep_probe *identity_probe;
+    link_discover_sweep_decode_identity_fn decode_identity;
+    link_discover_sweep_fallback_label_fn fallback_label;
+} link_discover_sweep_plan;
+
+int link_discover_sweep_target_is_valid(
+    const link_discover_sweep_target *target);
+int link_discover_sweep_plan_is_valid(
+    const link_discover_sweep_plan *plan);
+int link_discover_sweep_plan_target_at(
+    const link_discover_sweep_plan *plan,
+    size_t index,
+    link_discover_sweep_target *target);
 
 #ifdef __cplusplus
 }

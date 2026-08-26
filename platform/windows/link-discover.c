@@ -32,12 +32,6 @@
 #ifndef LINK_ENABLE_FULL_SWEEP
 #define LINK_ENABLE_FULL_SWEEP 0
 #endif
-#ifndef LINK_FULL_SWEEP_LABEL_7E0
-#define LINK_FULL_SWEEP_LABEL_7E0 "Primary powertrain ECU"
-#endif
-#ifndef LINK_FULL_SWEEP_LABEL_7E1
-#define LINK_FULL_SWEEP_LABEL_7E1 "Secondary EOBD powertrain ECU"
-#endif
 
 #define IDC_DLL 1001
 #define IDC_CONNECT 1002
@@ -432,6 +426,12 @@ static void install_obd_flow_filters(void)
 
 
 #if LINK_ENABLE_FULL_SWEEP
+#ifndef LINK_FULL_SWEEP_PLAN_FUNCTION
+#error "LINK_ENABLE_FULL_SWEEP requires LINK_FULL_SWEEP_PLAN_FUNCTION"
+#endif
+
+extern const link_discover_sweep_plan *LINK_FULL_SWEEP_PLAN_FUNCTION(void);
+
 static int full_sweep_cancelled(void)
 {
     return g_app.stop_event != NULL &&
@@ -439,17 +439,19 @@ static int full_sweep_cancelled(void)
 }
 
 static int full_sweep_start_filter(
-    uint32_t tx_id, uint32_t rx_id, int extended, unsigned long *filter_id)
+    const link_discover_sweep_target *target,
+    unsigned long *filter_id)
 {
     PASSTHRU_MSG mask;
     PASSTHRU_MSG pattern;
     PASSTHRU_MSG flow;
-    const uint32_t mask_id = extended ? UINT32_C(0x1fffffff) : UINT32_C(0x7ff);
+    const uint32_t mask_id = target->extended_id
+        ? UINT32_C(0x1fffffff) : UINT32_C(0x7ff);
     unsigned long rc;
 
-    make_iso_msg_ex(&mask, mask_id, extended);
-    make_iso_msg_ex(&pattern, rx_id, extended);
-    make_iso_msg_ex(&flow, tx_id, extended);
+    make_iso_msg_ex(&mask, mask_id, target->extended_id ? 1 : 0);
+    make_iso_msg_ex(&pattern, target->rx_can_id, target->extended_id ? 1 : 0);
+    make_iso_msg_ex(&flow, target->tx_can_id, target->extended_id ? 1 : 0);
     *filter_id = 0UL;
     rc = g_app.api.start_filter(
         g_app.channel_id, J2534_FLOW_CONTROL_FILTER,
@@ -458,7 +460,7 @@ static int full_sweep_start_filter(
 }
 
 static int full_sweep_read_target(
-    uint32_t rx_id,
+    const link_discover_sweep_target *target,
     unsigned long timeout_ms,
     const char *annotation,
     PASSTHRU_MSG *matched)
@@ -475,7 +477,7 @@ static int full_sweep_read_target(
         if (rc != J2534_STATUS_NOERROR && rc != J2534_ERR_TIMEOUT) return 0;
         for (i = 0UL; i < count; ++i) {
             evidence_frame("rx", &rx[i], annotation);
-            if (message_can_id(&rx[i]) == rx_id) {
+            if (message_can_id(&rx[i]) == target->rx_can_id) {
                 if (matched != NULL) *matched = rx[i];
                 return 1;
             }
@@ -484,87 +486,70 @@ static int full_sweep_read_target(
     return 0;
 }
 
-static int full_sweep_extract_f197(
-    const PASSTHRU_MSG *msg, char *label, size_t capacity)
+static void full_sweep_response_payload(
+    const PASSTHRU_MSG *message,
+    const uint8_t **payload,
+    size_t *payload_length)
 {
-    const unsigned char *payload;
-    size_t length;
-    size_t start = SIZE_MAX;
-    size_t i;
-    size_t written = 0U;
-
-    if (msg == NULL || label == NULL || capacity == 0U || msg->DataSize <= 4UL)
-        return 0;
-    label[0] = '\0';
-    payload = msg->Data + 4U;
-    length = (size_t)(msg->DataSize - 4UL);
-    for (i = 0U; i + 2U < length; ++i) {
-        if (payload[i] == 0x62U && payload[i + 1U] == 0xF1U &&
-            payload[i + 2U] == 0x97U) {
-            start = i + 3U;
-            break;
-        }
-    }
-    if (start == SIZE_MAX) return 0;
-    for (i = start; i < length && written + 1U < capacity; ++i) {
-        const unsigned char value = payload[i];
-        if (value == 0U || value == 0xFFU) break;
-        if (value < 0x20U || value > 0x7EU) return 0;
-        label[written++] = (char)value;
-    }
-    while (written != 0U && label[written - 1U] == ' ') --written;
-    label[written] = '\0';
-    return written != 0U;
-}
-
-static const char *full_sweep_fallback_label(uint32_t tx_id, int extended)
-{
-    if (!extended && tx_id == UINT32_C(0x7e0)) return LINK_FULL_SWEEP_LABEL_7E0;
-    if (!extended && tx_id == UINT32_C(0x7e1)) return LINK_FULL_SWEEP_LABEL_7E1;
-    return "Unidentified ECU";
+    if (payload == NULL || payload_length == NULL) return;
+    *payload = NULL;
+    *payload_length = 0U;
+    if (message == NULL || message->DataSize <= 4UL) return;
+    *payload = message->Data + 4U;
+    *payload_length = (size_t)(message->DataSize - 4UL);
 }
 
 static int full_sweep_probe_target(
-    uint32_t tx_id, uint32_t rx_id, int extended)
+    const link_discover_sweep_plan *plan,
+    const link_discover_sweep_target *target)
 {
-    static const unsigned char probes[][3] = {
-        {0x3EU, 0x00U, 0x00U},
-        {0x19U, 0x02U, 0xFFU},
-        {0x22U, 0xF1U, 0x90U}
-    };
-    static const size_t probe_lengths[] = {2U, 3U, 3U};
-    static const unsigned char identity[] = {0x22U, 0xF1U, 0x97U};
     unsigned long filter_id = 0UL;
-    size_t i;
+    size_t probe_index;
     int found = 0;
     char identity_label[96] = "";
     PASSTHRU_MSG matched;
 
-    if (!full_sweep_start_filter(tx_id, rx_id, extended, &filter_id)) return 0;
+    if (!full_sweep_start_filter(target, &filter_id)) return 0;
 
-    for (i = 0U; i < sizeof(probe_lengths) / sizeof(probe_lengths[0]); ++i) {
+    for (probe_index = 0U;
+         probe_index < plan->presence_probe_count;
+         ++probe_index) {
+        const link_discover_sweep_probe *probe =
+            &plan->presence_probes[probe_index];
         if (full_sweep_cancelled()) break;
         if (!send_read_only_target(
-                tx_id, extended, probes[i], probe_lengths[i],
-                "explicit full-sweep read-only diagnostic probe")) {
+                target->tx_can_id, target->extended_id ? 1 : 0,
+                probe->payload, probe->payload_length,
+                probe->annotation)) {
             continue;
         }
         if (full_sweep_read_target(
-                rx_id, 110UL,
-                "explicit full-sweep diagnostic response", &matched)) {
+                target, 110UL, probe->annotation, &matched)) {
             found = 1;
             break;
         }
     }
 
     if (found && !full_sweep_cancelled() &&
-        send_read_only_target(
-            tx_id, extended, identity, sizeof(identity),
-            "explicit full-sweep F197 identity read") &&
-        full_sweep_read_target(
-            rx_id, 180UL, "explicit full-sweep F197 response", &matched)) {
-        (void)full_sweep_extract_f197(
-            &matched, identity_label, sizeof(identity_label));
+        plan->identity_probe != NULL &&
+        plan->decode_identity != NULL) {
+        const link_discover_sweep_probe *identity = plan->identity_probe;
+        if (send_read_only_target(
+                target->tx_can_id, target->extended_id ? 1 : 0,
+                identity->payload, identity->payload_length,
+                identity->annotation) &&
+            full_sweep_read_target(
+                target, 180UL, identity->annotation, &matched)) {
+            const uint8_t *payload = NULL;
+            size_t payload_length = 0U;
+            full_sweep_response_payload(
+                &matched, &payload, &payload_length);
+            if (payload != NULL) {
+                (void)plan->decode_identity(
+                    payload, payload_length,
+                    identity_label, sizeof(identity_label));
+            }
+        }
     }
 
     if (g_app.api.stop_filter != NULL && filter_id != 0UL)
@@ -572,29 +557,40 @@ static int full_sweep_probe_target(
 
     if (found) {
         const char *label = identity_label[0] != '\0'
-            ? identity_label : full_sweep_fallback_label(tx_id, extended);
-        if (extended) {
+            ? identity_label
+            : (plan->fallback_label != NULL
+                ? plan->fallback_label(target)
+                : "Unidentified ECU");
+        if (label == NULL || label[0] == '\0') label = "Unidentified ECU";
+        if (target->extended_id) {
             post_logf("FULL SWEEP FOUND: %s  0x%08lX -> 0x%08lX",
-                      label, (unsigned long)tx_id, (unsigned long)rx_id);
+                      label,
+                      (unsigned long)target->tx_can_id,
+                      (unsigned long)target->rx_can_id);
         } else {
             post_logf("FULL SWEEP FOUND: %s  0x%03lX -> 0x%03lX",
-                      label, (unsigned long)tx_id, (unsigned long)rx_id);
+                      label,
+                      (unsigned long)target->tx_can_id,
+                      (unsigned long)target->rx_can_id);
         }
     }
     return found;
 }
 
-static int full_sweep_connect_iso15765(int extended)
+static int full_sweep_connect_iso15765(
+    const link_discover_sweep_target *target)
 {
     unsigned long rc;
     disconnect_channel();
     rc = g_app.api.connect(
         g_app.device_id, J2534_ISO15765,
-        extended ? J2534_CAN_29BIT_ID : 0UL,
-        500000UL, &g_app.channel_id);
+        target->extended_id ? J2534_CAN_29BIT_ID : 0UL,
+        (unsigned long)target->bitrate, &g_app.channel_id);
     if (rc != J2534_STATUS_NOERROR) {
-        post_logf("FULL SWEEP PassThruConnect(%s) failed: 0x%08lX",
-                  extended ? "29-bit ISO15765" : "11-bit ISO15765", rc);
+        post_logf(
+            "FULL SWEEP PassThruConnect(%s, %lu bit/s) failed: 0x%08lX",
+            target->extended_id ? "29-bit ISO15765" : "11-bit ISO15765",
+            (unsigned long)target->bitrate, rc);
         g_app.channel_id = 0UL;
         return 0;
     }
@@ -603,38 +599,50 @@ static int full_sweep_connect_iso15765(int extended)
 
 static DWORD WINAPI full_sweep_worker(LPVOID unused)
 {
-    uint32_t tx;
-    unsigned int target;
+    const link_discover_sweep_plan *plan =
+        LINK_FULL_SWEEP_PLAN_FUNCTION();
+    size_t index;
     size_t found = 0U;
+    int connected_extended = -1;
+    uint32_t connected_bitrate = 0U;
     (void)unused;
 
-    post_status("FULL SWEEP - 11-bit Mercedes diagnostic range 0x600-0x7F7");
-    post_logf("FULL SWEEP started: explicit read-only 11-bit and 29-bit diagnostic discovery.");
-
-    if (full_sweep_connect_iso15765(0)) {
-        for (tx = UINT32_C(0x600); tx <= UINT32_C(0x7f7); ++tx) {
-            if (full_sweep_cancelled()) break;
-            found += (size_t)full_sweep_probe_target(tx, tx + UINT32_C(8), 0);
-            if (((tx - UINT32_C(0x600)) & UINT32_C(0x1f)) == 0U)
-                post_logf("FULL SWEEP progress: 11-bit target 0x%03lX",
-                          (unsigned long)tx);
-        }
+    if (!link_discover_sweep_plan_is_valid(plan)) {
+        post_status("FULL SWEEP unavailable - invalid product sweep plan");
+        post_logf("FULL SWEEP rejected an invalid product-owned sweep plan.");
+        return 0U;
     }
 
-    if (!full_sweep_cancelled()) {
-        post_status("FULL SWEEP - ISO 15765 normal-fixed 29-bit targets");
-        if (full_sweep_connect_iso15765(1)) {
-            for (target = 0U; target <= 0xFFU; ++target) {
-                uint32_t tx_id;
-                uint32_t rx_id;
-                if (target == 0xF1U) continue;
-                if (full_sweep_cancelled()) break;
-                tx_id = UINT32_C(0x18da00f1) | ((uint32_t)target << 8U);
-                rx_id = UINT32_C(0x18daf100) | (uint32_t)target;
-                found += (size_t)full_sweep_probe_target(tx_id, rx_id, 1);
-                if ((target & 0x1FU) == 0U)
-                    post_logf("FULL SWEEP progress: 29-bit target 0x%02X", target);
-            }
+    {
+        char status[192];
+        (void)snprintf(status, sizeof(status),
+                       "FULL SWEEP - %s", plan->name);
+        post_status(status);
+    }
+    post_logf(
+        "FULL SWEEP started: %s (%lu product-defined diagnostic targets).",
+        plan->name, (unsigned long)plan->target_count);
+
+    for (index = 0U; index < plan->target_count; ++index) {
+        link_discover_sweep_target target;
+        if (full_sweep_cancelled()) break;
+        if (!link_discover_sweep_plan_target_at(plan, index, &target)) {
+            post_logf("FULL SWEEP plan target %lu was invalid; scan stopped.",
+                      (unsigned long)index);
+            break;
+        }
+        if (connected_extended != (target.extended_id ? 1 : 0) ||
+            connected_bitrate != target.bitrate ||
+            g_app.channel_id == 0UL) {
+            if (!full_sweep_connect_iso15765(&target)) break;
+            connected_extended = target.extended_id ? 1 : 0;
+            connected_bitrate = target.bitrate;
+        }
+        found += (size_t)full_sweep_probe_target(plan, &target);
+        if ((index & 0x1fU) == 0U || index + 1U == plan->target_count) {
+            post_logf("FULL SWEEP progress: target %lu/%lu",
+                      (unsigned long)(index + 1U),
+                      (unsigned long)plan->target_count);
         }
     }
 
@@ -644,7 +652,7 @@ static DWORD WINAPI full_sweep_worker(LPVOID unused)
         post_logf("FULL SWEEP cancelled after %lu responder(s).",
                   (unsigned long)found);
     } else {
-        char status[160];
+        char status[192];
         (void)snprintf(status, sizeof(status),
                        "FULL SWEEP complete - %lu responder(s) - reconnect passive capture when ready",
                        (unsigned long)found);
@@ -657,6 +665,16 @@ static DWORD WINAPI full_sweep_worker(LPVOID unused)
 
 static void run_full_sweep(void)
 {
+    const link_discover_sweep_plan *plan =
+        LINK_FULL_SWEEP_PLAN_FUNCTION();
+
+    if (!link_discover_sweep_plan_is_valid(plan)) {
+        MessageBoxA(g_app.window,
+                    "This product does not provide a valid full-sweep plan.",
+                    LINK_PRODUCT_NAME " Discover",
+                    MB_OK | MB_ICONERROR);
+        return;
+    }
     if (g_app.device_id == 0UL) {
         MessageBoxA(g_app.window,
                     "Connect to the OpenPort/J2534 device first.",

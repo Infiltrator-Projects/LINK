@@ -98,6 +98,7 @@ add_library(link-core STATIC
     src/uds/uds.c
     src/uds/uds_services.c
     src/discover/safety.c
+    src/discover/sweep.c
     src/discover/evidence.c
     src/discover/ecu_probe.c)
 add_library(LINK::Core ALIAS link-core)
@@ -152,7 +153,8 @@ function(link_add_windows_discover target)
     else()
         set(one_value_args
             PRODUCT_NAME PRODUCT_SLUG WINDOW_CLASS PRODUCT_VERSION
-            PRODUCT_COPYRIGHT PRODUCT_SUBTITLE PRODUCT_WEBSITE PRODUCT_ICON_PNG)
+            PRODUCT_COPYRIGHT PRODUCT_SUBTITLE PRODUCT_WEBSITE PRODUCT_ICON_PNG
+            FULL_SWEEP_PLAN_FUNCTION)
         cmake_parse_arguments(LINK_FACE "" "${one_value_args}" "" ${ARGN})
         if(LINK_FACE_UNPARSED_ARGUMENTS)
             message(FATAL_ERROR "Unknown link_add_windows_discover arguments: ${LINK_FACE_UNPARSED_ARGUMENTS}")
@@ -192,6 +194,11 @@ function(link_add_windows_discover target)
         LINK_PRODUCT_COPYRIGHT="${LINK_FACE_PRODUCT_COPYRIGHT}"
         LINK_PRODUCT_SUBTITLE="${LINK_FACE_PRODUCT_SUBTITLE}"
         LINK_PRODUCT_WEBSITE="${LINK_FACE_PRODUCT_WEBSITE}")
+    if(LINK_FACE_FULL_SWEEP_PLAN_FUNCTION)
+        target_compile_definitions(${target} PRIVATE
+            LINK_ENABLE_FULL_SWEEP=1
+            LINK_FULL_SWEEP_PLAN_FUNCTION=${LINK_FACE_FULL_SWEEP_PLAN_FUNCTION})
+    endif()
     if(MSVC)
         set_property(TARGET ${target} PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
         target_compile_options(${target} PRIVATE /W4 /WX /utf-8)
@@ -289,6 +296,7 @@ if(BUILD_TESTING AND PROJECT_IS_TOP_LEVEL)
     link_add_test(link-test-dtc-knowledge tests/test_dtc_knowledge.c link-dtc-knowledge)
     link_add_test(link-test-uds tests/test_uds.c link-uds)
     link_add_test(link-test-discover-safety tests/test_discover_safety.c link-discover-safety)
+    link_add_test(link-test-discover-sweep tests/test_discover_sweep.c link-discover-sweep)
     link_add_test(link-test-evidence tests/test_evidence.c link-evidence)
     link_add_test(link-test-ecu-probe tests/test_ecu_probe.c link-ecu-probe)
 endif()
