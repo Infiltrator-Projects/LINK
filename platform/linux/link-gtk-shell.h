@@ -55,6 +55,14 @@ typedef struct LinkGtkShellDescriptor {
                                bool ready,
                                void *context);
     void (*append_session_state_json)(GString *json, void *context);
+    /*
+     * Optional product action that deliberately restarts the active diagnostic
+     * session after the callback marks product-owned state (for example,
+     * requesting an exhaustive manufacturer sweep). The shell owns the restart
+     * so products never reach into ELM327 session internals.
+     */
+    const char *diagnostic_restart_action_label;
+    void (*diagnostic_restart_action)(void *context);
     const LinkGtkManufacturerExtension *manufacturer_extension;
     void *context;
 } LinkGtkShellDescriptor;
