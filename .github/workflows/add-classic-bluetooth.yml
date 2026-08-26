@@ -20,7 +20,9 @@ jobs:
       - name: Install Linux build dependencies
         run: sudo apt-get update && sudo apt-get install -y libgtk-4-dev libbluetooth-dev
       - name: Apply transport repair
-        run: python3 .github/apply-classic-bluetooth.py
+        run: |
+          python3 .github/fix-classic-script.py
+          python3 .github/apply-classic-bluetooth.py
       - name: Build and test
         run: |
           git diff --check
@@ -30,7 +32,7 @@ jobs:
           ctest --test-dir build --output-on-failure
       - name: Publish repaired main
         run: |
-          rm -f .github/workflows/add-classic-bluetooth.yml .github/apply-classic-bluetooth.py
+          rm -f .github/workflows/add-classic-bluetooth.yml .github/apply-classic-bluetooth.py .github/fix-classic-script.py
           git config user.name 'Shannon Smith'
           git config user.email 'infiltratr@yandex.com'
           git add -A
