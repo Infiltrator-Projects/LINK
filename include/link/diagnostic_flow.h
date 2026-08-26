@@ -42,6 +42,7 @@ typedef enum {
     LINK_DIAGNOSTIC_FLOW_IDLE = 0,
     LINK_DIAGNOSTIC_FLOW_INITIALIZING,
     LINK_DIAGNOSTIC_FLOW_DISCOVERING_PIDS,
+    LINK_DIAGNOSTIC_FLOW_READING_STANDARD_VIN,
     LINK_DIAGNOSTIC_FLOW_MANUFACTURER_EXTENSION,
     LINK_DIAGNOSTIC_FLOW_RESTORING_AFTER_MANUFACTURER,
     LINK_DIAGNOSTIC_FLOW_SCANNING_STORED_DTCS,
@@ -65,6 +66,7 @@ typedef enum {
     LINK_DIAGNOSTIC_FLOW_EVENT_NONE = 0,
     LINK_DIAGNOSTIC_FLOW_EVENT_ADAPTER_IDENTIFIED,
     LINK_DIAGNOSTIC_FLOW_EVENT_PID_DISCOVERY_COMPLETE,
+    LINK_DIAGNOSTIC_FLOW_EVENT_STANDARD_VIN,
     LINK_DIAGNOSTIC_FLOW_EVENT_DTC_LIST,
     LINK_DIAGNOSTIC_FLOW_EVENT_LIVE_SAMPLE,
     LINK_DIAGNOSTIC_FLOW_EVENT_LIVE_NO_DATA,
@@ -103,6 +105,8 @@ typedef struct {
     LinkDiagnosticFlowEventKind kind;
     LinkObd2DtcKind dtc_kind;
     const LinkObd2DtcList *dtc_list;
+    const char *vin;
+    bool vin_available;
     LinkObd2Sample sample;
     bool became_ready;
 } LinkDiagnosticFlowEvent;
@@ -116,6 +120,9 @@ typedef struct {
     LinkSchedulerResult scheduler_failure;
     LinkElm327InitState initialization;
     LinkObd2PidSet supported_pids;
+    char standard_vin[LINK_OBD2_VIN_LENGTH + 1U];
+    bool standard_vin_attempted;
+    bool standard_vin_available;
     LinkObd2DtcList stored_dtcs;
     LinkObd2DtcList pending_dtcs;
     LinkObd2DtcList permanent_dtcs;
@@ -170,6 +177,8 @@ const LinkObd2DtcList *link_diagnostic_flow_dtcs(
     const LinkDiagnosticFlow *flow,
     LinkObd2DtcKind kind);
 const char *link_diagnostic_flow_adapter_identifier(
+    const LinkDiagnosticFlow *flow);
+const char *link_diagnostic_flow_standard_vin(
     const LinkDiagnosticFlow *flow);
 
 #ifdef __cplusplus

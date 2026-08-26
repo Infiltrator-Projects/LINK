@@ -106,9 +106,25 @@ static int test_standard_sequence(void)
               &flow, &response, 500U, &event) ==
           LINK_DIAGNOSTIC_FLOW_RESULT_OK);
     CHECK(event.kind == LINK_DIAGNOSTIC_FLOW_EVENT_PID_DISCOVERY_COMPLETE);
-    CHECK(flow.stage == LINK_DIAGNOSTIC_FLOW_SCANNING_STORED_DTCS);
+    CHECK(flow.stage == LINK_DIAGNOSTIC_FLOW_READING_STANDARD_VIN);
     CHECK(link_obd2_pid_set_contains(
         link_diagnostic_flow_supported_pids(&flow), 0x0cU));
+
+    CHECK(link_diagnostic_flow_next_action(&flow, 550U, &action) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(strcmp(action.command, "0902") == 0);
+    response = response_ok(
+        "014\n0:490201574646\n1:315858474344\n2:414139393030\n3:30303031", false);
+    CHECK(link_diagnostic_flow_accept_response(
+              &flow, &response, 550U, &event) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(event.kind == LINK_DIAGNOSTIC_FLOW_EVENT_STANDARD_VIN);
+    CHECK(event.vin_available);
+    CHECK(event.vin != NULL);
+    CHECK(strcmp(event.vin, "WF61XXGCDAA990001") == 0);
+    CHECK(strcmp(link_diagnostic_flow_standard_vin(&flow),
+                 "WF61XXGCDAA990001") == 0);
+    CHECK(flow.stage == LINK_DIAGNOSTIC_FLOW_SCANNING_STORED_DTCS);
 
     CHECK(link_diagnostic_flow_next_action(&flow, 600U, &action) ==
           LINK_DIAGNOSTIC_FLOW_RESULT_OK);
@@ -183,9 +199,22 @@ static int test_manufacturer_extension_restore(void)
     CHECK(link_diagnostic_flow_accept_response(
               &flow, &response, 500U, &event) ==
           LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(flow.stage == LINK_DIAGNOSTIC_FLOW_READING_STANDARD_VIN);
+    CHECK(link_diagnostic_flow_next_action(&flow, 510U, &action) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(strcmp(action.command, "0902") == 0);
+    response = response_no_data();
+    CHECK(link_diagnostic_flow_accept_response(
+              &flow, &response, 510U, &event) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(event.kind == LINK_DIAGNOSTIC_FLOW_EVENT_STANDARD_VIN);
+    CHECK(!event.vin_available);
+    CHECK(event.vin == NULL);
+    CHECK(flow.standard_vin_attempted);
+    CHECK(link_diagnostic_flow_standard_vin(&flow) == NULL);
     CHECK(flow.stage == LINK_DIAGNOSTIC_FLOW_MANUFACTURER_EXTENSION);
 
-    CHECK(link_diagnostic_flow_next_action(&flow, 500U, &action) ==
+    CHECK(link_diagnostic_flow_next_action(&flow, 520U, &action) ==
           LINK_DIAGNOSTIC_FLOW_RESULT_OK);
     CHECK(action.kind == LINK_DIAGNOSTIC_FLOW_ACTION_MANUFACTURER_EXTENSION);
     CHECK(link_diagnostic_flow_resume_after_manufacturer(&flow) ==
@@ -215,8 +244,14 @@ static int test_manufacturer_extension_after_standard_dtcs(void)
     CHECK(strcmp(action.command, "0100") == 0);
     response = response_ok("410000000000", false);
     CHECK(link_diagnostic_flow_accept_response(&flow, &response, 500U, &event) == LINK_DIAGNOSTIC_FLOW_RESULT_OK);
-    CHECK(flow.stage == LINK_DIAGNOSTIC_FLOW_SCANNING_STORED_DTCS);
+    CHECK(flow.stage == LINK_DIAGNOSTIC_FLOW_READING_STANDARD_VIN);
+    CHECK(link_diagnostic_flow_next_action(&flow, 550U, &action) == LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(strcmp(action.command, "0902") == 0);
     response = response_no_data();
+    CHECK(link_diagnostic_flow_accept_response(&flow, &response, 550U, &event) == LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(event.kind == LINK_DIAGNOSTIC_FLOW_EVENT_STANDARD_VIN);
+    CHECK(!event.vin_available);
+    CHECK(flow.stage == LINK_DIAGNOSTIC_FLOW_SCANNING_STORED_DTCS);
     CHECK(link_diagnostic_flow_next_action(&flow, 600U, &action) == LINK_DIAGNOSTIC_FLOW_RESULT_OK);
     CHECK(strcmp(action.command, "03") == 0);
     CHECK(link_diagnostic_flow_accept_response(&flow, &response, 600U, &event) == LINK_DIAGNOSTIC_FLOW_RESULT_OK);

@@ -138,6 +138,7 @@ const char *link_diagnostic_flow_stage_name(LinkDiagnosticFlowStage stage)
     case LINK_DIAGNOSTIC_FLOW_IDLE: return "idle";
     case LINK_DIAGNOSTIC_FLOW_INITIALIZING: return "initializing";
     case LINK_DIAGNOSTIC_FLOW_DISCOVERING_PIDS: return "discovering-pids";
+    case LINK_DIAGNOSTIC_FLOW_READING_STANDARD_VIN: return "reading-standard-vin";
     case LINK_DIAGNOSTIC_FLOW_MANUFACTURER_EXTENSION: return "manufacturer-extension";
     case LINK_DIAGNOSTIC_FLOW_RESTORING_AFTER_MANUFACTURER: return "restoring-after-manufacturer";
     case LINK_DIAGNOSTIC_FLOW_SCANNING_STORED_DTCS: return "scanning-stored-dtcs";
@@ -239,6 +240,14 @@ LinkDiagnosticFlowResult link_diagnostic_flow_next_action(
     case LINK_DIAGNOSTIC_FLOW_DISCOVERING_PIDS:
         obd2_result = link_obd2_build_supported_pid_request(
             flow->supported_pid_base, command, sizeof(command));
+        if (obd2_result != LINK_OBD2_RESULT_OK) {
+            return flow_fail_obd2(flow, obd2_result);
+        }
+        return flow_emit_command(
+            flow, action, command, flow->config.query_timeout_ms);
+
+    case LINK_DIAGNOSTIC_FLOW_READING_STANDARD_VIN:
+        obd2_result = link_obd2_build_vin_request(command, sizeof(command));
         if (obd2_result != LINK_OBD2_RESULT_OK) {
             return flow_fail_obd2(flow, obd2_result);
         }
@@ -379,11 +388,37 @@ LinkDiagnosticFlowResult link_diagnostic_flow_accept_response(
             flow->supported_pid_base =
                 (uint8_t)(flow->supported_pid_base + 0x20U);
         } else {
-            flow->stage = flow->config.manufacturer_extension_after_pid_discovery
-                ? LINK_DIAGNOSTIC_FLOW_MANUFACTURER_EXTENSION
-                : LINK_DIAGNOSTIC_FLOW_SCANNING_STORED_DTCS;
+            flow->stage = LINK_DIAGNOSTIC_FLOW_READING_STANDARD_VIN;
             event->kind = LINK_DIAGNOSTIC_FLOW_EVENT_PID_DISCOVERY_COMPLETE;
         }
+        return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
+    }
+
+    if (stage == LINK_DIAGNOSTIC_FLOW_READING_STANDARD_VIN) {
+        LinkObd2Result result = LINK_OBD2_RESULT_OK;
+
+        flow->standard_vin_attempted = true;
+        flow->standard_vin_available = false;
+        flow->standard_vin[0] = '\0';
+
+        if (response->result != LINK_ELM327_RESULT_NO_DATA) {
+            result = link_obd2_decode_vin(response, flow->standard_vin);
+            if (result == LINK_OBD2_RESULT_OK) {
+                flow->standard_vin_available = true;
+            } else if (result != LINK_OBD2_RESULT_UNEXPECTED_RESPONSE &&
+                       result != LINK_OBD2_RESULT_MALFORMED_RESPONSE &&
+                       result != LINK_OBD2_RESULT_ELM_ERROR) {
+                return flow_fail_obd2(flow, result);
+            }
+        }
+
+        event->kind = LINK_DIAGNOSTIC_FLOW_EVENT_STANDARD_VIN;
+        event->vin_available = flow->standard_vin_available;
+        event->vin = flow->standard_vin_available
+            ? flow->standard_vin : NULL;
+        flow->stage = flow->config.manufacturer_extension_after_pid_discovery
+            ? LINK_DIAGNOSTIC_FLOW_MANUFACTURER_EXTENSION
+            : LINK_DIAGNOSTIC_FLOW_SCANNING_STORED_DTCS;
         return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
     }
 
@@ -534,4 +569,14 @@ const char *link_diagnostic_flow_adapter_identifier(
         return NULL;
     }
     return flow->initialization.adapter_id;
+}
+
+const char *link_diagnostic_flow_standard_vin(
+    const LinkDiagnosticFlow *flow)
+{
+    if (flow == NULL || !flow->standard_vin_available ||
+        flow->standard_vin[0] == '\0') {
+        return NULL;
+    }
+    return flow->standard_vin;
 }
