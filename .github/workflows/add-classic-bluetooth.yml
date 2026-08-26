@@ -1,4 +1,5 @@
 name: Temporary dual-mode Bluetooth repair
+# retry after SDP protocol-list correction
 
 on:
   push:
