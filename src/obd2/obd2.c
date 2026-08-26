@@ -205,10 +205,10 @@ static LinkObd2Result obd2_collect_indexed_message(
     }
 
     if (*found) {
-        if (written == 0U || (declared_length_seen && written != declared_length)) {
+        if (written == 0U || (declared_length_seen && written < declared_length)) {
             return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
         }
-        *message_length = written;
+        *message_length = declared_length_seen ? declared_length : written;
     }
     return LINK_OBD2_RESULT_OK;
 }
