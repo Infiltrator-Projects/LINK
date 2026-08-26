@@ -37,7 +37,6 @@ typedef struct {
 
 typedef struct {
     uint8_t availability_mask;
-    uint8_t format_identifier;
     size_t count;
     bool truncated;
     LinkUdsDtcRecord records[LINK_UDS_DTC_MAX_RECORDS];
@@ -79,14 +78,18 @@ static inline LinkUdsResult link_uds_decode_report_dtcs_by_status_mask_response(
     result = link_uds_decode_response(LINK_UDS_SERVICE_READ_DTC_INFORMATION,
                                       pdu, pdu_length, &generic);
     if (result != LINK_UDS_RESULT_OK) return result;
-    if (generic.data_length < 3U) return LINK_UDS_RESULT_MALFORMED_PDU;
+    if (generic.data_length < 2U) return LINK_UDS_RESULT_MALFORMED_PDU;
     if (generic.data[0] != LINK_UDS_DTC_REPORT_BY_STATUS_MASK) {
         return LINK_UDS_RESULT_UNEXPECTED_RESPONSE;
     }
 
+    /*
+     * ISO 14229-1 ReportDTCByStatusMask positive response is:
+     *   59 02 DTCStatusAvailabilityMask [DTCAndStatusRecord...]
+     * There is no DTCFormatIdentifier byte for sub-function 0x02.
+     */
     decoded.availability_mask = generic.data[1];
-    decoded.format_identifier = generic.data[2];
-    record_bytes = generic.data_length - 3U;
+    record_bytes = generic.data_length - 2U;
     if ((record_bytes % 4U) != 0U) return LINK_UDS_RESULT_MALFORMED_PDU;
 
     record_count = record_bytes / 4U;
@@ -94,7 +97,7 @@ static inline LinkUdsResult link_uds_decode_report_dtcs_by_status_mask_response(
     if (record_count > LINK_UDS_DTC_MAX_RECORDS) record_count = LINK_UDS_DTC_MAX_RECORDS;
 
     for (index = 0U; index < record_count; ++index) {
-        const uint8_t *record = generic.data + 3U + (index * 4U);
+        const uint8_t *record = generic.data + 2U + (index * 4U);
         decoded.records[index].code =
             ((uint32_t)record[0] << 16U) |
             ((uint32_t)record[1] << 8U) |

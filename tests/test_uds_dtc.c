@@ -34,7 +34,7 @@ static int test_build_request(void)
 static int test_decode_records(void)
 {
     const uint8_t pdu[] = {
-        0x59U, 0x02U, 0xffU, 0x01U,
+        0x59U, 0x02U, 0xffU,
         0x12U, 0x34U, 0x56U, 0x09U,
         0xabU, 0xcdU, 0xefU, 0x28U
     };
@@ -45,7 +45,6 @@ static int test_decode_records(void)
     CHECK(link_uds_decode_report_dtcs_by_status_mask_response(
               pdu, sizeof(pdu), &list) == LINK_UDS_RESULT_OK);
     CHECK(list.availability_mask == 0xffU);
-    CHECK(list.format_identifier == 0x01U);
     CHECK(list.count == 2U && !list.truncated);
     CHECK(list.records[0].code == UINT32_C(0x123456));
     CHECK(list.records[0].status == 0x09U);
@@ -62,10 +61,10 @@ static int test_decode_records(void)
 
 static int test_invalid_responses(void)
 {
-    const uint8_t empty[] = {0x59U, 0x02U, 0xffU, 0x01U};
-    const uint8_t wrong_subfunction[] = {0x59U, 0x0aU, 0xffU, 0x01U};
-    const uint8_t truncated[] = {0x59U, 0x02U, 0xffU};
-    const uint8_t partial_record[] = {0x59U, 0x02U, 0xffU, 0x01U, 0x12U, 0x34U};
+    const uint8_t empty[] = {0x59U, 0x02U, 0xffU};
+    const uint8_t wrong_subfunction[] = {0x59U, 0x0aU, 0xffU};
+    const uint8_t truncated[] = {0x59U, 0x02U};
+    const uint8_t partial_record[] = {0x59U, 0x02U, 0xffU, 0x12U, 0x34U};
     const uint8_t negative[] = {0x7fU, 0x19U, 0x31U};
     LinkUdsDtcList list;
 

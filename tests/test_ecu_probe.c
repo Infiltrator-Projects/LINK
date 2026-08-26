@@ -104,7 +104,7 @@ int main(void)
     CHECK(link_ecu_probe_command(&probe, command, sizeof(command), &written) ==
           LINK_ECU_PROBE_RESULT_OK);
     CHECK(strcmp(command, "1902FF") == 0);
-    response = ok_response("7F1978\n5902FF0112345609");
+    response = ok_response("7F1978\n5902FF12345609");
     CHECK(link_ecu_probe_accept(&probe, &response) ==
           LINK_ECU_PROBE_RESULT_COMPLETE);
     CHECK(probe.stage == LINK_ECU_PROBE_STAGE_COMPLETE);
