@@ -1492,6 +1492,7 @@ int32_t PassThruReadVersion(const unsigned long DeviceID, char *pFirmwareVersion
 	snprintf(dll_ver, MAX_LEN, "%s", DLL_VERSION);
 #endif
 	int failed = FALSE;
+	pFirmwareVersion[0] = '\0';
 	if (fw_version[0] != 0)
 	{
 		char *pos = strrchr(fw_version, ':');
@@ -1506,7 +1507,7 @@ int32_t PassThruReadVersion(const unsigned long DeviceID, char *pFirmwareVersion
 		else
 			failed = TRUE;
 	}
-	if (failed)
+	if (failed || pFirmwareVersion[0] == '\0')
 		strcpy(pFirmwareVersion, "unavailable");
 
 	strcpy(pDllVersion, dll_ver);

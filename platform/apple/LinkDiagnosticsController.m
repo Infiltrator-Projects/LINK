@@ -27,6 +27,8 @@
 - (void)stopTickTimer;
 - (BOOL)beginCommand:(const char *)command timeout:(uint64_t)timeoutMs;
 - (void)notifyManufacturerFailure:(NSString *)status;
+- (void)recoverManufacturerExtensionAfterFailure:(NSString *)status;
+- (void)finishManufacturerRecovery;
 - (void)handleSessionEvent:(const LinkElm327Session *)session;
 - (void)processCompletedResponse;
 - (BOOL)applyFlowEvent:(const LinkDiagnosticFlowEvent *)event;
@@ -39,6 +41,7 @@
     BOOL _sessionInitialized;
     BOOL _simulated;
     BOOL _manufacturerExtensionActive;
+    BOOL _manufacturerRecoveryActive;
     LinkElm327Simulator _simulator;
     LinkDiagnosticFlow _flow;
     LinkDiagnosticFlowConfig _flowConfig;
@@ -218,6 +221,7 @@ static void LinkAppleSessionEvent(
     self.pendingDTCs = @[];
     self.permanentDTCs = @[];
     _manufacturerExtensionActive = NO;
+    _manufacturerRecoveryActive = NO;
 
     (void)link_diagnostic_flow_init(&_flow, &_flowConfig);
     link_telemetry_store_clear_samples(&_telemetry);
@@ -300,6 +304,7 @@ static void LinkAppleSessionEvent(
 
     (void)link_diagnostic_flow_init(&_flow, &_flowConfig);
     _manufacturerExtensionActive = NO;
+    _manufacturerRecoveryActive = NO;
     _simulated = NO;
     self.active = NO;
     self.ready = NO;
@@ -455,6 +460,50 @@ static void LinkAppleSessionEvent(
     }
 }
 
+- (void)recoverManufacturerExtensionAfterFailure:(NSString *)status
+{
+    if (!_manufacturerExtensionActive || !_sessionInitialized) return;
+
+    [self notifyManufacturerFailure:status];
+    _manufacturerExtensionActive = NO;
+    _manufacturerRecoveryActive = YES;
+    _flow.config.restore_adapter_after_manufacturer_extension = true;
+
+    LinkDiagnosticFlowResult flowResult =
+        link_diagnostic_flow_resume_after_manufacturer(&_flow);
+    if (flowResult != LINK_DIAGNOSTIC_FLOW_RESULT_OK) {
+        _manufacturerRecoveryActive = NO;
+        [self failWithStatus:
+            @"Manufacturer scan stopped and shared flow could not resume"];
+        return;
+    }
+
+    LinkElm327SessionOpResult sessionResult =
+        link_elm327_session_begin_resynchronization(
+            &_session, LinkAppleMonotonicMilliseconds(), UINT64_C(2500));
+    if (sessionResult != LINK_ELM327_SESSION_OP_OK) {
+        _manufacturerRecoveryActive = NO;
+        link_diagnostic_flow_fail(
+            &_flow, LINK_DIAGNOSTIC_FLOW_RESULT_ELM_ERROR);
+        [self setSharedStatus:[NSString stringWithFormat:
+            @"Manufacturer scan stopped; adapter resynchronisation could not start: %@",
+            LinkAppleStringFromCString(
+                link_elm327_session_op_result_name(sessionResult))]];
+        return;
+    }
+    [self setSharedStatus:
+        @"Manufacturer scan interrupted; resynchronising adapter"];
+}
+
+- (void)finishManufacturerRecovery
+{
+    if (!_manufacturerRecoveryActive) return;
+    _manufacturerRecoveryActive = NO;
+    [self setSharedStatus:
+        @"Manufacturer scan interrupted; continuing standard diagnostics"];
+    [self driveDiagnosticFlow];
+}
+
 - (void)handleSessionEvent:(const LinkElm327Session *)session
 {
     if (session == NULL) return;
@@ -465,17 +514,38 @@ static void LinkAppleSessionEvent(
         return;
     }
 
+    if (session->status == LINK_ELM327_SESSION_RESYNCHRONIZED) {
+        if (_manufacturerRecoveryActive) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [self finishManufacturerRecovery];
+            });
+        }
+        return;
+    }
+
     if (session->status == LINK_ELM327_SESSION_TIMED_OUT) {
+        if (_manufacturerExtensionActive) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [self recoverManufacturerExtensionAfterFailure:
+                    @"Manufacturer diagnostic request timed out"];
+            });
+            return;
+        }
+        if (_manufacturerRecoveryActive) {
+            _manufacturerRecoveryActive = NO;
+            _flow.elm_failure = session->elm_result;
+            link_diagnostic_flow_fail(
+                &_flow, LINK_DIAGNOSTIC_FLOW_RESULT_ELM_ERROR);
+            [self setSharedStatus:
+                @"Adapter resynchronisation timed out; reconnect required"];
+            return;
+        }
         if (LinkAppleFlowIsFaultScan(&_flow))
             self.faultScanStatusText =
                 @"Fault scan timed out; reconnect required";
         _flow.elm_failure = session->elm_result;
         link_diagnostic_flow_fail(
             &_flow, LINK_DIAGNOSTIC_FLOW_RESULT_ELM_ERROR);
-        if (_manufacturerExtensionActive)
-            [self notifyManufacturerFailure:
-                @"Manufacturer diagnostic request timed out"];
-        _manufacturerExtensionActive = NO;
         [self setSharedStatus:
             @"Diagnostic request timed out; reconnect to resynchronise"];
         return;
@@ -484,6 +554,15 @@ static void LinkAppleSessionEvent(
     if (session->status == LINK_ELM327_SESSION_FAILED) {
         NSString *reason = LinkAppleStringFromCString(
             link_elm327_result_name(session->elm_result));
+        if (_manufacturerExtensionActive && session->needs_resync) {
+            NSString *status = [NSString stringWithFormat:
+                @"Manufacturer diagnostic adapter error: %@", reason];
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [self recoverManufacturerExtensionAfterFailure:status];
+            });
+            return;
+        }
+        if (_manufacturerRecoveryActive) _manufacturerRecoveryActive = NO;
         if (LinkAppleFlowIsFaultScan(&_flow)) {
             self.faultScanStatusText = [NSString stringWithFormat:
                 @"Fault scan adapter error: %@", reason];
@@ -507,6 +586,7 @@ static void LinkAppleSessionEvent(
             [self notifyManufacturerFailure:
                 @"Manufacturer diagnostic request cancelled"];
         _manufacturerExtensionActive = NO;
+        _manufacturerRecoveryActive = NO;
         [self setSharedStatus:@"Diagnostic request cancelled"];
     }
 }
@@ -790,6 +870,7 @@ static void LinkAppleSessionEvent(
     if (!_manufacturerExtensionActive) return NO;
 
     _manufacturerExtensionActive = NO;
+    _manufacturerRecoveryActive = NO;
     _flow.config.restore_adapter_after_manufacturer_extension = restore;
     LinkDiagnosticFlowResult result =
         link_diagnostic_flow_resume_after_manufacturer(&_flow);
@@ -811,6 +892,7 @@ static void LinkAppleSessionEvent(
     link_diagnostic_flow_fail(
         &_flow, LINK_DIAGNOSTIC_FLOW_RESULT_INVALID_STATE);
     _manufacturerExtensionActive = NO;
+    _manufacturerRecoveryActive = NO;
     self.ready = NO;
     [self setSharedStatus:status];
 }
