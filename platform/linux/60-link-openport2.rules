@@ -1,0 +1,5 @@
+# LINK native Tactrix OpenPort 2.0 access
+# Tactrix/OpenPort USB VID:PID 0403:cc4d.
+# TAG+="uaccess" grants the active desktop seat access; dialout retains the
+# expected headless/service path without making the device world-writable.
+SUBSYSTEM=="usb", ATTR{idVendor}=="0403", ATTR{idProduct}=="cc4d", GROUP="dialout", MODE="0660", TAG+="uaccess"
