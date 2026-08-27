@@ -41,21 +41,26 @@ static int test_raw_vin_pdu(void)
     char vin[LINK_OBD2_VIN_LENGTH + 1U];
     uint8_t bad[sizeof(pdu)];
 
-    CHECK(link_obd2_decode_vin_pdu(pdu, sizeof(pdu), vin) ==
-          LINK_OBD2_RESULT_OK);
-    CHECK(strcmp(vin, "SAJAD56L64WD78435") == 0);
-    CHECK(link_obd2_decode_vin_pdu(pdu, sizeof(pdu) - 1U, vin) ==
-          LINK_OBD2_RESULT_UNEXPECTED_RESPONSE);
+    check(link_obd2_decode_vin_pdu(pdu, sizeof(pdu), vin) ==
+              LINK_OBD2_RESULT_OK &&
+              strcmp(vin, "SAJAD56L64WD78435") == 0,
+          "decode raw VIN PDU");
+    check(link_obd2_decode_vin_pdu(
+              pdu, sizeof(pdu) - 1U, vin) ==
+              LINK_OBD2_RESULT_UNEXPECTED_RESPONSE,
+          "reject truncated raw VIN PDU");
 
     memcpy(bad, pdu, sizeof(bad));
     bad[3U] = (uint8_t)'I';
-    CHECK(link_obd2_decode_vin_pdu(bad, sizeof(bad), vin) ==
-          LINK_OBD2_RESULT_MALFORMED_RESPONSE);
-    CHECK(vin[0] == '\0');
+    check(link_obd2_decode_vin_pdu(bad, sizeof(bad), vin) ==
+              LINK_OBD2_RESULT_MALFORMED_RESPONSE &&
+              vin[0] == '\0',
+          "reject invalid raw VIN character");
 
     bad[0] = 0x48U;
-    CHECK(link_obd2_decode_vin_pdu(bad, sizeof(bad), vin) ==
-          LINK_OBD2_RESULT_UNEXPECTED_RESPONSE);
+    check(link_obd2_decode_vin_pdu(bad, sizeof(bad), vin) ==
+              LINK_OBD2_RESULT_UNEXPECTED_RESPONSE,
+          "reject non-VIN raw OBD response");
     return 0;
 }
 
