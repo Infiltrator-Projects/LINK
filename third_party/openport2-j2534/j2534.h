@@ -17,8 +17,8 @@
 #ifndef OP2J2534_H
     #define OP2J2534_H
 
-const char *DLL_VERSION = "3.0.0";
-const char *API_VERSION = "04.04";
+extern const char *DLL_VERSION;
+extern const char *API_VERSION;
 
 #define PM_DATA_LEN	4128 // Maixmum length of data in a PASSTHRU_MSG
 
@@ -150,7 +150,7 @@ OP2J2534_API int32_t PassThruStopMsgFilter(
 OP2J2534_API int32_t PassThruSetProgrammingVoltage(
     const unsigned long DeviceID, const unsigned long Pin, const unsigned long Voltage);
 OP2J2534_API int32_t PassThruReadVersion(
-    const unsigned long DeviceID, char *pApiVersion, char *pDllVersion, char *pFirmwareVersion);
+    const unsigned long DeviceID, char *pFirmwareVersion, char *pDllVersion, char *pApiVersion);
 OP2J2534_API int32_t PassThruGetLastError(
     char *pErrorDescription);
 OP2J2534_API int32_t PassThruIoctl(

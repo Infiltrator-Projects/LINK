@@ -610,10 +610,12 @@ static void accept_pass_thru_message(LinkLinuxOpenPort2State *state,
     }
 
     /*
-     * 0x01 is TX loopback and 0x08 is TX-done in the OpenPort/J2534
-     * implementation.  Neither is a vehicle response.
+     * RxStatus 0x02 is an ISO-15765 start-of-message indication, not the
+     * completed assembled response.  Treating it as complete can terminate a
+     * directed multi-frame request before the final J2534 record arrives.
      */
-    if ((message->RxStatus & 0x09UL) != 0UL) return;
+    if (!link_linux_openport2_rx_status_is_complete_vehicle(
+            message->RxStatus)) return;
 
     can_id = message_can_id(message);
     if (!response_matches(state, can_id)) return;

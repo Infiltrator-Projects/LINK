@@ -27,6 +27,7 @@ include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 
 option(LINK_ENABLE_SANITIZERS "Enable AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
+option(LINK_BUILD_LINUX_PROVIDER_SMOKE "Compile native Linux adapter providers as an ownership smoke target" OFF)
 option(LINK_BUILD_REFERENCE_PRODUCT_FACES
     "Build MBLINK and JAGLINK reference Windows Discover faces when LINK is top-level"
     OFF)
@@ -305,6 +306,29 @@ if(WIN32 AND PROJECT_IS_TOP_LEVEL)
     endif()
 endif()
 
+
+if(LINK_BUILD_LINUX_PROVIDER_SMOKE)
+    if(NOT UNIX OR APPLE)
+        message(FATAL_ERROR "LINK_BUILD_LINUX_PROVIDER_SMOKE is supported on Linux only.")
+    endif()
+    find_path(LINK_PROVIDER_BLUEZ_INCLUDE_DIR bluetooth/bluetooth.h REQUIRED)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(LINK_PROVIDER_LIBUSB REQUIRED IMPORTED_TARGET libusb-1.0)
+    add_library(link-linux-provider-smoke OBJECT
+        platform/linux/link-linux-serial.c
+        platform/linux/link-linux-openport2.c
+        third_party/openport2-j2534/j2534.c)
+    target_include_directories(link-linux-provider-smoke PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/include"
+        "${CMAKE_CURRENT_SOURCE_DIR}/platform/linux"
+        "${LINK_PROVIDER_BLUEZ_INCLUDE_DIR}")
+    target_link_libraries(link-linux-provider-smoke PRIVATE PkgConfig::LINK_PROVIDER_LIBUSB)
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(link-linux-provider-smoke PRIVATE ${LINK_WARNING_FLAGS})
+        set_source_files_properties("${CMAKE_CURRENT_SOURCE_DIR}/third_party/openport2-j2534/j2534.c" PROPERTIES COMPILE_OPTIONS "-w")
+    endif()
+endif()
+
 function(link_add_test target source test_name)
     add_executable(${target} ${source})
     target_link_libraries(${target} PRIVATE LINK::Core)
@@ -335,6 +359,9 @@ if(BUILD_TESTING AND PROJECT_IS_TOP_LEVEL)
     link_add_test(link-test-discover-sweep tests/test_discover_sweep.c link-discover-sweep)
     link_add_test(link-test-evidence tests/test_evidence.c link-evidence)
     link_add_test(link-test-ecu-probe tests/test_ecu_probe.c link-ecu-probe)
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        link_add_test(link-test-linux-openport2-status tests/test_linux_openport2_status.c link-linux-openport2-status)
+    endif()
 endif()
 
 if(LINK_ENABLE_INSTALL)

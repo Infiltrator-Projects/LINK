@@ -47,6 +47,9 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
 #define LE_LEN	80	// Maximum length of an error message string
 #define LM_LEN 256	// Maximum length of writelog() message
 
+const char *DLL_VERSION = "3.0.0";
+const char *API_VERSION = "04.04";
+
 typedef struct _connection
 {
 	uint8_t device_id;
@@ -730,8 +733,9 @@ int32_t PassThruClose(const unsigned long DeviceID)
 	{
 		uint8_t data[MAX_LEN];
 		strcpy(data, "atz\r\n");
-		int r = usb_send_expect(data, strlen(data), MAX_LEN, 2000, NULL);
-		r = libusb_release_interface(con->dev_handle, endpoint->intf_num);
+		r = usb_send_expect(data, strlen(data), MAX_LEN, 2000, NULL);
+		if (r == LIBUSB_SUCCESS)
+			r = libusb_release_interface(con->dev_handle, endpoint->intf_num);
 		libusb_close(con->dev_handle);
 		libusb_exit(con->ctx);
 
@@ -1463,6 +1467,11 @@ int32_t PassThruSetProgrammingVoltage(const unsigned long DeviceID,
 int32_t PassThruReadVersion(const unsigned long DeviceID, char *pFirmwareVersion,
 	char *pDllVersion, char *pApiVersion)
 {
+	if ((uint8_t)DeviceID != con->device_id)
+	{
+		snprintf(LAST_ERROR, LE_LEN, "Error: Invalid DeviceID");
+		return J2534_ERR_INVALID_DEVICE_ID;
+	}
 	if (pFirmwareVersion == NULL || pDllVersion == NULL
 		|| pApiVersion == NULL)
 	{
@@ -1528,7 +1537,7 @@ int32_t PassThruGetLastError(char *pErrorDescription)
 			writelog("NULL");
 		return J2534_ERR_NULL_PARAMETER;
 	}
-	pErrorDescription = LAST_ERROR;
+	(void)snprintf(pErrorDescription, LE_LEN, "%s", (const char *)LAST_ERROR);
 	if (write_log)
 	{
 		writelog(pErrorDescription);

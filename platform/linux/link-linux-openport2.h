@@ -9,6 +9,20 @@
 
 #if defined(__linux__)
 
+/* J2534 RxStatus bits emitted by the vendored OpenPort backend. */
+#define LINK_LINUX_OPENPORT2_RX_TX_LOOPBACK 0x01UL
+#define LINK_LINUX_OPENPORT2_RX_START_OF_MESSAGE 0x02UL
+#define LINK_LINUX_OPENPORT2_RX_TX_DONE 0x08UL
+
+static inline bool link_linux_openport2_rx_status_is_complete_vehicle(
+    unsigned long rx_status)
+{
+    return (rx_status &
+        (LINK_LINUX_OPENPORT2_RX_TX_LOOPBACK |
+         LINK_LINUX_OPENPORT2_RX_START_OF_MESSAGE |
+         LINK_LINUX_OPENPORT2_RX_TX_DONE)) == 0UL;
+}
+
 bool link_linux_openport2_is_selection(const char *device);
 size_t link_linux_openport2_discover(char paths[][256], size_t capacity);
 
