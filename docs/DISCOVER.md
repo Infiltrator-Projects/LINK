@@ -18,19 +18,20 @@ LINK Discover engine
 
 Discover is not a proposed extra repository or a future separate `Reader` product. It is already the specialist second application target in each manufacturer repository. The main MBLINK/JAGLINK application is the normal diagnostic experience; Discover is the deeper engineering-oriented ECU/module discovery, identification, read-only inventory and evidence/dump application.
 
-The same rule applies to the Windows OpenPort 2.0 / SAE J2534 target:
+The same ownership rule applies to OpenPort 2.0 on both supported desktop paths. Windows Discover uses the installed SAE J2534 FunctionLibrary, while Linux LINK can drive the Tactrix directly through its native libusb provider:
 
 ```text
 platform/windows/link-discover.c
     + MBLINK identity / Mercedes definitions
     = mblink-discover.exe
 
-platform/windows/link-discover.c
-    + JAGLINK identity / Jaguar definitions
-    = jaglink-discover.exe
+platform/linux/link-linux-openport2.c
+    + shared LINK diagnostic flow
+    + MBLINK / JAGLINK manufacturer definitions
+    = the same product diagnostics over native OpenPort USB
 ```
 
-The generic transport, scanner, safety and evidence behaviour must remain identical. Manufacturer-specific results and available read-only probes may differ because Mercedes and Jaguar expose different networks, ECUs, modules, identifiers and documented diagnostic data.
+The generic transport, scanner, safety and evidence behaviour belongs to LINK. Manufacturer-specific results and available read-only probes may differ because Mercedes and Jaguar expose different networks, ECUs, modules, identifiers and documented diagnostic data.
 
 ## Product role
 
