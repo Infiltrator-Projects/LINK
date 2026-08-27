@@ -33,6 +33,7 @@
 #define LINK_OP2_J2534_OK 0
 #define LINK_OP2_J2534_TIMEOUT 9
 #define LINK_OP2_ISO15765 6UL
+#define LINK_OP2_PASS_FILTER 1UL
 #define LINK_OP2_FLOW_CONTROL_FILTER 3UL
 #define LINK_OP2_ISO15765_FRAME_PAD 0x00000040UL
 #define LINK_OP2_CAN_29BIT_ID 0x00000100UL
@@ -101,8 +102,14 @@ typedef struct LinkLinuxOpenPort2State {
 
     uint32_t tx_can_id;
     uint32_t rx_can_id;
+    uint32_t can_filter_id;
+    uint32_t can_mask_id;
     bool tx_can_id_set;
     bool rx_can_id_set;
+    bool can_filter_set;
+    bool can_mask_set;
+    bool headers_enabled;
+    bool flow_control_enabled;
     bool filter_dirty;
 
     unsigned int response_timeout_ms;
@@ -212,8 +219,14 @@ static void reset_bridge(LinkLinuxOpenPort2State *state)
     state->automatic_candidate = 0U;
     state->tx_can_id = 0U;
     state->rx_can_id = 0U;
+    state->can_filter_id = 0U;
+    state->can_mask_id = 0U;
     state->tx_can_id_set = false;
     state->rx_can_id_set = false;
+    state->can_filter_set = false;
+    state->can_mask_set = false;
+    state->headers_enabled = false;
+    state->flow_control_enabled = true;
     state->filter_dirty = true;
     state->response_timeout_ms = 400U;
 }
@@ -394,6 +407,31 @@ static bool add_flow_filter(LinkLinuxOpenPort2State *state,
     return true;
 }
 
+static bool add_pass_filter(LinkLinuxOpenPort2State *state,
+                            uint32_t mask_id,
+                            uint32_t response_id,
+                            bool extended)
+{
+    LinkOpenPortPassThruMsg mask;
+    LinkOpenPortPassThruMsg pattern;
+    unsigned long filter_id = 0UL;
+    int32_t result;
+
+    if (state == NULL ||
+        state->filter_count >=
+            sizeof(state->filter_ids) / sizeof(state->filter_ids[0])) {
+        return false;
+    }
+    make_can_id_message(&mask, mask_id, extended);
+    make_can_id_message(&pattern, response_id, extended);
+    result = PassThruStartMsgFilter(
+        state->channel_id, LINK_OP2_PASS_FILTER,
+        &mask, &pattern, NULL, &filter_id);
+    if (result != LINK_OP2_J2534_OK) return false;
+    state->filter_ids[state->filter_count++] = filter_id;
+    return true;
+}
+
 static bool install_filters(LinkLinuxOpenPort2State *state)
 {
     bool custom;
@@ -403,70 +441,80 @@ static bool install_filters(LinkLinuxOpenPort2State *state)
     if (!state->filter_dirty) return true;
 
     stop_filters(state);
-    custom = state->tx_can_id_set || state->rx_can_id_set;
+    custom = state->tx_can_id_set || state->rx_can_id_set ||
+             (state->can_filter_set && state->can_mask_set);
 
-    if (custom) {
+    if (state->can_filter_set && state->can_mask_set) {
+        tx_id = state->tx_can_id_set ? state->tx_can_id : UINT32_C(0x7df);
+        if (state->flow_control_enabled && state->tx_can_id_set) {
+            if (!add_flow_filter(state, state->can_mask_id,
+                                 state->can_filter_id, tx_id,
+                                 state->active_extended)) return false;
+        } else if (!add_pass_filter(state, state->can_mask_id,
+                                    state->can_filter_id,
+                                    state->active_extended)) {
+            return false;
+        }
+    } else if (custom) {
         tx_id = state->tx_can_id_set ? state->tx_can_id : UINT32_C(0x7df);
         if (state->rx_can_id_set) {
             rx_id = state->rx_can_id;
-        } else if (!state->active_extended &&
-                   tx_id <= UINT32_C(0x7f7)) {
+        } else if (!state->active_extended && tx_id <= UINT32_C(0x7f7)) {
             rx_id = tx_id + UINT32_C(8);
         } else {
             return false;
         }
         if (!add_flow_filter(
                 state,
-                state->active_extended
-                    ? UINT32_C(0x1fffffff) : UINT32_C(0x7ff),
-                rx_id,
-                tx_id,
-                state->active_extended)) {
-            return false;
-        }
+                state->active_extended ? UINT32_C(0x1fffffff) : UINT32_C(0x7ff),
+                rx_id, tx_id, state->active_extended)) return false;
     } else {
         uint32_t index;
-        /*
-         * LINK's automatic ELM-compatible acquisition deliberately starts with
-         * 11-bit ISO15765.  Eight functional OBD responders are flow-controlled
-         * exactly as the shared Windows J2534 Discover path does.
-         */
         if (state->active_extended) return false;
         for (index = 0U; index < 8U; ++index) {
-            if (!add_flow_filter(
-                    state,
-                    UINT32_C(0x7ff),
-                    UINT32_C(0x7e8) + index,
-                    UINT32_C(0x7e0) + index,
-                    false)) {
-                return false;
-            }
+            if (!add_flow_filter(state, UINT32_C(0x7ff),
+                                 UINT32_C(0x7e8) + index,
+                                 UINT32_C(0x7e0) + index, false)) return false;
         }
     }
-
     state->filter_dirty = false;
     return true;
 }
 
 static bool append_response_payload(LinkLinuxOpenPort2State *state,
+                                    uint32_t can_id,
                                     const uint8_t *payload,
                                     size_t payload_length)
 {
     static const char hex[] = "0123456789ABCDEF";
-    size_t required;
+    size_t required = payload_length * 2U + 1U;
     size_t index;
-    if (state == NULL || payload == NULL || payload_length == 0U)
-        return false;
-    required = payload_length * 2U + 1U;
-    if (state->response_length + required + 1U >
-        sizeof(state->response_text)) {
+    if (state == NULL || payload == NULL || payload_length == 0U) return false;
+
+    if (state->headers_enabled) {
+        char header[16];
+        int written;
+        if (state->active_extended)
+            written = snprintf(header, sizeof(header), "%08X", (unsigned int)can_id);
+        else
+            written = snprintf(header, sizeof(header), "%03X", (unsigned int)can_id);
+        if (written < 0) return false;
+        required += (size_t)written;
+        if (payload_length <= 7U) required += 2U;
+        if (state->response_length + required + 1U > sizeof(state->response_text)) return false;
+        memcpy(state->response_text + state->response_length, header, (size_t)written);
+        state->response_length += (size_t)written;
+        if (payload_length <= 7U) {
+            state->response_text[state->response_length++] = '0';
+            state->response_text[state->response_length++] = hex[payload_length & 0x0fU];
+        }
+    } else if (state->response_length + required + 1U > sizeof(state->response_text)) {
         return false;
     }
+
     for (index = 0U; index < payload_length; ++index) {
-        state->response_text[state->response_length++] =
-            hex[payload[index] >> 4U];
-        state->response_text[state->response_length++] =
-            hex[payload[index] & UINT8_C(0x0f)];
+        state->response_text[state->response_length++] = hex[payload[index] >> 4U];
+        state->response_text[state->response_length++] = hex[payload[index] & UINT8_C(0x0f)];
     }
     state->response_text[state->response_length++] = '\r';
     state->response_text[state->response_length] = '\0';
@@ -552,7 +600,10 @@ static bool send_stored_request(LinkLinuxOpenPort2State *state)
         return false;
 
     state->request_pending = true;
-    state->request_functional = !state->tx_can_id_set;
+    state->request_functional = !state->tx_can_id_set ||
+        (state->can_filter_set && state->can_mask_set &&
+         state->can_mask_id != (state->active_extended
+             ? UINT32_C(0x1fffffff) : UINT32_C(0x7ff)));
     state->request_saw_response = false;
     state->request_saw_pending = false;
     state->response_length = 0U;
@@ -586,16 +637,18 @@ static bool retry_automatic_protocol(LinkLinuxOpenPort2State *state)
 static bool response_matches(const LinkLinuxOpenPort2State *state,
                              uint32_t can_id)
 {
+    uint32_t full_mask;
     if (state == NULL) return false;
-    if (state->rx_can_id_set)
-        return can_id == state->rx_can_id;
-    if (state->tx_can_id_set && !state->active_extended &&
-        state->tx_can_id <= UINT32_C(0x7f7)) {
-        return can_id == state->tx_can_id + UINT32_C(8);
+    if (state->rx_can_id_set) return can_id == state->rx_can_id;
+    if (state->can_filter_set && state->can_mask_set) {
+        full_mask = state->active_extended ? UINT32_C(0x1fffffff) : UINT32_C(0x7ff);
+        return (can_id & (state->can_mask_id & full_mask)) ==
+               (state->can_filter_id & (state->can_mask_id & full_mask));
     }
+    if (state->tx_can_id_set && !state->active_extended &&
+        state->tx_can_id <= UINT32_C(0x7f7)) return can_id == state->tx_can_id + UINT32_C(8);
     if (!state->tx_can_id_set && !state->active_extended)
-        return can_id >= UINT32_C(0x7e8) &&
-               can_id <= UINT32_C(0x7ef);
+        return can_id >= UINT32_C(0x7e8) && can_id <= UINT32_C(0x7ef);
     return false;
 }
 
@@ -625,7 +678,7 @@ static void accept_pass_thru_message(LinkLinuxOpenPort2State *state,
 
     payload = message->Data + 4U;
     payload_length = (size_t)message->DataSize - 4U;
-    if (!append_response_payload(state, payload, payload_length)) {
+    if (!append_response_payload(state, can_id, payload, payload_length)) {
         state->response_length = 0U;
         state->response_text[0] = '\0';
         (void)queue_text(state, "BUFFER FULL\r>");
@@ -667,12 +720,17 @@ static bool handle_at_command(LinkLinuxOpenPort2State *state,
         return queue_text(state, identity);
     }
 
-    if (strcmp(command, "ATE0") == 0 ||
-        strcmp(command, "ATL0") == 0 ||
-        strcmp(command, "ATS0") == 0 ||
-        strcmp(command, "ATH0") == 0 ||
-        strcmp(command, "ATCAF1") == 0 ||
-        strcmp(command, "ATCFC1") == 0) {
+    if (strcmp(command, "ATE0") == 0 || strcmp(command, "ATL0") == 0 ||
+        strcmp(command, "ATS0") == 0 || strcmp(command, "ATCAF1") == 0) {
+        return queue_ok(state);
+    }
+    if (strcmp(command, "ATH0") == 0 || strcmp(command, "ATH1") == 0) {
+        state->headers_enabled = command[3] == '1';
+        return queue_ok(state);
+    }
+    if (strcmp(command, "ATCFC0") == 0 || strcmp(command, "ATCFC1") == 0) {
+        state->flow_control_enabled = command[5] == '1';
+        state->filter_dirty = true;
         return queue_ok(state);
     }
 
@@ -723,13 +781,38 @@ static bool handle_at_command(LinkLinuxOpenPort2State *state,
         return queue_ok(state);
     }
 
+    if (strcmp(command, "ATCRA") == 0) {
+        state->rx_can_id = 0U;
+        state->rx_can_id_set = false;
+        state->can_filter_id = 0U;
+        state->can_mask_id = 0U;
+        state->can_filter_set = false;
+        state->can_mask_set = false;
+        state->filter_dirty = true;
+        return queue_ok(state);
+    }
     if (strncmp(command, "ATCRA", 5U) == 0) {
-        if (!parse_hex_u32(command + 5U, &value) ||
-            value > UINT32_C(0x1fffffff)) {
-            return queue_text(state, "?\r>");
-        }
+        if (!parse_hex_u32(command + 5U, &value) || value > UINT32_C(0x1fffffff)) return queue_text(state, "?\r>");
         state->rx_can_id = value;
         state->rx_can_id_set = true;
+        state->can_filter_set = false;
+        state->can_mask_set = false;
+        state->filter_dirty = true;
+        return queue_ok(state);
+    }
+    if (strncmp(command, "ATCF", 4U) == 0) {
+        if (!parse_hex_u32(command + 4U, &value) || value > UINT32_C(0x1fffffff)) return queue_text(state, "?\r>");
+        state->can_filter_id = value;
+        state->can_filter_set = true;
+        state->rx_can_id_set = false;
+        state->filter_dirty = true;
+        return queue_ok(state);
+    }
+    if (strncmp(command, "ATCM", 4U) == 0) {
+        if (!parse_hex_u32(command + 4U, &value) || value > UINT32_C(0x1fffffff)) return queue_text(state, "?\r>");
+        state->can_mask_id = value;
+        state->can_mask_set = true;
+        state->rx_can_id_set = false;
         state->filter_dirty = true;
         return queue_ok(state);
     }
