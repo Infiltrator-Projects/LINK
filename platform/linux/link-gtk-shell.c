@@ -358,7 +358,15 @@ static void refresh_devices(LinkGtkShell *shell)
     size_t count;
     size_t index;
     GtkStringList *model = gtk_string_list_new(NULL);
-    count = link_linux_serial_discover(paths, 32U);
+    const LinkGtkTransportProvider *provider =
+        shell != NULL && shell->descriptor != NULL
+            ? shell->descriptor->transport_provider : NULL;
+    if (provider != NULL && provider->discover != NULL) {
+        count = provider->discover(
+            paths, 32U, shell->descriptor->transport_provider_context);
+    } else {
+        count = link_linux_serial_discover(paths, 32U);
+    }
     for (index = 0U; index < count; ++index) gtk_string_list_append(model, paths[index]);
     if (count == 0U)
         gtk_string_list_append(model, link_gtk_i18n_translate_text("No adapter"));
@@ -724,6 +732,10 @@ static void process_session_event(LinkGtkShell *shell)
                 (void)finish_manufacturer_extension(shell, false);
                 return;
             }
+            if (extension->progress_changed != NULL &&
+                extension->progress_changed(shell->descriptor->context)) {
+                render_current_section(shell);
+            }
             if (complete) {
                 (void)finish_manufacturer_extension(shell, true);
             } else {
@@ -855,17 +867,50 @@ static void link_clicked(GtkButton *button, gpointer user_data)
         set_connection_state(shell, false, "No ELM327 serial device detected");
         return;
     }
-    if (!link_linux_serial_configure(&shell->serial, device, 38400U)) {
-        set_connection_state(shell, false, "Invalid adapter configuration");
-        return;
+    {
+        const LinkGtkTransportProvider *provider =
+            shell->descriptor->transport_provider;
+        if (provider != NULL) {
+            if (provider->configure == NULL ||
+                !provider->configure(
+                    device, 38400U, &shell->transport,
+                    shell->descriptor->transport_provider_context) ||
+                !link_transport_is_valid(&shell->transport)) {
+                set_connection_state(shell, false,
+                                     "Invalid replay/provider configuration");
+                return;
+            }
+        } else if (!link_linux_serial_configure(
+                       &shell->serial, device, 38400U)) {
+            set_connection_state(shell, false, "Invalid adapter configuration");
+            return;
+        }
     }
     if (shell->transport.connect(shell->transport.context) != LINK_TRANSPORT_OK) {
-        set_connection_state(shell, false, "Unable to open adapter · check dialout permissions");
+        set_connection_state(shell, false,
+            shell->descriptor->transport_provider != NULL
+                ? "Unable to open replay/provider transport"
+                : "Unable to open adapter · check dialout permissions");
         return;
     }
-    if (!link_linux_serial_probe_elm327(&shell->serial, identity, sizeof(identity))) {
+    if (shell->descriptor->transport_provider != NULL) {
+        const LinkGtkTransportProvider *provider =
+            shell->descriptor->transport_provider;
+        if (provider->probe_elm327 != NULL &&
+            !provider->probe_elm327(
+                identity, sizeof(identity),
+                shell->descriptor->transport_provider_context)) {
+            shell->transport.disconnect(shell->transport.context);
+            set_connection_state(
+                shell, false,
+                "Replay/provider ELM327 identity handshake failed");
+            return;
+        }
+    } else if (!link_linux_serial_probe_elm327(
+                   &shell->serial, identity, sizeof(identity))) {
         shell->transport.disconnect(shell->transport.context);
-        set_connection_state(shell, false, "Device opened but ELM327 identity handshake failed");
+        set_connection_state(shell, false,
+                             "Device opened but ELM327 identity handshake failed");
         return;
     }
     if (identity[0] == '\0') (void)snprintf(identity, sizeof(identity), "ELM327-compatible adapter");
@@ -922,7 +967,13 @@ static gboolean pump_serial(gpointer user_data)
 {
     LinkGtkShell *shell = user_data;
     const uint64_t now_ms = monotonic_ms();
-    link_linux_serial_pump(&shell->serial);
+    if (shell->descriptor->transport_provider != NULL &&
+        shell->descriptor->transport_provider->pump != NULL) {
+        shell->descriptor->transport_provider->pump(
+            shell->descriptor->transport_provider_context);
+    } else {
+        link_linux_serial_pump(&shell->serial);
+    }
     if (shell->diagnostic_retry_pending && now_ms >= shell->diagnostic_retry_at_ms &&
         shell->transport.is_connected != NULL &&
         shell->transport.is_connected(shell->transport.context)) {
