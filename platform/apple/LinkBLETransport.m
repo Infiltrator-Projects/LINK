@@ -111,6 +111,7 @@ static BOOL LinkRemainingBytesAreWhitespace(const uint8_t *bytes,
     CBPeripheral *_Nullable _peripheral;
     BOOL _startRequested;
     NSUInteger _operationGeneration;
+    NSUInteger _scanAttempt;
     NSUInteger _pendingServiceDiscoveries;
     NSArray<LinkBLECandidate *> *_Nullable _candidates;
     NSUInteger _candidateIndex;
@@ -184,6 +185,7 @@ static BOOL LinkRemainingBytesAreWhitespace(const uint8_t *bytes,
         dispatch_async(dispatch_get_main_queue(), ^{ [self start]; });
         return;
     }
+    if (!_startRequested) _scanAttempt = 0U;
     _startRequested = YES;
     if (self.isReady) { [self notifyDelegate]; return; }
     if (_central == nil) {
@@ -203,6 +205,7 @@ static BOOL LinkRemainingBytesAreWhitespace(const uint8_t *bytes,
         return;
     }
     _startRequested = NO;
+    _scanAttempt = 0U;
     _operationGeneration++;
     _probeGeneration++;
     [_central stopScan];
@@ -234,6 +237,8 @@ static BOOL LinkRemainingBytesAreWhitespace(const uint8_t *bytes,
 
 - (void)failAndStop:(NSString *)status
 {
+    _startRequested = NO;
+    _scanAttempt = 0U;
     _operationGeneration++;
     _probeGeneration++;
     [_central stopScan];
@@ -276,6 +281,7 @@ static BOOL LinkRemainingBytesAreWhitespace(const uint8_t *bytes,
 - (void)beginScan
 {
     if (!_startRequested || _central.state != CBManagerStatePoweredOn) return;
+    _scanAttempt++;
     _operationGeneration++;
     NSUInteger generation = _operationGeneration;
     _probeGeneration++;
@@ -290,9 +296,16 @@ static BOOL LinkRemainingBytesAreWhitespace(const uint8_t *bytes,
     self.adapterIdentifier = nil;
     [self resetSelection];
     [_central scanForPeripheralsWithServices:nil options:nil];
-    [self setState:LinkBLETransportStateScanning status:@"Scanning for BLE OBD adapter"];
+    [self setState:LinkBLETransportStateScanning
+            status:_scanAttempt == 1U
+                ? @"Scanning for BLE OBD adapter"
+                : @"Retrying BLE OBD adapter scan"];
     [self scheduleStateTimeout:LinkBLETransportStateScanning generation:generation
-                         after:LinkScanTimeoutSeconds message:@"No BLE OBD adapter found" recover:NO];
+                         after:LinkScanTimeoutSeconds
+                       message:_scanAttempt < 2U
+                           ? @"No BLE OBD adapter found; retrying"
+                           : @"No BLE OBD adapter found"
+                       recover:_scanAttempt < 2U];
 }
 
 - (void)centralManagerDidUpdateState:(CBCentralManager *)central
@@ -329,6 +342,7 @@ static BOOL LinkRemainingBytesAreWhitespace(const uint8_t *bytes,
     NSString *name = advertisementData[CBAdvertisementDataLocalNameKey];
     if (name.length == 0U) name = peripheral.name;
     if (name.length == 0U || !LinkPeripheralNameLooksLikeAdapter(name)) return;
+    _scanAttempt = 0U;
     [central stopScan];
     _operationGeneration++;
     NSUInteger generation = _operationGeneration;
@@ -543,6 +557,7 @@ didUpdateValueForCharacteristic:(CBCharacteristic *)characteristic
         _selectedNotify = candidate.notifyCharacteristic;
         _selectedWriteType = candidate.writeType;
         self.adapterIdentifier = identifier;
+        _scanAttempt = 0U;
         self.serviceUUID = candidate.service.UUID.UUIDString;
         self.writeCharacteristicUUID = candidate.writeCharacteristic.UUID.UUIDString;
         self.notifyCharacteristicUUID = candidate.notifyCharacteristic.UUID.UUIDString;

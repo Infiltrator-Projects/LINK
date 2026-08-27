@@ -344,6 +344,10 @@ static void LinkAppleSessionEvent(
     }
 
     if (!_sessionInitialized) self.statusText = transport.statusText;
+    if (transport.state == LinkBLETransportStateFailed) {
+        self.active = NO;
+        self.ready = NO;
+    }
     [self notifyDelegate];
 }
 
@@ -640,6 +644,13 @@ static void LinkAppleSessionEvent(
     }
 
     if (![self applyFlowEvent:&event]) return;
+
+    id<LinkDiagnosticsControllerDelegate> delegate = self.delegate;
+    if ([delegate respondsToSelector:
+            @selector(linkDiagnosticsController:didReceiveFlowEvent:)]) {
+        [delegate linkDiagnosticsController:self didReceiveFlowEvent:&event];
+    }
+    [self notifyDelegate];
     [self driveDiagnosticFlow];
 }
 
