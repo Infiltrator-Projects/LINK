@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "link/linux_serial.h"
+#include "link-linux-openport2.h"
 
 #include <string.h>
 
@@ -1213,6 +1214,8 @@ static LinkTransportStatus serial_connect(void *context)
     speed_t speed;
     if (transport == NULL || transport->device[0] == '\0')
         return LINK_TRANSPORT_INVALID_ARGUMENT;
+    if (transport->openport2)
+        return link_linux_openport2_connect(transport);
     if (transport->bluetooth_le) return ble_connect(transport);
     if (transport->bluetooth_classic) return classic_connect(transport);
     if (transport->connected) return LINK_TRANSPORT_OK;
@@ -1265,6 +1268,8 @@ static LinkTransportStatus serial_write(void *context,
     size_t offset = 0U;
     if (transport == NULL || bytes == NULL || size == 0U)
         return LINK_TRANSPORT_INVALID_ARGUMENT;
+    if (transport->openport2)
+        return link_linux_openport2_write(transport, bytes, size);
     if (transport->bluetooth_le) return ble_write(transport, bytes, size);
     if (!transport->connected || transport->fd < 0)
         return LINK_TRANSPORT_NOT_CONNECTED;
@@ -1307,13 +1312,29 @@ bool link_linux_serial_configure(LinkLinuxSerialTransport *transport,
 {
     char address[18];
     char classic_address[18];
+    bool was_openport2;
     if (transport == NULL || device == NULL || device[0] == '\0') return false;
+    was_openport2 = transport->openport2;
     if (transport->connected) link_linux_serial_disconnect(transport);
-    if (transport->provider_context != NULL) ble_state_destroy(transport);
+    if (transport->provider_context != NULL) {
+        if (was_openport2)
+            link_linux_openport2_destroy(transport);
+        else
+            ble_state_destroy(transport);
+    }
+
     transport->bluetooth_le = ble_extract_address(device, address);
-    transport->bluetooth_classic = classic_extract_address(device, classic_address);
-    if (strncmp(device, "BLE:", 4U) == 0 && !transport->bluetooth_le) return false;
-    if (strncmp(device, "BT:", 3U) == 0 && !transport->bluetooth_classic) return false;
+    transport->bluetooth_classic =
+        classic_extract_address(device, classic_address);
+    transport->openport2 = link_linux_openport2_is_selection(device);
+
+    if (strncmp(device, "BLE:", 4U) == 0 && !transport->bluetooth_le)
+        return false;
+    if (strncmp(device, "BT:", 3U) == 0 && !transport->bluetooth_classic)
+        return false;
+    if (strncmp(device, "OP2:", 4U) == 0 && !transport->openport2)
+        return false;
+
     (void)snprintf(transport->device, sizeof(transport->device), "%s", device);
     transport->baud_rate = baud_rate == 0U ? 38400U : baud_rate;
     transport->fd = -1;
@@ -1323,6 +1344,10 @@ bool link_linux_serial_configure(LinkLinuxSerialTransport *transport,
 void link_linux_serial_disconnect(LinkLinuxSerialTransport *transport)
 {
     if (transport == NULL) return;
+    if (transport->openport2) {
+        link_linux_openport2_disconnect(transport);
+        return;
+    }
     if (transport->bluetooth_le) {
         ble_disconnect(transport);
         return;
@@ -1335,6 +1360,8 @@ void link_linux_serial_disconnect(LinkLinuxSerialTransport *transport)
 bool link_linux_serial_is_connected(const LinkLinuxSerialTransport *transport)
 {
     if (transport == NULL || !transport->connected) return false;
+    if (transport->openport2)
+        return link_linux_openport2_is_connected(transport);
     if (transport->bluetooth_le) {
         const LinkLinuxBleState *state =
             (const LinkLinuxBleState *)transport->provider_context;
@@ -1353,6 +1380,9 @@ bool link_linux_serial_probe_elm327(LinkLinuxSerialTransport *transport,
     int elapsed = 0;
     if (identity != NULL && identity_capacity != 0U) identity[0] = '\0';
     if (!link_linux_serial_is_connected(transport)) return false;
+    if (transport->openport2)
+        return link_linux_openport2_probe(
+            transport, identity, identity_capacity);
     if (transport->bluetooth_le)
         return ble_probe_elm327(transport, identity, identity_capacity);
     if (!transport->bluetooth_classic) (void)tcflush(transport->fd, TCIFLUSH);
@@ -1384,6 +1414,10 @@ void link_linux_serial_pump(LinkLinuxSerialTransport *transport)
 {
     uint8_t buffer[1024];
     if (!link_linux_serial_is_connected(transport) || transport->receiver == NULL) return;
+    if (transport->openport2) {
+        link_linux_openport2_pump(transport);
+        return;
+    }
     if (transport->bluetooth_le) return;
     for (;;) {
         ssize_t count = read(transport->fd, buffer, sizeof(buffer));
@@ -1436,6 +1470,9 @@ size_t link_linux_serial_discover(char paths[][256], size_t capacity)
         }
         closedir(directory);
     }
+    if (count < capacity)
+        count += link_linux_openport2_discover(
+            paths + count, capacity - count);
     if (count < capacity)
         count += classic_discover_devices(paths + count, capacity - count);
     if (count < capacity)
