@@ -43,6 +43,7 @@ LINK currently owns:
 - portable diagnostic-flow controller state machine;
 - Discover safety classification and evidence writing;
 - common ECU/module discovery, identification and raw-response acquisition primitives; and
+- shared native Linux diagnostic-adapter layer for tty/RFCOMM, BlueZ BLE/GATT, BlueZ Classic/SPP and direct-libUSB Tactrix OpenPort 2.0;
 - shared native Windows OpenPort 2.0/J2534 Discover scanner shell.
 
 Codec support does not grant transmit permission. Discover remains independently deny-by-default; adding a UDS codec cannot silently broaden its request allowlist.
@@ -110,7 +111,7 @@ cmake --build build-sanitized --parallel
 ctest --test-dir build-sanitized --output-on-failure
 ```
 
-GitHub Actions builds and tests the strict portable core on Linux, macOS and Windows and runs ASan+UBSan on Linux. The DTC knowledge suite enforces the exact 9,533-definition catalogue size and pinned upstream snapshot, samples all seven generic families, checks generic/manufacturer range boundaries, preserves lowercase normalization and malformed-code rejection, and verifies shared UDS status semantics. The ISO-TP suite covers preserved Classical CAN behaviour as well as CAN-FD single-frame, multi-frame and extended-length traffic. The Windows configuration proves that the same shared Discover implementation can produce both MBLINK and JAGLINK product faces.
+GitHub Actions builds and tests the strict portable core on Linux, macOS and Windows and runs ASan+UBSan on Linux. Product Linux builds additionally compile LINK's native BlueZ and direct-libUSB OpenPort 2.0 providers; physical USB handshake validation remains a hardware test rather than something CI can simulate. The DTC knowledge suite enforces the exact 9,533-definition catalogue size and pinned upstream snapshot, samples all seven generic families, checks generic/manufacturer range boundaries, preserves lowercase normalization and malformed-code rejection, and verifies shared UDS status semantics. The ISO-TP suite covers preserved Classical CAN behaviour as well as CAN-FD single-frame, multi-frame and extended-length traffic. The Windows configuration proves that the same shared Discover implementation can produce both MBLINK and JAGLINK product faces.
 
 CI also installs LINK and its Common dependency to a clean prefix, rediscovers the exported `LINK::Core` package with `find_package`, and builds an external consumer that exercises the 27-service catalogue and 64-byte CAN-FD contract.
 
