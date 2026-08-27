@@ -125,20 +125,52 @@ function(link_enable_linux_gtk_shell target)
     if(NOT TARGET ${target})
         message(FATAL_ERROR "link_enable_linux_gtk_shell target does not exist: ${target}")
     endif()
-    set(link_gtk_shell_source "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platform/linux/link-gtk-shell.c")
-    set(link_gtk_i18n_header "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platform/linux/link-gtk-i18n.h")
+
+    set(link_gtk_shell_source
+        "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platform/linux/link-gtk-shell.c")
+    set(link_gtk_i18n_header
+        "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platform/linux/link-gtk-i18n.h")
+    set(link_openport_source
+        "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platform/linux/link-linux-openport2.c")
+    set(link_openport_j2534_source
+        "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/third_party/openport2-j2534/j2534.c")
+
     target_sources(${target} PRIVATE
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platform/linux/link-linux-serial.c"
+        "${link_openport_source}"
+        "${link_openport_j2534_source}"
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platform/linux/link-gtk-i18n.c"
         "${link_gtk_shell_source}")
     set_source_files_properties("${link_gtk_shell_source}" PROPERTIES
         COMPILE_OPTIONS "-include;${link_gtk_i18n_header}")
+    # The BSD backend is vendored protocol code. Keep LINK's strict warnings on
+    # the integration layer while insulating the imported implementation from
+    # product-level -Werror policies.
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
+        set_source_files_properties("${link_openport_j2534_source}" PROPERTIES
+            COMPILE_OPTIONS "-w")
+    endif()
+
     target_include_directories(${target} PRIVATE
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platform/linux")
+
     find_path(LINK_BLUEZ_INCLUDE_DIR bluetooth/bluetooth.h REQUIRED)
     find_library(LINK_BLUEZ_LIBRARY bluetooth REQUIRED)
     target_include_directories(${target} PRIVATE "${LINK_BLUEZ_INCLUDE_DIR}")
-    target_link_libraries(${target} PRIVATE LINK::Core "${LINK_BLUEZ_LIBRARY}")
+
+    find_package(PkgConfig REQUIRED)
+    if(NOT TARGET PkgConfig::LINK_LIBUSB)
+        pkg_check_modules(LINK_LIBUSB REQUIRED IMPORTED_TARGET libusb-1.0)
+    endif()
+
+    target_link_libraries(${target} PRIVATE
+        LINK::Core
+        "${LINK_BLUEZ_LIBRARY}"
+        PkgConfig::LINK_LIBUSB)
+
+    install(FILES
+        "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platform/linux/60-link-openport2.rules"
+        DESTINATION "lib/udev/rules.d")
 endfunction()
 
 function(link_add_windows_discover target)
