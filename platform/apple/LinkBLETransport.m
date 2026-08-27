@@ -295,7 +295,19 @@ static BOOL LinkRemainingBytesAreWhitespace(const uint8_t *bytes,
     self.peripheralName = nil;
     self.adapterIdentifier = nil;
     [self resetSelection];
-    [_central scanForPeripheralsWithServices:nil options:nil];
+    /*
+     * Some dual-mode ELM/Vgate adapters do not include their local name in
+     * every advertising packet.  With CoreBluetooth's default duplicate
+     * suppression the first nameless packet can be the only callback, which
+     * makes the first scan miss the adapter while the second succeeds from
+     * cached metadata.  Keep duplicate advertisements enabled until a matching
+     * adapter is selected so the first user connection can see the later
+     * named packet.
+     */
+    [_central scanForPeripheralsWithServices:nil
+                                    options:@{
+        CBCentralManagerScanOptionAllowDuplicatesKey: @YES
+    }];
     [self setState:LinkBLETransportStateScanning
             status:_scanAttempt == 1U
                 ? @"Scanning for BLE OBD adapter"
