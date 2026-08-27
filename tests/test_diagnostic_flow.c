@@ -256,9 +256,21 @@ static int test_manufacturer_extension_after_standard_dtcs(void)
     CHECK(flow.stage == LINK_DIAGNOSTIC_FLOW_SCANNING_STORED_DTCS);
     CHECK(link_diagnostic_flow_next_action(&flow, 600U, &action) == LINK_DIAGNOSTIC_FLOW_RESULT_OK);
     CHECK(strcmp(action.command, "03") == 0);
+
+    /*
+     * Real C207/Vgate evidence returns one empty-DTC sentinel from each EOBD
+     * responder as "4300\\n4300". The shared flow must treat that as an
+     * empty stored-fault list and continue to pending/permanent faults.
+     */
+    response = response_ok("4300\\n4300", false);
     CHECK(link_diagnostic_flow_accept_response(&flow, &response, 600U, &event) == LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(event.kind == LINK_DIAGNOSTIC_FLOW_EVENT_DTC_LIST);
+    CHECK(event.dtc_kind == LINK_OBD2_DTC_STORED);
+    CHECK(event.dtc_list != NULL && event.dtc_list->count == 0U);
+
     CHECK(link_diagnostic_flow_next_action(&flow, 700U, &action) == LINK_DIAGNOSTIC_FLOW_RESULT_OK);
     CHECK(strcmp(action.command, "07") == 0);
+    response = response_no_data();
     CHECK(link_diagnostic_flow_accept_response(&flow, &response, 700U, &event) == LINK_DIAGNOSTIC_FLOW_RESULT_OK);
     CHECK(link_diagnostic_flow_next_action(&flow, 800U, &action) == LINK_DIAGNOSTIC_FLOW_RESULT_OK);
     CHECK(strcmp(action.command, "0A") == 0);
