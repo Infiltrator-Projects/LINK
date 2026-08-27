@@ -393,11 +393,26 @@ static LinkObd2Result obd2_append_dtc_pairs(
     LinkObd2DtcKind kind, LinkObd2DtcList *list)
 {
     size_t index;
+    size_t end;
     if (bytes == NULL || list == NULL || start > byte_count) {
         return LINK_OBD2_RESULT_INVALID_ARGUMENT;
     }
-    if (((byte_count - start) & 1U) != 0U) return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
-    for (index = start; index + 1U < byte_count; index += 2U) {
+
+    /*
+     * Some vehicle ECUs report an empty Mode 03/07/0A list as a single
+     * trailing 00 after the positive-response service byte (for example
+     * "43 00"). That byte is padding/no-code evidence, not half of a DTC.
+     * Accept only a lone trailing zero when the payload length is odd; any
+     * non-zero orphan byte remains malformed.
+     */
+    end = byte_count;
+    if (((end - start) & 1U) != 0U) {
+        if (end == start || bytes[end - 1U] != 0U) {
+            return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
+        }
+        end--;
+    }
+    for (index = start; index + 1U < end; index += 2U) {
         char code[LINK_OBD2_DTC_TEXT_LENGTH];
         LinkObd2Result result;
         if (bytes[index] == 0U && bytes[index + 1U] == 0U) continue;
