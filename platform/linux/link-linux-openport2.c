@@ -10,6 +10,9 @@
  * LINK diagnostic controller.  Product layers therefore remain completely
  * transport agnostic.
  */
+#ifndef _POSIX_C_SOURCE
+#define _POSIX_C_SOURCE 200809L
+#endif
 #include "link-linux-openport2.h"
 
 #if defined(__linux__)

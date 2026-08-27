@@ -717,35 +717,37 @@ int32_t PassThruOpen(const void *pName, unsigned long *pDeviceID)
  */
 int32_t PassThruClose(const unsigned long DeviceID)
 {
+	int reset_result;
+	int release_result;
+
 	if (write_log)
 	{
 		snprintf(log_msg, LM_LEN, "Closing...\n\t|\n\tDeviceID:  %lu\n", DeviceID);
 		writelog(log_msg);
 	}
 
-	int r = J2534_NOERROR;
 	if ((uint8_t)DeviceID != con->device_id)
 	{
 		snprintf(LAST_ERROR, LE_LEN, "Error: Invalid DeviceID");
-		r = J2534_ERR_INVALID_DEVICE_ID;
+		return J2534_ERR_INVALID_DEVICE_ID;
 	}
-	else
-	{
-		uint8_t data[MAX_LEN];
-		strcpy(data, "atz\r\n");
-		r = usb_send_expect(data, strlen(data), MAX_LEN, 2000, NULL);
-		if (r == LIBUSB_SUCCESS)
-			r = libusb_release_interface(con->dev_handle, endpoint->intf_num);
-		libusb_close(con->dev_handle);
-		libusb_exit(con->ctx);
 
-		if (write_log)
-		{
-			writelog("Closed\n");
-			fclose(logfile);
-		}
+	uint8_t data[MAX_LEN];
+	strcpy(data, "atz\r\n");
+	reset_result = usb_send_expect(data, strlen(data), MAX_LEN, 2000, NULL);
+	release_result = libusb_release_interface(con->dev_handle, endpoint->intf_num);
+	libusb_close(con->dev_handle);
+	libusb_exit(con->ctx);
+
+	if (write_log)
+	{
+		writelog("Closed\n");
+		fclose(logfile);
 	}
-	return r;
+
+	if (reset_result != LIBUSB_SUCCESS)
+		return error_map(reset_result);
+	return error_map(release_result);
 }
 
 /*

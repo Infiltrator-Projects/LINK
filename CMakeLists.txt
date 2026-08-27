@@ -314,6 +314,7 @@ if(LINK_BUILD_LINUX_PROVIDER_SMOKE)
     find_path(LINK_PROVIDER_BLUEZ_INCLUDE_DIR bluetooth/bluetooth.h REQUIRED)
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(LINK_PROVIDER_LIBUSB REQUIRED IMPORTED_TARGET libusb-1.0)
+    pkg_check_modules(LINK_PROVIDER_GIO REQUIRED IMPORTED_TARGET gio-2.0)
     add_library(link-linux-provider-smoke OBJECT
         platform/linux/link-linux-serial.c
         platform/linux/link-linux-openport2.c
@@ -322,7 +323,9 @@ if(LINK_BUILD_LINUX_PROVIDER_SMOKE)
         "${CMAKE_CURRENT_SOURCE_DIR}/include"
         "${CMAKE_CURRENT_SOURCE_DIR}/platform/linux"
         "${LINK_PROVIDER_BLUEZ_INCLUDE_DIR}")
-    target_link_libraries(link-linux-provider-smoke PRIVATE PkgConfig::LINK_PROVIDER_LIBUSB)
+    target_link_libraries(link-linux-provider-smoke PRIVATE
+        PkgConfig::LINK_PROVIDER_LIBUSB
+        PkgConfig::LINK_PROVIDER_GIO)
     if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
         target_compile_options(link-linux-provider-smoke PRIVATE ${LINK_WARNING_FLAGS})
         set_source_files_properties("${CMAKE_CURRENT_SOURCE_DIR}/third_party/openport2-j2534/j2534.c" PROPERTIES COMPILE_OPTIONS "-w")

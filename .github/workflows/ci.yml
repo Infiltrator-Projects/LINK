@@ -113,7 +113,7 @@ jobs:
       - name: Install native transport build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libbluetooth-dev libusb-1.0-0-dev pkg-config
+          sudo apt-get install -y --no-install-recommends libbluetooth-dev libglib2.0-dev libusb-1.0-0-dev pkg-config
       - name: Initialise Common
         shell: bash
         run: git submodule update --init src/infiltratr-common
