@@ -93,6 +93,7 @@ typedef struct LinkGtkShellDescriptor {
     const LinkGtkManufacturerExtension *manufacturer_extension;
     const LinkGtkTransportProvider *transport_provider;
     void *transport_provider_context;
+    bool auto_connect;
     void *context;
 } LinkGtkShellDescriptor;
 
