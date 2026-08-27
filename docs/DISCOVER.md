@@ -52,7 +52,7 @@ passive network observation
     -> structured raw/evidence dump
 ```
 
-Current functionality is the first part of that path: passive 500 kbit/s CAN capture and a bounded read-only standard OBD inventory. Future depth expands the same Discover application rather than creating new MBLINK-Reader/JAGLINK-Reader repositories or duplicate scanner programs.
+Current functionality spans more than the first two steps. LINK supplies passive capture, bounded standard OBD inventory, generic read-only interrogation/evidence machinery and a reusable deep discovery-plan contract. MBLINK already supplies a Mercedes FULL SWEEP plan through that contract; JAGLINK deliberately does not add Jaguar-specific active depth until reproducible evidence supports the routes and requests. Further depth expands the same Discover applications rather than creating new MBLINK-Reader/JAGLINK-Reader repositories or duplicate scanner programs.
 
 ## What LINK owns
 

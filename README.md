@@ -78,7 +78,7 @@ MBLINK Discover     JAGLINK Discover
  Mercedes face       Jaguar face
 ```
 
-The current implementation provides passive CAN capture plus a bounded read-only standard OBD inventory. Its intended evolution is deeper manufacturer-aware module discovery, ECU identification, documented read-only acquisition and structured evidence/dump export using the same shared engine.
+The current implementation provides passive CAN capture, bounded standard OBD inventory and a shared deep read-only discovery-plan interface that product repositories can populate with evidence-backed manufacturer targets. MBLINK already uses that interface for its explicit Mercedes FULL SWEEP; JAGLINK intentionally remains at the bounded/passive stage until Jaguar-specific routes and requests are corroborated. ECU identification, structured evidence/dump export and all generic discovery mechanics remain single-source in LINK.
 
 That evolution must not fork the generic scanner. Mercedes-specific module topology, identifiers and probes belong in MBLINK; Jaguar-specific equivalents belong in JAGLINK. The reusable state machine, transports, safety classifier, evidence model and platform shell stay here.
 
@@ -159,7 +159,7 @@ Manually runnable build/test helpers, where present, are diagnostic tools only a
 
 ## Roadmap
 
-The next diagnostic completion work is to connect the existing OBD freeze-frame/readiness primitives to the same resolved fault-record path. In parallel, Discover should evolve from its present passive CAN/bounded OBD baseline into the shared deep read-only ECU/module reader: manufacturer-aware module inventory, identity acquisition and structured evidence/dump export, while keeping all generic mechanics single-source in LINK. The generic DTC catalogue is complete for the pinned OBDex snapshot and should be refreshed reproducibly when its upstream source changes. Remaining consolidation work includes reusable BLE transport coordination and further packaging/CI helper consolidation without pulling product branding into LINK.
+The next diagnostic completion work is to connect the existing OBD freeze-frame/readiness primitives to the same resolved fault-record path and continue broadening the shared deep-reader mechanics only where a product can supply evidence-backed targets. LINK now provides prompt-safe ELM resynchronisation after an interrupted manufacturer extension and header-aware broad CAN route discovery for native OpenPort 2.0; product repositories decide when those mechanisms are appropriate for a verified vehicle family. The generic DTC catalogue is complete for the pinned OBDex snapshot and should be refreshed reproducibly when its upstream source changes. Remaining consolidation work includes packaging/CI helper convergence without pulling product branding into LINK.
 
 ## Licence
 
