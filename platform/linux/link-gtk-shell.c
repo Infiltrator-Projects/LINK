@@ -95,6 +95,8 @@ static const char *session_status_name(LinkElm327SessionStatus status)
     case LINK_ELM327_SESSION_WAITING: return "waiting";
     case LINK_ELM327_SESSION_COMPLETE: return "complete";
     case LINK_ELM327_SESSION_TIMED_OUT: return "timed-out";
+    case LINK_ELM327_SESSION_RESYNCHRONIZING: return "resynchronizing";
+    case LINK_ELM327_SESSION_RESYNCHRONIZED: return "resynchronized";
     case LINK_ELM327_SESSION_CANCELLED: return "cancelled";
     case LINK_ELM327_SESSION_FAILED: return "failed";
     }
