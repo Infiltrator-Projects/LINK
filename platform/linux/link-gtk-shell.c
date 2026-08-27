@@ -929,6 +929,14 @@ static void link_clicked(GtkButton *button, gpointer user_data)
     }
 }
 
+static gboolean auto_link_idle(gpointer user_data)
+{
+    LinkGtkShell *shell = user_data;
+    if (shell == NULL) return G_SOURCE_REMOVE;
+    link_clicked(NULL, shell);
+    return G_SOURCE_REMOVE;
+}
+
 static void refresh_clicked(GtkButton *button, gpointer user_data)
 {
     (void)button;
@@ -1155,6 +1163,8 @@ static void activate(GtkApplication *application, gpointer user_data)
     render_current_section(shell);
     (void)g_timeout_add(25U, pump_serial, shell);
     gtk_window_present(shell->window);
+    if (d->auto_connect)
+        (void)g_idle_add(auto_link_idle, shell);
 }
 
 int link_gtk_shell_run(int argc, char **argv,
