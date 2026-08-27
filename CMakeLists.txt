@@ -127,6 +127,20 @@ function(link_enable_linux_gtk_shell target)
         message(FATAL_ERROR "link_enable_linux_gtk_shell target does not exist: ${target}")
     endif()
 
+    set(one_value_args UDEV_RULE_NAME)
+    cmake_parse_arguments(LINK_GTK_SHELL "" "${one_value_args}" "" ${ARGN})
+    if(LINK_GTK_SHELL_UNPARSED_ARGUMENTS)
+        message(FATAL_ERROR
+            "Unknown link_enable_linux_gtk_shell arguments: ${LINK_GTK_SHELL_UNPARSED_ARGUMENTS}")
+    endif()
+    if(NOT LINK_GTK_SHELL_UDEV_RULE_NAME)
+        set(LINK_GTK_SHELL_UDEV_RULE_NAME "60-link-openport2.rules")
+    endif()
+    if(NOT LINK_GTK_SHELL_UDEV_RULE_NAME MATCHES "^[A-Za-z0-9._+-]+\\.rules$")
+        message(FATAL_ERROR
+            "UDEV_RULE_NAME must be a plain .rules filename: ${LINK_GTK_SHELL_UDEV_RULE_NAME}")
+    endif()
+
     set(link_gtk_shell_source
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platform/linux/link-gtk-shell.c")
     set(link_gtk_i18n_header
@@ -169,9 +183,13 @@ function(link_enable_linux_gtk_shell target)
         "${LINK_BLUEZ_LIBRARY}"
         PkgConfig::LINK_LIBUSB)
 
+    # LINK owns the rule contents, while the consuming application owns its
+    # package namespace.  A consumer-specific filename prevents two LINK-based
+    # applications from claiming the same dpkg path when installed together.
     install(FILES
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platform/linux/60-link-openport2.rules"
-        DESTINATION "lib/udev/rules.d")
+        DESTINATION "lib/udev/rules.d"
+        RENAME "${LINK_GTK_SHELL_UDEV_RULE_NAME}")
 endfunction()
 
 function(link_add_windows_discover target)
