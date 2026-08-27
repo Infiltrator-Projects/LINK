@@ -1147,7 +1147,7 @@ static void link_clicked(GtkButton *button, gpointer user_data)
 
     device = selected_device(shell);
     if (device == NULL || device[0] == '\0') {
-        set_connection_state(shell, false, "No ELM327 serial device detected");
+        set_connection_state(shell, false, "No diagnostic adapter detected");
         return;
     }
 
@@ -1191,7 +1191,7 @@ static void link_clicked(GtkButton *button, gpointer user_data)
             shell->transport.disconnect(shell->transport.context);
             set_connection_state(
                 shell, false,
-                "Replay/provider ELM327 identity handshake failed");
+                "Replay/provider adapter identity handshake failed");
             end_capture_attempt(shell, "adapter-identity-failed");
             return;
         }
@@ -1199,13 +1199,13 @@ static void link_clicked(GtkButton *button, gpointer user_data)
                    &shell->serial, identity, sizeof(identity))) {
         shell->transport.disconnect(shell->transport.context);
         set_connection_state(shell, false,
-                             "Device opened but ELM327 identity handshake failed");
+                             "Device opened but adapter identity handshake failed");
         end_capture_attempt(shell, "adapter-identity-failed");
         return;
     }
     if (identity[0] == '\0')
         (void)snprintf(
-            identity, sizeof(identity), "ELM327-compatible adapter");
+            identity, sizeof(identity), "Diagnostic adapter");
     mark_capture_attempt_linked(shell, identity);
 
     {
