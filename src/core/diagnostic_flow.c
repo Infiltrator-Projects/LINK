@@ -162,6 +162,10 @@ LinkDiagnosticFlowResult link_diagnostic_flow_init(
     }
     if (config != NULL) {
         resolved = *config;
+        if (resolved.manufacturer_extension_after_pid_discovery &&
+            resolved.manufacturer_extension_after_standard_dtcs) {
+            return LINK_DIAGNOSTIC_FLOW_RESULT_INVALID_ARGUMENT;
+        }
         if (resolved.init_timeout_ms == 0U) {
             resolved.init_timeout_ms = LINK_DIAGNOSTIC_FLOW_DEFAULT_INIT_TIMEOUT_MS;
         }

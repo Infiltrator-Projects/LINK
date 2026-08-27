@@ -52,19 +52,20 @@ The DTC knowledge API is presentation-neutral and deliberately preserves the raw
 
 The catalogue is generated deterministically by `scripts/import-obdex-dtcs.py`. The generator validates exact family counts and a total of 9,533 unique generic definitions before producing the vendored normalized snapshot and compiled C lookup. The resolver uses that compiled table directly, so product builds require no network access or runtime data files.
 
-The shared diagnostic-flow controller owns the normal product-neutral sequence:
+The shared diagnostic-flow controller owns the product-neutral sequence and supports exactly one manufacturer-extension insertion point per session:
 
 ```text
 ELM init
   → standard OBD-II PID discovery
-  → optional manufacturer extension hook
-  → optional ELM restore
+  → standard VIN
+  → [optional early manufacturer extension + optional ELM restore]
   → stored / pending / permanent DTC inventory
+  → [optional late manufacturer extension + optional ELM restore]
   → live-data scheduler
   → live PID decode
 ```
 
-MBLINK uses the extension hook for Mercedes-specific probing. JAGLINK currently skips it. Manufacturer logic therefore stays above LINK while the generic sequencing remains shared.
+A configuration that enables both extension positions is rejected rather than silently running manufacturer discovery twice. MBLINK deliberately uses the late hook so standard fault evidence completes before a potentially long Mercedes module scan. JAGLINK currently skips the manufacturer hook. Manufacturer logic therefore stays above LINK while generic sequencing remains shared.
 
 ## Discover application model
 
@@ -111,7 +112,7 @@ cmake --build build-sanitized --parallel
 ctest --test-dir build-sanitized --output-on-failure
 ```
 
-GitHub Actions builds and tests the strict portable core on Linux, macOS and Windows and runs ASan+UBSan on Linux. Product Linux builds additionally compile LINK's native BlueZ and direct-libUSB OpenPort 2.0 providers; physical USB handshake validation remains a hardware test rather than something CI can simulate. The DTC knowledge suite enforces the exact 9,533-definition catalogue size and pinned upstream snapshot, samples all seven generic families, checks generic/manufacturer range boundaries, preserves lowercase normalization and malformed-code rejection, and verifies shared UDS status semantics. The ISO-TP suite covers preserved Classical CAN behaviour as well as CAN-FD single-frame, multi-frame and extended-length traffic. The Windows configuration proves that the same shared Discover implementation can produce both MBLINK and JAGLINK product faces.
+GitHub Actions builds and tests the strict portable core on Linux, macOS and Windows, runs ASan+UBSan on Linux, and independently compiles LINK's native BlueZ/direct-libUSB adapter providers in LINK CI. The OpenPort regression suite rejects J2534 start-of-message, loopback and TX-done records as completed vehicle responses. Product Linux builds provide a second integration check; physical USB handshake validation remains a hardware test rather than something CI can simulate. The DTC knowledge suite enforces the exact 9,533-definition catalogue size and pinned upstream snapshot, samples all seven generic families, checks generic/manufacturer range boundaries, preserves lowercase normalization and malformed-code rejection, and verifies shared UDS status semantics. The ISO-TP suite covers preserved Classical CAN behaviour as well as CAN-FD single-frame, multi-frame and extended-length traffic. The Windows configuration proves that the same shared Discover implementation can produce both MBLINK and JAGLINK product faces.
 
 CI also installs LINK and its Common dependency to a clean prefix, rediscovers the exported `LINK::Core` package with `find_package`, and builds an external consumer that exercises the 27-service catalogue and 64-byte CAN-FD contract.
 

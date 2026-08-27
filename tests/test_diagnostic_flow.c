@@ -275,6 +275,29 @@ static int test_manufacturer_extension_after_standard_dtcs(void)
     return 0;
 }
 
+static int test_invalid_manufacturer_extension_configuration(void)
+{
+    LinkDiagnosticFlow flow;
+    LinkDiagnosticFlowConfig config = LINK_DIAGNOSTIC_FLOW_CONFIG_INIT;
+
+    config.manufacturer_extension_after_pid_discovery = true;
+    config.manufacturer_extension_after_standard_dtcs = true;
+    CHECK(link_diagnostic_flow_init(&flow, &config) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_INVALID_ARGUMENT);
+    return 0;
+}
+
+static int test_default_cold_acquisition_timeout(void)
+{
+    LinkDiagnosticFlow flow;
+    LinkDiagnosticFlowConfig config = LINK_DIAGNOSTIC_FLOW_CONFIG_INIT;
+
+    CHECK(link_diagnostic_flow_init(&flow, &config) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(flow.config.query_timeout_ms == UINT64_C(8000));
+    return 0;
+}
+
 static int test_invalid_response_order(void)
 {
     LinkDiagnosticFlow flow;
@@ -295,6 +318,8 @@ int main(void)
     if (test_standard_sequence() != 0) return 1;
     if (test_manufacturer_extension_restore() != 0) return 1;
     if (test_manufacturer_extension_after_standard_dtcs() != 0) return 1;
+    if (test_invalid_manufacturer_extension_configuration() != 0) return 1;
+    if (test_default_cold_acquisition_timeout() != 0) return 1;
     if (test_invalid_response_order() != 0) return 1;
     puts("diagnostic flow tests passed");
     return 0;

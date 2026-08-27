@@ -103,6 +103,27 @@ jobs:
           Write-Host "MBLINK face: $($mb.FullName)"
           Write-Host "JAGLINK face: $($jag.FullName)"
 
+  linux-native-adapters:
+    name: Ubuntu / native Linux adapter providers
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install native transport build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libbluetooth-dev libusb-1.0-0-dev pkg-config
+      - name: Initialise Common
+        shell: bash
+        run: git submodule update --init src/infiltratr-common
+      - name: Configure native provider ownership smoke
+        run: cmake -S . -B build-linux-providers -DCMAKE_BUILD_TYPE=Release -DLINK_BUILD_LINUX_PROVIDER_SMOKE=ON -DBUILD_TESTING=ON
+      - name: Compile native providers
+        run: cmake --build build-linux-providers --target link-linux-provider-smoke link-test-linux-openport2-status --parallel
+      - name: Verify OpenPort receive-status regression
+        run: ctest --test-dir build-linux-providers -R '^link-linux-openport2-status$' --output-on-failure
+
   sanitizers:
     name: Ubuntu / ASan + UBSan
     runs-on: ubuntu-latest
