@@ -71,6 +71,27 @@ static void elm327_session_receive(void *context,
         return;
     }
 
+    if (session->status == LINK_ELM327_SESSION_RESYNCHRONIZING) {
+        size_t last_prompt = SIZE_MAX;
+        for (size_t index = 0U; index < size; ++index) {
+            if (data[index] == (uint8_t)'>') last_prompt = index;
+        }
+        elm327_session_add_unexpected(session, size);
+        if (last_prompt == SIZE_MAX ||
+            !elm327_session_bytes_are_whitespace(
+                data + last_prompt + 1U, size - last_prompt - 1U)) {
+            return;
+        }
+        session->status = LINK_ELM327_SESSION_RESYNCHRONIZED;
+        session->needs_resync = false;
+        session->elm_result = LINK_ELM327_RESULT_OK;
+        session->transport_status = LINK_TRANSPORT_OK;
+        memset(&session->parser, 0, sizeof(session->parser));
+        memset(&session->response, 0, sizeof(session->response));
+        elm327_session_notify(session);
+        return;
+    }
+
     if (session->status != LINK_ELM327_SESSION_WAITING) {
         elm327_session_add_unexpected(session, size);
         if (!elm327_session_bytes_are_whitespace(data, size)) {
@@ -150,7 +171,8 @@ LinkTransportStatus link_elm327_session_connect(LinkElm327Session *session)
         return LINK_TRANSPORT_INVALID_ARGUMENT;
     }
     if (session->callback_active ||
-        session->status == LINK_ELM327_SESSION_WAITING) {
+        session->status == LINK_ELM327_SESSION_WAITING ||
+        session->status == LINK_ELM327_SESSION_RESYNCHRONIZING) {
         return LINK_TRANSPORT_BUSY;
     }
 
@@ -178,7 +200,8 @@ void link_elm327_session_disconnect(LinkElm327Session *session)
 
     session->transport.disconnect(session->transport.context);
     session->transport.set_receiver(session->transport.context, NULL, NULL);
-    if (session->status == LINK_ELM327_SESSION_WAITING) {
+    if (session->status == LINK_ELM327_SESSION_WAITING ||
+        session->status == LINK_ELM327_SESSION_RESYNCHRONIZING) {
         session->status = LINK_ELM327_SESSION_CANCELLED;
         session->needs_resync = false;
         elm327_session_notify(session);
@@ -215,7 +238,8 @@ LinkElm327SessionOpResult link_elm327_session_begin(
         return LINK_ELM327_SESSION_OP_INVALID_ARGUMENT;
     }
     if (session->callback_active ||
-        session->status == LINK_ELM327_SESSION_WAITING) {
+        session->status == LINK_ELM327_SESSION_WAITING ||
+        session->status == LINK_ELM327_SESSION_RESYNCHRONIZING) {
         return LINK_ELM327_SESSION_OP_BUSY;
     }
     if (session->needs_resync) {
@@ -266,7 +290,8 @@ LinkElm327SessionStatus link_elm327_session_tick(
         return LINK_ELM327_SESSION_FAILED;
     }
 
-    if (session->status == LINK_ELM327_SESSION_WAITING &&
+    if ((session->status == LINK_ELM327_SESSION_WAITING ||
+         session->status == LINK_ELM327_SESSION_RESYNCHRONIZING) &&
         now_ms >= session->deadline_ms) {
         session->status = LINK_ELM327_SESSION_TIMED_OUT;
         session->transport_status = LINK_TRANSPORT_TIMEOUT;
@@ -276,10 +301,56 @@ LinkElm327SessionStatus link_elm327_session_tick(
     return session->status;
 }
 
+LinkElm327SessionOpResult link_elm327_session_begin_resynchronization(
+    LinkElm327Session *session,
+    uint64_t now_ms,
+    uint64_t timeout_ms)
+{
+    static const uint8_t prompt_request[] = {'\r'};
+    uint64_t deadline;
+    LinkTransportStatus write_result;
+
+    if (session == NULL || timeout_ms == 0U ||
+        !link_transport_is_valid(&session->transport)) {
+        return LINK_ELM327_SESSION_OP_INVALID_ARGUMENT;
+    }
+    if (session->callback_active ||
+        session->status == LINK_ELM327_SESSION_WAITING ||
+        session->status == LINK_ELM327_SESSION_RESYNCHRONIZING) {
+        return LINK_ELM327_SESSION_OP_BUSY;
+    }
+    if (!session->needs_resync) {
+        return LINK_ELM327_SESSION_OP_INVALID_ARGUMENT;
+    }
+    if (!session->transport.is_connected(session->transport.context)) {
+        return LINK_ELM327_SESSION_OP_NOT_CONNECTED;
+    }
+    if (!infiltratr_u64_add_checked(now_ms, timeout_ms, &deadline)) {
+        return LINK_ELM327_SESSION_OP_DEADLINE_OVERFLOW;
+    }
+
+    session->status = LINK_ELM327_SESSION_RESYNCHRONIZING;
+    session->deadline_ms = deadline;
+    session->elm_result = LINK_ELM327_RESULT_MORE_DATA;
+    session->transport_status = LINK_TRANSPORT_OK;
+    memset(&session->parser, 0, sizeof(session->parser));
+    memset(&session->response, 0, sizeof(session->response));
+
+    write_result = session->transport.write(
+        session->transport.context, prompt_request, sizeof(prompt_request));
+    if (write_result != LINK_TRANSPORT_OK) {
+        elm327_session_fail(session, LINK_ELM327_RESULT_MORE_DATA,
+                            write_result, true);
+        return LINK_ELM327_SESSION_OP_TRANSPORT_ERROR;
+    }
+    return LINK_ELM327_SESSION_OP_OK;
+}
+
 bool link_elm327_session_cancel(LinkElm327Session *session)
 {
     if (session == NULL ||
-        session->status != LINK_ELM327_SESSION_WAITING) {
+        (session->status != LINK_ELM327_SESSION_WAITING &&
+         session->status != LINK_ELM327_SESSION_RESYNCHRONIZING)) {
         return false;
     }
 
@@ -292,7 +363,8 @@ bool link_elm327_session_cancel(LinkElm327Session *session)
 void link_elm327_session_mark_resynchronized(LinkElm327Session *session)
 {
     if (session == NULL ||
-        session->status == LINK_ELM327_SESSION_WAITING) {
+        session->status == LINK_ELM327_SESSION_WAITING ||
+        session->status == LINK_ELM327_SESSION_RESYNCHRONIZING) {
         return;
     }
 

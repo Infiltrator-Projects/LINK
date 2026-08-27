@@ -26,6 +26,8 @@ typedef enum LinkElm327SessionStatus {
     LINK_ELM327_SESSION_WAITING,
     LINK_ELM327_SESSION_COMPLETE,
     LINK_ELM327_SESSION_TIMED_OUT,
+    LINK_ELM327_SESSION_RESYNCHRONIZING,
+    LINK_ELM327_SESSION_RESYNCHRONIZED,
     LINK_ELM327_SESSION_CANCELLED,
     LINK_ELM327_SESSION_FAILED
 } LinkElm327SessionStatus;
@@ -79,6 +81,16 @@ LinkElm327SessionOpResult link_elm327_session_begin(
 LinkElm327SessionStatus link_elm327_session_tick(
     LinkElm327Session *session,
     uint64_t now_ms);
+
+/**
+ * Begin bounded prompt-based resynchronisation after timeout/cancellation.
+ * A bare carriage return requests a fresh prompt; stale input is discarded
+ * until a prompt with only trailing whitespace is observed.
+ */
+LinkElm327SessionOpResult link_elm327_session_begin_resynchronization(
+    LinkElm327Session *session,
+    uint64_t now_ms,
+    uint64_t timeout_ms);
 
 /** Cancel locally and require explicit resynchronisation before reuse. */
 bool link_elm327_session_cancel(LinkElm327Session *session);
