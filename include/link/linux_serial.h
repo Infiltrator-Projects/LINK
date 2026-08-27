@@ -15,10 +15,13 @@ extern "C" {
  * Linux ELM-compatible transport.
  *
  * The historical name is retained for source compatibility.  The provider
- * accepts ordinary tty/rfcomm paths plus native BlueZ BLE and Bluetooth
- * Classic SPP selections returned by link_linux_serial_discover(). BLE uses
- * BlueZ D-Bus/GATT. Classic SPP uses a native RFCOMM socket with SDP service
- * discovery, so callers do not need to create /dev/rfcomm* manually.
+ * accepts ordinary tty/rfcomm paths, native BlueZ BLE / Bluetooth Classic
+ * selections and native Tactrix OpenPort 2.0 USB selections returned by
+ * link_linux_serial_discover(). BLE uses BlueZ D-Bus/GATT, Classic SPP uses a
+ * native RFCOMM socket with SDP discovery, and OpenPort 2.0 uses LINK's own
+ * libusb/J2534 provider. The historical "serial" API name is retained for
+ * source compatibility; the object is now a general Linux diagnostic-adapter
+ * transport.
  */
 typedef struct LinkLinuxSerialTransport {
     int fd;
@@ -30,6 +33,7 @@ typedef struct LinkLinuxSerialTransport {
     bool connected;
     bool bluetooth_le;
     bool bluetooth_classic;
+    bool openport2;
 } LinkLinuxSerialTransport;
 
 void link_linux_serial_init(LinkLinuxSerialTransport *transport);
@@ -38,6 +42,13 @@ bool link_linux_serial_configure(LinkLinuxSerialTransport *transport,
                                  unsigned int baud_rate);
 void link_linux_serial_disconnect(LinkLinuxSerialTransport *transport);
 bool link_linux_serial_is_connected(const LinkLinuxSerialTransport *transport);
+/**
+ * Verify and identify the selected diagnostic adapter.
+ *
+ * For compatibility the historical function name is retained. ELM adapters
+ * are queried with ATI; LINK-native OpenPort 2.0 selections return their
+ * Tactrix/J2534 firmware identity without pretending the USB device is an ELM.
+ */
 bool link_linux_serial_probe_elm327(LinkLinuxSerialTransport *transport,
                                     char *identity,
                                     size_t identity_capacity);
