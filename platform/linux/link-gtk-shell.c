@@ -39,9 +39,14 @@ typedef struct LinkGtkShell {
     char adapter_identity[160];
     char adapter_device[256];
     GString *exchange_json;
+    size_t trace_record_count;
     size_t exchange_count;
     bool exchange_truncated;
     uint64_t exchange_started_ms;
+    uint64_t attempt_started_ms;
+    unsigned int capture_attempt_count;
+    unsigned int current_capture_attempt;
+    bool capture_attempt_linked;
     unsigned int diagnostic_retry_count;
     bool diagnostic_retry_pending;
     uint64_t diagnostic_retry_at_ms;
@@ -77,7 +82,12 @@ static uint64_t monotonic_ms(void)
 }
 
 #define LINK_GTK_SESSION_TRACE_LIMIT (16U * 1024U * 1024U)
-static void set_connection_state(LinkGtkShell *shell, bool connected, const char *message);
+
+static void set_connection_state(
+    LinkGtkShell *shell,
+    bool connected,
+    const char *message);
+
 static const char *session_status_name(LinkElm327SessionStatus status)
 {
     switch (status) {
@@ -90,73 +100,345 @@ static const char *session_status_name(LinkElm327SessionStatus status)
     }
     return "unknown";
 }
+
 static void json_string(GString *out, const char *text)
 {
-    const unsigned char *p=(const unsigned char *)(text!=NULL?text:"");
-    g_string_append_c(out,'"');
-    for (;*p!=0U;++p) {
-        if (*p=='"') g_string_append(out,"\\\"");
-        else if (*p=='\\') g_string_append(out,"\\\\");
-        else if (*p=='\n') g_string_append(out,"\\n");
-        else if (*p=='\r') g_string_append(out,"\\r");
-        else if (*p=='\t') g_string_append(out,"\\t");
-        else if (*p<0x20U) g_string_append_printf(out,"\\u%04x",(unsigned int)*p);
-        else g_string_append_c(out,(char)*p);
+    const unsigned char *p =
+        (const unsigned char *)(text != NULL ? text : "");
+    g_string_append_c(out, '"');
+    for (; *p != 0U; ++p) {
+        if (*p == '"') g_string_append(out, "\\\"");
+        else if (*p == '\\') g_string_append(out, "\\\\");
+        else if (*p == '\n') g_string_append(out, "\\n");
+        else if (*p == '\r') g_string_append(out, "\\r");
+        else if (*p == '\t') g_string_append(out, "\\t");
+        else if (*p < 0x20U)
+            g_string_append_printf(out, "\\u%04x", (unsigned int)*p);
+        else
+            g_string_append_c(out, (char)*p);
     }
-    g_string_append_c(out,'"');
+    g_string_append_c(out, '"');
 }
-static void json_hex(GString *out,const uint8_t *data,size_t n)
+
+static void json_hex(GString *out, const uint8_t *data, size_t count)
 {
-    static const char h[]="0123456789ABCDEF"; size_t i;
-    g_string_append_c(out,'"');
-    for(i=0U;data!=NULL&&i<n;++i){g_string_append_c(out,h[data[i]>>4U]);g_string_append_c(out,h[data[i]&15U]);}
-    g_string_append_c(out,'"');
+    static const char hex[] = "0123456789ABCDEF";
+    size_t index;
+    g_string_append_c(out, '"');
+    for (index = 0U; data != NULL && index < count; ++index) {
+        g_string_append_c(out, hex[data[index] >> 4U]);
+        g_string_append_c(out, hex[data[index] & 15U]);
+    }
+    g_string_append_c(out, '"');
 }
+
+/*
+ * A diagnostic investigation intentionally survives LINK DOWN / LINK UP.
+ * Individual physical connection attempts are separated by explicit trace
+ * records instead of erasing earlier evidence.  This is important for cold
+ * ELM327/protocol-acquisition faults which may disappear on a second attempt.
+ */
 static void reset_session_capture(LinkGtkShell *shell)
 {
-    if(shell->exchange_json==NULL)shell->exchange_json=g_string_sized_new(8192U);else g_string_truncate(shell->exchange_json,0U);
-    shell->exchange_count=0U;shell->exchange_truncated=false;shell->exchange_started_ms=monotonic_ms();
-    shell->adapter_identity[0]='\0';shell->adapter_device[0]='\0';
-    shell->diagnostic_retry_count=0U;shell->diagnostic_retry_pending=false;
-    shell->diagnostic_retry_at_ms=0U;shell->diagnostic_had_failure=false;
+    if (shell->exchange_json == NULL)
+        shell->exchange_json = g_string_sized_new(8192U);
+    else
+        g_string_truncate(shell->exchange_json, 0U);
+
+    shell->trace_record_count = 0U;
+    shell->exchange_count = 0U;
+    shell->exchange_truncated = false;
+    shell->exchange_started_ms = monotonic_ms();
+    shell->attempt_started_ms = 0U;
+    shell->capture_attempt_count = 0U;
+    shell->current_capture_attempt = 0U;
+    shell->capture_attempt_linked = false;
+    shell->adapter_identity[0] = '\0';
+    shell->adapter_device[0] = '\0';
+    shell->diagnostic_retry_count = 0U;
+    shell->diagnostic_retry_pending = false;
+    shell->diagnostic_retry_at_ms = 0U;
+    shell->diagnostic_had_failure = false;
 }
-static void record_session_exchange(LinkGtkShell *shell)
+
+static bool append_trace_record(LinkGtkShell *shell, GString *record)
 {
-    const LinkElm327Session *x=&shell->session; const LinkElm327Response *r; GString *e; uint64_t now,elapsed;
-    if(x->status!=LINK_ELM327_SESSION_COMPLETE&&x->status!=LINK_ELM327_SESSION_TIMED_OUT&&x->status!=LINK_ELM327_SESSION_CANCELLED&&x->status!=LINK_ELM327_SESSION_FAILED)return;
-    if (shell->exchange_truncated) return;
-    now = monotonic_ms();
-    elapsed = now >= shell->exchange_started_ms ? now - shell->exchange_started_ms : 0U;
-    e=g_string_sized_new(512U+x->parser.raw_length*2U);
-    g_string_append_printf(e,"{\"elapsed_ms\":%llu,\"sequence\":%llu,\"status\":",(unsigned long long)elapsed,(unsigned long long)x->sequence);
-    json_string(e,session_status_name(x->status));g_string_append(e,",\"command\":");json_string(e,x->parser.command);g_string_append(e,",\"raw_hex\":");json_hex(e,x->parser.raw,x->parser.raw_length);
-    g_string_append(e,",\"elm_result\":");json_string(e,link_elm327_result_name(x->elm_result));
-    r=x->status==LINK_ELM327_SESSION_COMPLETE?link_elm327_session_response(x):NULL;
-    if(r!=NULL){g_string_append(e,",\"response\":{\"result\":");json_string(e,link_elm327_result_name(r->result));g_string_append(e,",\"text\":");json_string(e,r->text);g_string_append_c(e,'}');}else g_string_append(e,",\"response\":null");
-    g_string_append_c(e,'}');
-    if(shell->exchange_json->len+e->len+2U>LINK_GTK_SESSION_TRACE_LIMIT){shell->exchange_truncated=true;g_string_free(e,TRUE);return;}
-    if (shell->exchange_count != 0U) g_string_append_c(shell->exchange_json, ',');
-    g_string_append_len(shell->exchange_json, e->str, (gssize)e->len);
-    ++shell->exchange_count;
-    g_string_free(e, TRUE);
+    size_t separator = 0U;
+    if (shell == NULL || record == NULL) return false;
+    if (shell->exchange_truncated) return false;
+    if (shell->trace_record_count != 0U) separator = 1U;
+    if (shell->exchange_json->len + record->len + separator >
+        LINK_GTK_SESSION_TRACE_LIMIT) {
+        shell->exchange_truncated = true;
+        return false;
+    }
+    if (separator != 0U) g_string_append_c(shell->exchange_json, ',');
+    g_string_append_len(
+        shell->exchange_json, record->str, (gssize)record->len);
+    ++shell->trace_record_count;
+    return true;
 }
-static GString *build_session_json(const LinkGtkShell *shell)
+
+static uint64_t investigation_elapsed_ms(const LinkGtkShell *shell)
 {
-    GString *o=g_string_sized_new(2048U+(shell->exchange_json!=NULL?shell->exchange_json->len:0U));GDateTime *now=g_date_time_new_now_utc();char *ts=now!=NULL?g_date_time_format_iso8601(now):NULL;
-    g_string_append(o,"{\n\"schema\":\"link-diagnostic-session/v1\",\n\"generated_utc\":");json_string(o,ts!=NULL?ts:"unknown");g_string_append(o,",\n\"product\":");json_string(o,shell->descriptor->brand_name);g_string_append(o,",\n\"version\":");json_string(o,shell->descriptor->version);
-    g_string_append(o,",\n\"adapter_device\":");json_string(o,shell->adapter_device);g_string_append(o,",\n\"adapter_identity\":");json_string(o,shell->adapter_identity);g_string_append(o,",\n\"diagnostic_stage\":");json_string(o,link_diagnostic_flow_stage_name(shell->flow.stage));
-    g_string_append_printf(o,",\n\"session_complete\":%s,\n\"diagnostics_active\":%s,\n\"diagnostics_ready\":%s,\n\"manufacturer_extension_active\":%s,\n\"diagnostic_had_failure\":%s,\n\"automatic_retries\":%u",
-        shell->diagnostics_ready && !shell->manufacturer_extension_active ? "true" : "false",
+    const uint64_t now = monotonic_ms();
+    if (shell == NULL || now < shell->exchange_started_ms) return 0U;
+    return now - shell->exchange_started_ms;
+}
+
+static uint64_t attempt_elapsed_ms(const LinkGtkShell *shell)
+{
+    const uint64_t now = monotonic_ms();
+    if (shell == NULL || shell->attempt_started_ms == 0U ||
+        now < shell->attempt_started_ms) {
+        return 0U;
+    }
+    return now - shell->attempt_started_ms;
+}
+
+static void begin_capture_attempt(LinkGtkShell *shell, const char *device)
+{
+    GString *record;
+    if (shell == NULL || shell->current_capture_attempt != 0U) return;
+
+    ++shell->capture_attempt_count;
+    shell->current_capture_attempt = shell->capture_attempt_count;
+    shell->attempt_started_ms = monotonic_ms();
+    shell->capture_attempt_linked = false;
+    shell->diagnostic_retry_count = 0U;
+    shell->diagnostic_retry_pending = false;
+    shell->diagnostic_retry_at_ms = 0U;
+    shell->diagnostic_had_failure = false;
+    shell->adapter_identity[0] = '\0';
+    (void)snprintf(
+        shell->adapter_device, sizeof(shell->adapter_device), "%s",
+        device != NULL ? device : "");
+
+    record = g_string_sized_new(384U);
+    g_string_append_printf(
+        record,
+        "{\"record_type\":\"attempt\",\"event\":\"start\","
+        "\"attempt\":%u,\"investigation_elapsed_ms\":%llu,"
+        "\"adapter_device\":",
+        shell->current_capture_attempt,
+        (unsigned long long)investigation_elapsed_ms(shell));
+    json_string(record, shell->adapter_device);
+    g_string_append_c(record, '}');
+    (void)append_trace_record(shell, record);
+    g_string_free(record, TRUE);
+}
+
+static void mark_capture_attempt_linked(
+    LinkGtkShell *shell,
+    const char *identity)
+{
+    GString *record;
+    if (shell == NULL || shell->current_capture_attempt == 0U) return;
+
+    shell->capture_attempt_linked = true;
+    (void)snprintf(
+        shell->adapter_identity, sizeof(shell->adapter_identity), "%s",
+        identity != NULL ? identity : "");
+
+    record = g_string_sized_new(448U);
+    g_string_append_printf(
+        record,
+        "{\"record_type\":\"attempt\",\"event\":\"adapter-verified\","
+        "\"attempt\":%u,\"investigation_elapsed_ms\":%llu,"
+        "\"attempt_elapsed_ms\":%llu,\"adapter_device\":",
+        shell->current_capture_attempt,
+        (unsigned long long)investigation_elapsed_ms(shell),
+        (unsigned long long)attempt_elapsed_ms(shell));
+    json_string(record, shell->adapter_device);
+    g_string_append(record, ",\"adapter_identity\":");
+    json_string(record, shell->adapter_identity);
+    g_string_append_c(record, '}');
+    (void)append_trace_record(shell, record);
+    g_string_free(record, TRUE);
+}
+
+static void end_capture_attempt(LinkGtkShell *shell, const char *outcome)
+{
+    GString *record;
+    if (shell == NULL || shell->current_capture_attempt == 0U) return;
+
+    record = g_string_sized_new(1024U);
+    g_string_append_printf(
+        record,
+        "{\"record_type\":\"attempt\",\"event\":\"end\","
+        "\"attempt\":%u,\"investigation_elapsed_ms\":%llu,"
+        "\"attempt_elapsed_ms\":%llu,\"outcome\":",
+        shell->current_capture_attempt,
+        (unsigned long long)investigation_elapsed_ms(shell),
+        (unsigned long long)attempt_elapsed_ms(shell));
+    json_string(record, outcome != NULL ? outcome : "ended");
+    g_string_append(record, ",\"adapter_device\":");
+    json_string(record, shell->adapter_device);
+    g_string_append(record, ",\"adapter_identity\":");
+    json_string(record, shell->adapter_identity);
+    g_string_append_printf(
+        record,
+        ",\"adapter_verified\":%s,\"diagnostics_active\":%s,"
+        "\"diagnostics_ready\":%s,\"manufacturer_extension_active\":%s,"
+        "\"diagnostic_had_failure\":%s,\"automatic_retries\":%u,"
+        "\"diagnostic_stage\":",
+        shell->capture_attempt_linked ? "true" : "false",
         shell->diagnostics_active ? "true" : "false",
         shell->diagnostics_ready ? "true" : "false",
         shell->manufacturer_extension_active ? "true" : "false",
         shell->diagnostic_had_failure ? "true" : "false",
         shell->diagnostic_retry_count);
-    if(shell->flow.stage==LINK_DIAGNOSTIC_FLOW_FAILED){g_string_append(o,",\n\"diagnostic_failure\":");json_string(o,link_diagnostic_flow_result_name(shell->flow.failure));}
-    if(shell->descriptor->append_session_state_json!=NULL){g_string_append(o,",\n\"product_state\":");shell->descriptor->append_session_state_json(o,shell->descriptor->context);}
-    g_string_append_printf(o,",\n\"elm_exchanges\":{\"captured\":%zu,\"truncated\":%s,\"records\":[",shell->exchange_count,shell->exchange_truncated?"true":"false");if(shell->exchange_json!=NULL)g_string_append_len(o,shell->exchange_json->str,(gssize)shell->exchange_json->len);g_string_append(o,"]}\n}\n");
-    g_free(ts);if(now!=NULL)g_date_time_unref(now);return o;
+    json_string(
+        record,
+        shell->capture_attempt_linked
+            ? link_diagnostic_flow_stage_name(shell->flow.stage)
+            : "not-started");
+    if (shell->flow.stage == LINK_DIAGNOSTIC_FLOW_FAILED) {
+        g_string_append(record, ",\"diagnostic_failure\":");
+        json_string(record, link_diagnostic_flow_result_name(shell->flow.failure));
+    }
+    if (shell->capture_attempt_linked &&
+        shell->descriptor->append_session_state_json != NULL) {
+        g_string_append(record, ",\"product_state\":");
+        shell->descriptor->append_session_state_json(
+            record, shell->descriptor->context);
+    }
+    g_string_append_c(record, '}');
+    (void)append_trace_record(shell, record);
+    g_string_free(record, TRUE);
+
+    shell->current_capture_attempt = 0U;
+    shell->attempt_started_ms = 0U;
+    shell->capture_attempt_linked = false;
 }
+
+static void record_session_exchange(LinkGtkShell *shell)
+{
+    const LinkElm327Session *session;
+    const LinkElm327Response *response;
+    GString *record;
+
+    if (shell == NULL || shell->current_capture_attempt == 0U) return;
+    session = &shell->session;
+    if (session->status != LINK_ELM327_SESSION_COMPLETE &&
+        session->status != LINK_ELM327_SESSION_TIMED_OUT &&
+        session->status != LINK_ELM327_SESSION_CANCELLED &&
+        session->status != LINK_ELM327_SESSION_FAILED) {
+        return;
+    }
+    if (shell->exchange_truncated) return;
+
+    record = g_string_sized_new(640U + session->parser.raw_length * 2U);
+    g_string_append_printf(
+        record,
+        "{\"record_type\":\"elm-exchange\",\"attempt\":%u,"
+        "\"investigation_elapsed_ms\":%llu,\"attempt_elapsed_ms\":%llu,"
+        "\"sequence\":%llu,\"status\":",
+        shell->current_capture_attempt,
+        (unsigned long long)investigation_elapsed_ms(shell),
+        (unsigned long long)attempt_elapsed_ms(shell),
+        (unsigned long long)session->sequence);
+    json_string(record, session_status_name(session->status));
+    g_string_append(record, ",\"command\":");
+    json_string(record, session->parser.command);
+    g_string_append(record, ",\"raw_hex\":");
+    json_hex(record, session->parser.raw, session->parser.raw_length);
+    g_string_append(record, ",\"elm_result\":");
+    json_string(record, link_elm327_result_name(session->elm_result));
+
+    response = session->status == LINK_ELM327_SESSION_COMPLETE
+        ? link_elm327_session_response(session) : NULL;
+    if (response != NULL) {
+        g_string_append(record, ",\"response\":{\"result\":");
+        json_string(record, link_elm327_result_name(response->result));
+        g_string_append(record, ",\"text\":");
+        json_string(record, response->text);
+        g_string_append_c(record, '}');
+    } else {
+        g_string_append(record, ",\"response\":null");
+    }
+    g_string_append_c(record, '}');
+
+    if (append_trace_record(shell, record)) ++shell->exchange_count;
+    g_string_free(record, TRUE);
+}
+
+static GString *build_session_json(const LinkGtkShell *shell)
+{
+    GString *out;
+    GDateTime *now;
+    char *timestamp;
+
+    out = g_string_sized_new(
+        3072U +
+        (shell->exchange_json != NULL ? shell->exchange_json->len : 0U));
+    now = g_date_time_new_now_utc();
+    timestamp = now != NULL ? g_date_time_format_iso8601(now) : NULL;
+
+    g_string_append(
+        out,
+        "{\n\"schema\":\"link-diagnostic-investigation/v2\","
+        "\n\"generated_utc\":");
+    json_string(out, timestamp != NULL ? timestamp : "unknown");
+    g_string_append(out, ",\n\"product\":");
+    json_string(out, shell->descriptor->brand_name);
+    g_string_append(out, ",\n\"version\":");
+    json_string(out, shell->descriptor->version);
+    g_string_append_printf(
+        out,
+        ",\n\"attempts_started\":%u,\n\"active_attempt\":%u",
+        shell->capture_attempt_count,
+        shell->current_capture_attempt);
+    g_string_append(out, ",\n\"latest_adapter_device\":");
+    json_string(out, shell->adapter_device);
+    g_string_append(out, ",\n\"latest_adapter_identity\":");
+    json_string(out, shell->adapter_identity);
+    g_string_append(out, ",\n\"diagnostic_stage\":");
+    json_string(out, link_diagnostic_flow_stage_name(shell->flow.stage));
+    g_string_append_printf(
+        out,
+        ",\n\"session_complete\":%s,"
+        "\n\"diagnostics_active\":%s,"
+        "\n\"diagnostics_ready\":%s,"
+        "\n\"manufacturer_extension_active\":%s,"
+        "\n\"diagnostic_had_failure\":%s,"
+        "\n\"automatic_retries\":%u",
+        shell->diagnostics_ready && !shell->manufacturer_extension_active
+            ? "true" : "false",
+        shell->diagnostics_active ? "true" : "false",
+        shell->diagnostics_ready ? "true" : "false",
+        shell->manufacturer_extension_active ? "true" : "false",
+        shell->diagnostic_had_failure ? "true" : "false",
+        shell->diagnostic_retry_count);
+    if (shell->flow.stage == LINK_DIAGNOSTIC_FLOW_FAILED) {
+        g_string_append(out, ",\n\"diagnostic_failure\":");
+        json_string(
+            out, link_diagnostic_flow_result_name(shell->flow.failure));
+    }
+    if (shell->descriptor->append_session_state_json != NULL) {
+        g_string_append(out, ",\n\"product_state\":");
+        shell->descriptor->append_session_state_json(
+            out, shell->descriptor->context);
+    }
+    g_string_append_printf(
+        out,
+        ",\n\"trace\":{\"records_captured\":%zu,"
+        "\"elm_exchanges\":%zu,\"truncated\":%s,\"records\":[",
+        shell->trace_record_count,
+        shell->exchange_count,
+        shell->exchange_truncated ? "true" : "false");
+    if (shell->exchange_json != NULL) {
+        g_string_append_len(
+            out, shell->exchange_json->str,
+            (gssize)shell->exchange_json->len);
+    }
+    g_string_append(out, "]}\n}\n");
+
+    g_free(timestamp);
+    if (now != NULL) g_date_time_unref(now);
+    return out;
+}
+
 G_GNUC_BEGIN_IGNORE_DEPRECATIONS
 static void save_session_response(GtkNativeDialog *dialog,int response,gpointer data)
 {
