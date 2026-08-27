@@ -32,8 +32,35 @@ typedef struct LinkGtkManufacturerExtension {
     bool (*accept_response)(const LinkElm327Response *response,
                             bool *complete,
                             void *context);
+    /*
+     * Optional low-cost progress edge.  Return true only when product-owned
+     * state visible in the workspace changed (for example, a newly discovered
+     * ECU or newly captured DTC).  This avoids repainting a long manufacturer
+     * sweep for every expected NO DATA response.
+     */
+    bool (*progress_changed)(void *context);
     void (*finished)(bool complete, void *context);
 } LinkGtkManufacturerExtension;
+
+/**
+ * Optional product-supplied Linux transport provider.
+ *
+ * The normal shell owns the serial/BlueZ provider.  Tests and specialist
+ * products may instead expose a deterministic byte-stream transport (for
+ * example a captured ELM327 replay) without duplicating the GTK workspace.
+ * The provider is selected only when this descriptor is non-NULL.
+ */
+typedef struct LinkGtkTransportProvider {
+    size_t (*discover)(char paths[][256], size_t capacity, void *context);
+    bool (*configure)(const char *device,
+                      unsigned int baud_rate,
+                      LinkTransport *transport,
+                      void *context);
+    bool (*probe_elm327)(char *identity,
+                         size_t identity_capacity,
+                         void *context);
+    void (*pump)(void *context);
+} LinkGtkTransportProvider;
 
 typedef struct LinkGtkShellDescriptor {
     const char *app_id;
@@ -64,6 +91,8 @@ typedef struct LinkGtkShellDescriptor {
     const char *diagnostic_restart_action_label;
     void (*diagnostic_restart_action)(void *context);
     const LinkGtkManufacturerExtension *manufacturer_extension;
+    const LinkGtkTransportProvider *transport_provider;
+    void *transport_provider_context;
     void *context;
 } LinkGtkShellDescriptor;
 
