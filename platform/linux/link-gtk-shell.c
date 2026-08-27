@@ -1136,6 +1136,7 @@ static void link_clicked(GtkButton *button, gpointer user_data)
     (void)button;
 
     if (shell->transport.is_connected(shell->transport.context)) {
+        end_capture_attempt(shell, "user-disconnect");
         stop_diagnostics(shell);
         if (shell->transport.is_connected(shell->transport.context))
             shell->transport.disconnect(shell->transport.context);
@@ -1149,6 +1150,8 @@ static void link_clicked(GtkButton *button, gpointer user_data)
         set_connection_state(shell, false, "No ELM327 serial device detected");
         return;
     }
+
+    begin_capture_attempt(shell, device);
     {
         const LinkGtkTransportProvider *provider =
             shell->descriptor->transport_provider;
@@ -1160,11 +1163,13 @@ static void link_clicked(GtkButton *button, gpointer user_data)
                 !link_transport_is_valid(&shell->transport)) {
                 set_connection_state(shell, false,
                                      "Invalid replay/provider configuration");
+                end_capture_attempt(shell, "provider-configuration-failed");
                 return;
             }
         } else if (!link_linux_serial_configure(
                        &shell->serial, device, 38400U)) {
             set_connection_state(shell, false, "Invalid adapter configuration");
+            end_capture_attempt(shell, "adapter-configuration-failed");
             return;
         }
     }
@@ -1173,6 +1178,7 @@ static void link_clicked(GtkButton *button, gpointer user_data)
             shell->descriptor->transport_provider != NULL
                 ? "Unable to open replay/provider transport"
                 : "Unable to open adapter · check dialout permissions");
+        end_capture_attempt(shell, "transport-connect-failed");
         return;
     }
     if (shell->descriptor->transport_provider != NULL) {
@@ -1186,6 +1192,7 @@ static void link_clicked(GtkButton *button, gpointer user_data)
             set_connection_state(
                 shell, false,
                 "Replay/provider ELM327 identity handshake failed");
+            end_capture_attempt(shell, "adapter-identity-failed");
             return;
         }
     } else if (!link_linux_serial_probe_elm327(
@@ -1193,12 +1200,13 @@ static void link_clicked(GtkButton *button, gpointer user_data)
         shell->transport.disconnect(shell->transport.context);
         set_connection_state(shell, false,
                              "Device opened but ELM327 identity handshake failed");
+        end_capture_attempt(shell, "adapter-identity-failed");
         return;
     }
-    if (identity[0] == '\0') (void)snprintf(identity, sizeof(identity), "ELM327-compatible adapter");
-    reset_session_capture(shell);
-    (void)snprintf(shell->adapter_device, sizeof(shell->adapter_device), "%s", device);
-    (void)snprintf(shell->adapter_identity, sizeof(shell->adapter_identity), "%s", identity);
+    if (identity[0] == '\0')
+        (void)snprintf(
+            identity, sizeof(identity), "ELM327-compatible adapter");
+    mark_capture_attempt_linked(shell, identity);
 
     {
         char message[256];
@@ -1465,6 +1473,8 @@ int link_gtk_shell_run(int argc, char **argv,
     application = gtk_application_new(descriptor->app_id, G_APPLICATION_DEFAULT_FLAGS);
     g_signal_connect(application, "activate", G_CALLBACK(activate), &shell);
     status = g_application_run(G_APPLICATION(application), argc, argv);
+    if (shell.current_capture_attempt != 0U)
+        end_capture_attempt(&shell, "application-exit");
     stop_diagnostics(&shell);
     if (shell.transport.is_connected(shell.transport.context))
         shell.transport.disconnect(shell.transport.context);
