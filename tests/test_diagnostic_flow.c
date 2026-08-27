@@ -259,10 +259,10 @@ static int test_manufacturer_extension_after_standard_dtcs(void)
 
     /*
      * Real C207/Vgate evidence returns one empty-DTC sentinel from each EOBD
-     * responder as "4300\\n4300". The shared flow must treat that as an
+     * responder as "4300\n4300". The shared flow must treat that as an
      * empty stored-fault list and continue to pending/permanent faults.
      */
-    response = response_ok("4300\\n4300", false);
+    response = response_ok("4300\n4300", false);
     CHECK(link_diagnostic_flow_accept_response(&flow, &response, 600U, &event) == LINK_DIAGNOSTIC_FLOW_RESULT_OK);
     CHECK(event.kind == LINK_DIAGNOSTIC_FLOW_EVENT_DTC_LIST);
     CHECK(event.dtc_kind == LINK_OBD2_DTC_STORED);
