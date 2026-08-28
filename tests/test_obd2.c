@@ -83,6 +83,43 @@ int main(void)
               sample.value == 1726.0,
           "decode RPM");
 
+    response = parse_response("0111", "41117A\r>");
+    check(link_obd2_decode_live_pid(&response, 0x11U, &sample) ==
+              LINK_OBD2_RESULT_OK && sample.unit == LINK_OBD2_UNIT_PERCENT &&
+              sample.value > 47.84 && sample.value < 47.85,
+          "decode absolute throttle valve near captured 48 percent");
+
+    response = parse_response("0149", "414900\r>");
+    check(link_obd2_decode_live_pid(&response, 0x49U, &sample) ==
+              LINK_OBD2_RESULT_OK && sample.unit == LINK_OBD2_UNIT_PERCENT &&
+              sample.value == 0.0,
+          "decode accelerator pedal D at rest");
+
+    response = parse_response("014A", "414A80\r>");
+    check(link_obd2_decode_live_pid(&response, 0x4aU, &sample) ==
+              LINK_OBD2_RESULT_OK && sample.unit == LINK_OBD2_UNIT_PERCENT &&
+              sample.value > 50.19 && sample.value < 50.20,
+          "decode accelerator pedal E");
+
+    response = parse_response("014C", "414CFF\r>");
+    check(link_obd2_decode_live_pid(&response, 0x4cU, &sample) ==
+              LINK_OBD2_RESULT_OK && sample.unit == LINK_OBD2_UNIT_PERCENT &&
+              sample.value == 100.0,
+          "decode commanded throttle actuator");
+
+    response = parse_response("0123", "41233039\r>");
+    check(link_obd2_decode_live_pid(&response, 0x23U, &sample) ==
+              LINK_OBD2_RESULT_OK && sample.unit == LINK_OBD2_UNIT_KPA &&
+              sample.value == 123450.0,
+          "keep fuel rail pressure canonical in kPa");
+
+    check(strcmp(link_obd2_pid_name(0x11U),
+                 "Absolute throttle valve position") == 0,
+          "distinguish throttle valve from accelerator pedal");
+    check(strcmp(link_obd2_pid_name(0x49U),
+                 "Accelerator pedal position D") == 0,
+          "name accelerator pedal D");
+
     /* Captured C207 behaviour: optional permanent-DTC Mode 0A is unavailable. */
     response = parse_response("0A", "7F0A22\r>");
     check(link_obd2_is_negative_response(

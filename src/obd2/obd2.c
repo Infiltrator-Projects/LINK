@@ -300,8 +300,16 @@ static LinkObd2Result obd2_decode_sample_data(
         decoded.value = (double)(((unsigned int)data[0] << 8U) | data[1]) / 100.0;
         decoded.unit = LINK_OBD2_UNIT_GRAMS_PER_SECOND; break;
     case 0x11U:
+    case 0x45U:
+    case 0x47U:
+    case 0x48U:
+    case 0x49U:
+    case 0x4aU:
+    case 0x4bU:
+    case 0x4cU:
         if (length < 1U) return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
-        decoded.value = (double)data[0] * 100.0 / 255.0; decoded.unit = LINK_OBD2_UNIT_PERCENT; break;
+        decoded.value = (double)data[0] * 100.0 / 255.0;
+        decoded.unit = LINK_OBD2_UNIT_PERCENT; break;
     case 0x23U:
         if (length < 2U) return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
         decoded.value = (double)(((unsigned int)data[0] << 8U) | data[1]) * 10.0;
@@ -470,14 +478,21 @@ const char *link_obd2_pid_name(uint8_t pid)
     case 0x0dU: return "Vehicle speed";
     case 0x0fU: return "Intake air temperature";
     case 0x10U: return "Mass air flow rate";
-    case 0x11U: return "Throttle position";
+    case 0x11U: return "Absolute throttle valve position";
     case 0x23U: return "Fuel rail gauge pressure";
     case 0x2cU: return "Commanded EGR";
     case 0x2dU: return "EGR error";
     case 0x33U: return "Barometric pressure";
     case 0x3cU: return "Catalyst temperature bank 1 sensor 1";
     case 0x42U: return "Control module voltage";
+    case 0x45U: return "Relative throttle position";
     case 0x46U: return "Ambient air temperature";
+    case 0x47U: return "Absolute throttle position B";
+    case 0x48U: return "Absolute throttle position C";
+    case 0x49U: return "Accelerator pedal position D";
+    case 0x4aU: return "Accelerator pedal position E";
+    case 0x4bU: return "Accelerator pedal position F";
+    case 0x4cU: return "Commanded throttle actuator";
     case 0x5cU: return "Engine oil temperature";
     case 0x5eU: return "Engine fuel rate";
     case 0x78U: return "Exhaust gas temperature bank 1 sensor 1";

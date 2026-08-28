@@ -16,7 +16,7 @@ static const LinkObd2ParameterEntry link_obd2_parameters[] = {
     { { OBD_KEY(0x0cU), "obd2.engine.rpm", "RPM", "Engine speed", " rpm", 0U, false, 0.0, 0.0 }, LINK_OBD2_UNIT_RPM },
     { { OBD_KEY(0x0dU), "obd2.vehicle.speed", "SPEED", "Vehicle speed", " km/h", 0U, false, 0.0, 0.0 }, LINK_OBD2_UNIT_KMH },
     { { OBD_KEY(0x0bU), "obd2.engine.map", "MAP", "Manifold pressure", " kPa", 0U, false, 0.0, 0.0 }, LINK_OBD2_UNIT_KPA },
-    { { OBD_KEY(0x11U), "obd2.engine.throttle", "THROTTLE", "Throttle position", "%", 0U, true, 0.0, 100.0 }, LINK_OBD2_UNIT_PERCENT },
+    { { OBD_KEY(0x11U), "obd2.engine.throttle", "THR VALVE", "Absolute throttle valve position", "%", 0U, true, 0.0, 100.0 }, LINK_OBD2_UNIT_PERCENT },
     { { OBD_KEY(0x04U), "obd2.engine.load", "LOAD", "Calculated engine load", "%", 0U, true, 0.0, 100.0 }, LINK_OBD2_UNIT_PERCENT },
     { { OBD_KEY(0x10U), "obd2.engine.maf", "MAF", "Mass air flow", " g/s", 1U, false, 0.0, 0.0 }, LINK_OBD2_UNIT_GRAMS_PER_SECOND },
     { { OBD_KEY(0x05U), "obd2.engine.coolant", "ECT", "Coolant temperature", " °C", 0U, false, 0.0, 0.0 }, LINK_OBD2_UNIT_CELSIUS },
@@ -27,7 +27,14 @@ static const LinkObd2ParameterEntry link_obd2_parameters[] = {
     { { OBD_KEY(0x33U), "obd2.engine.barometric_pressure", "BARO", "Barometric pressure", " kPa", 0U, false, 0.0, 0.0 }, LINK_OBD2_UNIT_KPA },
     { { OBD_KEY(0x3cU), "obd2.aftertreatment.catalyst_temp_b1s1", "CAT T", "Catalyst temperature B1S1", " °C", 1U, false, 0.0, 0.0 }, LINK_OBD2_UNIT_CELSIUS },
     { { OBD_KEY(0x42U), "obd2.electrical.control_module_voltage", "VOLT", "Control module voltage", " V", 2U, false, 0.0, 0.0 }, LINK_OBD2_UNIT_VOLTS },
+    { { OBD_KEY(0x45U), "obd2.engine.relative_throttle", "THR REL", "Relative throttle position", "%", 1U, true, 0.0, 100.0 }, LINK_OBD2_UNIT_PERCENT },
     { { OBD_KEY(0x46U), "obd2.environment.ambient_air", "AMBIENT", "Ambient air temperature", " °C", 0U, false, 0.0, 0.0 }, LINK_OBD2_UNIT_CELSIUS },
+    { { OBD_KEY(0x47U), "obd2.engine.throttle_b", "THR B", "Absolute throttle position B", "%", 1U, true, 0.0, 100.0 }, LINK_OBD2_UNIT_PERCENT },
+    { { OBD_KEY(0x48U), "obd2.engine.throttle_c", "THR C", "Absolute throttle position C", "%", 1U, true, 0.0, 100.0 }, LINK_OBD2_UNIT_PERCENT },
+    { { OBD_KEY(0x49U), "obd2.driver.accelerator_pedal_d", "PEDAL D", "Accelerator pedal position D", "%", 1U, true, 0.0, 100.0 }, LINK_OBD2_UNIT_PERCENT },
+    { { OBD_KEY(0x4aU), "obd2.driver.accelerator_pedal_e", "PEDAL E", "Accelerator pedal position E", "%", 1U, true, 0.0, 100.0 }, LINK_OBD2_UNIT_PERCENT },
+    { { OBD_KEY(0x4bU), "obd2.driver.accelerator_pedal_f", "PEDAL F", "Accelerator pedal position F", "%", 1U, true, 0.0, 100.0 }, LINK_OBD2_UNIT_PERCENT },
+    { { OBD_KEY(0x4cU), "obd2.engine.commanded_throttle_actuator", "THR CMD", "Commanded throttle actuator", "%", 1U, true, 0.0, 100.0 }, LINK_OBD2_UNIT_PERCENT },
     { { OBD_KEY(0x5cU), "obd2.engine.oil_temperature", "OIL T", "Engine oil temperature", " °C", 0U, false, 0.0, 0.0 }, LINK_OBD2_UNIT_CELSIUS },
     { { OBD_KEY(0x5eU), "obd2.engine.fuel_rate", "FUEL", "Engine fuel rate", " L/h", 2U, false, 0.0, 0.0 }, LINK_OBD2_UNIT_LITRES_PER_HOUR },
     { { OBD_KEY(0x78U), "obd2.aftertreatment.egt_b1s1", "EGT1", "Exhaust gas temperature B1S1", " °C", 1U, false, 0.0, 0.0 }, LINK_OBD2_UNIT_CELSIUS },
@@ -70,13 +77,29 @@ bool link_parameter_sample_is_valid(const LinkParameterSample *sample)
 bool link_parameter_format_value(const LinkParameterDefinition *definition, bool available, double value, char *buffer, size_t buffer_size)
 {
     InfiltratrScalarFormatOptions options = INFILTRATR_SCALAR_FORMAT_OPTIONS_INIT;
+    long double display_value = (long double)value;
     if (!link_parameter_definition_is_valid(definition) || buffer == NULL || buffer_size == 0U) return false;
     options.decimal_places = definition->decimal_places;
     options.clamp = definition->clamp;
     options.minimum = (long double)definition->minimum;
     options.maximum = (long double)definition->maximum;
     options.suffix = definition->suffix;
-    return infiltratr_format_scalar(available, (long double)value, &options, buffer, buffer_size);
+
+    /*
+     * SAE OBD-II rail pressure remains canonical in kPa in the decoded sample,
+     * telemetry history and CSV evidence. Human presentation auto-scales large
+     * rail values to MPa so common-rail diesel pressure is immediately legible.
+     */
+    if (available &&
+        definition->key.protocol == LINK_PARAMETER_PROTOCOL_OBD2 &&
+        definition->key.module == LINK_PARAMETER_MODULE_STANDARD_OBD2 &&
+        definition->key.identifier == UINT32_C(0x23) &&
+        value >= 1000.0) {
+        display_value /= 1000.0L;
+        options.decimal_places = 1U;
+        options.suffix = " MPa";
+    }
+    return infiltratr_format_scalar(available, display_value, &options, buffer, buffer_size);
 }
 
 bool link_parameter_format_sample(const LinkParameterSample *sample, char *buffer, size_t buffer_size)
