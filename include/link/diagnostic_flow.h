@@ -48,6 +48,7 @@ typedef enum {
     LINK_DIAGNOSTIC_FLOW_SCANNING_STORED_DTCS,
     LINK_DIAGNOSTIC_FLOW_SCANNING_PENDING_DTCS,
     LINK_DIAGNOSTIC_FLOW_SCANNING_PERMANENT_DTCS,
+    LINK_DIAGNOSTIC_FLOW_CONFIGURING_LIVE_HEADERS,
     LINK_DIAGNOSTIC_FLOW_LIVE,
     LINK_DIAGNOSTIC_FLOW_READING_LIVE,
     LINK_DIAGNOSTIC_FLOW_FAILED
@@ -77,6 +78,7 @@ typedef struct {
     bool manufacturer_extension_after_pid_discovery;
     bool manufacturer_extension_after_standard_dtcs;
     bool restore_adapter_after_manufacturer_extension;
+    bool preserve_live_response_headers;
     uint64_t init_timeout_ms;
     uint64_t query_timeout_ms;
     uint64_t live_timeout_ms;
@@ -87,6 +89,7 @@ typedef struct {
         .manufacturer_extension_after_pid_discovery = false, \
         .manufacturer_extension_after_standard_dtcs = false, \
         .restore_adapter_after_manufacturer_extension = false, \
+        .preserve_live_response_headers = false, \
         .init_timeout_ms = LINK_DIAGNOSTIC_FLOW_DEFAULT_INIT_TIMEOUT_MS, \
         .query_timeout_ms = LINK_DIAGNOSTIC_FLOW_DEFAULT_QUERY_TIMEOUT_MS, \
         .live_timeout_ms = LINK_DIAGNOSTIC_FLOW_DEFAULT_LIVE_TIMEOUT_MS \

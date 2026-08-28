@@ -154,6 +154,7 @@ const char *link_diagnostic_flow_stage_name(LinkDiagnosticFlowStage stage)
     case LINK_DIAGNOSTIC_FLOW_SCANNING_STORED_DTCS: return "scanning-stored-dtcs";
     case LINK_DIAGNOSTIC_FLOW_SCANNING_PENDING_DTCS: return "scanning-pending-dtcs";
     case LINK_DIAGNOSTIC_FLOW_SCANNING_PERMANENT_DTCS: return "scanning-permanent-dtcs";
+    case LINK_DIAGNOSTIC_FLOW_CONFIGURING_LIVE_HEADERS: return "configuring-live-headers";
     case LINK_DIAGNOSTIC_FLOW_LIVE: return "live";
     case LINK_DIAGNOSTIC_FLOW_READING_LIVE: return "reading-live";
     case LINK_DIAGNOSTIC_FLOW_FAILED: return "failed";
@@ -286,6 +287,10 @@ LinkDiagnosticFlowResult link_diagnostic_flow_next_action(
             flow, action, command, flow->config.query_timeout_ms);
     }
 
+    case LINK_DIAGNOSTIC_FLOW_CONFIGURING_LIVE_HEADERS:
+        return flow_emit_command(
+            flow, action, "ATH1", flow->config.init_timeout_ms);
+
     case LINK_DIAGNOSTIC_FLOW_LIVE: {
         LinkSchedulerDispatch dispatch;
         LinkSchedulerNextResult next =
@@ -378,13 +383,27 @@ LinkDiagnosticFlowResult link_diagnostic_flow_accept_response(
         if (flow->initialization.stage == LINK_ELM327_INIT_COMPLETE) {
             if (stage == LINK_DIAGNOSTIC_FLOW_RESTORING_AFTER_MANUFACTURER) {
                 flow->stage = flow->standard_dtc_inventory_complete
-                    ? LINK_DIAGNOSTIC_FLOW_LIVE
+                    ? (flow->config.preserve_live_response_headers
+                        ? LINK_DIAGNOSTIC_FLOW_CONFIGURING_LIVE_HEADERS
+                        : LINK_DIAGNOSTIC_FLOW_LIVE)
                     : LINK_DIAGNOSTIC_FLOW_SCANNING_STORED_DTCS;
             } else {
                 flow->supported_pid_base = 0x00U;
                 flow->stage = LINK_DIAGNOSTIC_FLOW_DISCOVERING_PIDS;
             }
         }
+        return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
+    }
+
+    if (stage == LINK_DIAGNOSTIC_FLOW_CONFIGURING_LIVE_HEADERS) {
+        if (response->result != LINK_ELM327_RESULT_OK || !response->ok_seen) {
+            return flow_fail_elm(
+                flow,
+                response->result != LINK_ELM327_RESULT_OK
+                    ? response->result
+                    : LINK_ELM327_RESULT_MALFORMED_RESPONSE);
+        }
+        flow->stage = LINK_DIAGNOSTIC_FLOW_LIVE;
         return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
     }
 
@@ -485,6 +504,9 @@ LinkDiagnosticFlowResult link_diagnostic_flow_accept_response(
             if (flow->config.manufacturer_extension_after_standard_dtcs) {
                 flow->stage = LINK_DIAGNOSTIC_FLOW_MANUFACTURER_EXTENSION;
                 event->became_ready = false;
+            } else if (flow->config.preserve_live_response_headers) {
+                flow->stage = LINK_DIAGNOSTIC_FLOW_CONFIGURING_LIVE_HEADERS;
+                event->became_ready = false;
             } else {
                 event->became_ready = true;
             }
@@ -572,7 +594,9 @@ LinkDiagnosticFlowResult link_diagnostic_flow_resume_after_manufacturer(
         flow->stage = LINK_DIAGNOSTIC_FLOW_RESTORING_AFTER_MANUFACTURER;
     } else {
         flow->stage = flow->standard_dtc_inventory_complete
-            ? LINK_DIAGNOSTIC_FLOW_LIVE
+            ? (flow->config.preserve_live_response_headers
+                ? LINK_DIAGNOSTIC_FLOW_CONFIGURING_LIVE_HEADERS
+                : LINK_DIAGNOSTIC_FLOW_LIVE)
             : LINK_DIAGNOSTIC_FLOW_SCANNING_STORED_DTCS;
     }
     return LINK_DIAGNOSTIC_FLOW_RESULT_OK;

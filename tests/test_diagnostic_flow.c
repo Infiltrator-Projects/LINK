@@ -276,6 +276,7 @@ static int test_manufacturer_extension_after_standard_dtcs(void)
 
     config.manufacturer_extension_after_standard_dtcs = true;
     config.restore_adapter_after_manufacturer_extension = true;
+    config.preserve_live_response_headers = true;
     CHECK(link_diagnostic_flow_init(&flow, &config) == LINK_DIAGNOSTIC_FLOW_RESULT_OK);
     CHECK(link_diagnostic_flow_start(&flow) == LINK_DIAGNOSTIC_FLOW_RESULT_OK);
     CHECK(complete_initialization(&flow) == 0);
@@ -328,6 +329,15 @@ static int test_manufacturer_extension_after_standard_dtcs(void)
     CHECK(link_diagnostic_flow_resume_after_manufacturer(&flow) == LINK_DIAGNOSTIC_FLOW_RESULT_OK);
     CHECK(flow.stage == LINK_DIAGNOSTIC_FLOW_RESTORING_AFTER_MANUFACTURER);
     CHECK(complete_initialization(&flow) == 0);
+    CHECK(flow.stage == LINK_DIAGNOSTIC_FLOW_CONFIGURING_LIVE_HEADERS);
+    CHECK(link_diagnostic_flow_next_action(&flow, 900U, &action) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(action.kind == LINK_DIAGNOSTIC_FLOW_ACTION_SEND_COMMAND);
+    CHECK(strcmp(action.command, "ATH1") == 0);
+    response = response_ok(NULL, true);
+    CHECK(link_diagnostic_flow_accept_response(
+              &flow, &response, 900U, &event) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
     CHECK(flow.stage == LINK_DIAGNOSTIC_FLOW_LIVE);
     return 0;
 }

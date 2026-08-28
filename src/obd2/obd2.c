@@ -101,6 +101,77 @@ static LinkObd2Result obd2_parse_hex_line(
     return LINK_OBD2_RESULT_OK;
 }
 
+
+/*
+ * ELM327 ATH1 adds the CAN responder identifier to each line. With ATS0,
+ * 11-bit identifiers may be glued directly to the DLC (for example
+ * "7E804410C1AF8"); with spaces enabled the same response is commonly
+ * "7E8 04 41 0C 1A F8". Strip only a positively identified 11/29-bit
+ * header and optional DLC, leaving ordinary headerless OBD payloads untouched.
+ */
+static LinkObd2Result obd2_parse_data_line(
+    const char *line, size_t line_length,
+    uint8_t *bytes, size_t bytes_size, size_t *byte_count)
+{
+    size_t first = 0U;
+    size_t last = line_length;
+    size_t token_end;
+    size_t data_start;
+    size_t header_digits = 0U;
+    bool headered = false;
+    LinkObd2Result result;
+
+    if (line == NULL || bytes == NULL || byte_count == NULL) {
+        return LINK_OBD2_RESULT_INVALID_ARGUMENT;
+    }
+
+    while (first < last && obd2_space(line[first])) first++;
+    while (last > first && obd2_space(line[last - 1U])) last--;
+    token_end = first;
+    while (token_end < last && obd2_hex_value(line[token_end]) >= 0) {
+        token_end++;
+    }
+
+    if (token_end < last && obd2_space(line[token_end])) {
+        header_digits = token_end - first;
+        headered = header_digits == 3U || header_digits == 8U;
+        data_start = token_end;
+        while (data_start < last && obd2_space(line[data_start])) data_start++;
+    } else if (token_end == last &&
+               ((last - first) & 1U) != 0U &&
+               last - first >= 7U) {
+        /* Headerless payloads are byte-aligned; odd hex count identifies
+         * an unspaced 11-bit CAN header (3 nibbles) followed by bytes. */
+        header_digits = 3U;
+        headered = true;
+        data_start = first + header_digits;
+    } else {
+        data_start = first;
+    }
+
+    if (!headered) {
+        return obd2_parse_hex_line(
+            line + first, last - first, bytes, bytes_size, byte_count);
+    }
+    if (data_start >= last) return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
+
+    result = obd2_parse_hex_line(
+        line + data_start, last - data_start, bytes, bytes_size, byte_count);
+    if (result != LINK_OBD2_RESULT_OK) return result;
+
+    /*
+     * CAN responses with headers normally include a DLC byte immediately
+     * after the identifier. Remove it only when it is self-consistent.
+     */
+    if (*byte_count >= 2U && bytes[0] <= 8U &&
+        (size_t)bytes[0] <= *byte_count - 1U) {
+        const size_t declared = (size_t)bytes[0];
+        memmove(bytes, bytes + 1U, declared);
+        *byte_count = declared;
+    }
+    return LINK_OBD2_RESULT_OK;
+}
+
 static bool obd2_parse_indexed_length(
     const char *line, size_t line_length, size_t *length)
 {
@@ -241,8 +312,8 @@ static LinkObd2Result obd2_find_pid_payload(
         size_t data_length;
 
         if (memchr(cursor, ':', line_length) != NULL) goto next_line;
-        result = obd2_parse_hex_line(cursor, line_length, bytes,
-                                     sizeof(bytes), &byte_count);
+        result = obd2_parse_data_line(cursor, line_length, bytes,
+                                      sizeof(bytes), &byte_count);
         if (result != LINK_OBD2_RESULT_OK) {
             size_t indexed_length = 0U;
             if (obd2_parse_indexed_length(cursor, line_length, &indexed_length)) {

@@ -83,6 +83,18 @@ int main(void)
               sample.value == 1726.0,
           "decode RPM");
 
+    response = parse_response(
+        "010C", "7E8 04 41 0C 1A F8\r7E9 04 41 0C 1A F4\r>");
+    check(link_obd2_decode_live_pid(&response, 0x0cU, &sample) ==
+              LINK_OBD2_RESULT_OK && sample.unit == LINK_OBD2_UNIT_RPM &&
+              sample.value == 1726.0,
+          "decode RPM while preserving spaced responder CAN headers");
+
+    response = parse_response("010C", "7E804410C1AF8\r>");
+    check(link_obd2_decode_live_pid(&response, 0x0cU, &sample) ==
+              LINK_OBD2_RESULT_OK && sample.value == 1726.0,
+          "decode RPM while preserving unspaced 11-bit CAN header");
+
     response = parse_response("0111", "41117A\r>");
     check(link_obd2_decode_live_pid(&response, 0x11U, &sample) ==
               LINK_OBD2_RESULT_OK && sample.unit == LINK_OBD2_UNIT_PERCENT &&
