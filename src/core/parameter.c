@@ -22,6 +22,7 @@ static const LinkObd2ParameterEntry link_obd2_parameters[] = {
     { { OBD_KEY(0x05U), "obd2.engine.coolant", "ECT", "Coolant temperature", " °C", 0U, false, 0.0, 0.0 }, LINK_OBD2_UNIT_CELSIUS },
     { { OBD_KEY(0x0fU), "obd2.engine.intake_air", "IAT", "Intake air temperature", " °C", 0U, false, 0.0, 0.0 }, LINK_OBD2_UNIT_CELSIUS },
     { { OBD_KEY(0x23U), "obd2.diesel.rail_pressure", "RAIL", "Fuel rail gauge pressure", " kPa", 0U, false, 0.0, 0.0 }, LINK_OBD2_UNIT_KPA },
+    { { OBD_KEY(0x2fU), "obd2.fuel.tank_level", "FUEL LVL", "Fuel tank level input", "%", 1U, true, 0.0, 100.0 }, LINK_OBD2_UNIT_PERCENT },
     { { OBD_KEY(0x2cU), "obd2.diesel.egr_command", "EGR CMD", "Commanded EGR", "%", 1U, true, 0.0, 100.0 }, LINK_OBD2_UNIT_PERCENT },
     { { OBD_KEY(0x2dU), "obd2.diesel.egr_error", "EGR ERR", "EGR error", "%", 1U, false, 0.0, 0.0 }, LINK_OBD2_UNIT_PERCENT },
     { { OBD_KEY(0x33U), "obd2.engine.barometric_pressure", "BARO", "Barometric pressure", " kPa", 0U, false, 0.0, 0.0 }, LINK_OBD2_UNIT_KPA },

@@ -82,6 +82,7 @@ LinkSchedulerResult link_scheduler_configure_standard_obd2_bits(LinkScheduler *s
         { 0x0dU, 500U, LINK_SCHEDULER_PRIORITY_HIGH },
         { 0x0bU, 500U, LINK_SCHEDULER_PRIORITY_HIGH },
         { 0x23U, 500U, LINK_SCHEDULER_PRIORITY_HIGH },
+        { 0x2fU, 2000U, LINK_SCHEDULER_PRIORITY_LOW },
         { 0x49U, 500U, LINK_SCHEDULER_PRIORITY_HIGH },
         { 0x4aU, 500U, LINK_SCHEDULER_PRIORITY_HIGH },
         { 0x4cU, 500U, LINK_SCHEDULER_PRIORITY_HIGH },

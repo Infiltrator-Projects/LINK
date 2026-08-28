@@ -113,6 +113,12 @@ int main(void)
               sample.value == 123450.0,
           "keep fuel rail pressure canonical in kPa");
 
+    response = parse_response("012F", "412F80\r>");
+    check(link_obd2_decode_live_pid(&response, 0x2fU, &sample) ==
+              LINK_OBD2_RESULT_OK && sample.unit == LINK_OBD2_UNIT_PERCENT &&
+              sample.value > 50.19 && sample.value < 50.20,
+          "decode SAE fuel tank level input");
+
     check(strcmp(link_obd2_pid_name(0x11U),
                  "Absolute throttle valve position") == 0,
           "distinguish throttle valve from accelerator pedal");

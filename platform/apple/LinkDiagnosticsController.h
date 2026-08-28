@@ -85,6 +85,8 @@ NS_ASSUME_NONNULL_BEGIN
  */
 - (BOOL)pollingEnabledForPID:(uint8_t)pid;
 - (void)setPollingEnabled:(BOOL)enabled forPID:(uint8_t)pid;
+/** Immutable byte snapshot for non-blocking export/write paths. */
+- (nullable NSData *)csvDataSnapshot;
 - (nullable NSString *)csvSnapshot;
 
 - (const LinkDiagnosticFlow *)diagnosticFlow;

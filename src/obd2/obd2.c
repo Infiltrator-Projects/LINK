@@ -317,6 +317,9 @@ static LinkObd2Result obd2_decode_sample_data(
     case 0x2cU:
         if (length < 1U) return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
         decoded.value = (double)data[0] * 100.0 / 255.0; decoded.unit = LINK_OBD2_UNIT_PERCENT; break;
+    case 0x2fU:
+        if (length < 1U) return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
+        decoded.value = (double)data[0] * 100.0 / 255.0; decoded.unit = LINK_OBD2_UNIT_PERCENT; break;
     case 0x2dU:
         if (length < 1U) return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
         decoded.value = ((double)(int)data[0] - 128.0) * 100.0 / 128.0;
@@ -481,6 +484,7 @@ const char *link_obd2_pid_name(uint8_t pid)
     case 0x11U: return "Absolute throttle valve position";
     case 0x23U: return "Fuel rail gauge pressure";
     case 0x2cU: return "Commanded EGR";
+    case 0x2fU: return "Fuel tank level input";
     case 0x2dU: return "EGR error";
     case 0x33U: return "Barometric pressure";
     case 0x3cU: return "Catalyst temperature bank 1 sensor 1";

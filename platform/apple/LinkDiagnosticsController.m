@@ -1105,11 +1105,18 @@ static void LinkAppleSessionEvent(
     }
 }
 
-- (nullable NSString *)csvSnapshot
+- (nullable NSData *)csvDataSnapshot
 {
     if (_sessionCSV.length == 0U) return nil;
+    return [_sessionCSV copy];
+}
+
+- (nullable NSString *)csvSnapshot
+{
+    NSData *snapshot = [self csvDataSnapshot];
+    if (snapshot == nil) return nil;
     return [[NSString alloc]
-        initWithData:[_sessionCSV copy]
+        initWithData:snapshot
         encoding:NSUTF8StringEncoding];
 }
 
