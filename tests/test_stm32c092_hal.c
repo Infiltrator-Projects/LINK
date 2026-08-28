@@ -25,6 +25,20 @@ static uint8_t fake_tx_data[64U];
 static bool fake_tx_event_available;
 static FDCAN_TxEventFifoTypeDef fake_tx_event;
 
+static void reset_fake_hal(void)
+{
+    fake_tick = 0U;
+    fake_notifications = 0U;
+    fake_tx_free = 3U;
+    fake_rx_available = false;
+    memset(&fake_rx_header, 0, sizeof(fake_rx_header));
+    memset(fake_rx_data, 0, sizeof(fake_rx_data));
+    memset(&fake_tx_header, 0, sizeof(fake_tx_header));
+    memset(fake_tx_data, 0, sizeof(fake_tx_data));
+    fake_tx_event_available = false;
+    memset(&fake_tx_event, 0, sizeof(fake_tx_event));
+}
+
 uint32_t HAL_GetTick(void) { return fake_tick; }
 
 uint32_t HAL_FDCAN_GetRxFifoFillLevel(
@@ -116,6 +130,7 @@ HAL_StatusTypeDef HAL_FDCAN_Start(FDCAN_HandleTypeDef *hfdcan)
 
 static int test_classic_tx_and_completion(void)
 {
+    reset_fake_hal();
     FDCAN_HandleTypeDef hfdcan;
     LinkStm32C092Hal adapter;
     LinkStm32CanOps ops;
@@ -162,6 +177,7 @@ static int test_classic_tx_and_completion(void)
 
 static int test_can_fd_and_extended_id_mapping(void)
 {
+    reset_fake_hal();
     FDCAN_HandleTypeDef hfdcan;
     LinkStm32C092Hal adapter;
     LinkStm32CanOps ops;
@@ -188,6 +204,7 @@ static int test_can_fd_and_extended_id_mapping(void)
 
 static int test_rx_mapping_and_event_loss(void)
 {
+    reset_fake_hal();
     FDCAN_HandleTypeDef hfdcan;
     LinkStm32C092Hal adapter;
     LinkStm32CanOps ops;

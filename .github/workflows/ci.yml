@@ -165,7 +165,7 @@ jobs:
       - name: Install ARM embedded GCC
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends gcc-arm-none-eabi
+          sudo apt-get install -y --no-install-recommends gcc-arm-none-eabi libnewlib-arm-none-eabi
       - name: Cross-compile STM32C092 source set
         shell: bash
         run: |
