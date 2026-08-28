@@ -83,6 +83,10 @@ jobs:
           grep -Fq '"BLE", stateName.UTF8String' platform/apple/LinkDiagnosticsController.m
           grep -Fq 'LinkBLETransportStateFailed' platform/apple/LinkDiagnosticsController.m
           grep -Fq 'link-test-uds-dtc tests/test_uds_dtc.c link-uds-dtc' CMakeLists.txt
+          if grep -REn '\?[[:space:]]*:' platform/apple; then
+            echo 'Apple platform code must not use the GNU omitted-middle ?: extension.' >&2
+            exit 1
+          fi
 
       - name: Configure
         shell: bash

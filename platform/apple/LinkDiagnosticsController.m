@@ -398,7 +398,8 @@ static void LinkAppleSessionEvent(
     }
 
     NSString *stateName = LinkAppleBLEStateName(transport.state);
-    NSString *transportStatus = transport.statusText ?: @"";
+    NSString *transportStatus = transport.statusText != nil
+        ? transport.statusText : @"";
     NSString *recordingKey = [NSString stringWithFormat:
         @"%@|%@", stateName, transportStatus];
     if (_recorder.started && !_recorder.finished &&
