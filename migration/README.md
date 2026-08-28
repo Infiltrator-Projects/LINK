@@ -1,1 +1,1 @@
-Temporary raw shared-code candidates imported from MBLINK/JAGLINK for comparison and promotion into neutral LINK sources. Vehicle-specific Mercedes/Jaguar code is intentionally excluded.
+Historical migration marker. Shared automotive code has been promoted into LINK; manufacturer-specific Mercedes and Jaguar code remains in its product repository. Do not place new implementation files here.

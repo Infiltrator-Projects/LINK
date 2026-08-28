@@ -19,6 +19,14 @@ static bool sink(void *context, const char *bytes, size_t length)
 static const char *pid_name(uint8_t pid) { return pid == 0x0cU ? "Engine speed" : "PID"; }
 static const char *unit_name(uint32_t unit) { return unit == (uint32_t)LINK_OBD2_UNIT_RPM ? "rpm" : "unit"; }
 static const char *result_name(uint32_t result) { return result == 0U ? "ok" : "error"; }
+static size_t occurrence_count(const char *text, const char *needle)
+{
+    size_t count = 0U, length;
+    if (text == NULL || needle == NULL || needle[0] == '\0') return 0U;
+    length = strlen(needle);
+    while ((text = strstr(text, needle)) != NULL) { ++count; text += length; }
+    return count;
+}
 
 int main(void)
 {
@@ -68,5 +76,13 @@ int main(void)
     CHECK(link_telemetry_recorder_record_response_named(&recorder, 30U, "010C", "ok", "41 0C 13 4A"));
     CHECK(link_telemetry_recorder_finish(&recorder, 3U));
     CHECK(strstr(output.data, "# link_session_stream_version,1\n") != NULL);
+    link_telemetry_recorder_init(&recorder);
+    link_telemetry_session_metadata_init(&metadata, 4U, "adapter", "vehicle");
+    CHECK(link_telemetry_recorder_continue(&recorder, &metadata, "link", sink, &output));
+    CHECK(link_telemetry_recorder_record_response_named(&recorder, 5U, "ATI", "ok", "ELM327"));
+    CHECK(link_telemetry_recorder_finish(&recorder, 6U));
+    CHECK(occurrence_count(output.data, "# link_session_stream_version,1\n") == 1U);
+    CHECK(occurrence_count(output.data, "# session_started_epoch_ms,") == 2U);
+    CHECK(occurrence_count(output.data, "record_type,sequence,timestamp_ms,pid,name,value,unit,favourite,command,result,response\n") == 1U);
     return 0;
 }

@@ -92,6 +92,15 @@ void link_telemetry_session_metadata_finish(LinkTelemetrySessionMetadata *metada
 
 void link_telemetry_recorder_init(LinkTelemetryRecorder *recorder);
 bool link_telemetry_recorder_begin(LinkTelemetryRecorder *recorder, const LinkTelemetrySessionMetadata *metadata, const char *product_slug, LinkTelemetryTextSink sink, void *context);
+/**
+ * Append another session to an existing recorder stream.
+ *
+ * The stream-version and CSV column headers are deliberately omitted so one
+ * exported evidence file can contain multiple connection attempts without
+ * becoming a sequence of independently headed CSV documents. The caller must
+ * have previously emitted the stream header with link_telemetry_recorder_begin().
+ */
+bool link_telemetry_recorder_continue(LinkTelemetryRecorder *recorder, const LinkTelemetrySessionMetadata *metadata, const char *product_slug, LinkTelemetryTextSink sink, void *context);
 bool link_telemetry_recorder_record_sample_named(LinkTelemetryRecorder *recorder, const LinkTelemetrySample *sample, bool favourite, const char *pid_name, const char *unit_name);
 bool link_telemetry_recorder_record_response_named(LinkTelemetryRecorder *recorder, uint64_t timestamp_ms, const char *command, const char *result_name, const char *response_text);
 bool link_telemetry_recorder_finish(LinkTelemetryRecorder *recorder, uint64_t ended_epoch_ms);

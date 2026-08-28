@@ -35,6 +35,15 @@ jobs:
           grep -Fq "startsWith(github.event.workflow_run.head_commit.message, 'Release ')" "$release"
           grep -Fq 'github.event.workflow_run.head_branch == '\''main'\''' "$release"
           grep -Fq 'published releases are immutable' "$release"
+          grep -Fq 'gh release create "$TAG"' "$release"
+          grep -Fq -- '--target "$head_commit" --draft' "$release"
+          grep -Fq 'gh release upload "$TAG"' "$release"
+          grep -Fq 'gh release edit "$TAG"' "$release"
+          grep -Fq -- '--draft=false' "$release"
+          if grep -Fq 'git push origin "$TAG"' "$release"; then
+            echo "LINK must not expose an immutable tag before every asset is verified." >&2
+            exit 1
+          fi
           if grep -Eq '^  (pull_request|merge_group|schedule):' .github/workflows/ci.yml; then
             echo "LINK CI must run from main only." >&2
             exit 1
@@ -60,8 +69,8 @@ jobs:
         run: |
           set -euo pipefail
           git submodule update --init src/infiltratr-common
-          test "$(tr -d '[:space:]' < src/infiltratr-common/VERSION)" = "1.13.0"
-          test "$(git -C src/infiltratr-common rev-parse HEAD)" = "1b2e258bd576e86968261463375d144a8874bd01"
+          test "$(tr -d '[:space:]' < src/infiltratr-common/VERSION)" = "1.15.0"
+          test "$(git -C src/infiltratr-common rev-parse HEAD)" = "dc4c767369be59bd3c2171ce74b402bd38b870d2"
 
       - name: Configure
         shell: bash

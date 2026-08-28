@@ -10,7 +10,7 @@ NS_ASSUME_NONNULL_BEGIN
 static const NSTimeInterval LinkScanTimeoutSeconds = 12.0;
 static const NSTimeInterval LinkConnectTimeoutSeconds = 8.0;
 static const NSTimeInterval LinkDiscoveryTimeoutSeconds = 8.0;
-static const NSTimeInterval LinkProbeTimeoutSeconds = 2.0;
+static const NSTimeInterval LinkProbeTimeoutSeconds = 5.0;
 static const NSTimeInterval LinkReconnectDelaySeconds = 0.75;
 static const NSUInteger LinkWriteQueueLimit = 65536U;
 
@@ -115,6 +115,7 @@ static BOOL LinkRemainingBytesAreWhitespace(const uint8_t *bytes,
     NSUInteger _pendingServiceDiscoveries;
     NSArray<LinkBLECandidate *> *_Nullable _candidates;
     NSUInteger _candidateIndex;
+    NSUInteger _channelProbeAttempt;
     LinkBLECandidate *_Nullable _probingCandidate;
     NSUInteger _probeGeneration;
     BOOL _probeSent;
@@ -185,7 +186,10 @@ static BOOL LinkRemainingBytesAreWhitespace(const uint8_t *bytes,
         dispatch_async(dispatch_get_main_queue(), ^{ [self start]; });
         return;
     }
-    if (!_startRequested) _scanAttempt = 0U;
+    if (!_startRequested) {
+        _scanAttempt = 0U;
+        _channelProbeAttempt = 0U;
+    }
     _startRequested = YES;
     if (self.isReady) { [self notifyDelegate]; return; }
     if (_central == nil) {
@@ -206,6 +210,7 @@ static BOOL LinkRemainingBytesAreWhitespace(const uint8_t *bytes,
     }
     _startRequested = NO;
     _scanAttempt = 0U;
+    _channelProbeAttempt = 0U;
     _operationGeneration++;
     _probeGeneration++;
     [_central stopScan];
@@ -433,6 +438,7 @@ didDiscoverCharacteristicsForService:(CBService *)service
 
 - (void)buildAndProbeCandidates
 {
+    _channelProbeAttempt++;
     NSMutableArray<LinkBLECandidate *> *result = [[NSMutableArray alloc] init];
     for (CBService *service in _peripheral.services) {
         NSArray<CBCharacteristic *> *characteristics = service.characteristics;
@@ -464,14 +470,25 @@ didDiscoverCharacteristicsForService:(CBService *)service
     _candidates = [result copy];
     _candidateIndex = 0U;
     if (_candidates.count == 0U) { [self failAndStop:@"No writable/notify BLE command channel found"]; return; }
-    [self setState:LinkBLETransportStateProbing status:@"Validating ELM327 BLE channel"];
+    [self setState:LinkBLETransportStateProbing
+            status:_channelProbeAttempt == 1U
+                ? @"Validating ELM327 BLE channel"
+                : @"Retrying ELM327 BLE channel validation"];
     [self probeNextCandidate];
 }
 
 - (void)probeNextCandidate
 {
     if (!_startRequested || _peripheral.state != CBPeripheralStateConnected) return;
-    if (_candidateIndex >= _candidates.count) { [self failAndStop:@"No ELM327 command channel responded"]; return; }
+    if (_candidateIndex >= _candidates.count) {
+        if (_channelProbeAttempt < 2U) {
+            [self recoverAfterTransientFailure:
+                @"ELM327 channel did not wake; reconnecting once"];
+        } else {
+            [self failAndStop:@"No ELM327 command channel responded"];
+        }
+        return;
+    }
     _probingCandidate = [_candidates objectAtIndex:_candidateIndex++];
     _probeGeneration++;
     NSUInteger generation = _probeGeneration;
@@ -570,6 +587,7 @@ didUpdateValueForCharacteristic:(CBCharacteristic *)characteristic
         _selectedWriteType = candidate.writeType;
         self.adapterIdentifier = identifier;
         _scanAttempt = 0U;
+        _channelProbeAttempt = 0U;
         self.serviceUUID = candidate.service.UUID.UUIDString;
         self.writeCharacteristicUUID = candidate.writeCharacteristic.UUID.UUIDString;
         self.notifyCharacteristicUUID = candidate.notifyCharacteristic.UUID.UUIDString;

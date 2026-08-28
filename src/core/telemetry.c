@@ -123,14 +123,29 @@ static bool latch_failure(LinkTelemetryRecorder *recorder) { if (recorder != NUL
 
 void link_telemetry_recorder_init(LinkTelemetryRecorder *recorder) { if (recorder != NULL) memset(recorder, 0, sizeof(*recorder)); }
 
-bool link_telemetry_recorder_begin(LinkTelemetryRecorder *recorder, const LinkTelemetrySessionMetadata *metadata, const char *product_slug, LinkTelemetryTextSink sink, void *context)
+static bool recorder_begin_session(LinkTelemetryRecorder *recorder, const LinkTelemetrySessionMetadata *metadata, const char *product_slug, LinkTelemetryTextSink sink, void *context, bool write_stream_header)
 {
     char line[192]; int written;
     if (recorder == NULL || metadata == NULL || product_slug == NULL || product_slug[0] == '\0' || sink == NULL || recorder->started || recorder->failed) return false;
     recorder->sink = sink; recorder->context = context; recorder->started = true; recorder->finished = false; recorder->failed = false;
-    written = snprintf(line, sizeof(line), "# %s_session_stream_version,1\n# session_started_epoch_ms,%llu\n", product_slug, (unsigned long long)metadata->started_epoch_ms);
-    if (written < 0 || (size_t)written >= sizeof(line) || !emit(sink, context, line) || !emit_metadata(sink, context, "adapter_identifier", metadata->adapter_identifier) || !emit_metadata(sink, context, "vehicle_identifier", metadata->vehicle_identifier) || !emit(sink, context, "record_type,sequence,timestamp_ms,pid,name,value,unit,favourite,command,result,response\n")) return latch_failure(recorder);
+    if (write_stream_header) {
+        written = snprintf(line, sizeof(line), "# %s_session_stream_version,1\n", product_slug);
+        if (written < 0 || (size_t)written >= sizeof(line) || !emit(sink, context, line)) return latch_failure(recorder);
+    }
+    written = snprintf(line, sizeof(line), "# session_started_epoch_ms,%llu\n", (unsigned long long)metadata->started_epoch_ms);
+    if (written < 0 || (size_t)written >= sizeof(line) || !emit(sink, context, line) || !emit_metadata(sink, context, "adapter_identifier", metadata->adapter_identifier) || !emit_metadata(sink, context, "vehicle_identifier", metadata->vehicle_identifier)) return latch_failure(recorder);
+    if (write_stream_header && !emit(sink, context, "record_type,sequence,timestamp_ms,pid,name,value,unit,favourite,command,result,response\n")) return latch_failure(recorder);
     return true;
+}
+
+bool link_telemetry_recorder_begin(LinkTelemetryRecorder *recorder, const LinkTelemetrySessionMetadata *metadata, const char *product_slug, LinkTelemetryTextSink sink, void *context)
+{
+    return recorder_begin_session(recorder, metadata, product_slug, sink, context, true);
+}
+
+bool link_telemetry_recorder_continue(LinkTelemetryRecorder *recorder, const LinkTelemetrySessionMetadata *metadata, const char *product_slug, LinkTelemetryTextSink sink, void *context)
+{
+    return recorder_begin_session(recorder, metadata, product_slug, sink, context, false);
 }
 
 bool link_telemetry_recorder_record_sample_named(LinkTelemetryRecorder *recorder, const LinkTelemetrySample *sample, bool favourite, const char *pid_name, const char *unit_name)

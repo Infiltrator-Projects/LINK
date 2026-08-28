@@ -71,7 +71,7 @@ jobs:
           test -s "release-assets/LINK-${VERSION}-source.zip"
           test -s release-assets/SHA256SUMS.txt
 
-      - name: Create immutable tag and release
+      - name: Stage complete draft and publish immutable release
         shell: bash
         env:
           VERSION: ${{ steps.release.outputs.version }}
@@ -86,16 +86,29 @@ jobs:
             echo "Release tag $TAG already exists; published releases are immutable." >&2
             exit 1
           fi
-          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "Release $TAG already exists; published releases are immutable." >&2
-            exit 1
+          release_state="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --json isDraft,targetCommitish --jq '[.isDraft, .targetCommitish] | @tsv' \
+            2>/dev/null || true)"
+          if [[ -n "$release_state" ]]; then
+            IFS=$'\t' read -r is_draft target_commitish <<<"$release_state"
+            if [[ "$is_draft" != "true" || "$target_commitish" != "$head_commit" ]]; then
+              echo "Release $TAG already exists; published releases are immutable." >&2
+              exit 1
+            fi
+          else
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" \
+              --target "$head_commit" --draft \
+              --title "LINK $VERSION" \
+              --notes "LINK $VERSION: automatic release from tested current main."
           fi
+          gh release upload "$TAG" release-assets/* --repo "$GITHUB_REPOSITORY" --clobber
 
-          git tag "$TAG" "$head_commit"
-          git push origin "$TAG"
-          gh release create "$TAG" release-assets/* --repo "$GITHUB_REPOSITORY" --target "$head_commit" \
-            --title "LINK $VERSION" \
-            --notes "LINK $VERSION: automatic release from tested current main."
+          assets="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')"
+          grep -Fxq "LINK-${VERSION}-source.zip" <<<"$assets"
+          grep -Fxq "SHA256SUMS.txt" <<<"$assets"
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false
+          git fetch origin "refs/tags/$TAG:refs/tags/$TAG"
+          test "$(git rev-parse "refs/tags/$TAG^{commit}")" = "$head_commit"
 
       - name: Verify published assets
         shell: bash

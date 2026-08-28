@@ -22,6 +22,7 @@
 - (void)notifyDelegate;
 - (void)setSharedStatus:(NSString *)status;
 - (void)prepareForStart;
+- (void)rewriteCurrentSessionVehicleIdentifier:(const char *)vehicleIdentifier;
 - (void)beginPortableSession;
 - (void)startTickTimer;
 - (void)stopTickTimer;
@@ -50,6 +51,7 @@
     LinkTelemetryRecorder _recorder;
     LinkTelemetrySessionMetadata _sessionMetadata;
     NSMutableData *_sessionCSV;
+    NSUInteger _currentSessionCSVStart;
 
     dispatch_source_t _tickTimer;
     NSUInteger _pollGeneration;
@@ -226,10 +228,33 @@ static void LinkAppleSessionEvent(
     (void)link_diagnostic_flow_init(&_flow, &_flowConfig);
     link_telemetry_store_clear_samples(&_telemetry);
     link_telemetry_recorder_init(&_recorder);
-    _sessionCSV = [[NSMutableData alloc] init];
     _sessionMonotonicStartMs = LinkAppleMonotonicMilliseconds();
     link_telemetry_session_metadata_init(
         &_sessionMetadata, LinkAppleEpochMilliseconds(), NULL, NULL);
+}
+
+- (void)rewriteCurrentSessionVehicleIdentifier:(const char *)vehicleIdentifier
+{
+    if (vehicleIdentifier == NULL || vehicleIdentifier[0] == '\0' ||
+        _currentSessionCSVStart >= _sessionCSV.length) return;
+
+    NSString *identifier = [NSString stringWithUTF8String:vehicleIdentifier];
+    if (identifier.length == 0U) return;
+    NSString *escaped = [identifier stringByReplacingOccurrencesOfString:@"\""
+                                                               withString:@"\"\""];
+    NSData *needle = [@"# vehicle_identifier,\"\"\n"
+        dataUsingEncoding:NSUTF8StringEncoding];
+    NSData *replacement = [[NSString stringWithFormat:
+        @"# vehicle_identifier,\"%@\"\n", escaped]
+        dataUsingEncoding:NSUTF8StringEncoding];
+    NSRange range = NSMakeRange(
+        _currentSessionCSVStart, _sessionCSV.length - _currentSessionCSVStart);
+    NSRange match = [_sessionCSV rangeOfData:needle options:0 range:range];
+    if (match.location != NSNotFound) {
+        [_sessionCSV replaceBytesInRange:match
+                               withBytes:replacement.bytes
+                                  length:replacement.length];
+    }
 }
 
 - (void)start
@@ -374,15 +399,24 @@ static void LinkAppleSessionEvent(
         return;
     }
 
-    if (!_recorder.started &&
-        !link_telemetry_recorder_begin(
-            &_recorder, &_sessionMetadata, _productSlug.UTF8String,
-            LinkAppleAppendCSV, (__bridge void *)_sessionCSV)) {
-        _sessionInitialized = NO;
-        link_elm327_session_disconnect(&_session);
-        link_elm327_session_deinit(&_session);
-        [self failWithStatus:@"Could not start portable session recorder"];
-        return;
+    if (!_recorder.started) {
+        const BOOL continuingEvidence = _sessionCSV.length != 0U;
+        _currentSessionCSVStart = _sessionCSV.length;
+        const bool recorderStarted = continuingEvidence
+            ? link_telemetry_recorder_continue(
+                &_recorder, &_sessionMetadata, _productSlug.UTF8String,
+                LinkAppleAppendCSV, (__bridge void *)_sessionCSV)
+            : link_telemetry_recorder_begin(
+                &_recorder, &_sessionMetadata, _productSlug.UTF8String,
+                LinkAppleAppendCSV, (__bridge void *)_sessionCSV);
+        if (!recorderStarted) {
+            [_sessionCSV setLength:_currentSessionCSVStart];
+            _sessionInitialized = NO;
+            link_elm327_session_disconnect(&_session);
+            link_elm327_session_deinit(&_session);
+            [self failWithStatus:@"Could not start portable session recorder"];
+            return;
+        }
     }
 
     (void)link_diagnostic_flow_init(&_flow, &_flowConfig);
@@ -645,12 +679,6 @@ static void LinkAppleSessionEvent(
 
     if (![self applyFlowEvent:&event]) return;
 
-    id<LinkDiagnosticsControllerDelegate> delegate = self.delegate;
-    if ([delegate respondsToSelector:
-            @selector(linkDiagnosticsController:didReceiveFlowEvent:)]) {
-        [delegate linkDiagnosticsController:self didReceiveFlowEvent:&event];
-    }
-    [self notifyDelegate];
     [self driveDiagnosticFlow];
 }
 
@@ -677,8 +705,7 @@ static void LinkAppleSessionEvent(
 
     case LINK_DIAGNOSTIC_FLOW_EVENT_STANDARD_VIN:
         if (event->vin_available && event->vin != NULL) {
-            link_telemetry_session_metadata_set_vehicle(
-                &_sessionMetadata, event->vin);
+            [self setVehicleIdentifier:event->vin];
         }
         break;
 
@@ -917,6 +944,7 @@ static void LinkAppleSessionEvent(
 {
     link_telemetry_session_metadata_set_vehicle(
         &_sessionMetadata, vehicleIdentifier);
+    [self rewriteCurrentSessionVehicleIdentifier:vehicleIdentifier];
 }
 
 - (NSUInteger)recordedSampleCount
