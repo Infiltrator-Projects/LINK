@@ -76,6 +76,7 @@ int main(void)
     bits[0x0cU / 8U] |= (uint8_t)(1U << (0x0cU % 8U));
     CHECK(link_scheduler_configure_standard_obd2_bits(&scheduler, bits, 0U) == LINK_SCHEDULER_RESULT_OK);
     CHECK(scheduler.count == 1U && scheduler.items[0].pid == 0x0cU);
+    CHECK(scheduler.items[0].interval_ms == 500U);
 
     link_telemetry_store_init(&telemetry);
     CHECK(link_telemetry_store_record(&telemetry, 20U, &measurement));

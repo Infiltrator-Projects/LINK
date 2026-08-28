@@ -175,7 +175,44 @@ static int test_standard_sequence(void)
     CHECK(link_diagnostic_flow_next_action(&flow, 1001U, &action) ==
           LINK_DIAGNOSTIC_FLOW_RESULT_OK);
     CHECK(action.kind == LINK_DIAGNOSTIC_FLOW_ACTION_WAIT);
-    CHECK(action.wait_ms > 0U && action.wait_ms <= 250U);
+    CHECK(action.wait_ms > 0U && action.wait_ms <= 500U);
+    return 0;
+}
+
+static int test_live_timeout_recovery(void)
+{
+    LinkDiagnosticFlow flow;
+    LinkDiagnosticFlowConfig config = LINK_DIAGNOSTIC_FLOW_CONFIG_INIT;
+    LinkDiagnosticFlowAction action;
+
+    CHECK(link_diagnostic_flow_init(&flow, &config) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(link_scheduler_add(
+              &flow.scheduler, 0x0cU, 500U,
+              LINK_SCHEDULER_PRIORITY_CRITICAL, 100U) ==
+          LINK_SCHEDULER_RESULT_OK);
+    flow.stage = LINK_DIAGNOSTIC_FLOW_LIVE;
+
+    CHECK(link_diagnostic_flow_next_action(&flow, 100U, &action) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(action.kind == LINK_DIAGNOSTIC_FLOW_ACTION_SEND_COMMAND);
+    CHECK(action.pid == 0x0cU);
+    CHECK(flow.stage == LINK_DIAGNOSTIC_FLOW_READING_LIVE);
+    CHECK(flow.awaiting_response);
+
+    CHECK(link_diagnostic_flow_recover_live_timeout(&flow, 150U) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(flow.stage == LINK_DIAGNOSTIC_FLOW_LIVE);
+    CHECK(!flow.awaiting_response);
+    CHECK(flow.scheduler.items[0].next_due_ms >= 650U);
+
+    CHECK(link_diagnostic_flow_next_action(&flow, 150U, &action) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(action.kind == LINK_DIAGNOSTIC_FLOW_ACTION_WAIT);
+    CHECK(action.wait_ms >= 500U);
+
+    CHECK(link_diagnostic_flow_recover_live_timeout(&flow, 150U) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_INVALID_STATE);
     return 0;
 }
 
@@ -336,6 +373,7 @@ static int test_invalid_response_order(void)
 int main(void)
 {
     if (test_standard_sequence() != 0) return 1;
+    if (test_live_timeout_recovery() != 0) return 1;
     if (test_manufacturer_extension_restore() != 0) return 1;
     if (test_manufacturer_extension_after_standard_dtcs() != 0) return 1;
     if (test_invalid_manufacturer_extension_configuration() != 0) return 1;
