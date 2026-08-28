@@ -8,7 +8,7 @@ LINK is the shared C11 vehicle-diagnostics and application engine used by MBLINK
 
 **Current source version:** see [`VERSION`](VERSION)  
 **Shared foundation:** exact Infiltratr Common release/commit pinned by `src/infiltratr-common` and `CMakeLists.txt`  
-**Platforms:** Linux, Windows, macOS/iOS-facing portable core  
+**Platforms:** Linux, Windows, macOS/iOS-facing portable core, bare-metal STM32  
 **Licence:** GPL-3.0-or-later
 
 ## Role in the project family
@@ -38,6 +38,7 @@ LINK currently owns:
 - a compiled 27-service ISO 14229 service catalogue and bounded request/response codecs;
 - read-only UDS `ReadDTCInformation` helpers;
 - Classical CAN and CAN-FD ISO-TP, including CAN-FD payloads through 64 bytes and extended First Frame lengths for PDUs above 4095 bytes;
+- bare-metal STM32 CAN/FDCAN edge with a bounded interrupt queue and direct ISO-TP/UDS orchestration;
 - parameter definitions, store/history, scheduler and telemetry/CSV;
 - diagnostic workspace model;
 - portable diagnostic-flow controller state machine;
@@ -99,6 +100,8 @@ Compatibility aliases/wrappers preserve product-prefixed public APIs while the u
 
 The 27-service UDS implementation is compiled into `LINK::Core`; `include/link/uds_services.h` contains the public contract rather than per-consumer private implementations.
 
+Bare-metal STM32 support keeps STM32Cube HAL outside the portable core: the host-tested queue/transaction glue lives in `platform/stm32`, while concrete Cube integration stays in `examples/stm32c092`. See `docs/STM32.md`.
+
 ## Build and test
 
 ```bash
@@ -117,7 +120,7 @@ cmake --build build-sanitized --parallel
 ctest --test-dir build-sanitized --output-on-failure
 ```
 
-GitHub Actions builds and tests the strict portable core on Linux, macOS and Windows, runs ASan+UBSan on Linux, and independently compiles LINK's native BlueZ/direct-libUSB adapter providers in LINK CI. The OpenPort regression suite rejects J2534 start-of-message, loopback and TX-done records as completed vehicle responses. Product Linux builds provide a second integration check; physical USB handshake validation remains a hardware test rather than something CI can simulate. The DTC knowledge suite enforces the exact 9,533-definition catalogue size and pinned upstream snapshot, samples all seven generic families, checks generic/manufacturer range boundaries, preserves lowercase normalization and malformed-code rejection, and verifies shared UDS status semantics. The ISO-TP suite covers preserved Classical CAN behaviour as well as CAN-FD single-frame, multi-frame and extended-length traffic. The Windows configuration proves that the same shared Discover implementation can produce both MBLINK and JAGLINK product faces.
+GitHub Actions builds and tests the strict portable core on Linux, macOS and Windows, runs ASan+UBSan on Linux, and independently compiles LINK's native BlueZ/direct-libUSB adapter providers in LINK CI. The OpenPort regression suite rejects J2534 start-of-message, loopback and TX-done records as completed vehicle responses. Product Linux builds provide a second integration check; physical USB handshake validation remains a hardware test rather than something CI can simulate. The DTC knowledge suite enforces the exact 9,533-definition catalogue size and pinned upstream snapshot, samples all seven generic families, checks generic/manufacturer range boundaries, preserves lowercase normalization and malformed-code rejection, and verifies shared UDS status semantics. The ISO-TP suite covers preserved Classical CAN behaviour as well as CAN-FD single-frame, multi-frame and extended-length traffic. The STM32 regression suite host-simulates the bounded interrupt queue, wrapping HAL-style millisecond clock and a complete multi-frame UDS F190 transaction through the same LINK ISO-TP/UDS core. The Windows configuration proves that the same shared Discover implementation can produce both MBLINK and JAGLINK product faces.
 
 CI also installs LINK and its Common dependency to a clean prefix, rediscovers the exported `LINK::Core` package with `find_package`, and builds an external consumer that exercises the 27-service catalogue and 64-byte CAN-FD contract.
 

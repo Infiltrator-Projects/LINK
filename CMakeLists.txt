@@ -371,6 +371,23 @@ if(BUILD_TESTING AND PROJECT_IS_TOP_LEVEL)
     link_add_test(link-test-fuel-economy tests/test_fuel_economy.c link-fuel-economy)
     link_add_test(link-test-diagnostic-flow tests/test_diagnostic_flow.c link-diagnostic-flow)
     link_add_test(link-test-isotp tests/test_isotp.c link-isotp)
+    add_executable(link-test-stm32
+        tests/test_stm32.c
+        platform/stm32/link-stm32-can.c
+        platform/stm32/link-stm32-uds.c)
+    target_include_directories(link-test-stm32 PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/platform/stm32")
+    target_link_libraries(link-test-stm32 PRIVATE LINK::Core)
+    if(MSVC)
+        target_compile_options(link-test-stm32 PRIVATE /W4 /WX /utf-8)
+    else()
+        target_compile_options(link-test-stm32 PRIVATE ${LINK_WARNING_FLAGS})
+    endif()
+    if(LINK_ENABLE_SANITIZERS)
+        target_compile_options(link-test-stm32 PRIVATE ${LINK_SANITIZER_FLAGS})
+        target_link_options(link-test-stm32 PRIVATE -fsanitize=address,undefined)
+    endif()
+    add_test(NAME link-stm32 COMMAND link-test-stm32)
     link_add_test(link-test-runtime tests/test_runtime.c link-runtime)
     link_add_test(link-test-elm327 tests/test_elm327.c link-elm327)
     link_add_test(link-test-elm327-session tests/test_elm327_session.c link-elm327-session)
