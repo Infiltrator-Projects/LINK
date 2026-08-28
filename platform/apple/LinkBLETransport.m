@@ -404,7 +404,8 @@ static BOOL LinkRemainingBytesAreWhitespace(const uint8_t *bytes,
                  error:(NSError * _Nullable)error
 {
     if (peripheral == _peripheral && _startRequested) {
-        NSString *message = error.localizedDescription ?: @"BLE adapter connection failed";
+        NSString *message = error.localizedDescription != nil
+            ? error.localizedDescription : @"BLE adapter connection failed";
         [self recoverAfterTransientFailure:message];
     }
     (void)central;
@@ -416,7 +417,8 @@ static BOOL LinkRemainingBytesAreWhitespace(const uint8_t *bytes,
 {
     if (peripheral != _peripheral) return;
     if (_startRequested) {
-        NSString *message = error.localizedDescription ?: @"Adapter disconnected; reconnecting";
+        NSString *message = error.localizedDescription != nil
+            ? error.localizedDescription : @"Adapter disconnected; reconnecting";
         [self recoverAfterTransientFailure:message];
     } else {
         _peripheral = nil;
