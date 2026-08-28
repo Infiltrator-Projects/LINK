@@ -138,7 +138,8 @@ static const InfiltratrI18nEntry en_au[] = {
     ENTRY("Engine fuel rate", "Engine fuel rate"),
     ENTRY("Exhaust gas temperature B1S1", "Exhaust gas temperature B1S1"),
     ENTRY("DPF bank 1 differential pressure", "DPF bank 1 differential pressure"),
-    ENTRY("DPF bank 1 inlet temperature", "DPF bank 1 inlet temperature"),
+    ENTRY("DPF bank 1 inlet temperature", "DPF bank 1 inlet temperature"),    ENTRY("Fuel tank level input", "Fuel tank level input"),
+
 };
 
 static const InfiltratrI18nEntry en_us[] = {
@@ -277,7 +278,8 @@ static const InfiltratrI18nEntry de_de[] = {
     ENTRY("Engine fuel rate", "Motorkraftstoffrate"),
     ENTRY("Exhaust gas temperature B1S1", "Abgastemperatur B1S1"),
     ENTRY("DPF bank 1 differential pressure", "DPF Bank 1 Differenzdruck"),
-    ENTRY("DPF bank 1 inlet temperature", "DPF Bank 1 Einlasstemperatur"),
+    ENTRY("DPF bank 1 inlet temperature", "DPF Bank 1 Einlasstemperatur"),    ENTRY("Fuel tank level input", "Kraftstofftankfüllstand"),
+
 };
 
 static const InfiltratrI18nEntry fr_fr[] = {
@@ -364,7 +366,8 @@ static const InfiltratrI18nEntry fr_fr[] = {
     ENTRY("Engine fuel rate", "Débit de carburant moteur"),
     ENTRY("Exhaust gas temperature B1S1", "Température des gaz d’échappement B1S1"),
     ENTRY("DPF bank 1 differential pressure", "Pression différentielle DPF banc 1"),
-    ENTRY("DPF bank 1 inlet temperature", "Température d’entrée DPF banc 1"),
+    ENTRY("DPF bank 1 inlet temperature", "Température d’entrée DPF banc 1"),    ENTRY("Fuel tank level input", "Niveau de carburant"),
+
 };
 
 static const InfiltratrI18nEntry es_es[] = {
@@ -451,7 +454,8 @@ static const InfiltratrI18nEntry es_es[] = {
     ENTRY("Engine fuel rate", "Caudal de combustible del motor"),
     ENTRY("Exhaust gas temperature B1S1", "Temperatura de gases de escape B1S1"),
     ENTRY("DPF bank 1 differential pressure", "Presión diferencial DPF banco 1"),
-    ENTRY("DPF bank 1 inlet temperature", "Temperatura de entrada DPF banco 1"),
+    ENTRY("DPF bank 1 inlet temperature", "Temperatura de entrada DPF banco 1"),    ENTRY("Fuel tank level input", "Nivel de combustible"),
+
 };
 
 static const InfiltratrI18nEntry it_it[] = {
@@ -538,7 +542,8 @@ static const InfiltratrI18nEntry it_it[] = {
     ENTRY("Engine fuel rate", "Portata carburante motore"),
     ENTRY("Exhaust gas temperature B1S1", "Temperatura gas di scarico B1S1"),
     ENTRY("DPF bank 1 differential pressure", "Pressione differenziale DPF banco 1"),
-    ENTRY("DPF bank 1 inlet temperature", "Temperatura ingresso DPF banco 1"),
+    ENTRY("DPF bank 1 inlet temperature", "Temperatura ingresso DPF banco 1"),    ENTRY("Fuel tank level input", "Livello carburante"),
+
 };
 
 static const InfiltratrI18nEntry pl_pl[] = {
@@ -673,7 +678,8 @@ static const InfiltratrI18nEntry pl_pl[] = {
     ENTRY("Engine fuel rate", "Przepływ paliwa silnika"),
     ENTRY("Exhaust gas temperature B1S1", "Temperatura spalin B1S1"),
     ENTRY("DPF bank 1 differential pressure", "Ciśnienie różnicowe DPF bank 1"),
-    ENTRY("DPF bank 1 inlet temperature", "Temperatura wlotowa DPF bank 1"),
+    ENTRY("DPF bank 1 inlet temperature", "Temperatura wlotowa DPF bank 1"),    ENTRY("Fuel tank level input", "Poziom paliwa"),
+
 };
 
 static const InfiltratrI18nEntry pt_br[] = {
@@ -808,7 +814,8 @@ static const InfiltratrI18nEntry pt_br[] = {
     ENTRY("Engine fuel rate", "Vazão de combustível do motor"),
     ENTRY("Exhaust gas temperature B1S1", "Temperatura dos gases de escape B1S1"),
     ENTRY("DPF bank 1 differential pressure", "Pressão diferencial do DPF banco 1"),
-    ENTRY("DPF bank 1 inlet temperature", "Temperatura de entrada do DPF banco 1"),
+    ENTRY("DPF bank 1 inlet temperature", "Temperatura de entrada do DPF banco 1"),    ENTRY("Fuel tank level input", "Nível de combustível"),
+
 };
 
 static const InfiltratrI18nEntry zh_cn[] = {
@@ -943,7 +950,8 @@ static const InfiltratrI18nEntry zh_cn[] = {
     ENTRY("Engine fuel rate", "发动机燃油流量"),
     ENTRY("Exhaust gas temperature B1S1", "排气温度 B1S1"),
     ENTRY("DPF bank 1 differential pressure", "DPF 第1组差压"),
-    ENTRY("DPF bank 1 inlet temperature", "DPF 第1组入口温度"),
+    ENTRY("DPF bank 1 inlet temperature", "DPF 第1组入口温度"),    ENTRY("Fuel tank level input", "燃油箱液位"),
+
 };
 
 static const InfiltratrI18nEntry hi_in[] = {
@@ -1078,7 +1086,8 @@ static const InfiltratrI18nEntry hi_in[] = {
     ENTRY("Engine fuel rate", "इंजन ईंधन प्रवाह दर"),
     ENTRY("Exhaust gas temperature B1S1", "एग्जॉस्ट गैस तापमान B1S1"),
     ENTRY("DPF bank 1 differential pressure", "DPF बैंक 1 डिफरेंशियल दबाव"),
-    ENTRY("DPF bank 1 inlet temperature", "DPF बैंक 1 इनलेट तापमान"),
+    ENTRY("DPF bank 1 inlet temperature", "DPF बैंक 1 इनलेट तापमान"),    ENTRY("Fuel tank level input", "ईंधन टैंक स्तर"),
+
 };
 
 static const InfiltratrI18nEntry ar[] = {
@@ -1213,7 +1222,8 @@ static const InfiltratrI18nEntry ar[] = {
     ENTRY("Engine fuel rate", "معدل تدفق وقود المحرك"),
     ENTRY("Exhaust gas temperature B1S1", "درجة حرارة غازات العادم B1S1"),
     ENTRY("DPF bank 1 differential pressure", "فرق ضغط DPF للبنك 1"),
-    ENTRY("DPF bank 1 inlet temperature", "درجة حرارة مدخل DPF للبنك 1"),
+    ENTRY("DPF bank 1 inlet temperature", "درجة حرارة مدخل DPF للبنك 1"),    ENTRY("Fuel tank level input", "مستوى خزان الوقود"),
+
 };
 
 static const InfiltratrI18nEntry ja_jp[] = {
@@ -1348,7 +1358,8 @@ static const InfiltratrI18nEntry ja_jp[] = {
     ENTRY("Engine fuel rate", "エンジン燃料流量"),
     ENTRY("Exhaust gas temperature B1S1", "排気ガス温度 B1S1"),
     ENTRY("DPF bank 1 differential pressure", "DPF バンク1 差圧"),
-    ENTRY("DPF bank 1 inlet temperature", "DPF バンク1 入口温度"),
+    ENTRY("DPF bank 1 inlet temperature", "DPF バンク1 入口温度"),    ENTRY("Fuel tank level input", "燃料タンクレベル"),
+
 };
 
 static const InfiltratrI18nEntry ko_kr[] = {
@@ -1483,7 +1494,8 @@ static const InfiltratrI18nEntry ko_kr[] = {
     ENTRY("Engine fuel rate", "엔진 연료 유량"),
     ENTRY("Exhaust gas temperature B1S1", "배기가스 온도 B1S1"),
     ENTRY("DPF bank 1 differential pressure", "DPF 뱅크 1 차압"),
-    ENTRY("DPF bank 1 inlet temperature", "DPF 뱅크 1 입구 온도"),
+    ENTRY("DPF bank 1 inlet temperature", "DPF 뱅크 1 입구 온도"),    ENTRY("Fuel tank level input", "연료 탱크 레벨"),
+
 };
 
 static const InfiltratrI18nEntry id_id[] = {
@@ -1618,7 +1630,8 @@ static const InfiltratrI18nEntry id_id[] = {
     ENTRY("Engine fuel rate", "Laju bahan bakar mesin"),
     ENTRY("Exhaust gas temperature B1S1", "Suhu gas buang B1S1"),
     ENTRY("DPF bank 1 differential pressure", "Tekanan diferensial DPF bank 1"),
-    ENTRY("DPF bank 1 inlet temperature", "Suhu masuk DPF bank 1"),
+    ENTRY("DPF bank 1 inlet temperature", "Suhu masuk DPF bank 1"),    ENTRY("Fuel tank level input", "Tingkat tangki bahan bakar"),
+
 };
 
 static const InfiltratrI18nCatalog catalogs[] = {
