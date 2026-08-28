@@ -12,8 +12,11 @@ static const NSTimeInterval LinkConnectTimeoutSeconds = 8.0;
 static const NSTimeInterval LinkDiscoveryTimeoutSeconds = 8.0;
 static const NSTimeInterval LinkProbeTimeoutSeconds = 5.0;
 static const NSTimeInterval LinkReconnectDelaySeconds = 0.75;
-static const NSUInteger LinkRecoveryAttemptLimit = 2U;
+static const NSUInteger LinkRecoveryAttemptLimit = 5U;
+static const NSUInteger LinkScanAttemptLimit = 4U;
 static const NSUInteger LinkWriteQueueLimit = 65536U;
+static NSString * const LinkKnownPeripheralDefaultsKey =
+    @"link.ble.knownPeripheralIdentifier.v1";
 
 @interface LinkBLECandidate : NSObject
 @property(nonatomic, strong) CBService *service;
@@ -89,6 +92,8 @@ static BOOL LinkRemainingBytesAreWhitespace(const uint8_t *bytes,
 @property(nonatomic, copy, readwrite, nullable) NSString *writeCharacteristicUUID;
 @property(nonatomic, copy, readwrite, nullable) NSString *notifyCharacteristicUUID;
 - (void)beginScan;
+- (void)connectPeripheral:(CBPeripheral *)peripheral
+                     name:(NSString *)name;
 - (void)buildAndProbeCandidates;
 - (void)probeNextCandidate;
 - (void)sendProbeIfPossible;
@@ -114,6 +119,7 @@ static BOOL LinkRemainingBytesAreWhitespace(const uint8_t *bytes,
     NSUInteger _operationGeneration;
     NSUInteger _scanAttempt;
     NSUInteger _recoveryAttempt;
+    BOOL _knownPeripheralAttempted;
     NSUInteger _pendingServiceDiscoveries;
     NSArray<LinkBLECandidate *> *_Nullable _candidates;
     NSUInteger _candidateIndex;
@@ -192,6 +198,7 @@ static BOOL LinkRemainingBytesAreWhitespace(const uint8_t *bytes,
         _scanAttempt = 0U;
         _recoveryAttempt = 0U;
         _channelProbeAttempt = 0U;
+        _knownPeripheralAttempted = NO;
     }
     _startRequested = YES;
     if (self.isReady) { [self notifyDelegate]; return; }
@@ -215,6 +222,7 @@ static BOOL LinkRemainingBytesAreWhitespace(const uint8_t *bytes,
     _scanAttempt = 0U;
     _recoveryAttempt = 0U;
     _channelProbeAttempt = 0U;
+    _knownPeripheralAttempted = NO;
     _operationGeneration++;
     _probeGeneration++;
     [_central stopScan];
@@ -249,6 +257,7 @@ static BOOL LinkRemainingBytesAreWhitespace(const uint8_t *bytes,
     _startRequested = NO;
     _scanAttempt = 0U;
     _recoveryAttempt = 0U;
+    _knownPeripheralAttempted = NO;
     _operationGeneration++;
     _probeGeneration++;
     [_central stopScan];
@@ -299,9 +308,7 @@ static BOOL LinkRemainingBytesAreWhitespace(const uint8_t *bytes,
 - (void)beginScan
 {
     if (!_startRequested || _central.state != CBManagerStatePoweredOn) return;
-    _scanAttempt++;
     _operationGeneration++;
-    NSUInteger generation = _operationGeneration;
     _probeGeneration++;
     [_central stopScan];
     [_writeQueue setLength:0U];
@@ -313,6 +320,34 @@ static BOOL LinkRemainingBytesAreWhitespace(const uint8_t *bytes,
     self.peripheralName = nil;
     self.adapterIdentifier = nil;
     [self resetSelection];
+
+    /*
+     * CoreBluetooth gives an app a stable peripheral identifier. Reuse the
+     * last channel that completed an ELM ATI probe before relying on local-name
+     * advertisements again. A stale identifier still falls back to the normal
+     * bounded scan path after the connection timeout.
+     */
+    if (!_knownPeripheralAttempted) {
+        _knownPeripheralAttempted = YES;
+        NSString *savedIdentifier = [[NSUserDefaults standardUserDefaults]
+            stringForKey:LinkKnownPeripheralDefaultsKey];
+        NSUUID *identifier = savedIdentifier.length != 0U
+            ? [[NSUUID alloc] initWithUUIDString:savedIdentifier] : nil;
+        if (identifier != nil) {
+            NSArray<CBPeripheral *> *saved =
+                [_central retrievePeripheralsWithIdentifiers:@[identifier]];
+            CBPeripheral *known = saved.firstObject;
+            if (known != nil) {
+                NSString *name = known.name.length != 0U
+                    ? known.name : @"saved BLE OBD adapter";
+                [self connectPeripheral:known name:name];
+                return;
+            }
+        }
+    }
+
+    _scanAttempt++;
+    NSUInteger generation = _operationGeneration;
     /*
      * Some dual-mode ELM/Vgate adapters do not include their local name in
      * every advertising packet.  With CoreBluetooth's default duplicate
@@ -332,10 +367,30 @@ static BOOL LinkRemainingBytesAreWhitespace(const uint8_t *bytes,
                 : @"Retrying BLE OBD adapter scan"];
     [self scheduleStateTimeout:LinkBLETransportStateScanning generation:generation
                          after:LinkScanTimeoutSeconds
-                       message:_scanAttempt < 2U
+                       message:_scanAttempt < LinkScanAttemptLimit
                            ? @"No BLE OBD adapter found; retrying"
                            : @"No BLE OBD adapter found"
-                       recover:_scanAttempt < 2U];
+                       recover:_scanAttempt < LinkScanAttemptLimit];
+}
+
+- (void)connectPeripheral:(CBPeripheral *)peripheral
+                     name:(NSString *)name
+{
+    if (!_startRequested || peripheral == nil) return;
+    [_central stopScan];
+    _operationGeneration++;
+    NSUInteger generation = _operationGeneration;
+    _peripheral = peripheral;
+    _peripheral.delegate = self;
+    self.peripheralName = name;
+    [self setState:LinkBLETransportStateConnecting
+            status:[NSString stringWithFormat:@"Connecting to %@", name]];
+    [_central connectPeripheral:peripheral options:nil];
+    [self scheduleStateTimeout:LinkBLETransportStateConnecting
+                    generation:generation
+                         after:LinkConnectTimeoutSeconds
+                       message:@"BLE adapter connection timed out"
+                       recover:YES];
 }
 
 - (void)centralManagerDidUpdateState:(CBCentralManager *)central
@@ -372,18 +427,9 @@ static BOOL LinkRemainingBytesAreWhitespace(const uint8_t *bytes,
     NSString *name = advertisementData[CBAdvertisementDataLocalNameKey];
     if (name.length == 0U) name = peripheral.name;
     if (name.length == 0U || !LinkPeripheralNameLooksLikeAdapter(name)) return;
-    [central stopScan];
-    _operationGeneration++;
-    NSUInteger generation = _operationGeneration;
-    _peripheral = peripheral;
-    _peripheral.delegate = self;
-    self.peripheralName = name;
-    [self setState:LinkBLETransportStateConnecting
-            status:[NSString stringWithFormat:@"Connecting to %@", name]];
-    [central connectPeripheral:peripheral options:nil];
-    [self scheduleStateTimeout:LinkBLETransportStateConnecting generation:generation
-                         after:LinkConnectTimeoutSeconds message:@"BLE adapter connection timed out" recover:YES];
+    [self connectPeripheral:peripheral name:name];
     (void)RSSI;
+    (void)central;
 }
 
 - (void)centralManager:(CBCentralManager *)central
@@ -600,6 +646,9 @@ didUpdateValueForCharacteristic:(CBCharacteristic *)characteristic
         _selectedNotify = candidate.notifyCharacteristic;
         _selectedWriteType = candidate.writeType;
         self.adapterIdentifier = identifier;
+        [[NSUserDefaults standardUserDefaults]
+            setObject:_peripheral.identifier.UUIDString
+               forKey:LinkKnownPeripheralDefaultsKey];
         _scanAttempt = 0U;
         _recoveryAttempt = 0U;
         _channelProbeAttempt = 0U;

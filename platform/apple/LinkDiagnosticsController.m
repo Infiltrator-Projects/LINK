@@ -771,11 +771,24 @@ static void LinkAppleSessionEvent(
             break;
         case LINK_OBD2_DTC_PERMANENT:
             self.permanentDTCs = codes;
-            self.faultScanStatusText = [NSString stringWithFormat:
-                @"Complete · %lu stored · %lu pending · %lu permanent",
-                (unsigned long)self.storedDTCs.count,
-                (unsigned long)self.pendingDTCs.count,
-                (unsigned long)self.permanentDTCs.count];
+            if (!event->dtc_response_available) {
+                NSString *outcome = event->dtc_negative_response
+                    ? [NSString stringWithFormat:
+                        @"permanent unavailable (NRC 0x%02X)",
+                        (unsigned int)event->dtc_negative_response_code]
+                    : @"permanent unavailable";
+                self.faultScanStatusText = [NSString stringWithFormat:
+                    @"Complete · %lu stored · %lu pending · %@",
+                    (unsigned long)self.storedDTCs.count,
+                    (unsigned long)self.pendingDTCs.count,
+                    outcome];
+            } else {
+                self.faultScanStatusText = [NSString stringWithFormat:
+                    @"Complete · %lu stored · %lu pending · %lu permanent",
+                    (unsigned long)self.storedDTCs.count,
+                    (unsigned long)self.pendingDTCs.count,
+                    (unsigned long)self.permanentDTCs.count];
+            }
             break;
         }
         if (event->became_ready) self.ready = YES;

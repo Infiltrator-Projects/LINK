@@ -67,6 +67,11 @@ ELM init
 
 A configuration that enables both extension positions is rejected rather than silently running manufacturer discovery twice. MBLINK deliberately uses the late hook so standard fault evidence completes before a potentially long Mercedes module scan. JAGLINK currently skips the manufacturer hook. Manufacturer logic therefore stays above LINK while generic sequencing remains shared.
 
+An optional stored, pending or permanent DTC mode may return ELM `NO DATA` or
+an ISO-style `7F <service> <NRC>` response on a vehicle that does not make that
+inventory available. LINK records that outcome as unavailable and continues
+the bounded flow; malformed or unrelated traffic remains a hard protocol error.
+
 ## Discover application model
 
 Discover is not a separate product repository. It is a specialist branded application target inside each manufacturer repository:

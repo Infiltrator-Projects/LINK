@@ -109,6 +109,9 @@ typedef struct {
     bool vin_available;
     LinkObd2Sample sample;
     bool became_ready;
+    bool dtc_response_available;
+    bool dtc_negative_response;
+    uint8_t dtc_negative_response_code;
 } LinkDiagnosticFlowEvent;
 
 typedef struct {

@@ -79,6 +79,9 @@ jobs:
           grep -Fq 'LinkRecoveryAttemptLimit' platform/apple/LinkBLETransport.m
           grep -Fq '_recoveryAttempt > LinkRecoveryAttemptLimit' platform/apple/LinkBLETransport.m
           grep -Fq 'retry limit reached' platform/apple/LinkBLETransport.m
+          grep -Fq 'LinkScanAttemptLimit = 4U' platform/apple/LinkBLETransport.m
+          grep -Fq 'retrievePeripheralsWithIdentifiers' platform/apple/LinkBLETransport.m
+          grep -Fq 'LinkKnownPeripheralDefaultsKey' platform/apple/LinkBLETransport.m
           grep -Fq 'link_telemetry_recorder_begin(' platform/apple/LinkDiagnosticsController.m
           grep -Fq '"BLE", stateName.UTF8String' platform/apple/LinkDiagnosticsController.m
           grep -Fq 'LinkBLETransportStateFailed' platform/apple/LinkDiagnosticsController.m

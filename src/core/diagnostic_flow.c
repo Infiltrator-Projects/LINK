@@ -69,6 +69,16 @@ static LinkObd2DtcKind flow_stage_dtc_kind(LinkDiagnosticFlowStage stage)
     }
 }
 
+static uint8_t flow_dtc_request_service(LinkObd2DtcKind kind)
+{
+    switch (kind) {
+    case LINK_OBD2_DTC_STORED: return UINT8_C(0x03);
+    case LINK_OBD2_DTC_PENDING: return UINT8_C(0x07);
+    case LINK_OBD2_DTC_PERMANENT: return UINT8_C(0x0a);
+    }
+    return 0U;
+}
+
 static LinkObd2DtcList *flow_dtc_list(
     LinkDiagnosticFlow *flow,
     LinkObd2DtcKind kind)
@@ -433,17 +443,27 @@ LinkDiagnosticFlowResult link_diagnostic_flow_accept_response(
         LinkObd2DtcList decoded = {0};
         LinkObd2DtcList *target = flow_dtc_list(flow, kind);
         LinkObd2Result result = LINK_OBD2_RESULT_OK;
+        uint8_t negative_response_code = 0U;
 
         if (target == NULL) {
             flow->failure = LINK_DIAGNOSTIC_FLOW_RESULT_INVALID_STATE;
             flow->stage = LINK_DIAGNOSTIC_FLOW_FAILED;
             return flow->failure;
         }
-        if (response->result != LINK_ELM327_RESULT_NO_DATA) {
+        event->dtc_response_available =
+            response->result != LINK_ELM327_RESULT_NO_DATA;
+        if (event->dtc_response_available) {
             result = link_obd2_decode_dtcs(response, kind, &decoded);
         }
         if (result != LINK_OBD2_RESULT_OK) {
-            return flow_fail_obd2(flow, result);
+            const uint8_t request_service = flow_dtc_request_service(kind);
+            if (!link_obd2_is_negative_response(
+                    response, request_service, &negative_response_code)) {
+                return flow_fail_obd2(flow, result);
+            }
+            event->dtc_response_available = false;
+            event->dtc_negative_response = true;
+            event->dtc_negative_response_code = negative_response_code;
         }
 
         *target = decoded;

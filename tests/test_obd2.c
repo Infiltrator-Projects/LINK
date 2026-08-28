@@ -71,6 +71,7 @@ int main(void)
     LinkObd2Sample sample;
     LinkObd2ClearAuthorization authorization = LINK_OBD2_CLEAR_AUTHORIZATION_INIT;
     LinkElm327Response response;
+    uint8_t negative_response_code = 0U;
 
     check(link_obd2_build_live_pid_request(0x0cU, command, sizeof(command)) ==
               LINK_OBD2_RESULT_OK && strcmp(command, "010C") == 0,
@@ -81,6 +82,26 @@ int main(void)
               LINK_OBD2_RESULT_OK && sample.unit == LINK_OBD2_UNIT_RPM &&
               sample.value == 1726.0,
           "decode RPM");
+
+    /* Captured C207 behaviour: optional permanent-DTC Mode 0A is unavailable. */
+    response = parse_response("0A", "7F0A22\r>");
+    check(link_obd2_is_negative_response(
+              &response, UINT8_C(0x0a), &negative_response_code) &&
+              negative_response_code == UINT8_C(0x22),
+          "recognize captured Mode 0A negative response");
+    check(!link_obd2_is_negative_response(
+              &response, UINT8_C(0x07), &negative_response_code),
+          "reject negative response for another service");
+
+    response = parse_response("0A", "7F0A22\r7F0A22\r>");
+    check(link_obd2_is_negative_response(
+              &response, UINT8_C(0x0a), &negative_response_code),
+          "recognize matching multi-ECU Mode 0A negative responses");
+
+    response = parse_response("0A", "4A00\r7F0A22\r>");
+    check(!link_obd2_is_negative_response(
+              &response, UINT8_C(0x0a), &negative_response_code),
+          "do not collapse mixed positive and negative traffic");
 
     memcpy(command, "sentinel", sizeof("sentinel"));
     check(link_obd2_build_clear_dtc_request(&authorization, command,

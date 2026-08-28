@@ -274,7 +274,15 @@ static int test_manufacturer_extension_after_standard_dtcs(void)
     CHECK(link_diagnostic_flow_accept_response(&flow, &response, 700U, &event) == LINK_DIAGNOSTIC_FLOW_RESULT_OK);
     CHECK(link_diagnostic_flow_next_action(&flow, 800U, &action) == LINK_DIAGNOSTIC_FLOW_RESULT_OK);
     CHECK(strcmp(action.command, "0A") == 0);
+    /*
+     * Captured C207/Vgate evidence returns 7F 0A 22 for optional permanent
+     * DTC Mode 0A.  It is unavailable evidence, not a fatal shared-flow error.
+     */
+    response = response_ok("7F0A22", false);
     CHECK(link_diagnostic_flow_accept_response(&flow, &response, 800U, &event) == LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(!event.dtc_response_available);
+    CHECK(event.dtc_negative_response);
+    CHECK(event.dtc_negative_response_code == UINT8_C(0x22));
     CHECK(flow.standard_dtc_inventory_complete);
     CHECK(flow.stage == LINK_DIAGNOSTIC_FLOW_MANUFACTURER_EXTENSION);
     CHECK(!event.became_ready);

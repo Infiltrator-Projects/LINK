@@ -143,6 +143,19 @@ LinkObd2Result link_obd2_decode_dtcs(
     const LinkElm327Response *response,
     LinkObd2DtcKind kind,
     LinkObd2DtcList *list);
+/**
+ * Recognise an ISO-style negative response for one requested OBD service.
+ *
+ * Some emissions ECUs answer optional modes such as permanent-DTC Mode 0A
+ * with `7F <service> <NRC>` instead of ELM `NO DATA`.  This helper accepts
+ * only a response made entirely of matching three-byte negative-response
+ * records, so callers can distinguish an unavailable optional inventory from
+ * malformed or unrelated traffic without hiding protocol errors.
+ */
+bool link_obd2_is_negative_response(
+    const LinkElm327Response *response,
+    uint8_t request_service,
+    uint8_t *negative_response_code);
 LinkObd2Result link_obd2_decode_dtc_pair(
     uint8_t high,
     uint8_t low,

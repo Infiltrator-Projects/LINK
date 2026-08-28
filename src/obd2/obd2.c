@@ -808,3 +808,58 @@ LinkObd2Result link_obd2_decode_dtcs(
     *list = decoded;
     return LINK_OBD2_RESULT_OK;
 }
+
+bool link_obd2_is_negative_response(
+    const LinkElm327Response *response,
+    uint8_t request_service,
+    uint8_t *negative_response_code)
+{
+    const char *cursor;
+    uint8_t indexed[OBD2_MAX_MESSAGE_BYTES];
+    size_t indexed_length = 0U;
+    bool indexed_found = false;
+    bool matched = false;
+    uint8_t captured_code = 0U;
+    LinkObd2Result result;
+
+    if (negative_response_code != NULL) *negative_response_code = 0U;
+    if (response == NULL || request_service == 0U) return false;
+
+    result = obd2_collect_indexed_message(
+        response, indexed, sizeof(indexed), &indexed_length, &indexed_found);
+    if (result != LINK_OBD2_RESULT_OK) return false;
+    if (indexed_found) {
+        if (indexed_length != 3U || indexed[0] != UINT8_C(0x7f) ||
+            indexed[1] != request_service) {
+            return false;
+        }
+        if (negative_response_code != NULL)
+            *negative_response_code = indexed[2];
+        return true;
+    }
+
+    if (obd2_response_ready(response) != LINK_OBD2_RESULT_OK) return false;
+    cursor = response->text;
+    while (*cursor != '\0') {
+        const char *end = strchr(cursor, '\n');
+        const size_t line_length = end == NULL
+            ? strlen(cursor) : (size_t)(end - cursor);
+        uint8_t bytes[OBD2_MAX_LINE_BYTES];
+        size_t byte_count = 0U;
+
+        result = obd2_parse_hex_line(
+            cursor, line_length, bytes, sizeof(bytes), &byte_count);
+        if (result != LINK_OBD2_RESULT_OK || byte_count != 3U ||
+            bytes[0] != UINT8_C(0x7f) || bytes[1] != request_service) {
+            return false;
+        }
+        if (!matched) captured_code = bytes[2];
+        else if (bytes[2] != captured_code) return false;
+        matched = true;
+        if (end == NULL) break;
+        cursor = end + 1;
+    }
+    if (matched && negative_response_code != NULL)
+        *negative_response_code = captured_code;
+    return matched;
+}
