@@ -2,10 +2,6 @@
 /**
  * @file link-stm32-uds.h
  * @brief Bare-metal STM32 orchestration for LINK ISO-TP + UDS client traffic.
- *
- * The protocol engines remain LINK-owned. This object only joins the bounded
- * STM32 CAN queue to one request/response transaction at a time. Request and
- * response storage are supplied by the caller; no allocation is performed.
  */
 #ifndef LINK_STM32_UDS_H
 #define LINK_STM32_UDS_H
@@ -66,6 +62,11 @@ typedef struct {
     size_t request_length;
     LinkIsoTpCanFrame pending_tx;
     bool pending_tx_valid;
+    bool pending_tx_tracks_transmitter;
+    bool in_flight_tracks_transmitter;
+    uint64_t tx_completion_deadline_us;
+    uint64_t last_transmitter_completion_us;
+    bool last_transmitter_completion_valid;
     bool uds_started;
     LinkUdsResponse response;
     LinkIsoTpResult isotp_result;
@@ -85,15 +86,12 @@ bool link_stm32_uds_init(
 
 void link_stm32_uds_reset(LinkStm32UdsClient *client);
 
-/** Copy and begin one complete UDS request PDU. */
 LinkStm32UdsResult link_stm32_uds_start(
     LinkStm32UdsClient *client,
     const uint8_t *request,
     size_t request_length);
 
-/** Progress queued CAN, ISO-TP and UDS state in main-loop context. */
 LinkStm32UdsResult link_stm32_uds_poll(LinkStm32UdsClient *client);
-
 const LinkUdsResponse *link_stm32_uds_response(const LinkStm32UdsClient *client);
 
 #ifdef __cplusplus

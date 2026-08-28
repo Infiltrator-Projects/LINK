@@ -4,14 +4,13 @@
  * @brief Allocation-free STM32 CAN/FDCAN edge for LINK ISO-TP.
  *
  * This layer is deliberately independent of STM32Cube HAL types. A concrete
- * STM32 family adapter supplies four tiny callbacks for RX, TX, TX readiness
- * and the millisecond HAL clock. The LINK protocol stack therefore remains
- * portable and the normal desktop/mobile builds gain no STM32 dependency.
+ * STM32 family adapter supplies RX, TX, completion-status and millisecond-clock
+ * callbacks, so the portable LINK core gains no STM32 HAL dependency.
  *
- * The receive queue is single-producer/single-consumer: the producer is the
- * CAN RX interrupt and the consumer is the main loop. Frames are copied into
- * bounded caller-owned state; overflow is counted and the newest frame is
- * dropped rather than overwriting unread evidence.
+ * RX is single-producer/single-consumer: the interrupt producer snapshots both
+ * the frame and its arrival tick; the main-loop consumer receives a projected
+ * monotonic timestamp. TX allows one outstanding hardware frame at a time and
+ * does not report completion until the concrete controller confirms it.
  */
 #ifndef LINK_STM32_CAN_H
 #define LINK_STM32_CAN_H
@@ -28,9 +27,19 @@ extern "C" {
 
 #define LINK_STM32_CAN_RX_QUEUE_CAPACITY 8U
 
+typedef enum {
+    LINK_STM32_CAN_TX_IDLE = 0,
+    LINK_STM32_CAN_TX_PENDING,
+    LINK_STM32_CAN_TX_COMPLETE,
+    LINK_STM32_CAN_TX_FAILED
+} LinkStm32CanTxStatus;
+
 typedef bool (*LinkStm32CanReceiveFn)(void *context, LinkIsoTpCanFrame *frame);
 typedef bool (*LinkStm32CanTxReadyFn)(void *context);
 typedef bool (*LinkStm32CanSendFn)(void *context, const LinkIsoTpCanFrame *frame);
+typedef LinkStm32CanTxStatus (*LinkStm32CanTxStatusFn)(
+    void *context,
+    uint32_t *completion_tick_ms);
 typedef uint32_t (*LinkStm32CanClockMsFn)(void *context);
 
 typedef struct {
@@ -38,46 +47,40 @@ typedef struct {
     LinkStm32CanReceiveFn receive;
     LinkStm32CanTxReadyFn tx_ready;
     LinkStm32CanSendFn send;
+    LinkStm32CanTxStatusFn tx_status;
     LinkStm32CanClockMsFn clock_ms;
 } LinkStm32CanOps;
 
 typedef struct {
+    LinkIsoTpCanFrame frame;
+    uint32_t arrival_tick_ms;
+} LinkStm32CanRxEntry;
+
+typedef struct {
     LinkStm32CanOps ops;
-    LinkIsoTpCanFrame rx_queue[LINK_STM32_CAN_RX_QUEUE_CAPACITY];
+    LinkStm32CanRxEntry rx_queue[LINK_STM32_CAN_RX_QUEUE_CAPACITY];
     volatile uint8_t rx_head;
     volatile uint8_t rx_tail;
     volatile uint32_t rx_dropped;
+    bool tx_in_flight;
     uint32_t last_tick_ms;
     uint64_t elapsed_ms;
-    bool clock_started;
 } LinkStm32Can;
 
-/** Validate callbacks, clear the queue and initialise the wrap-safe clock. */
 bool link_stm32_can_init(LinkStm32Can *channel, const LinkStm32CanOps *ops);
-
-/**
- * Drain the concrete FDCAN RX FIFO into the bounded LINK queue.
- * Call this from the STM32 HAL RX FIFO callback for the configured controller.
- */
 void link_stm32_can_rx_isr(LinkStm32Can *channel);
-
-/** Pop one queued frame in main-loop context. */
 bool link_stm32_can_pop(LinkStm32Can *channel, LinkIsoTpCanFrame *frame);
-
-/** Return the number of frames dropped because the bounded RX queue was full. */
+bool link_stm32_can_pop_timed(
+    LinkStm32Can *channel,
+    LinkIsoTpCanFrame *frame,
+    uint64_t *arrival_us);
 uint32_t link_stm32_can_rx_dropped(const LinkStm32Can *channel);
-
-/** Return true only when the concrete controller can accept another TX frame. */
 bool link_stm32_can_tx_ready(const LinkStm32Can *channel);
-
-/** Submit one LINK ISO-TP CAN frame to the concrete STM32 controller. */
 bool link_stm32_can_send(LinkStm32Can *channel, const LinkIsoTpCanFrame *frame);
-
-/**
- * Convert the caller's wrapping 32-bit millisecond HAL clock to monotonic
- * microseconds. Natural uint32_t subtraction extends HAL_GetTick across wrap.
- * The function is intended for main-loop use; the RX ISR never mutates time.
- */
+bool link_stm32_can_tx_in_flight(const LinkStm32Can *channel);
+LinkStm32CanTxStatus link_stm32_can_poll_tx_status(
+    LinkStm32Can *channel,
+    uint64_t *completion_us);
 uint64_t link_stm32_can_now_us(LinkStm32Can *channel);
 
 #ifdef __cplusplus

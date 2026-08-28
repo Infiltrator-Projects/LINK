@@ -9,15 +9,19 @@ STM32 application
       |
 STM32Cube HAL/FDCAN
       |
-platform/stm32 bounded CAN queue + UDS transaction glue
+platform/stm32 bounded CAN queue + completion-aware UDS glue
       |
 LINK ISO-TP
       |
 LINK UDS / 27-service codecs
 ```
 
-The platform boundary is deliberately split in two. `platform/stm32/` contains HAL-independent, allocation-free queue/timing/orchestration code that can be host-tested in normal LINK CI. A concrete MCU family example supplies the STM32Cube calls needed to turn FDCAN RX/TX and `HAL_GetTick()` into those generic operations.
+The platform boundary is split deliberately. `platform/stm32/` is HAL-independent and allocation-free. RX queue entries retain the interrupt-time millisecond tick, and only one hardware TX is outstanding at a time. ISO-TP separation/flow-control timing and UDS P2 timing are re-anchored to confirmed hardware transmission rather than FIFO admission.
 
-The first concrete target is the STM32C092RCTx project supplied in MBLINK issue #27. See `examples/stm32c092/README.md` for the exact Cube/Keil integration and the read-only F190 VIN example.
+The concrete STM32C092 binding lives in `examples/stm32c092/`. It uses the FDCAN Tx Event FIFO/message markers for real completion, treats lost Tx events as transport failure, and keeps STM32Cube types outside LINK's portable core.
 
-This is a LINK platform port, not a second MBLINK protocol implementation. Manufacturer UI and product presentation remain outside the MCU. A future dedicated hardware interface may run LINK on the MCU while MBLINK/JAGLINK remain host applications.
+The first target is the STM32C092RCTx project supplied in MBLINK issue #27. The attachment is an ECU/server demonstration; LINK's reference target is intentionally a diagnostic tester/client that talks to a vehicle. The attachment's separate UDS implementation is not imported.
+
+See `examples/stm32c092/README.md` for Cube/Keil integration, corrected 48 MHz/500 kbit/s nominal timing guidance and the read-only F190 VIN example.
+
+Manufacturer UI and product presentation remain outside the MCU. MBLINK/JAGLINK can remain host applications while a future dedicated interface runs LINK firmware on the MCU.

@@ -2,29 +2,32 @@
 
 # STM32C092 FDCAN UDS example
 
-This is the LINK port for the STM32C092 project supplied in MBLINK issue #27. It deliberately ports the shared LINK ISO-TP/UDS engine instead of importing the separate UDS implementation bundled in the attachment.
+This is the LINK port for the STM32C092 project supplied in MBLINK issue #27. It deliberately ports LINK's own ISO-TP/UDS engine rather than importing the separate protocol stack bundled in the attachment.
 
-The supplied project establishes a useful concrete target:
+The supplied project establishes the target: STM32C092RCTx, 48 MHz system/FDCAN clock, Classical CAN at 500 kbit/s, RX FIFO0 interrupts and `HAL_GetTick()`.
 
-- STM32C092RCTx (Cortex-M0+), LQFP64;
-- 48 MHz system/FDCAN clock;
-- Classical CAN at 500 kbit/s;
-- one standard FDCAN acceptance filter;
-- interrupt-driven RX FIFO0;
-- `HAL_GetTick()` as the available 1 ms monotonic clock;
-- physical diagnostic IDs `0x7E0` request / `0x7E8` response.
+The attachment itself demonstrates an ECU/server role: receive tester requests on `0x7E0/0x7DF` and reply on `0x7E8`. LINK's reference firmware deliberately implements the diagnostic-tester/client role needed to talk to a vehicle: transmit on `0x7E0`, receive the ECU response on `0x7E8`.
 
-LINK keeps all ISO-TP and UDS behaviour in its existing portable C11 implementations. `platform/stm32/` only provides bounded bare-metal orchestration. The files in this directory are the STM32Cube HAL binding and a copy-ready read-only VIN example.
+## Hardware project and licensing
 
-## What to retain from the supplied Cube project
+Keep the Cube-generated `Drivers/`, `Inc/`, `Src/`, `.ioc`, startup file and Keil project. Do not import the attachment's `library/src`, `library/crypto` or old `stm32c092/uds_*` protocol implementation. Those files identify themselves with a separate `LicenseRef-STM32-UDS-Research-Education-Commercial-1.0` marker while the attachment does not contain that referenced licence text; LINK already provides the corresponding GPL-3.0-or-later protocol implementation.
 
-Keep the Cube-generated hardware project: `Drivers/`, `Inc/`, `Src/`, the `.ioc`, startup file and the Keil project. Its existing FDCAN timing already resolves to 500 kbit/s nominal Classical CAN and does not need to be regenerated for this example.
+## Nominal CAN timing
 
-Do not add the attachment's `library/src`, `library/crypto` or old `stm32c092/uds_*` implementation to LINK. Those files identify themselves with `LicenseRef-STM32-UDS-Research-Education-Commercial-1.0`, but the attachment does not contain the referenced licence text. LINK already owns the corresponding ISO-TP and UDS implementation under GPL-3.0-or-later, so importing a second protocol stack is both unnecessary and legally ambiguous.
+Do not blindly retain the attachment's nominal timing fields. Its values calculate to 500 kbit/s, but `NominalSyncJumpWidth = 12` with `NominalTimeSeg2 = 2` is not a sound relationship.
 
-## Sources to add to the Keil/Cube project
+For a 48 MHz FDCAN clock, use this conservative 500 kbit/s Classical-CAN starting point:
 
-Add these LINK sources:
+```text
+NominalPrescaler     = 6
+NominalTimeSeg1      = 13
+NominalTimeSeg2      = 2
+NominalSyncJumpWidth = 2
+```
+
+That is 16 time quanta per bit with an 87.5% sample point. Confirm the generated values in CubeMX against the exact board clock tree before flashing hardware.
+
+## Sources to add
 
 ```text
 LINK/src/core/isotp.c
@@ -34,15 +37,10 @@ LINK/platform/stm32/link-stm32-can.c
 LINK/platform/stm32/link-stm32-uds.c
 LINK/examples/stm32c092/link-stm32c092-hal.c
 LINK/examples/stm32c092/link-stm32c092-example.c
-```
-
-LINK's ISO-TP/UDS sources use the two saturating integer helpers from the pinned Infiltratr Common dependency. For a direct Keil source build also add:
-
-```text
 LINK/src/infiltratr-common/src/core.c
 ```
 
-and these include paths:
+Include paths:
 
 ```text
 LINK/include
@@ -52,19 +50,11 @@ LINK/src/infiltratr-common/include
 <your Cube project>/Inc
 ```
 
-Normal LINK CMake builds are unchanged; none of the STM32Cube HAL files are compiled into Linux, Windows, Apple, MBLINK or JAGLINK targets.
+Normal LINK/MBLINK/JAGLINK product builds do not compile STM32Cube HAL.
 
-## `main.c` integration
+## main.c integration
 
-Keep the generated peripheral initialisation:
-
-```c
-MX_GPIO_Init();
-MX_FDCAN1_Init();
-MX_USART2_UART_Init();
-```
-
-Then replace the attachment's manual FDCAN filter/start block and its `uds_c092_*` initialisation with:
+After the Cube-generated GPIO/FDCAN/UART initialisation:
 
 ```c
 #include "link-stm32c092-example.h"
@@ -72,17 +62,13 @@ Then replace the attachment's manual FDCAN filter/start block and its `uds_c092_
 if (!link_stm32c092_example_init(&hfdcan1)) {
     Error_Handler();
 }
-```
 
-In the main loop:
-
-```c
 while (1) {
     link_stm32c092_example_process();
 }
 ```
 
-Replace the old callback body that manually reads one message with:
+Use both FDCAN callbacks:
 
 ```c
 void HAL_FDCAN_RxFifo0Callback(
@@ -93,37 +79,35 @@ void HAL_FDCAN_RxFifo0Callback(
         link_stm32c092_example_rx_fifo0_irq(hfdcan);
     }
 }
+
+void HAL_FDCAN_TxEventFifoCallback(
+    FDCAN_HandleTypeDef *hfdcan,
+    uint32_t TxEventFifoITs)
+{
+    link_stm32c092_example_tx_event_irq(hfdcan, TxEventFifoITs);
+}
 ```
 
-The LINK ISR path drains FIFO0 into an eight-frame single-producer/single-consumer queue. It therefore does not have the attachment's single pending-frame overwrite/drop behaviour. It also converts STM32 HAL DLC constants to actual byte lengths instead of casting `rxHeader.DataLength` to a byte count.
+RX FIFO0 is drained into an eight-frame bounded queue and every frame keeps the interrupt-time `HAL_GetTick()` value. Main-loop latency therefore does not turn an on-time queued response into a false ISO-TP/UDS timeout.
 
-## What the example does
+TX uses `FDCAN_STORE_TX_EVENTS` plus a unique message marker. LINK does not advance ISO-TP separation/flow-control timing or start the UDS P2 timer merely because `HAL_FDCAN_AddMessageToTxFifoQ()` accepted a frame; it waits for the matching Tx Event FIFO record. A lost Tx-event FIFO element becomes an explicit transport failure, and a hardware TX that never completes is bounded by the configured flow-control timeout.
 
-At startup it sends the read-only UDS request:
+## Example operation
 
-```text
-22 F1 90
-```
-
-through LINK ISO-TP on `0x7E0` and accepts the physical response on `0x7E8`. Multi-frame responses are reassembled by LINK and flow-control frames are generated by the existing LINK ISO-TP engine.
-
-When complete:
+At startup the example issues the read-only request `22 F1 90` for VIN. LINK performs ISO-TP reassembly and flow control. On success:
 
 ```c
 if (link_stm32c092_example_state() == LINK_STM32C092_EXAMPLE_VIN_READY) {
     const char *vin = link_stm32c092_example_vin();
-    /* inspect in the debugger, print over USART, or forward to a host */
 }
 ```
 
-A UDS negative response is preserved via `link_stm32c092_example_negative_response_code()`. RX queue overflow is observable through `link_stm32c092_example_dropped_frames()` rather than silently losing evidence.
+Negative responses are retained through `link_stm32c092_example_negative_response_code()`, and RX overflow is visible through `link_stm32c092_example_dropped_frames()`.
 
-The example is intentionally read-only. The underlying LINK UDS catalogue still exposes all 27 standard service codecs to firmware that explicitly chooses to use them; this example does not automatically enable state-changing, security or programming operations.
+The example remains intentionally read-only. LINK's wider UDS catalogue is not automatically authorised by this firmware.
 
-## Timing
+## Timing resolution and CAN FD
 
-LINK uses monotonic microseconds. The supplied project only exposes `HAL_GetTick()` at 1 ms resolution, so the STM32 edge extends the wrapping 32-bit millisecond counter into a monotonic 64-bit microsecond value. Sub-millisecond ISO-TP STmin values are therefore handled conservatively by waiting until the next millisecond tick; they are not transmitted early.
+The supplied project exposes `HAL_GetTick()` at 1 ms resolution. LINK extends the wrapping 32-bit clock to monotonic 64-bit microseconds and preserves the ISR tick for RX and TX-completion events. Sub-millisecond STmin values are therefore handled conservatively; they are never transmitted early.
 
-## CAN FD
-
-The HAL mapper understands canonical CAN-FD DLC sizes through 64 bytes because LINK supports CAN FD. The supplied `.ioc` is configured for Classical CAN, and the copy-ready VIN example intentionally leaves CAN FD and bit-rate switching disabled. Enabling CAN FD requires a corresponding Cube FDCAN configuration change; it is not silently enabled by this port.
+The HAL mapper understands canonical CAN-FD DLC sizes through 64 bytes, but the supplied project/example remains Classical CAN with bit-rate switching disabled. Enabling CAN FD requires a matching Cube FDCAN configuration change.

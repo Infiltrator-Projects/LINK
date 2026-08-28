@@ -1,14 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-/** @file link-stm32c092-hal.c @brief STM32C092 FDCAN binding for LINK. */
 #include "link-stm32c092-hal.h"
 
 #include <string.h>
 
 static bool link_stm32c092_dlc_to_length(uint32_t dlc, uint8_t *length)
 {
-    if (length == NULL) {
-        return false;
-    }
+    if (length == NULL) return false;
     switch (dlc) {
     case FDCAN_DLC_BYTES_0: *length = 0U; return true;
     case FDCAN_DLC_BYTES_1: *length = 1U; return true;
@@ -32,9 +29,7 @@ static bool link_stm32c092_dlc_to_length(uint32_t dlc, uint8_t *length)
 
 static bool link_stm32c092_length_to_dlc(uint8_t length, uint32_t *dlc)
 {
-    if (dlc == NULL) {
-        return false;
-    }
+    if (dlc == NULL) return false;
     switch (length) {
     case 0U: *dlc = FDCAN_DLC_BYTES_0; return true;
     case 1U: *dlc = FDCAN_DLC_BYTES_1; return true;
@@ -63,9 +58,7 @@ static bool link_stm32c092_receive(void *context, LinkIsoTpCanFrame *frame)
     uint8_t data[LINK_ISOTP_CAN_FD_MAX_DATA_LENGTH];
     uint8_t length;
 
-    if (adapter == NULL || adapter->hfdcan == NULL || frame == NULL) {
-        return false;
-    }
+    if (adapter == NULL || adapter->hfdcan == NULL || frame == NULL) return false;
 
     while (HAL_FDCAN_GetRxFifoFillLevel(adapter->hfdcan, FDCAN_RX_FIFO0) != 0U) {
         memset(&header, 0, sizeof(header));
@@ -84,12 +77,9 @@ static bool link_stm32c092_receive(void *context, LinkIsoTpCanFrame *frame)
         frame->extended_id = header.IdType == FDCAN_EXTENDED_ID;
         frame->length = length;
         frame->can_fd = header.FDFormat == FDCAN_FD_CAN;
-        if (length != 0U) {
-            memcpy(frame->data, data, length);
-        }
+        if (length != 0U) memcpy(frame->data, data, length);
         return true;
     }
-
     return false;
 }
 
@@ -97,21 +87,28 @@ static bool link_stm32c092_tx_ready(void *context)
 {
     LinkStm32C092Hal *adapter = (LinkStm32C092Hal *)context;
     return adapter != NULL && adapter->hfdcan != NULL &&
+           adapter->pending_marker == 0U &&
            HAL_FDCAN_GetTxFifoFreeLevel(adapter->hfdcan) != 0U;
 }
 
-static bool link_stm32c092_send(
-    void *context,
-    const LinkIsoTpCanFrame *frame)
+static bool link_stm32c092_send(void *context, const LinkIsoTpCanFrame *frame)
 {
     LinkStm32C092Hal *adapter = (LinkStm32C092Hal *)context;
     FDCAN_TxHeaderTypeDef header;
     uint32_t dlc;
+    uint8_t marker;
 
     if (adapter == NULL || adapter->hfdcan == NULL || frame == NULL ||
+        adapter->pending_marker != 0U ||
         !link_stm32c092_length_to_dlc(frame->length, &dlc)) {
         return false;
     }
+
+    marker = adapter->next_marker;
+    adapter->next_marker = marker == UINT8_MAX ? 1U : (uint8_t)(marker + 1U);
+    adapter->pending_marker = marker;
+    adapter->completed_marker = 0U;
+    adapter->tx_event_lost = false;
 
     memset(&header, 0, sizeof(header));
     header.Identifier = frame->can_id;
@@ -122,11 +119,43 @@ static bool link_stm32c092_send(
     header.BitRateSwitch = frame->can_fd && adapter->fd_bit_rate_switch
         ? FDCAN_BRS_ON : FDCAN_BRS_OFF;
     header.FDFormat = frame->can_fd ? FDCAN_FD_CAN : FDCAN_CLASSIC_CAN;
-    header.TxEventFifoControl = FDCAN_NO_TX_EVENTS;
-    header.MessageMarker = 0U;
+    header.TxEventFifoControl = FDCAN_STORE_TX_EVENTS;
+    header.MessageMarker = marker;
 
-    return HAL_FDCAN_AddMessageToTxFifoQ(
-        adapter->hfdcan, &header, frame->data) == HAL_OK;
+    if (HAL_FDCAN_AddMessageToTxFifoQ(
+            adapter->hfdcan, &header, frame->data) != HAL_OK) {
+        adapter->pending_marker = 0U;
+        return false;
+    }
+    return true;
+}
+
+static LinkStm32CanTxStatus link_stm32c092_tx_status(
+    void *context,
+    uint32_t *completion_tick_ms)
+{
+    LinkStm32C092Hal *adapter = (LinkStm32C092Hal *)context;
+    uint8_t pending;
+
+    if (completion_tick_ms != NULL) *completion_tick_ms = 0U;
+    if (adapter == NULL || adapter->hfdcan == NULL) return LINK_STM32_CAN_TX_FAILED;
+
+    pending = adapter->pending_marker;
+    if (pending == 0U) return LINK_STM32_CAN_TX_IDLE;
+    if (adapter->tx_event_lost) {
+        adapter->tx_event_lost = false;
+        adapter->pending_marker = 0U;
+        adapter->completed_marker = 0U;
+        return LINK_STM32_CAN_TX_FAILED;
+    }
+    if (adapter->completed_marker != pending) return LINK_STM32_CAN_TX_PENDING;
+
+    if (completion_tick_ms != NULL) {
+        *completion_tick_ms = adapter->completed_tick_ms;
+    }
+    adapter->pending_marker = 0U;
+    adapter->completed_marker = 0U;
+    return LINK_STM32_CAN_TX_COMPLETE;
 }
 
 static uint32_t link_stm32c092_clock_ms(void *context)
@@ -140,11 +169,11 @@ void link_stm32c092_hal_init(
     FDCAN_HandleTypeDef *hfdcan,
     bool fd_bit_rate_switch)
 {
-    if (adapter == NULL) {
-        return;
-    }
+    if (adapter == NULL) return;
+    memset(adapter, 0, sizeof(*adapter));
     adapter->hfdcan = hfdcan;
     adapter->fd_bit_rate_switch = fd_bit_rate_switch;
+    adapter->next_marker = 1U;
 }
 
 LinkStm32CanOps link_stm32c092_hal_ops(LinkStm32C092Hal *adapter)
@@ -155,8 +184,36 @@ LinkStm32CanOps link_stm32c092_hal_ops(LinkStm32C092Hal *adapter)
     ops.receive = link_stm32c092_receive;
     ops.tx_ready = link_stm32c092_tx_ready;
     ops.send = link_stm32c092_send;
+    ops.tx_status = link_stm32c092_tx_status;
     ops.clock_ms = link_stm32c092_clock_ms;
     return ops;
+}
+
+void link_stm32c092_hal_tx_event_irq(
+    LinkStm32C092Hal *adapter,
+    uint32_t tx_event_fifo_its)
+{
+    FDCAN_TxEventFifoTypeDef event;
+
+    if (adapter == NULL || adapter->hfdcan == NULL) return;
+    if ((tx_event_fifo_its & FDCAN_IT_TX_EVT_FIFO_ELT_LOST) != 0U) {
+        adapter->tx_event_lost = true;
+    }
+
+    while (HAL_FDCAN_GetTxEventFifoFillLevel(adapter->hfdcan) != 0U) {
+        memset(&event, 0, sizeof(event));
+        if (HAL_FDCAN_GetTxEvent(adapter->hfdcan, &event) != HAL_OK) {
+            adapter->tx_event_lost = true;
+            return;
+        }
+        if (adapter->pending_marker != 0U &&
+            event.MessageMarker == adapter->pending_marker &&
+            (event.EventType == FDCAN_TX_EVENT ||
+             event.EventType == FDCAN_TX_IN_SPITE_OF_ABORT)) {
+            adapter->completed_tick_ms = HAL_GetTick();
+            adapter->completed_marker = (uint8_t)event.MessageMarker;
+        }
+    }
 }
 
 bool link_stm32c092_hal_start_standard(
@@ -164,6 +221,10 @@ bool link_stm32c092_hal_start_standard(
     uint32_t response_id)
 {
     FDCAN_FilterTypeDef filter;
+    const uint32_t notifications =
+        FDCAN_IT_RX_FIFO0_NEW_MESSAGE |
+        FDCAN_IT_TX_EVT_FIFO_NEW_DATA |
+        FDCAN_IT_TX_EVT_FIFO_ELT_LOST;
 
     if (adapter == NULL || adapter->hfdcan == NULL || response_id > 0x7ffU) {
         return false;
@@ -179,18 +240,12 @@ bool link_stm32c092_hal_start_standard(
 
     if (HAL_FDCAN_ConfigFilter(adapter->hfdcan, &filter) != HAL_OK ||
         HAL_FDCAN_ConfigGlobalFilter(
-            adapter->hfdcan,
-            FDCAN_REJECT,
-            FDCAN_REJECT,
-            FDCAN_FILTER_REMOTE,
-            FDCAN_FILTER_REMOTE) != HAL_OK ||
+            adapter->hfdcan, FDCAN_REJECT, FDCAN_REJECT,
+            FDCAN_FILTER_REMOTE, FDCAN_FILTER_REMOTE) != HAL_OK ||
         HAL_FDCAN_ActivateNotification(
-            adapter->hfdcan,
-            FDCAN_IT_RX_FIFO0_NEW_MESSAGE,
-            0U) != HAL_OK ||
+            adapter->hfdcan, notifications, 0U) != HAL_OK ||
         HAL_FDCAN_Start(adapter->hfdcan) != HAL_OK) {
         return false;
     }
-
     return true;
 }

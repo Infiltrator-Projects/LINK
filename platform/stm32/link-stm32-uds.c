@@ -11,6 +11,12 @@ static bool link_stm32_uds_config_valid(const LinkStm32UdsConfig *config)
            config->p2_timeout_us != 0U && config->p2_star_timeout_us != 0U;
 }
 
+static uint64_t link_stm32_uds_deadline(uint64_t now_us, uint64_t delta_us)
+{
+    return UINT64_MAX - now_us < delta_us
+        ? UINT64_MAX : now_us + delta_us;
+}
+
 static LinkStm32UdsResult link_stm32_uds_fail(
     LinkStm32UdsClient *client,
     LinkStm32UdsResult result)
@@ -18,6 +24,9 @@ static LinkStm32UdsResult link_stm32_uds_fail(
     if (client != NULL) {
         client->state = LINK_STM32_UDS_FAILED;
         client->pending_tx_valid = false;
+        client->pending_tx_tracks_transmitter = false;
+        client->in_flight_tracks_transmitter = false;
+        client->tx_completion_deadline_us = 0U;
         client->failure = result;
     }
     return result;
@@ -48,36 +57,135 @@ static bool link_stm32_uds_is_flow_control(
     return (frame->data[offset] >> 4U) == 0x3U;
 }
 
+static LinkIsoTpResult link_stm32_uds_confirm_transmitter_sent(
+    LinkStm32UdsClient *client,
+    uint64_t sent_us)
+{
+    LinkIsoTpTx *tx = &client->transmitter;
+
+    if (tx->state == LINK_ISOTP_TX_FAILED) {
+        return tx->failure;
+    }
+    if (tx->state == LINK_ISOTP_TX_WAIT_FLOW_CONTROL) {
+        tx->deadline_us = link_stm32_uds_deadline(
+            sent_us, tx->config.flow_control_timeout_us);
+        return LINK_ISOTP_RESULT_WAIT_FLOW_CONTROL;
+    }
+    if (tx->state == LINK_ISOTP_TX_SENDING) {
+        tx->next_send_us = link_stm32_uds_deadline(
+            sent_us, tx->separation_time_us);
+        return tx->separation_time_us == 0U
+            ? LINK_ISOTP_RESULT_OK
+            : LINK_ISOTP_RESULT_WAIT_SEPARATION;
+    }
+    if (tx->state == LINK_ISOTP_TX_COMPLETE) {
+        return LINK_ISOTP_RESULT_COMPLETE;
+    }
+    return LINK_ISOTP_RESULT_UNEXPECTED_FRAME;
+}
+
 static LinkStm32UdsResult link_stm32_uds_send_pending(
     LinkStm32UdsClient *client)
 {
+    bool tracks_transmitter;
+    uint64_t now_us;
+
     if (!client->pending_tx_valid) {
         return LINK_STM32_UDS_RESULT_OK;
     }
     if (!link_stm32_can_tx_ready(client->channel)) {
         return LINK_STM32_UDS_RESULT_WAITING;
     }
+
+    tracks_transmitter = client->pending_tx_tracks_transmitter;
     if (!link_stm32_can_send(client->channel, &client->pending_tx)) {
         return link_stm32_uds_fail(client, LINK_STM32_UDS_RESULT_CAN_IO);
     }
+
     client->pending_tx_valid = false;
+    client->pending_tx_tracks_transmitter = false;
+    client->in_flight_tracks_transmitter = tracks_transmitter;
+    now_us = link_stm32_can_now_us(client->channel);
+    client->tx_completion_deadline_us = link_stm32_uds_deadline(
+        now_us, client->config.flow_control_timeout_us);
     return LINK_STM32_UDS_RESULT_OK;
+}
+
+static LinkStm32UdsResult link_stm32_uds_poll_tx_completion(
+    LinkStm32UdsClient *client)
+{
+    LinkStm32CanTxStatus status;
+    uint64_t completion_us = 0U;
+    uint64_t now_us;
+    bool tracks_transmitter;
+
+    if (!link_stm32_can_tx_in_flight(client->channel)) {
+        client->in_flight_tracks_transmitter = false;
+        client->tx_completion_deadline_us = 0U;
+        return LINK_STM32_UDS_RESULT_OK;
+    }
+
+    status = link_stm32_can_poll_tx_status(
+        client->channel, &completion_us);
+    if (status == LINK_STM32_CAN_TX_PENDING) {
+        now_us = link_stm32_can_now_us(client->channel);
+        if (client->tx_completion_deadline_us != 0U &&
+            now_us >= client->tx_completion_deadline_us) {
+            return link_stm32_uds_fail(
+                client, LINK_STM32_UDS_RESULT_CAN_IO);
+        }
+        return LINK_STM32_UDS_RESULT_OK;
+    }
+    if (status == LINK_STM32_CAN_TX_FAILED) {
+        return link_stm32_uds_fail(
+            client, LINK_STM32_UDS_RESULT_CAN_IO);
+    }
+    if (status != LINK_STM32_CAN_TX_COMPLETE) {
+        return LINK_STM32_UDS_RESULT_OK;
+    }
+
+    tracks_transmitter = client->in_flight_tracks_transmitter;
+    client->in_flight_tracks_transmitter = false;
+    client->tx_completion_deadline_us = 0U;
+    if (!tracks_transmitter) {
+        return LINK_STM32_UDS_RESULT_OK;
+    }
+
+    client->last_transmitter_completion_us = completion_us;
+    client->last_transmitter_completion_valid = true;
+    client->isotp_result = link_stm32_uds_confirm_transmitter_sent(
+        client, completion_us);
+    if (client->isotp_result == LINK_ISOTP_RESULT_OK ||
+        client->isotp_result == LINK_ISOTP_RESULT_COMPLETE ||
+        client->isotp_result == LINK_ISOTP_RESULT_WAIT_FLOW_CONTROL ||
+        client->isotp_result == LINK_ISOTP_RESULT_WAIT_SEPARATION) {
+        return LINK_STM32_UDS_RESULT_OK;
+    }
+    return link_stm32_uds_fail(
+        client, LINK_STM32_UDS_RESULT_ISOTP_ERROR);
 }
 
 static LinkStm32UdsResult link_stm32_uds_begin_response_wait(
     LinkStm32UdsClient *client,
     uint64_t now_us)
 {
+    uint64_t response_start_us;
+
     if (client->uds_started || client->pending_tx_valid ||
+        link_stm32_can_tx_in_flight(client->channel) ||
         client->transmitter.state != LINK_ISOTP_TX_COMPLETE) {
         return LINK_STM32_UDS_RESULT_OK;
     }
 
+    response_start_us = client->last_transmitter_completion_valid
+        ? client->last_transmitter_completion_us : now_us;
     client->uds_result = link_uds_client_begin(
-        &client->uds, client->tx_storage, client->request_length, now_us);
+        &client->uds, client->tx_storage, client->request_length,
+        response_start_us);
     if (client->uds_result != LINK_UDS_RESULT_OK) {
         return link_stm32_uds_fail(client, LINK_STM32_UDS_RESULT_UDS_ERROR);
     }
+    client->last_transmitter_completion_valid = false;
     client->uds_started = true;
     return LINK_STM32_UDS_RESULT_OK;
 }
@@ -142,6 +250,11 @@ void link_stm32_uds_reset(LinkStm32UdsClient *client)
     link_uds_client_reset(&client->uds);
     client->request_length = 0U;
     client->pending_tx_valid = false;
+    client->pending_tx_tracks_transmitter = false;
+    client->in_flight_tracks_transmitter = false;
+    client->tx_completion_deadline_us = 0U;
+    client->last_transmitter_completion_us = 0U;
+    client->last_transmitter_completion_valid = false;
     client->uds_started = false;
     memset(&client->response, 0, sizeof(client->response));
     client->isotp_result = LINK_ISOTP_RESULT_OK;
@@ -192,6 +305,7 @@ LinkStm32UdsResult link_stm32_uds_start(
     }
 
     client->pending_tx_valid = true;
+    client->pending_tx_tracks_transmitter = true;
     client->state = LINK_STM32_UDS_ACTIVE;
     return LINK_STM32_UDS_RESULT_OK;
 }
@@ -228,6 +342,7 @@ static LinkStm32UdsResult link_stm32_uds_accept_rx(
         }
         client->pending_tx = flow_control;
         client->pending_tx_valid = true;
+        client->pending_tx_tracks_transmitter = false;
     }
 
     if (client->isotp_result == LINK_ISOTP_RESULT_UNEXPECTED_FRAME) {
@@ -269,6 +384,7 @@ LinkStm32UdsResult link_stm32_uds_poll(LinkStm32UdsClient *client)
     LinkStm32UdsResult result;
     LinkIsoTpCanFrame frame;
     uint64_t now_us;
+    uint64_t arrival_us = 0U;
 
     if (client == NULL) {
         return LINK_STM32_UDS_RESULT_INVALID_ARGUMENT;
@@ -285,6 +401,11 @@ LinkStm32UdsResult link_stm32_uds_poll(LinkStm32UdsClient *client)
         return client->failure;
     }
 
+    result = link_stm32_uds_poll_tx_completion(client);
+    if (client->state == LINK_STM32_UDS_FAILED) {
+        return result;
+    }
+
     now_us = link_stm32_can_now_us(client->channel);
     result = link_stm32_uds_send_pending(client);
     if (result == LINK_STM32_UDS_RESULT_CAN_IO) {
@@ -295,8 +416,10 @@ LinkStm32UdsResult link_stm32_uds_poll(LinkStm32UdsClient *client)
         return result;
     }
 
-    while (link_stm32_can_pop(client->channel, &frame)) {
-        result = link_stm32_uds_accept_rx(client, &frame, now_us);
+    while (link_stm32_can_pop_timed(
+               client->channel, &frame, &arrival_us)) {
+        result = link_stm32_uds_accept_rx(
+            client, &frame, arrival_us);
         if (result == LINK_STM32_UDS_RESULT_COMPLETE ||
             result == LINK_STM32_UDS_RESULT_NEGATIVE_RESPONSE ||
             client->state == LINK_STM32_UDS_FAILED) {
@@ -308,7 +431,9 @@ LinkStm32UdsResult link_stm32_uds_poll(LinkStm32UdsClient *client)
         }
     }
 
+    now_us = link_stm32_can_now_us(client->channel);
     if (!client->pending_tx_valid &&
+        !link_stm32_can_tx_in_flight(client->channel) &&
         client->transmitter.state == LINK_ISOTP_TX_SENDING &&
         link_stm32_can_tx_ready(client->channel)) {
         client->isotp_result = link_isotp_tx_next(
@@ -316,6 +441,7 @@ LinkStm32UdsResult link_stm32_uds_poll(LinkStm32UdsClient *client)
         if (client->isotp_result == LINK_ISOTP_RESULT_OK ||
             client->isotp_result == LINK_ISOTP_RESULT_COMPLETE) {
             client->pending_tx_valid = true;
+            client->pending_tx_tracks_transmitter = true;
             result = link_stm32_uds_send_pending(client);
             if (result == LINK_STM32_UDS_RESULT_CAN_IO) {
                 return result;
@@ -331,12 +457,18 @@ LinkStm32UdsResult link_stm32_uds_poll(LinkStm32UdsClient *client)
         return result;
     }
 
-    client->isotp_result = link_isotp_tx_tick(&client->transmitter, now_us);
-    if (client->isotp_result != LINK_ISOTP_RESULT_OK &&
-        client->isotp_result != LINK_ISOTP_RESULT_COMPLETE &&
-        client->isotp_result != LINK_ISOTP_RESULT_WAIT_FLOW_CONTROL &&
-        client->isotp_result != LINK_ISOTP_RESULT_WAIT_SEPARATION) {
-        return link_stm32_uds_fail(client, LINK_STM32_UDS_RESULT_ISOTP_ERROR);
+    if (!(client->pending_tx_valid &&
+          client->pending_tx_tracks_transmitter) &&
+        !client->in_flight_tracks_transmitter) {
+        client->isotp_result = link_isotp_tx_tick(
+            &client->transmitter, now_us);
+        if (client->isotp_result != LINK_ISOTP_RESULT_OK &&
+            client->isotp_result != LINK_ISOTP_RESULT_COMPLETE &&
+            client->isotp_result != LINK_ISOTP_RESULT_WAIT_FLOW_CONTROL &&
+            client->isotp_result != LINK_ISOTP_RESULT_WAIT_SEPARATION) {
+            return link_stm32_uds_fail(
+                client, LINK_STM32_UDS_RESULT_ISOTP_ERROR);
+        }
     }
 
     client->isotp_result = link_isotp_rx_tick(&client->receiver, now_us);

@@ -1,8 +1,4 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-/**
- * @file link-stm32c092-hal.h
- * @brief STM32C092 STM32Cube HAL binding for LINK's bare-metal CAN edge.
- */
 #ifndef LINK_STM32C092_HAL_H
 #define LINK_STM32C092_HAL_H
 
@@ -19,22 +15,21 @@ extern "C" {
 typedef struct {
     FDCAN_HandleTypeDef *hfdcan;
     bool fd_bit_rate_switch;
+    volatile uint8_t pending_marker;
+    volatile uint8_t completed_marker;
+    volatile uint32_t completed_tick_ms;
+    volatile bool tx_event_lost;
+    uint8_t next_marker;
 } LinkStm32C092Hal;
 
 void link_stm32c092_hal_init(
     LinkStm32C092Hal *adapter,
     FDCAN_HandleTypeDef *hfdcan,
     bool fd_bit_rate_switch);
-
 LinkStm32CanOps link_stm32c092_hal_ops(LinkStm32C092Hal *adapter);
-
-/**
- * Configure one exact standard-ID response filter, reject unmatched/remote
- * frames, enable FIFO0 notification and start the FDCAN controller.
- *
- * The supplied STM32C092 project already declares one standard filter and is
- * therefore directly compatible with this helper.
- */
+void link_stm32c092_hal_tx_event_irq(
+    LinkStm32C092Hal *adapter,
+    uint32_t tx_event_fifo_its);
 bool link_stm32c092_hal_start_standard(
     LinkStm32C092Hal *adapter,
     uint32_t response_id);

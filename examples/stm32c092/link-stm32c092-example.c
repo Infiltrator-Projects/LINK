@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-/** @file link-stm32c092-example.c @brief STM32C092 LINK UDS VIN example. */
 #include "link-stm32c092-example.h"
 
 #include "link-stm32c092-hal.h"
@@ -29,13 +28,10 @@ static bool link_stm32c092_begin_vin(void)
     size_t request_length = 0U;
 
     if (link_uds_build_read_did_request(
-            LINK_STM32C092_VIN_DID,
-            request,
-            sizeof(request),
+            LINK_STM32C092_VIN_DID, request, sizeof(request),
             &request_length) != LINK_UDS_RESULT_OK) {
         return false;
     }
-
     return link_stm32_uds_start(
         &example_uds, request, request_length) == LINK_STM32_UDS_RESULT_OK;
 }
@@ -45,9 +41,7 @@ bool link_stm32c092_example_init(FDCAN_HandleTypeDef *hfdcan)
     LinkStm32CanOps ops;
     LinkStm32UdsConfig config;
 
-    if (hfdcan == NULL) {
-        return false;
-    }
+    if (hfdcan == NULL) return false;
 
     memset(example_vin, 0, sizeof(example_vin));
     example_nrc = 0U;
@@ -67,8 +61,6 @@ bool link_stm32c092_example_init(FDCAN_HandleTypeDef *hfdcan)
     config.address.rx_can_id = LINK_STM32C092_RESPONSE_ID;
     config.address.addressing_mode = LINK_ISOTP_ADDRESSING_NORMAL;
     config.address.target_type = LINK_ISOTP_TARGET_PHYSICAL;
-    config.rx_block_size = 0U;
-    config.rx_stmin = 0U;
     config.consecutive_timeout_us = UINT64_C(1000000);
     config.flow_control_timeout_us = UINT64_C(1000000);
     config.max_wait_frames = 3U;
@@ -78,13 +70,9 @@ bool link_stm32c092_example_init(FDCAN_HandleTypeDef *hfdcan)
     config.data_length = LINK_ISOTP_CLASSIC_CAN_DATA_LENGTH;
 
     if (!link_stm32_uds_init(
-            &example_uds,
-            &example_can,
-            &config,
-            example_rx_storage,
-            sizeof(example_rx_storage),
-            example_tx_storage,
-            sizeof(example_tx_storage)) ||
+            &example_uds, &example_can, &config,
+            example_rx_storage, sizeof(example_rx_storage),
+            example_tx_storage, sizeof(example_tx_storage)) ||
         !link_stm32c092_begin_vin()) {
         example_state = LINK_STM32C092_EXAMPLE_FAILED;
         return false;
@@ -99,9 +87,7 @@ void link_stm32c092_example_process(void)
     LinkStm32UdsResult result;
     const LinkUdsResponse *response;
 
-    if (example_state != LINK_STM32C092_EXAMPLE_READING_VIN) {
-        return;
-    }
+    if (example_state != LINK_STM32C092_EXAMPLE_READING_VIN) return;
 
     result = link_stm32_uds_poll(&example_uds);
     if (result == LINK_STM32_UDS_RESULT_WAITING ||
@@ -110,9 +96,7 @@ void link_stm32c092_example_process(void)
     }
     if (result == LINK_STM32_UDS_RESULT_NEGATIVE_RESPONSE) {
         response = link_stm32_uds_response(&example_uds);
-        if (response != NULL) {
-            example_nrc = response->negative_response_code;
-        }
+        if (response != NULL) example_nrc = response->negative_response_code;
         example_state = LINK_STM32C092_EXAMPLE_NEGATIVE_RESPONSE;
         return;
     }
@@ -139,6 +123,15 @@ void link_stm32c092_example_rx_fifo0_irq(FDCAN_HandleTypeDef *hfdcan)
 {
     if (hfdcan != NULL && hfdcan == example_hal.hfdcan) {
         link_stm32_can_rx_isr(&example_can);
+    }
+}
+
+void link_stm32c092_example_tx_event_irq(
+    FDCAN_HandleTypeDef *hfdcan,
+    uint32_t tx_event_fifo_its)
+{
+    if (hfdcan != NULL && hfdcan == example_hal.hfdcan) {
+        link_stm32c092_hal_tx_event_irq(&example_hal, tx_event_fifo_its);
     }
 }
 
