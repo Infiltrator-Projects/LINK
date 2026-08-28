@@ -31,6 +31,8 @@
 - (void)notifyManufacturerFailure:(NSString *)status;
 - (void)recoverManufacturerExtensionAfterFailure:(NSString *)status;
 - (void)finishManufacturerRecovery;
+- (void)beginLiveRecovery;
+- (void)finishLiveRecovery;
 - (void)handleSessionEvent:(const LinkElm327Session *)session;
 - (void)processCompletedResponse;
 - (BOOL)applyFlowEvent:(const LinkDiagnosticFlowEvent *)event;
@@ -45,6 +47,8 @@
     BOOL _simulated;
     BOOL _manufacturerExtensionActive;
     BOOL _manufacturerRecoveryActive;
+    BOOL _liveRecoveryActive;
+    NSUInteger _consecutiveLiveTimeouts;
     LinkElm327Simulator _simulator;
     LinkDiagnosticFlow _flow;
     LinkDiagnosticFlowConfig _flowConfig;
@@ -253,6 +257,8 @@ static void LinkAppleSessionEvent(
     self.permanentDTCs = @[];
     _manufacturerExtensionActive = NO;
     _manufacturerRecoveryActive = NO;
+    _liveRecoveryActive = NO;
+    _consecutiveLiveTimeouts = 0U;
     _lastRecordedTransportStatus = nil;
 
     (void)link_diagnostic_flow_init(&_flow, &_flowConfig);
@@ -383,6 +389,8 @@ static void LinkAppleSessionEvent(
     (void)link_diagnostic_flow_init(&_flow, &_flowConfig);
     _manufacturerExtensionActive = NO;
     _manufacturerRecoveryActive = NO;
+    _liveRecoveryActive = NO;
+    _consecutiveLiveTimeouts = 0U;
     _simulated = NO;
     self.active = NO;
     self.ready = NO;
@@ -595,6 +603,65 @@ static void LinkAppleSessionEvent(
     [self driveDiagnosticFlow];
 }
 
+- (void)beginLiveRecovery
+{
+    LinkElm327SessionOpResult sessionResult;
+
+    if (_liveRecoveryActive || !_sessionInitialized ||
+        _flow.stage != LINK_DIAGNOSTIC_FLOW_READING_LIVE) {
+        return;
+    }
+
+    ++_consecutiveLiveTimeouts;
+    if (_consecutiveLiveTimeouts > 3U) {
+        self.ready = NO;
+        _flow.elm_failure = LINK_ELM327_RESULT_MORE_DATA;
+        link_diagnostic_flow_fail(
+            &_flow, LINK_DIAGNOSTIC_FLOW_RESULT_ELM_ERROR);
+        [self setSharedStatus:
+            @"Repeated live-data timeouts; reconnect required"];
+        return;
+    }
+
+    _liveRecoveryActive = YES;
+    self.ready = NO;
+    sessionResult = link_elm327_session_begin_resynchronization(
+        &_session, LinkAppleMonotonicMilliseconds(), UINT64_C(2500));
+    if (sessionResult != LINK_ELM327_SESSION_OP_OK) {
+        _liveRecoveryActive = NO;
+        link_diagnostic_flow_fail(
+            &_flow, LINK_DIAGNOSTIC_FLOW_RESULT_ELM_ERROR);
+        [self setSharedStatus:[NSString stringWithFormat:
+            @"Live request timed out; adapter resynchronisation could not start: %@",
+            LinkAppleStringFromCString(
+                link_elm327_session_op_result_name(sessionResult))]];
+        return;
+    }
+    [self setSharedStatus:
+        @"Live request timed out; resynchronising adapter"];
+}
+
+- (void)finishLiveRecovery
+{
+    LinkDiagnosticFlowResult result;
+
+    if (!_liveRecoveryActive) return;
+    result = link_diagnostic_flow_recover_live_timeout(
+        &_flow, LinkAppleMonotonicMilliseconds());
+    _liveRecoveryActive = NO;
+    if (result != LINK_DIAGNOSTIC_FLOW_RESULT_OK) {
+        [self failWithStatus:
+            @"Adapter resynchronised but live diagnostic flow could not resume"];
+        return;
+    }
+
+    [self applyPollingPreferencesToScheduler];
+    self.ready = YES;
+    [self setSharedStatus:
+        @"Live request recovered; continuing diagnostics"];
+    [self driveDiagnosticFlow];
+}
+
 - (void)handleSessionEvent:(const LinkElm327Session *)session
 {
     if (session == NULL) return;
@@ -609,6 +676,10 @@ static void LinkAppleSessionEvent(
         if (_manufacturerRecoveryActive) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 [self finishManufacturerRecovery];
+            });
+        } else if (_liveRecoveryActive) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [self finishLiveRecovery];
             });
         }
         return;
@@ -631,9 +702,16 @@ static void LinkAppleSessionEvent(
                 @"Adapter resynchronisation timed out; reconnect required"];
             return;
         }
+        if (_flow.stage == LINK_DIAGNOSTIC_FLOW_READING_LIVE) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [self beginLiveRecovery];
+            });
+            return;
+        }
         if (LinkAppleFlowIsFaultScan(&_flow))
             self.faultScanStatusText =
                 @"Fault scan timed out; reconnect required";
+        self.ready = NO;
         _flow.elm_failure = session->elm_result;
         link_diagnostic_flow_fail(
             &_flow, LINK_DIAGNOSTIC_FLOW_RESULT_ELM_ERROR);
@@ -807,6 +885,7 @@ static void LinkAppleSessionEvent(
     }
 
     case LINK_DIAGNOSTIC_FLOW_EVENT_LIVE_SAMPLE: {
+        _consecutiveLiveTimeouts = 0U;
         LinkTelemetryMeasurement measurement = {
             .pid = event->sample.pid,
             .value = event->sample.value,
@@ -1005,6 +1084,7 @@ static void LinkAppleSessionEvent(
         &_flow, LINK_DIAGNOSTIC_FLOW_RESULT_INVALID_STATE);
     _manufacturerExtensionActive = NO;
     _manufacturerRecoveryActive = NO;
+    _liveRecoveryActive = NO;
     self.ready = NO;
     [self setSharedStatus:status];
 }
