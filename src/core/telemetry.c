@@ -266,6 +266,12 @@ static bool emit_build_identity(LinkTelemetryTextSink sink,
         !emit_metadata(sink, context, key, MBLINK_BUILD_REVISION))
         return false;
 #endif
+    /*
+     * Standalone LINK builds do not define the product-specific MBLINK
+     * identity macros, so keep the shared helper warning-clean there too.
+     */
+    (void)product_slug;
+    (void)key;
     (void)written;
     return true;
 }
