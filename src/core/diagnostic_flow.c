@@ -524,6 +524,38 @@ LinkDiagnosticFlowResult link_diagnostic_flow_accept_response(
     return flow->failure;
 }
 
+LinkDiagnosticFlowResult link_diagnostic_flow_recover_live_timeout(
+    LinkDiagnosticFlow *flow,
+    uint64_t now_ms)
+{
+    LinkSchedulerItem *item;
+    uint64_t deferred_due;
+
+    if (flow == NULL) {
+        return LINK_DIAGNOSTIC_FLOW_RESULT_INVALID_ARGUMENT;
+    }
+    if (flow->stage != LINK_DIAGNOSTIC_FLOW_READING_LIVE ||
+        !flow->awaiting_response ||
+        flow->active_schedule_index >= flow->scheduler.count) {
+        return LINK_DIAGNOSTIC_FLOW_RESULT_INVALID_STATE;
+    }
+
+    item = &flow->scheduler.items[flow->active_schedule_index];
+    deferred_due = infiltratr_u64_add_saturating(
+        now_ms, (uint64_t)item->interval_ms);
+    if (item->next_due_ms < deferred_due) {
+        item->next_due_ms = deferred_due;
+    }
+
+    flow->awaiting_response = false;
+    flow->stage = LINK_DIAGNOSTIC_FLOW_LIVE;
+    flow->failure = LINK_DIAGNOSTIC_FLOW_RESULT_OK;
+    flow->elm_failure = LINK_ELM327_RESULT_OK;
+    flow->obd2_failure = LINK_OBD2_RESULT_OK;
+    flow->scheduler_failure = LINK_SCHEDULER_RESULT_OK;
+    return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
+}
+
 LinkDiagnosticFlowResult link_diagnostic_flow_resume_after_manufacturer(
     LinkDiagnosticFlow *flow)
 {

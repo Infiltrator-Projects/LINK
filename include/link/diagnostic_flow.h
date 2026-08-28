@@ -169,6 +169,16 @@ LinkDiagnosticFlowResult link_diagnostic_flow_accept_response(
 LinkDiagnosticFlowResult link_diagnostic_flow_resume_after_manufacturer(
     LinkDiagnosticFlow *flow);
 
+/**
+ * Abandon one timed-out live request after the transport has been
+ * resynchronised. Discovery, DTC inventory and the scheduler are preserved.
+ * The timed-out PID is deferred by one full interval so recovery cannot
+ * immediately hammer the same request again.
+ */
+LinkDiagnosticFlowResult link_diagnostic_flow_recover_live_timeout(
+    LinkDiagnosticFlow *flow,
+    uint64_t now_ms);
+
 /** Put the portable flow into a deterministic failed state after transport/UI failure. */
 void link_diagnostic_flow_fail(
     LinkDiagnosticFlow *flow,
