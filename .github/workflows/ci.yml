@@ -152,6 +152,48 @@ jobs:
       - name: Verify OpenPort receive-status regression
         run: ctest --test-dir build-linux-providers -R '^link-linux-openport2-status$' --output-on-failure
 
+  stm32-arm-cross:
+    name: STM32C092 / Cortex-M0+ cross-compile
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Initialise Common
+        shell: bash
+        run: git submodule update --init src/infiltratr-common
+      - name: Install ARM embedded GCC
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends gcc-arm-none-eabi
+      - name: Cross-compile STM32C092 source set
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build-stm32-arm
+          flags=(
+            -mcpu=cortex-m0plus -mthumb -std=c11 -ffreestanding
+            -Wall -Wextra -Wpedantic -Wshadow -Wformat=2
+            -Wstrict-prototypes -Wmissing-prototypes -Werror
+            -Iinclude -Iplatform/stm32 -Iexamples/stm32c092
+            -Itests/stm32c092_hal_stub -Isrc/infiltratr-common/include
+          )
+          sources=(
+            src/core/isotp.c
+            src/uds/uds.c
+            src/uds/uds_services.c
+            src/infiltratr-common/src/core.c
+            platform/stm32/link-stm32-can.c
+            platform/stm32/link-stm32-uds.c
+            examples/stm32c092/link-stm32c092-hal.c
+            examples/stm32c092/link-stm32c092-example.c
+          )
+          for source in "${sources[@]}"; do
+            object="build-stm32-arm/$(printf '%s' "$source" | tr '/.' '__').o"
+            arm-none-eabi-gcc "${flags[@]}" -c "$source" -o "$object"
+          done
+          arm-none-eabi-size build-stm32-arm/*.o
+
   sanitizers:
     name: Ubuntu / ASan + UBSan
     runs-on: ubuntu-latest

@@ -272,6 +272,114 @@ static int test_delayed_rx_and_multiframe_tx(void)
     return 0;
 }
 
+static int test_flow_control_overflow_fails(void)
+{
+    FakeCan fake;
+    LinkStm32Can channel;
+    LinkStm32CanOps ops;
+    LinkStm32UdsClient client;
+    LinkStm32UdsConfig config;
+    uint8_t rx_storage[64U];
+    uint8_t tx_storage[64U];
+    uint8_t request[20U];
+    LinkIsoTpCanFrame frame;
+    size_t index;
+
+    memset(&fake, 0, sizeof(fake));
+    fake.tx_ready = true;
+    ops = fake_ops(&fake);
+    REQUIRE(link_stm32_can_init(&channel, &ops));
+    config = test_config();
+    REQUIRE(link_stm32_uds_init(
+        &client, &channel, &config,
+        rx_storage, sizeof(rx_storage),
+        tx_storage, sizeof(tx_storage)));
+
+    request[0] = 0x2eU;
+    request[1] = 0xf1U;
+    request[2] = 0x90U;
+    for (index = 3U; index < sizeof(request); ++index) {
+        request[index] = (uint8_t)index;
+    }
+
+    REQUIRE(link_stm32_uds_start(
+        &client, request, sizeof(request)) == LINK_STM32_UDS_RESULT_OK);
+    REQUIRE(link_stm32_uds_poll(&client) == LINK_STM32_UDS_RESULT_WAITING);
+    fake.tick_ms = 1U;
+    fake_complete_tx(&fake);
+    REQUIRE(link_stm32_uds_poll(&client) == LINK_STM32_UDS_RESULT_WAITING);
+
+    frame = classic_frame(0x7e8U);
+    frame.length = 3U;
+    frame.data[0] = 0x32U;
+    frame.data[1] = 0U;
+    frame.data[2] = 0U;
+    fake_push_rx(&fake, &frame);
+    link_stm32_can_rx_isr(&channel);
+    REQUIRE(link_stm32_uds_poll(&client) == LINK_STM32_UDS_RESULT_ISOTP_ERROR);
+    return 0;
+}
+
+static int test_wrong_consecutive_sequence_fails(void)
+{
+    FakeCan fake;
+    LinkStm32Can channel;
+    LinkStm32CanOps ops;
+    LinkStm32UdsClient client;
+    LinkStm32UdsConfig config;
+    uint8_t rx_storage[128U];
+    uint8_t tx_storage[16U];
+    const uint8_t request[3U] = {0x22U, 0xf1U, 0x90U};
+    LinkIsoTpCanFrame frame;
+
+    memset(&fake, 0, sizeof(fake));
+    fake.tx_ready = true;
+    ops = fake_ops(&fake);
+    REQUIRE(link_stm32_can_init(&channel, &ops));
+    config = test_config();
+    REQUIRE(link_stm32_uds_init(
+        &client, &channel, &config,
+        rx_storage, sizeof(rx_storage),
+        tx_storage, sizeof(tx_storage)));
+    REQUIRE(link_stm32_uds_start(
+        &client, request, sizeof(request)) == LINK_STM32_UDS_RESULT_OK);
+    REQUIRE(link_stm32_uds_poll(&client) == LINK_STM32_UDS_RESULT_WAITING);
+    fake.tick_ms = 1U;
+    fake_complete_tx(&fake);
+    REQUIRE(link_stm32_uds_poll(&client) == LINK_STM32_UDS_RESULT_WAITING);
+
+    frame = classic_frame(0x7e8U);
+    frame.data[0] = 0x10U;
+    frame.data[1] = 0x0aU;
+    frame.data[2] = 0x62U;
+    frame.data[3] = 0xf1U;
+    frame.data[4] = 0x90U;
+    frame.data[5] = 'A';
+    frame.data[6] = 'B';
+    frame.data[7] = 'C';
+    fake_push_rx(&fake, &frame);
+    link_stm32_can_rx_isr(&channel);
+    REQUIRE(link_stm32_uds_poll(&client) == LINK_STM32_UDS_RESULT_WAITING);
+
+    fake.tick_ms = 2U;
+    fake_complete_tx(&fake);
+    REQUIRE(link_stm32_uds_poll(&client) == LINK_STM32_UDS_RESULT_WAITING);
+
+    frame = classic_frame(0x7e8U);
+    frame.data[0] = 0x22U;
+    frame.data[1] = 'D';
+    frame.data[2] = 'E';
+    frame.data[3] = 'F';
+    frame.data[4] = 'G';
+    frame.data[5] = 'H';
+    frame.data[6] = 'I';
+    frame.data[7] = 'J';
+    fake_push_rx(&fake, &frame);
+    link_stm32_can_rx_isr(&channel);
+    REQUIRE(link_stm32_uds_poll(&client) == LINK_STM32_UDS_RESULT_ISOTP_ERROR);
+    return 0;
+}
+
 static int test_stuck_hardware_tx_is_bounded(void)
 {
     FakeCan fake;
@@ -304,6 +412,8 @@ int main(void)
 {
     REQUIRE(test_queue_clock_and_tx_completion() == 0);
     REQUIRE(test_delayed_rx_and_multiframe_tx() == 0);
+    REQUIRE(test_flow_control_overflow_fails() == 0);
+    REQUIRE(test_wrong_consecutive_sequence_fails() == 0);
     REQUIRE(test_stuck_hardware_tx_is_bounded() == 0);
     return 0;
 }

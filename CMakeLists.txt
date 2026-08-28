@@ -388,6 +388,27 @@ if(BUILD_TESTING AND PROJECT_IS_TOP_LEVEL)
         target_link_options(link-test-stm32 PRIVATE -fsanitize=address,undefined)
     endif()
     add_test(NAME link-stm32 COMMAND link-test-stm32)
+
+    add_executable(link-test-stm32c092-hal
+        tests/test_stm32c092_hal.c
+        platform/stm32/link-stm32-can.c
+        examples/stm32c092/link-stm32c092-hal.c)
+    target_include_directories(link-test-stm32c092-hal PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/stm32c092_hal_stub"
+        "${CMAKE_CURRENT_SOURCE_DIR}/platform/stm32"
+        "${CMAKE_CURRENT_SOURCE_DIR}/examples/stm32c092")
+    target_link_libraries(link-test-stm32c092-hal PRIVATE LINK::Core)
+    if(MSVC)
+        target_compile_options(link-test-stm32c092-hal PRIVATE /W4 /WX /utf-8)
+    else()
+        target_compile_options(link-test-stm32c092-hal PRIVATE ${LINK_WARNING_FLAGS})
+    endif()
+    if(LINK_ENABLE_SANITIZERS)
+        target_compile_options(link-test-stm32c092-hal PRIVATE ${LINK_SANITIZER_FLAGS})
+        target_link_options(link-test-stm32c092-hal PRIVATE -fsanitize=address,undefined)
+    endif()
+    add_test(NAME link-stm32c092-hal COMMAND link-test-stm32c092-hal)
+
     link_add_test(link-test-runtime tests/test_runtime.c link-runtime)
     link_add_test(link-test-elm327 tests/test_elm327.c link-elm327)
     link_add_test(link-test-elm327-session tests/test_elm327_session.c link-elm327-session)
