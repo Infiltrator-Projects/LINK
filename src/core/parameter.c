@@ -28,7 +28,7 @@ static const LinkObd2ParameterEntry link_obd2_parameters[] = {
     { { OBD_KEY(0x3cU), "obd2.aftertreatment.catalyst_temp_b1s1", "CAT T", "Catalyst temperature B1S1", " °C", 1U, false, 0.0, 0.0 }, LINK_OBD2_UNIT_CELSIUS },
     { { OBD_KEY(0x42U), "obd2.electrical.control_module_voltage", "VOLT", "Control module voltage", " V", 2U, false, 0.0, 0.0 }, LINK_OBD2_UNIT_VOLTS },
     { { OBD_KEY(0x45U), "obd2.engine.relative_throttle", "THR REL", "Relative throttle position", "%", 1U, true, 0.0, 100.0 }, LINK_OBD2_UNIT_PERCENT },
-    { { OBD_KEY(0x46U), "obd2.environment.ambient_air", "AMBIENT", "Ambient air temperature", " °C", 0U, false, 0.0, 0.0 }, LINK_OBD2_UNIT_CELSIUS },
+    { { OBD_KEY(0x46U), "obd2.environment.ambient_air", "AMBIENT", "Ambient air temperature", " °C", 1U, false, 0.0, 0.0 }, LINK_OBD2_UNIT_CELSIUS },
     { { OBD_KEY(0x47U), "obd2.engine.throttle_b", "THR B", "Absolute throttle position B", "%", 1U, true, 0.0, 100.0 }, LINK_OBD2_UNIT_PERCENT },
     { { OBD_KEY(0x48U), "obd2.engine.throttle_c", "THR C", "Absolute throttle position C", "%", 1U, true, 0.0, 100.0 }, LINK_OBD2_UNIT_PERCENT },
     { { OBD_KEY(0x49U), "obd2.driver.accelerator_pedal_d", "PEDAL D", "Accelerator pedal position D", "%", 1U, true, 0.0, 100.0 }, LINK_OBD2_UNIT_PERCENT },

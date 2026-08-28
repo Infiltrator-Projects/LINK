@@ -34,6 +34,7 @@
 - (void)handleSessionEvent:(const LinkElm327Session *)session;
 - (void)processCompletedResponse;
 - (BOOL)applyFlowEvent:(const LinkDiagnosticFlowEvent *)event;
+- (void)applyPollingPreferencesToScheduler;
 - (void)driveDiagnosticFlow;
 @end
 
@@ -63,6 +64,7 @@
     NSString *_simulatedLiveStatusText;
     NSString *_standardVINStatusText;
     NSString *_lastRecordedTransportStatus;
+    BOOL _pidPollingEnabled[256];
 }
 
 static uint64_t LinkAppleMonotonicMilliseconds(void)
@@ -173,6 +175,9 @@ static void LinkAppleSessionEvent(
     _storedDTCs = @[];
     _pendingDTCs = @[];
     _permanentDTCs = @[];
+
+    for (NSUInteger pid = 0U; pid < 256U; ++pid)
+        _pidPollingEnabled[pid] = YES;
 
     (void)link_diagnostic_flow_init(&_flow, &_flowConfig);
     link_telemetry_store_init(&_telemetry);
@@ -771,6 +776,12 @@ static void LinkAppleSessionEvent(
             break;
         case LINK_OBD2_DTC_PERMANENT:
             self.permanentDTCs = codes;
+            /*
+             * The portable flow has just constructed its capability-gated
+             * standard schedule. Reapply the caller's persistent runtime
+             * polling policy before the first live request can be emitted.
+             */
+            [self applyPollingPreferencesToScheduler];
             if (!event->dtc_response_available) {
                 NSString *outcome = event->dtc_negative_response
                     ? [NSString stringWithFormat:
@@ -1052,6 +1063,46 @@ static void LinkAppleSessionEvent(
 {
     link_telemetry_store_set_favourite(&_telemetry, pid, favourite);
     [self notifyDelegate];
+}
+
+- (BOOL)pollingEnabledForPID:(uint8_t)pid
+{
+    return _pidPollingEnabled[pid];
+}
+
+- (void)setPollingEnabled:(BOOL)enabled forPID:(uint8_t)pid
+{
+    _pidPollingEnabled[pid] = enabled;
+
+    /*
+     * NOT_FOUND simply means capability discovery has not built this PID into
+     * the current schedule (yet, or at all). The preference is still retained
+     * and will be applied when a future schedule contains the PID.
+     */
+    (void)link_scheduler_set_enabled(&_flow.scheduler, pid, enabled);
+    [self notifyDelegate];
+
+    /*
+     * If every PID was disabled the flow may have settled in READY with no
+     * timer outstanding. Enabling one again should restart polling immediately,
+     * but never race an in-flight ELM or manufacturer request.
+     */
+    if (enabled && self.active && !_flow.awaiting_response &&
+        !_manufacturerExtensionActive &&
+        (_flow.stage == LINK_DIAGNOSTIC_FLOW_LIVE ||
+         _flow.stage == LINK_DIAGNOSTIC_FLOW_READING_LIVE)) {
+        [self driveDiagnosticFlow];
+    }
+}
+
+- (void)applyPollingPreferencesToScheduler
+{
+    for (size_t index = 0U; index < _flow.scheduler.count; ++index) {
+        const LinkSchedulerItem *item = &_flow.scheduler.items[index];
+        if (!item->pid_valid) continue;
+        (void)link_scheduler_set_enabled(
+            &_flow.scheduler, item->pid, _pidPollingEnabled[item->pid]);
+    }
 }
 
 - (nullable NSString *)csvSnapshot

@@ -58,6 +58,10 @@ int main(void)
               link_parameter_obd2_definition(0x23U),
               true, 990.0, formatted, sizeof(formatted)));
     CHECK(strcmp(formatted, "990 kPa") == 0);
+    CHECK(link_parameter_format_value(
+              link_parameter_obd2_definition(0x46U),
+              true, 18.0, formatted, sizeof(formatted)));
+    CHECK(strcmp(formatted, "18.0 °C") == 0);
     link_parameter_store_init(&parameter_store);
     CHECK(link_parameter_store_register(&parameter_store, parameter.definition) == LINK_PARAMETER_STORE_OK);
     CHECK(link_parameter_store_record(&parameter_store, &parameter) == LINK_PARAMETER_STORE_OK);

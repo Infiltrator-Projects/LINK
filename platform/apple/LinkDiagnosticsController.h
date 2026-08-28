@@ -77,6 +77,14 @@ NS_ASSUME_NONNULL_BEGIN
                                       limit:(NSUInteger)limit;
 - (BOOL)favouriteForPID:(uint8_t)pid;
 - (void)setFavourite:(BOOL)favourite forPID:(uint8_t)pid;
+
+/**
+ * Runtime polling policy is independent of vehicle capability. A supported PID
+ * may remain visible in the catalogue while disabled here, preventing routine
+ * requests until the caller enables it again.
+ */
+- (BOOL)pollingEnabledForPID:(uint8_t)pid;
+- (void)setPollingEnabled:(BOOL)enabled forPID:(uint8_t)pid;
 - (nullable NSString *)csvSnapshot;
 
 - (const LinkDiagnosticFlow *)diagnosticFlow;
