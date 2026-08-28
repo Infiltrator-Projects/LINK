@@ -35,8 +35,8 @@ option(LINK_ENABLE_INSTALL
     "Install LINK headers, library and CMake package when LINK is top-level"
     ${PROJECT_IS_TOP_LEVEL})
 
-set(LINK_COMMON_VERSION "1.15.0")
-set(LINK_COMMON_COMMIT "dc4c767369be59bd3c2171ce74b402bd38b870d2")
+set(LINK_COMMON_VERSION "1.15.1")
+set(LINK_COMMON_COMMIT "1ec54363609ac66d051485ea6244c215cc7fcd47")
 set(LINK_COMMON_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/infiltratr-common")
 
 if(NOT TARGET InfiltratrCommon::Portable)
@@ -377,6 +377,7 @@ if(BUILD_TESTING AND PROJECT_IS_TOP_LEVEL)
     link_add_test(link-test-obd2 tests/test_obd2.c link-obd2)
     link_add_test(link-test-dtc-knowledge tests/test_dtc_knowledge.c link-dtc-knowledge)
     link_add_test(link-test-uds tests/test_uds.c link-uds)
+    link_add_test(link-test-uds-dtc tests/test_uds_dtc.c link-uds-dtc)
     link_add_test(link-test-discover-safety tests/test_discover_safety.c link-discover-safety)
     link_add_test(link-test-discover-sweep tests/test_discover_sweep.c link-discover-sweep)
     link_add_test(link-test-evidence tests/test_evidence.c link-evidence)

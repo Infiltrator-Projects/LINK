@@ -56,6 +56,13 @@ jobs:
           grep -q '^U3000' third_party/obdex/generic-dtcs.tsv
           git diff --check
 
+      - name: Compile and test generated catalogue
+        run: |
+          set -euo pipefail
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --parallel
+          ctest --test-dir build --output-on-failure
+
       - name: Commit normalized snapshot to main
         run: |
           set -euo pipefail

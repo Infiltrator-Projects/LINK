@@ -69,8 +69,20 @@ jobs:
         run: |
           set -euo pipefail
           git submodule update --init src/infiltratr-common
-          test "$(tr -d '[:space:]' < src/infiltratr-common/VERSION)" = "1.15.0"
-          test "$(git -C src/infiltratr-common rev-parse HEAD)" = "dc4c767369be59bd3c2171ce74b402bd38b870d2"
+          test "$(tr -d '[:space:]' < src/infiltratr-common/VERSION)" = "1.15.1"
+          test "$(git -C src/infiltratr-common rev-parse HEAD)" = "1ec54363609ac66d051485ea6244c215cc7fcd47"
+
+      - name: Enforce transport and evidence regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq 'LinkRecoveryAttemptLimit' platform/apple/LinkBLETransport.m
+          grep -Fq '_recoveryAttempt > LinkRecoveryAttemptLimit' platform/apple/LinkBLETransport.m
+          grep -Fq 'retry limit reached' platform/apple/LinkBLETransport.m
+          grep -Fq 'link_telemetry_recorder_begin(' platform/apple/LinkDiagnosticsController.m
+          grep -Fq '"BLE", stateName.UTF8String' platform/apple/LinkDiagnosticsController.m
+          grep -Fq 'LinkBLETransportStateFailed' platform/apple/LinkDiagnosticsController.m
+          grep -Fq 'link-test-uds-dtc tests/test_uds_dtc.c link-uds-dtc' CMakeLists.txt
 
       - name: Configure
         shell: bash

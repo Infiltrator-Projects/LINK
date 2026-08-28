@@ -21,8 +21,9 @@
 
 - (void)notifyDelegate;
 - (void)setSharedStatus:(NSString *)status;
-- (void)prepareForStart;
-- (void)rewriteCurrentSessionVehicleIdentifier:(const char *)vehicleIdentifier;
+- (BOOL)prepareForStart;
+- (void)rewriteCurrentSessionMetadataKey:(NSString *)key
+                                   value:(const char *)value;
 - (void)beginPortableSession;
 - (void)startTickTimer;
 - (void)stopTickTimer;
@@ -61,6 +62,7 @@
     NSString *_liveStatusText;
     NSString *_simulatedLiveStatusText;
     NSString *_standardVINStatusText;
+    NSString *_lastRecordedTransportStatus;
 }
 
 static uint64_t LinkAppleMonotonicMilliseconds(void)
@@ -92,6 +94,22 @@ static NSString *LinkAppleStringFromCString(const char *value)
     if (value == NULL) return @"unknown";
     NSString *string = [NSString stringWithUTF8String:value];
     return string != nil ? string : @"unknown";
+}
+
+static NSString *LinkAppleBLEStateName(LinkBLETransportState state)
+{
+    switch (state) {
+    case LinkBLETransportStateIdle: return @"idle";
+    case LinkBLETransportStateWaitingForBluetooth: return @"waiting";
+    case LinkBLETransportStateScanning: return @"scanning";
+    case LinkBLETransportStateConnecting: return @"connecting";
+    case LinkBLETransportStateDiscovering: return @"discovering";
+    case LinkBLETransportStateProbing: return @"probing";
+    case LinkBLETransportStateReady: return @"ready";
+    case LinkBLETransportStateDisconnected: return @"disconnected";
+    case LinkBLETransportStateFailed: return @"failed";
+    }
+    return @"unknown";
 }
 
 static NSArray<NSString *> *LinkAppleDTCStrings(const LinkObd2DtcList *list)
@@ -212,8 +230,14 @@ static void LinkAppleSessionEvent(
     [self notifyDelegate];
 }
 
-- (void)prepareForStart
+- (BOOL)prepareForStart
 {
+    if (_recorder.started && !_recorder.finished) {
+        const uint64_t endedEpochMs = LinkAppleEpochMilliseconds();
+        link_telemetry_session_metadata_finish(&_sessionMetadata, endedEpochMs);
+        (void)link_telemetry_recorder_finish(&_recorder, endedEpochMs);
+    }
+
     _pollGeneration++;
     self.active = YES;
     self.ready = NO;
@@ -224,6 +248,7 @@ static void LinkAppleSessionEvent(
     self.permanentDTCs = @[];
     _manufacturerExtensionActive = NO;
     _manufacturerRecoveryActive = NO;
+    _lastRecordedTransportStatus = nil;
 
     (void)link_diagnostic_flow_init(&_flow, &_flowConfig);
     link_telemetry_store_clear_samples(&_telemetry);
@@ -231,21 +256,38 @@ static void LinkAppleSessionEvent(
     _sessionMonotonicStartMs = LinkAppleMonotonicMilliseconds();
     link_telemetry_session_metadata_init(
         &_sessionMetadata, LinkAppleEpochMilliseconds(), NULL, NULL);
+
+    const BOOL continuingEvidence = _sessionCSV.length != 0U;
+    _currentSessionCSVStart = _sessionCSV.length;
+    const bool recorderStarted = continuingEvidence
+        ? link_telemetry_recorder_continue(
+            &_recorder, &_sessionMetadata, _productSlug.UTF8String,
+            LinkAppleAppendCSV, (__bridge void *)_sessionCSV)
+        : link_telemetry_recorder_begin(
+            &_recorder, &_sessionMetadata, _productSlug.UTF8String,
+            LinkAppleAppendCSV, (__bridge void *)_sessionCSV);
+    if (!recorderStarted) {
+        [_sessionCSV setLength:_currentSessionCSVStart];
+        self.active = NO;
+        return NO;
+    }
+    return YES;
 }
 
-- (void)rewriteCurrentSessionVehicleIdentifier:(const char *)vehicleIdentifier
+- (void)rewriteCurrentSessionMetadataKey:(NSString *)key
+                                   value:(const char *)value
 {
-    if (vehicleIdentifier == NULL || vehicleIdentifier[0] == '\0' ||
+    if (key.length == 0U || value == NULL || value[0] == '\0' ||
         _currentSessionCSVStart >= _sessionCSV.length) return;
 
-    NSString *identifier = [NSString stringWithUTF8String:vehicleIdentifier];
+    NSString *identifier = [NSString stringWithUTF8String:value];
     if (identifier.length == 0U) return;
     NSString *escaped = [identifier stringByReplacingOccurrencesOfString:@"\""
                                                                withString:@"\"\""];
-    NSData *needle = [@"# vehicle_identifier,\"\"\n"
+    NSData *needle = [[NSString stringWithFormat:@"# %@,\"\"\n", key]
         dataUsingEncoding:NSUTF8StringEncoding];
     NSData *replacement = [[NSString stringWithFormat:
-        @"# vehicle_identifier,\"%@\"\n", escaped]
+        @"# %@,\"%@\"\n", key, escaped]
         dataUsingEncoding:NSUTF8StringEncoding];
     NSRange range = NSMakeRange(
         _currentSessionCSVStart, _sessionCSV.length - _currentSessionCSVStart);
@@ -266,7 +308,10 @@ static void LinkAppleSessionEvent(
     if (self.active) return;
 
     _simulated = NO;
-    [self prepareForStart];
+    if (![self prepareForStart]) {
+        [self setSharedStatus:@"Could not start diagnostic evidence recorder"];
+        return;
+    }
     self.peripheralName = nil;
     [self notifyDelegate];
     [_provider start];
@@ -292,7 +337,10 @@ static void LinkAppleSessionEvent(
     if (self.active) return;
 
     _simulated = YES;
-    [self prepareForStart];
+    if (![self prepareForStart]) {
+        [self setSharedStatus:@"Could not start simulated evidence recorder"];
+        return;
+    }
     self.peripheralName = @"Simulated ELM327";
 
     LinkElm327SimulatorConfig config = LINK_ELM327_SIMULATOR_CONFIG_INIT;
@@ -345,6 +393,21 @@ static void LinkAppleSessionEvent(
     if (transport.adapterIdentifier != nil) {
         link_telemetry_session_metadata_set_adapter(
             &_sessionMetadata, transport.adapterIdentifier.UTF8String);
+        [self rewriteCurrentSessionMetadataKey:@"adapter_identifier"
+                                         value:transport.adapterIdentifier.UTF8String];
+    }
+
+    NSString *stateName = LinkAppleBLEStateName(transport.state);
+    NSString *transportStatus = transport.statusText ?: @"";
+    NSString *recordingKey = [NSString stringWithFormat:
+        @"%@|%@", stateName, transportStatus];
+    if (_recorder.started && !_recorder.finished &&
+        ![_lastRecordedTransportStatus isEqualToString:recordingKey]) {
+        _lastRecordedTransportStatus = recordingKey;
+        (void)link_telemetry_recorder_record_response_named(
+            &_recorder,
+            LinkAppleElapsedMilliseconds(_sessionMonotonicStartMs),
+            "BLE", stateName.UTF8String, transportStatus.UTF8String);
     }
 
     if (transport.isReady && !_sessionInitialized) {
@@ -370,6 +433,10 @@ static void LinkAppleSessionEvent(
 
     if (!_sessionInitialized) self.statusText = transport.statusText;
     if (transport.state == LinkBLETransportStateFailed) {
+        const uint64_t endedEpochMs = LinkAppleEpochMilliseconds();
+        link_telemetry_session_metadata_finish(&_sessionMetadata, endedEpochMs);
+        if (_recorder.started && !_recorder.finished)
+            (void)link_telemetry_recorder_finish(&_recorder, endedEpochMs);
         self.active = NO;
         self.ready = NO;
     }
@@ -397,26 +464,6 @@ static void LinkAppleSessionEvent(
         link_elm327_session_deinit(&_session);
         [self failWithStatus:@"Failed to connect simulated ELM327 transport"];
         return;
-    }
-
-    if (!_recorder.started) {
-        const BOOL continuingEvidence = _sessionCSV.length != 0U;
-        _currentSessionCSVStart = _sessionCSV.length;
-        const bool recorderStarted = continuingEvidence
-            ? link_telemetry_recorder_continue(
-                &_recorder, &_sessionMetadata, _productSlug.UTF8String,
-                LinkAppleAppendCSV, (__bridge void *)_sessionCSV)
-            : link_telemetry_recorder_begin(
-                &_recorder, &_sessionMetadata, _productSlug.UTF8String,
-                LinkAppleAppendCSV, (__bridge void *)_sessionCSV);
-        if (!recorderStarted) {
-            [_sessionCSV setLength:_currentSessionCSVStart];
-            _sessionInitialized = NO;
-            link_elm327_session_disconnect(&_session);
-            link_elm327_session_deinit(&_session);
-            [self failWithStatus:@"Could not start portable session recorder"];
-            return;
-        }
     }
 
     (void)link_diagnostic_flow_init(&_flow, &_flowConfig);
@@ -699,6 +746,8 @@ static void LinkAppleSessionEvent(
                 LinkAppleStringFromCString(identifier);
             link_telemetry_session_metadata_set_adapter(
                 &_sessionMetadata, identifier);
+            [self rewriteCurrentSessionMetadataKey:@"adapter_identifier"
+                                             value:identifier];
         }
         break;
     }
@@ -944,7 +993,8 @@ static void LinkAppleSessionEvent(
 {
     link_telemetry_session_metadata_set_vehicle(
         &_sessionMetadata, vehicleIdentifier);
-    [self rewriteCurrentSessionVehicleIdentifier:vehicleIdentifier];
+    [self rewriteCurrentSessionMetadataKey:@"vehicle_identifier"
+                                     value:vehicleIdentifier];
 }
 
 - (NSUInteger)recordedSampleCount

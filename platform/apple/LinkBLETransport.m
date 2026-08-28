@@ -12,6 +12,7 @@ static const NSTimeInterval LinkConnectTimeoutSeconds = 8.0;
 static const NSTimeInterval LinkDiscoveryTimeoutSeconds = 8.0;
 static const NSTimeInterval LinkProbeTimeoutSeconds = 5.0;
 static const NSTimeInterval LinkReconnectDelaySeconds = 0.75;
+static const NSUInteger LinkRecoveryAttemptLimit = 2U;
 static const NSUInteger LinkWriteQueueLimit = 65536U;
 
 @interface LinkBLECandidate : NSObject
@@ -112,6 +113,7 @@ static BOOL LinkRemainingBytesAreWhitespace(const uint8_t *bytes,
     BOOL _startRequested;
     NSUInteger _operationGeneration;
     NSUInteger _scanAttempt;
+    NSUInteger _recoveryAttempt;
     NSUInteger _pendingServiceDiscoveries;
     NSArray<LinkBLECandidate *> *_Nullable _candidates;
     NSUInteger _candidateIndex;
@@ -188,6 +190,7 @@ static BOOL LinkRemainingBytesAreWhitespace(const uint8_t *bytes,
     }
     if (!_startRequested) {
         _scanAttempt = 0U;
+        _recoveryAttempt = 0U;
         _channelProbeAttempt = 0U;
     }
     _startRequested = YES;
@@ -210,6 +213,7 @@ static BOOL LinkRemainingBytesAreWhitespace(const uint8_t *bytes,
     }
     _startRequested = NO;
     _scanAttempt = 0U;
+    _recoveryAttempt = 0U;
     _channelProbeAttempt = 0U;
     _operationGeneration++;
     _probeGeneration++;
@@ -244,6 +248,7 @@ static BOOL LinkRemainingBytesAreWhitespace(const uint8_t *bytes,
 {
     _startRequested = NO;
     _scanAttempt = 0U;
+    _recoveryAttempt = 0U;
     _operationGeneration++;
     _probeGeneration++;
     [_central stopScan];
@@ -259,6 +264,14 @@ static BOOL LinkRemainingBytesAreWhitespace(const uint8_t *bytes,
 
 - (void)recoverAfterTransientFailure:(NSString *)status
 {
+    if (!_startRequested) return;
+    _recoveryAttempt++;
+    if (_recoveryAttempt > LinkRecoveryAttemptLimit) {
+        [self failAndStop:[NSString stringWithFormat:
+            @"%@; retry limit reached", status]];
+        return;
+    }
+
     _operationGeneration++;
     NSUInteger recoveryGeneration = _operationGeneration;
     _probeGeneration++;
@@ -359,7 +372,6 @@ static BOOL LinkRemainingBytesAreWhitespace(const uint8_t *bytes,
     NSString *name = advertisementData[CBAdvertisementDataLocalNameKey];
     if (name.length == 0U) name = peripheral.name;
     if (name.length == 0U || !LinkPeripheralNameLooksLikeAdapter(name)) return;
-    _scanAttempt = 0U;
     [central stopScan];
     _operationGeneration++;
     NSUInteger generation = _operationGeneration;
@@ -587,6 +599,7 @@ didUpdateValueForCharacteristic:(CBCharacteristic *)characteristic
         _selectedWriteType = candidate.writeType;
         self.adapterIdentifier = identifier;
         _scanAttempt = 0U;
+        _recoveryAttempt = 0U;
         _channelProbeAttempt = 0U;
         self.serviceUUID = candidate.service.UUID.UUIDString;
         self.writeCharacteristicUUID = candidate.writeCharacteristic.UUID.UUIDString;
