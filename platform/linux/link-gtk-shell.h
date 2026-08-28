@@ -81,6 +81,13 @@ typedef struct LinkGtkShellDescriptor {
                                bool active,
                                bool ready,
                                void *context);
+    /*
+     * Optional product-owned runtime polling policy. Returning false keeps a
+     * capability-advertised PID visible but removes it from routine dispatch.
+     * The callback is re-evaluated before live scheduling so UI changes take
+     * effect without reconnecting or reaching into shell internals.
+     */
+    bool (*polling_enabled)(uint8_t pid, void *context);
     void (*append_session_state_json)(GString *json, void *context);
     /*
      * Optional product action that deliberately restarts the active diagnostic

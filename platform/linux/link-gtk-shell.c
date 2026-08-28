@@ -933,6 +933,23 @@ static bool begin_manufacturer_extension(LinkGtkShell *shell)
     return drive_manufacturer_extension(shell);
 }
 
+static void apply_polling_policy(LinkGtkShell *shell)
+{
+    size_t index;
+    if (shell == NULL || shell->descriptor == NULL ||
+        shell->descriptor->polling_enabled == NULL) return;
+
+    for (index = 0U; index < shell->flow.scheduler.count; ++index) {
+        const LinkSchedulerItem *item = &shell->flow.scheduler.items[index];
+        if (!item->pid_valid) continue;
+        (void)link_scheduler_set_enabled(
+            &shell->flow.scheduler,
+            item->pid,
+            shell->descriptor->polling_enabled(
+                item->pid, shell->descriptor->context));
+    }
+}
+
 static bool drive_diagnostics(LinkGtkShell *shell)
 {
     LinkDiagnosticFlowAction action;
@@ -944,6 +961,7 @@ static bool drive_diagnostics(LinkGtkShell *shell)
         return drive_manufacturer_extension(shell);
     if (shell->session.status == LINK_ELM327_SESSION_WAITING) return true;
 
+    apply_polling_policy(shell);
     result = link_diagnostic_flow_next_action(&shell->flow, monotonic_ms(), &action);
     if (result != LINK_DIAGNOSTIC_FLOW_RESULT_OK) {
         fail_diagnostics(shell, result);
