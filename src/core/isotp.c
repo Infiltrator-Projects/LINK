@@ -310,9 +310,7 @@ bool link_isotp_address_is_valid(const LinkIsoTpAddress *address)
         return false;
     }
 
-    return address->addressing_mode >= LINK_ISOTP_ADDRESSING_NORMAL &&
-           address->addressing_mode <= LINK_ISOTP_ADDRESSING_MIXED &&
-           address->target_type >= LINK_ISOTP_TARGET_PHYSICAL &&
+    return address->addressing_mode <= LINK_ISOTP_ADDRESSING_MIXED &&
            address->target_type <= LINK_ISOTP_TARGET_FUNCTIONAL;
 }
 
