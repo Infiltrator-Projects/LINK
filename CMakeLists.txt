@@ -24,6 +24,21 @@ if(NOT CMAKE_MATCH_1 STREQUAL PROJECT_VERSION)
         "VERSION (${PROJECT_VERSION}) and LINK_VERSION_STRING (${CMAKE_MATCH_1}) disagree.")
 endif()
 
+set(LINK_SOURCE_REVISION "")
+find_program(LINK_SOURCE_GIT_EXECUTABLE git)
+if(LINK_SOURCE_GIT_EXECUTABLE)
+    execute_process(
+        COMMAND "${LINK_SOURCE_GIT_EXECUTABLE}" -C "${CMAKE_CURRENT_SOURCE_DIR}" rev-parse HEAD
+        OUTPUT_VARIABLE LINK_SOURCE_REVISION_CANDIDATE
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+        RESULT_VARIABLE LINK_SOURCE_REVISION_RESULT)
+    if(LINK_SOURCE_REVISION_RESULT EQUAL 0 AND
+       LINK_SOURCE_REVISION_CANDIDATE MATCHES "^[0-9a-fA-F]{40}$")
+        set(LINK_SOURCE_REVISION "${LINK_SOURCE_REVISION_CANDIDATE}")
+    endif()
+endif()
+
 if(MSVC)
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()
@@ -128,6 +143,10 @@ target_include_directories(link-core PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 target_link_libraries(link-core PUBLIC InfiltratrCommon::Portable)
+if(LINK_SOURCE_REVISION)
+    target_compile_definitions(link-core PRIVATE
+        LINK_SOURCE_REVISION="\"${LINK_SOURCE_REVISION}\"")
+endif()
 
 if(MSVC)
     target_compile_options(link-core PRIVATE /W4 /WX /utf-8)
