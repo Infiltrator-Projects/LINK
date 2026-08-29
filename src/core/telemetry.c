@@ -8,6 +8,29 @@
 #include <stdio.h>
 #include <string.h>
 
+/*
+ * Product faces compile the shared telemetry implementation either through
+ * LINK::Core or directly into their Apple target.  Normalize the product
+ * build identity here so MBLINK and JAGLINK evidence receive the same fields.
+ */
+#if defined(MBLINK_VERSION)
+#define LINK_TELEMETRY_PRODUCT_VERSION MBLINK_VERSION
+#elif defined(JAGLINK_VERSION)
+#define LINK_TELEMETRY_PRODUCT_VERSION JAGLINK_VERSION
+#endif
+
+#if defined(MBLINK_BUILD_PROFILE)
+#define LINK_TELEMETRY_PRODUCT_BUILD_PROFILE MBLINK_BUILD_PROFILE
+#elif defined(JAGLINK_BUILD_PROFILE)
+#define LINK_TELEMETRY_PRODUCT_BUILD_PROFILE JAGLINK_BUILD_PROFILE
+#endif
+
+#if defined(MBLINK_BUILD_REVISION)
+#define LINK_TELEMETRY_PRODUCT_BUILD_REVISION MBLINK_BUILD_REVISION
+#elif defined(JAGLINK_BUILD_REVISION)
+#define LINK_TELEMETRY_PRODUCT_BUILD_REVISION JAGLINK_BUILD_REVISION
+#endif
+
 #ifndef LINK_TELEMETRY_LINK_VERSION
 #define LINK_TELEMETRY_LINK_VERSION "0.14.26"
 #endif
@@ -248,27 +271,29 @@ static bool emit_build_identity(LinkTelemetryTextSink sink,
         !emit_metadata(sink, context, "build_id", LINK_TELEMETRY_BUILD_ID))
         return false;
 
-#ifdef MBLINK_VERSION
+#ifdef LINK_TELEMETRY_PRODUCT_VERSION
     written = snprintf(key, sizeof(key), "%s_version", product_slug);
     if (written < 0 || (size_t)written >= sizeof(key) ||
-        !emit_metadata(sink, context, key, MBLINK_VERSION))
+        !emit_metadata(sink, context, key, LINK_TELEMETRY_PRODUCT_VERSION))
         return false;
 #endif
-#ifdef MBLINK_BUILD_PROFILE
+#ifdef LINK_TELEMETRY_PRODUCT_BUILD_PROFILE
     written = snprintf(key, sizeof(key), "%s_build_profile", product_slug);
     if (written < 0 || (size_t)written >= sizeof(key) ||
-        !emit_metadata(sink, context, key, MBLINK_BUILD_PROFILE))
+        !emit_metadata(
+            sink, context, key, LINK_TELEMETRY_PRODUCT_BUILD_PROFILE))
         return false;
 #endif
-#ifdef MBLINK_BUILD_REVISION
+#ifdef LINK_TELEMETRY_PRODUCT_BUILD_REVISION
     written = snprintf(key, sizeof(key), "%s_build_revision", product_slug);
     if (written < 0 || (size_t)written >= sizeof(key) ||
-        !emit_metadata(sink, context, key, MBLINK_BUILD_REVISION))
+        !emit_metadata(
+            sink, context, key, LINK_TELEMETRY_PRODUCT_BUILD_REVISION))
         return false;
 #endif
     /*
-     * Standalone LINK builds do not define the product-specific MBLINK
-     * identity macros, so keep the shared helper warning-clean there too.
+     * Standalone LINK builds do not define a product-face identity, so keep
+     * the shared helper warning-clean there too.
      */
     (void)product_slug;
     (void)key;
