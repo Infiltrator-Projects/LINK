@@ -60,8 +60,10 @@ static bool read_slice(ProtoReader *reader, LinkMercedesMeProtoSlice *slice)
     uint64_t length;
     if (reader == NULL || slice == NULL || !read_varint(reader, &length))
         return false;
-    if (length > (uint64_t)(reader->size - reader->position))
+    if (length > (uint64_t)(reader->size - reader->position)) {
+        reader->position = reader->size;
         return false;
+    }
     slice->data = reader->bytes + reader->position;
     slice->size = (size_t)length;
     reader->position += (size_t)length;
@@ -72,8 +74,11 @@ static bool read_fixed64(ProtoReader *reader, uint64_t *value)
 {
     uint64_t result = 0U;
     unsigned int index;
-    if (reader == NULL || value == NULL ||
-        reader->size - reader->position < 8U) return false;
+    if (reader == NULL || value == NULL) return false;
+    if (reader->size - reader->position < 8U) {
+        reader->position = reader->size;
+        return false;
+    }
     for (index = 0U; index < 8U; ++index)
         result |= ((uint64_t)reader->bytes[reader->position + index])
                   << (index * 8U);
@@ -91,13 +96,19 @@ static bool skip_field(ProtoReader *reader, unsigned int wire_type)
     case 0U:
         return read_varint(reader, &ignored);
     case 1U:
-        if (reader->size - reader->position < 8U) return false;
+        if (reader->size - reader->position < 8U) {
+            reader->position = reader->size;
+            return false;
+        }
         reader->position += 8U;
         return true;
     case 2U:
         return read_slice(reader, &slice);
     case 5U:
-        if (reader->size - reader->position < 4U) return false;
+        if (reader->size - reader->position < 4U) {
+            reader->position = reader->size;
+            return false;
+        }
         reader->position += 4U;
         return true;
     default:
