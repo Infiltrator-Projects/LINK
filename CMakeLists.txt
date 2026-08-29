@@ -96,6 +96,7 @@ add_library(link-core STATIC
     src/elm327/session.c
     src/obd2/obd2.c
     src/obd2/dtc_knowledge.c
+    src/kwp2000/kwp2000.c
     src/uds/uds.c
     src/uds/uds_services.c
     src/discover/safety.c
@@ -413,6 +414,7 @@ if(BUILD_TESTING AND PROJECT_IS_TOP_LEVEL)
     link_add_test(link-test-elm327 tests/test_elm327.c link-elm327)
     link_add_test(link-test-elm327-session tests/test_elm327_session.c link-elm327-session)
     link_add_test(link-test-obd2 tests/test_obd2.c link-obd2)
+    link_add_test(link-test-kwp2000 tests/test_kwp2000.c link-kwp2000)
     link_add_test(link-test-dtc-knowledge tests/test_dtc_knowledge.c link-dtc-knowledge)
     link_add_test(link-test-uds tests/test_uds.c link-uds)
     link_add_test(link-test-uds-dtc tests/test_uds_dtc.c link-uds-dtc)
