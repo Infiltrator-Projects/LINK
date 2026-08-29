@@ -134,6 +134,33 @@ LinkMercedesMeNativeResult link_mercedes_me_build_login_set_key(
     size_t capacity,
     size_t *out_size);
 
+/** Build the legacy local-login seed request, exactly "y\\r". */
+LinkMercedesMeNativeResult link_mercedes_me_build_legacy_seed_request(
+    uint8_t *out,
+    size_t capacity,
+    size_t *out_size);
+
+/**
+ * Build the secure-mode seed request y<Base64(app_random)>CR.
+ * app_random must come from a cryptographically secure platform RNG; LINK
+ * intentionally does not reproduce the retired application's srand/rand RNG.
+ */
+LinkMercedesMeNativeResult link_mercedes_me_build_secure_seed_request(
+    const uint8_t app_random[LINK_MERCEDES_ME_APP_RANDOM_SIZE],
+    uint8_t *out,
+    size_t capacity,
+    size_t *out_size);
+
+/**
+ * Decode the positive GetSeed record used by GDK. The archived parser requires
+ * a 'y' prefix and ACK terminator, strips the prefix, then Base64-decodes.
+ * Authentication subsequently requires the decoded seed to be exactly 16 B.
+ */
+LinkMercedesMeNativeResult link_mercedes_me_parse_seed_response(
+    const uint8_t *wire,
+    size_t wire_size,
+    uint8_t device_random[LINK_MERCEDES_ME_DEVICE_RANDOM_SIZE]);
+
 LinkMercedesMeNativeResult link_mercedes_me_secure_encode(
     const uint8_t session_key[LINK_MERCEDES_ME_SESSION_KEY_SIZE],
     const uint8_t *plaintext,
