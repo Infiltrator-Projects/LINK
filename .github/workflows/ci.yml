@@ -17,7 +17,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [linux-native, macos-latest, windows-latest]
 
     steps:
       - name: Checkout
@@ -148,13 +148,14 @@ jobs:
           Write-Host "JAGLINK face: $($jag.FullName)"
 
   linux-native-adapters:
-    name: Ubuntu / native Linux adapter providers
-    runs-on: ubuntu-latest
+    name: Local Linux / native adapter providers
+    runs-on: linux-native
     timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install native transport build dependencies
+        if: runner.environment == 'github-hosted'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends libbluetooth-dev libglib2.0-dev libusb-1.0-0-dev pkg-config
@@ -211,8 +212,8 @@ jobs:
           arm-none-eabi-size build-stm32-arm/*.o
 
   sanitizers:
-    name: Ubuntu / ASan + UBSan
-    runs-on: ubuntu-latest
+    name: Local Linux / ASan + UBSan
+    runs-on: linux-native
     timeout-minutes: 20
     steps:
       - name: Checkout
