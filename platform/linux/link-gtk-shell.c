@@ -57,6 +57,10 @@ typedef struct LinkGtkShell {
     bool diagnostic_restart_pending;
     bool native_adapter_mode;
     size_t native_receive_chunks;
+    size_t native_record_count;
+    size_t native_nack_count;
+    size_t native_overflow_count;
+    LinkMercedesMeStreamParser native_stream_parser;
 } LinkGtkShell;
 
 static const char link_gtk_base_css[] =
@@ -169,6 +173,10 @@ static void reset_session_capture(LinkGtkShell *shell)
     shell->diagnostic_had_failure = false;
     shell->native_adapter_mode = false;
     shell->native_receive_chunks = 0U;
+    shell->native_record_count = 0U;
+    shell->native_nack_count = 0U;
+    shell->native_overflow_count = 0U;
+    link_mercedes_me_stream_parser_init(&shell->native_stream_parser);
 }
 
 static bool append_trace_record(LinkGtkShell *shell, GString *record)
@@ -219,6 +227,7 @@ static void begin_capture_attempt(LinkGtkShell *shell, const char *device)
     shell->diagnostic_retry_pending = false;
     shell->diagnostic_retry_at_ms = 0U;
     shell->diagnostic_had_failure = false;
+    link_mercedes_me_stream_parser_init(&shell->native_stream_parser);
     shell->adapter_identity[0] = '\0';
     (void)snprintf(
         shell->adapter_device, sizeof(shell->adapter_device), "%s",
@@ -324,6 +333,51 @@ static void end_capture_attempt(LinkGtkShell *shell, const char *outcome)
     shell->capture_attempt_linked = false;
 }
 
+static void native_stream_event(
+    void *context,
+    LinkMercedesMeStreamEventKind kind,
+    const uint8_t *bytes,
+    size_t size)
+{
+    LinkGtkShell *shell = context;
+    GString *record;
+    const char *record_type;
+
+    if (shell == NULL || shell->current_capture_attempt == 0U) return;
+
+    switch (kind) {
+    case LINK_MERCEDES_ME_STREAM_RECORD:
+        record_type = "native-record";
+        ++shell->native_record_count;
+        break;
+    case LINK_MERCEDES_ME_STREAM_NACK:
+        record_type = "native-nack";
+        ++shell->native_nack_count;
+        break;
+    case LINK_MERCEDES_ME_STREAM_OVERFLOW:
+        record_type = "native-overflow";
+        ++shell->native_overflow_count;
+        break;
+    default:
+        return;
+    }
+
+    record = g_string_sized_new(256U + size * 2U);
+    g_string_append_printf(
+        record,
+        "{\"record_type\":\"%s\",\"attempt\":%u,"
+        "\"investigation_elapsed_ms\":%llu,\"attempt_elapsed_ms\":%llu,"
+        "\"adapter_kind\":\"mercedes-me-native\",\"raw_hex\":",
+        record_type,
+        shell->current_capture_attempt,
+        (unsigned long long)investigation_elapsed_ms(shell),
+        (unsigned long long)attempt_elapsed_ms(shell));
+    json_hex(record, bytes, size);
+    g_string_append_c(record, '}');
+    (void)append_trace_record(shell, record);
+    g_string_free(record, TRUE);
+}
+
 static void native_transport_receive(
     void *context, const uint8_t *data, size_t size)
 {
@@ -345,6 +399,13 @@ static void native_transport_receive(
     g_string_append_c(record, '}');
     if (append_trace_record(shell, record)) ++shell->native_receive_chunks;
     g_string_free(record, TRUE);
+
+    (void)link_mercedes_me_stream_parser_feed(
+        &shell->native_stream_parser,
+        data,
+        size,
+        native_stream_event,
+        shell);
 }
 
 static void record_session_exchange(LinkGtkShell *shell)
@@ -431,9 +492,15 @@ static GString *build_session_json(const LinkGtkShell *shell)
     g_string_append_printf(
         out,
         ",\n\"native_adapter_mode\":%s,"
-        "\n\"native_receive_chunks\":%zu",
+        "\n\"native_receive_chunks\":%zu,"
+        "\n\"native_records\":%zu,"
+        "\n\"native_nacks\":%zu,"
+        "\n\"native_overflows\":%zu",
         shell->native_adapter_mode ? "true" : "false",
-        shell->native_receive_chunks);
+        shell->native_receive_chunks,
+        shell->native_record_count,
+        shell->native_nack_count,
+        shell->native_overflow_count);
     g_string_append(out, ",\n\"diagnostic_stage\":");
     json_string(out, link_diagnostic_flow_stage_name(shell->flow.stage));
     g_string_append_printf(

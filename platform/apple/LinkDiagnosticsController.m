@@ -28,6 +28,9 @@
                                    value:(const char *)value;
 - (void)beginPortableSession;
 - (void)recordNativeTransportBytes:(const uint8_t *)data size:(size_t)size;
+- (void)recordNativeStreamEvent:(LinkMercedesMeStreamEventKind)kind
+                          bytes:(const uint8_t *)bytes
+                           size:(size_t)size;
 - (void)startTickTimer;
 - (void)stopTickTimer;
 - (BOOL)beginCommand:(const char *)command timeout:(uint64_t)timeoutMs;
@@ -59,6 +62,7 @@
     LinkTelemetryStore _telemetry;
     LinkTelemetryRecorder _recorder;
     LinkTelemetrySessionMetadata _sessionMetadata;
+    LinkMercedesMeStreamParser _nativeStreamParser;
     NSMutableData *_sessionCSV;
     NSUInteger _currentSessionCSVStart;
 
@@ -158,6 +162,18 @@ static void LinkAppleNativeTransportReceive(
     [controller recordNativeTransportBytes:data size:size];
 }
 
+static void LinkAppleNativeStreamEvent(
+    void *context,
+    LinkMercedesMeStreamEventKind kind,
+    const uint8_t *bytes,
+    size_t size)
+{
+    LinkDiagnosticsController *controller =
+        (__bridge LinkDiagnosticsController *)context;
+    if (controller == nil) return;
+    [controller recordNativeStreamEvent:kind bytes:bytes size:size];
+}
+
 static void LinkAppleSessionEvent(
     void *context,
     const LinkElm327Session *session)
@@ -198,6 +214,7 @@ static void LinkAppleSessionEvent(
     (void)link_diagnostic_flow_init(&_flow, &_flowConfig);
     link_telemetry_store_init(&_telemetry);
     link_telemetry_recorder_init(&_recorder);
+    link_mercedes_me_stream_parser_init(&_nativeStreamParser);
     _sessionCSV = [[NSMutableData alloc] init];
     link_telemetry_store_set_favourite(&_telemetry, UINT8_C(0x0c), true);
     link_telemetry_store_set_favourite(&_telemetry, UINT8_C(0x0d), true);
@@ -277,6 +294,7 @@ static void LinkAppleSessionEvent(
     (void)link_diagnostic_flow_init(&_flow, &_flowConfig);
     link_telemetry_store_clear_samples(&_telemetry);
     link_telemetry_recorder_init(&_recorder);
+    link_mercedes_me_stream_parser_init(&_nativeStreamParser);
     _sessionMonotonicStartMs = LinkAppleMonotonicMilliseconds();
     link_telemetry_session_metadata_init(
         &_sessionMetadata, LinkAppleEpochMilliseconds(), NULL, NULL);
@@ -514,6 +532,46 @@ static void LinkAppleSessionEvent(
         &_recorder,
         LinkAppleElapsedMilliseconds(_sessionMonotonicStartMs),
         "NATIVE_RX", "bytes", hex.UTF8String);
+
+    (void)link_mercedes_me_stream_parser_feed(
+        &_nativeStreamParser,
+        data,
+        size,
+        LinkAppleNativeStreamEvent,
+        (__bridge void *)self);
+}
+
+- (void)recordNativeStreamEvent:(LinkMercedesMeStreamEventKind)kind
+                          bytes:(const uint8_t *)bytes
+                           size:(size_t)size
+{
+    const char *name;
+    NSMutableString *hex;
+
+    if (!self.nativeAdapterConnected || !_recorder.started ||
+        _recorder.finished) return;
+
+    switch (kind) {
+    case LINK_MERCEDES_ME_STREAM_RECORD:
+        name = "NATIVE_RECORD";
+        break;
+    case LINK_MERCEDES_ME_STREAM_NACK:
+        name = "NATIVE_NACK";
+        break;
+    case LINK_MERCEDES_ME_STREAM_OVERFLOW:
+        name = "NATIVE_OVERFLOW";
+        break;
+    default:
+        return;
+    }
+
+    hex = [[NSMutableString alloc] initWithCapacity:(NSUInteger)size * 2U];
+    for (size_t index = 0U; bytes != NULL && index < size; ++index)
+        [hex appendFormat:@"%02X", (unsigned int)bytes[index]];
+    (void)link_telemetry_recorder_record_response_named(
+        &_recorder,
+        LinkAppleElapsedMilliseconds(_sessionMonotonicStartMs),
+        name, "bytes", hex.UTF8String);
 }
 
 - (void)beginPortableSession
