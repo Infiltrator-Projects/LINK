@@ -708,6 +708,143 @@ LinkMercedesMeNativeResult link_mercedes_me_build_set_baudrate(
     return LINK_MERCEDES_ME_NATIVE_OK;
 }
 
+
+static const char native_hex_upper[] = "0123456789ABCDEF";
+
+static void write_fixed_hex(
+    unsigned int value,
+    unsigned int width,
+    uint8_t *out)
+{
+    unsigned int index;
+    for (index = 0U; index < width; ++index) {
+        const unsigned int shift = (width - index - 1U) * 4U;
+        out[index] = (uint8_t)native_hex_upper[(value >> shift) & 0x0fU];
+    }
+}
+
+LinkMercedesMeNativeResult link_mercedes_me_build_raw_can(
+    unsigned int can_id,
+    const uint8_t *payload,
+    size_t payload_size,
+    uint8_t *out,
+    size_t capacity,
+    size_t *out_size)
+{
+    size_t needed;
+    size_t index;
+    size_t offset;
+
+    if (out_size != NULL) *out_size = 0U;
+    if (out == NULL || (payload == NULL && payload_size != 0U))
+        return LINK_MERCEDES_ME_NATIVE_INVALID_ARGUMENT;
+    if (can_id > LINK_MERCEDES_ME_CAN_ID_MAX ||
+        payload_size > LINK_MERCEDES_ME_RAW_CAN_MAX_PAYLOAD)
+        return LINK_MERCEDES_ME_NATIVE_RANGE;
+    needed = 1U + 3U + 1U + payload_size * 2U + 1U;
+    if (capacity < needed)
+        return LINK_MERCEDES_ME_NATIVE_CAPACITY;
+
+    offset = 0U;
+    out[offset++] = (uint8_t)LINK_MERCEDES_ME_CMD_RAW_CAN;
+    write_fixed_hex(can_id, 3U, out + offset);
+    offset += 3U;
+    out[offset++] = (uint8_t)native_hex_upper[payload_size & 0x0fU];
+    for (index = 0U; index < payload_size; ++index) {
+        out[offset++] = (uint8_t)native_hex_upper[payload[index] >> 4U];
+        out[offset++] = (uint8_t)native_hex_upper[payload[index] & 0x0fU];
+    }
+    out[offset++] = UINT8_C(0x0d);
+    if (out_size != NULL) *out_size = offset;
+    return LINK_MERCEDES_ME_NATIVE_OK;
+}
+
+LinkMercedesMeNativeResult link_mercedes_me_build_isotp_config(
+    unsigned int request_can_id,
+    unsigned int response_can_id,
+    int allow_raw_can_responses,
+    int padding,
+    uint8_t *out,
+    size_t capacity,
+    size_t *out_size)
+{
+    unsigned int flags;
+    unsigned int wire_padding;
+    size_t offset = 0U;
+
+    if (out_size != NULL) *out_size = 0U;
+    if (out == NULL)
+        return LINK_MERCEDES_ME_NATIVE_INVALID_ARGUMENT;
+    if (request_can_id > LINK_MERCEDES_ME_CAN_ID_MAX ||
+        response_can_id > LINK_MERCEDES_ME_CAN_ID_MAX ||
+        padding < LINK_MERCEDES_ME_ISOTP_PADDING_OFF ||
+        padding > 255)
+        return LINK_MERCEDES_ME_NATIVE_RANGE;
+    if (capacity < 16U)
+        return LINK_MERCEDES_ME_NATIVE_CAPACITY;
+
+    flags = allow_raw_can_responses != 0 ? 0U : 0x80U;
+    if (padding == LINK_MERCEDES_ME_ISOTP_PADDING_OFF) {
+        wire_padding = LINK_MERCEDES_ME_ISOTP_PADDING_OFF_WIRE;
+    } else {
+        flags |= 0x01U;
+        wire_padding = (unsigned int)padding;
+    }
+
+    out[offset++] = (uint8_t)LINK_MERCEDES_ME_CMD_ISOTP_CONFIG;
+    out[offset++] = (uint8_t)LINK_MERCEDES_ME_ISOTP_COMMAND_VERSION[0];
+    out[offset++] = (uint8_t)LINK_MERCEDES_ME_ISOTP_COMMAND_VERSION[1];
+    write_fixed_hex(request_can_id, 4U, out + offset);
+    offset += 4U;
+    write_fixed_hex(response_can_id, 4U, out + offset);
+    offset += 4U;
+    write_fixed_hex(flags, 2U, out + offset);
+    offset += 2U;
+    write_fixed_hex(wire_padding, 2U, out + offset);
+    offset += 2U;
+    out[offset++] = UINT8_C(0x0d);
+    if (out_size != NULL) *out_size = offset;
+    return LINK_MERCEDES_ME_NATIVE_OK;
+}
+
+LinkMercedesMeNativeResult link_mercedes_me_build_isotp_transceive(
+    unsigned int request_can_id,
+    const uint8_t *payload,
+    size_t payload_size,
+    uint8_t *out,
+    size_t capacity,
+    size_t *out_size)
+{
+    size_t encoded_size;
+    size_t needed;
+    size_t offset = 0U;
+
+    if (out_size != NULL) *out_size = 0U;
+    if (out == NULL || (payload == NULL && payload_size != 0U))
+        return LINK_MERCEDES_ME_NATIVE_INVALID_ARGUMENT;
+    if (request_can_id > LINK_MERCEDES_ME_CAN_ID_MAX ||
+        payload_size > LINK_MERCEDES_ME_ISOTP_MAX_PAYLOAD)
+        return LINK_MERCEDES_ME_NATIVE_RANGE;
+
+    encoded_size = base64_encoded_size(payload_size);
+    needed = 1U + 2U + 4U + encoded_size + 1U;
+    if (capacity < needed)
+        return LINK_MERCEDES_ME_NATIVE_CAPACITY;
+
+    out[offset++] = (uint8_t)LINK_MERCEDES_ME_CMD_ISOTP_TRANSCEIVE;
+    out[offset++] = (uint8_t)LINK_MERCEDES_ME_ISOTP_COMMAND_VERSION[0];
+    out[offset++] = (uint8_t)LINK_MERCEDES_ME_ISOTP_COMMAND_VERSION[1];
+    write_fixed_hex(request_can_id, 4U, out + offset);
+    offset += 4U;
+    if (!base64_encode(payload, payload_size, out + offset,
+                       capacity - offset - 1U, &encoded_size))
+        return LINK_MERCEDES_ME_NATIVE_CAPACITY;
+    offset += encoded_size;
+    out[offset++] = UINT8_C(0x0d);
+    if (out_size != NULL) *out_size = offset;
+    return LINK_MERCEDES_ME_NATIVE_OK;
+}
+
 static LinkMercedesMeNativeResult build_base64_command(
     uint8_t identifier,
     const uint8_t *payload,

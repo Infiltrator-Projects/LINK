@@ -25,6 +25,9 @@ extern "C" {
 #define LINK_MERCEDES_ME_CAN_FILTER_MAX_IDS 15U
 #define LINK_MERCEDES_ME_RAW_CAN_MAX_PAYLOAD 8U
 #define LINK_MERCEDES_ME_ISOTP_MAX_PAYLOAD 100U
+#define LINK_MERCEDES_ME_ISOTP_COMMAND_VERSION "01"
+#define LINK_MERCEDES_ME_ISOTP_PADDING_OFF (-1)
+#define LINK_MERCEDES_ME_ISOTP_PADDING_OFF_WIRE 0xAAU
 #define LINK_MERCEDES_ME_OBDII_REQUEST_ID 0x7DFU
 #define LINK_MERCEDES_ME_DEFAULT_BAUD_ORDINAL 6U
 #define LINK_MERCEDES_ME_ADAPTER_VIN_MIN_LENGTH 1U
@@ -129,6 +132,20 @@ LinkMercedesMeNativeResult link_mercedes_me_build_get_passkey(
     uint8_t *out, size_t capacity, size_t *out_size);
 LinkMercedesMeNativeResult link_mercedes_me_build_set_baudrate(
     unsigned int baud_ordinal,
+    uint8_t *out, size_t capacity, size_t *out_size);
+LinkMercedesMeNativeResult link_mercedes_me_build_raw_can(
+    unsigned int can_id,
+    const uint8_t *payload, size_t payload_size,
+    uint8_t *out, size_t capacity, size_t *out_size);
+LinkMercedesMeNativeResult link_mercedes_me_build_isotp_config(
+    unsigned int request_can_id,
+    unsigned int response_can_id,
+    int allow_raw_can_responses,
+    int padding,
+    uint8_t *out, size_t capacity, size_t *out_size);
+LinkMercedesMeNativeResult link_mercedes_me_build_isotp_transceive(
+    unsigned int request_can_id,
+    const uint8_t *payload, size_t payload_size,
     uint8_t *out, size_t capacity, size_t *out_size);
 LinkMercedesMeNativeResult link_mercedes_me_build_get_seed(
     const uint8_t *payload, size_t payload_size,

@@ -20,7 +20,7 @@ int main(void)
     uint8_t key[32];
     uint8_t wire[700];
     uint8_t decoded[600];
-    uint8_t command[100];
+    uint8_t command[180];
     size_t wire_size;
     size_t decoded_size;
     size_t command_size;
@@ -93,6 +93,63 @@ int main(void)
     CHECK(link_mercedes_me_build_set_baudrate(
               9U, command, sizeof(command), &command_size) ==
           LINK_MERCEDES_ME_NATIVE_RANGE);
+
+    {
+        static const uint8_t raw_payload[] = {0x22U, 0xf1U, 0x90U};
+        CHECK(link_mercedes_me_build_raw_can(
+                  0x7e0U, raw_payload, sizeof(raw_payload),
+                  command, sizeof(command), &command_size) ==
+              LINK_MERCEDES_ME_NATIVE_OK);
+        CHECK(command_size == 12U &&
+              memcmp(command, "t7E0322F190\r", 12U) == 0);
+        CHECK(link_mercedes_me_build_raw_can(
+                  0x800U, raw_payload, sizeof(raw_payload),
+                  command, sizeof(command), &command_size) ==
+              LINK_MERCEDES_ME_NATIVE_RANGE);
+        CHECK(link_mercedes_me_build_raw_can(
+                  0x7e0U, raw_payload, 9U,
+                  command, sizeof(command), &command_size) ==
+              LINK_MERCEDES_ME_NATIVE_RANGE);
+    }
+
+    CHECK(link_mercedes_me_build_isotp_config(
+              0x7e0U, 0x7e8U, 1, 0,
+              command, sizeof(command), &command_size) ==
+          LINK_MERCEDES_ME_NATIVE_OK);
+    CHECK(command_size == 16U &&
+          memcmp(command, "I0107E007E80100\r", 16U) == 0);
+    CHECK(link_mercedes_me_build_isotp_config(
+              0x7e0U, 0x7e8U, 0, LINK_MERCEDES_ME_ISOTP_PADDING_OFF,
+              command, sizeof(command), &command_size) ==
+          LINK_MERCEDES_ME_NATIVE_OK);
+    CHECK(command_size == 16U &&
+          memcmp(command, "I0107E007E880AA\r", 16U) == 0);
+    CHECK(link_mercedes_me_build_isotp_config(
+              0x800U, 0x7e8U, 1, 0,
+              command, sizeof(command), &command_size) ==
+          LINK_MERCEDES_ME_NATIVE_RANGE);
+    CHECK(link_mercedes_me_build_isotp_config(
+              0x7e0U, 0x7e8U, 1, -2,
+              command, sizeof(command), &command_size) ==
+          LINK_MERCEDES_ME_NATIVE_RANGE);
+
+    {
+        static const uint8_t isotp_payload[] = {0x22U, 0xf1U, 0x90U};
+        CHECK(link_mercedes_me_build_isotp_transceive(
+                  0x7e0U, isotp_payload, sizeof(isotp_payload),
+                  command, sizeof(command), &command_size) ==
+              LINK_MERCEDES_ME_NATIVE_OK);
+        CHECK(command_size == 12U &&
+              memcmp(command, "i0107E0IvGQ\r", 12U) == 0);
+        CHECK(link_mercedes_me_build_isotp_transceive(
+                  0x800U, isotp_payload, sizeof(isotp_payload),
+                  command, sizeof(command), &command_size) ==
+              LINK_MERCEDES_ME_NATIVE_RANGE);
+        CHECK(link_mercedes_me_build_isotp_transceive(
+                  0x7e0U, isotp_payload, 101U,
+                  command, sizeof(command), &command_size) ==
+              LINK_MERCEDES_ME_NATIVE_RANGE);
+    }
 
     CHECK(link_mercedes_me_build_get_seed(
               NULL, 0U, command, sizeof(command), &command_size) ==

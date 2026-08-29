@@ -219,6 +219,27 @@ The following complete builders are now proved:
 - baud ordinal: `S0\r` through `S8\r`
 - X read: `X%02X\r`
 - X write: `X%02X<payload>\r`
+- raw CAN: `t<can-id:3HEX><payload-length:1HEX><payload:HEX>\r`
+- ISO-TP configure: `I01<request-id:4HEX><response-id:4HEX><flags:2HEX><padding:2HEX>\r`
+- ISO-TP transact: `i01<request-id:4HEX><Base64(payload)>\r`
+
+The raw-CAN payload-length field is one uppercase hexadecimal digit and the
+payload is emitted as uppercase hexadecimal bytes. The native bounds are
+**0..8 bytes** and CAN IDs **0..0x7FF**. For example, CAN ID `0x7E0`
+with payload `22 F1 90` constructs `t7E0322F190\r`.
+
+The ISO-TP command version is exactly **`01`**. Request/response CAN IDs
+are emitted as four uppercase hexadecimal digits. ISO-TP transmit payloads are
+**0..100 bytes** and are Base64-encoded; `0x7E0` plus `22 F1 90`
+constructs `i0107E0IvGQ\r`.
+
+For ISO-TP configuration, bit 0 of the flags byte denotes padding enabled.
+Bit 7 is set when raw-CAN responses are **not** allowed. Padding accepts
+**-1..255**; `-1` disables padding, clears bit 0 and places the native
+sentinel byte `AA` in the wire field. Thus request `0x7E0`, response
+`0x7E8`, raw responses allowed and padding `00` constructs
+`I0107E007E80100\r`; with raw responses disallowed and padding disabled it
+constructs `I0107E007E880AA\r`.
 
 The official initialization path uses baud ordinal **6**, which constructs
 `S6\r`. The native binary does not by that fact alone prove the physical
@@ -379,6 +400,8 @@ LINK now independently implements and regression-tests:
 - AES-256 ECB encryption/decryption for that frame;
 - Base64 `a...CR` secure wrapping/unwrapping;
 - the proved simple/seed/key/baud/X command builders;
+- the exact raw-CAN `t...`, ISO-TP configuration `I...` and ISO-TP
+  transaction `i...` builders;
 - observed GDK protocol limits and X-mode constants;
 - the DiagLogic acquisition-policy constants;
 - Whisper response-selection and DTC-presentation vocabularies.
@@ -392,8 +415,6 @@ challenge key or APK configuration bundle is copied into LINK.
   provisioning and the two random arguments together;
 - the exact role/order of application-random versus adapter-random in that
   sequence;
-- the exact raw-CAN `t...` command layout;
-- the exact ISO-TP `I...` / `i...` command layouts;
 - payload formats for X modes whose identifier is known but structure is not;
 - the role of the native fixed legacy challenge key in the complete handshake;
 - the actual compressed/raw APK configuration assets;

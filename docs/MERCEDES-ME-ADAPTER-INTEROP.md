@@ -404,12 +404,14 @@ captures. They are evidence labels, not commands to the adapter.
 
 ## Evidence still required
 
-Native-library analysis has now resolved many individual GDK command builders,
-the SHA-256 session-key derivation and the AES-256/Base64 secure envelope. The
+Native-library analysis has now resolved the raw-CAN and ISO-TP command
+layouts in addition to the individual GDK command builders, SHA-256 session-key
+derivation and AES-256/Base64 secure envelope. The exact `t...`, `I...` and
+`i...` formats and their bounds are recorded in
+[`MERCEDES-ME-NATIVE-BINARIES.md`](MERCEDES-ME-NATIVE-BINARIES.md). The
 remaining high-value unknowns are:
 
 - the complete authentication sequence and exact random/challenge direction;
-- exact raw-CAN and ISO-TP command payload layouts;
 - higher-level `setupObdAdapter` / `readObdAdapterData` sequencing;
 - the APK configuration bundle that binds Mercedes ECU addresses, requests,
   extraction and formulas;
