@@ -116,6 +116,26 @@ int main(void)
     LinkMercedesMeDiaglogicValue value;
     Capture capture;
     LinkMercedesMeDiaglogicResult result;
+    const LinkMercedesMeDiaglogicReferencePolicy *policy;
+
+    policy = link_mercedes_me_diaglogic_reference_policy();
+    CHECK(policy != NULL);
+    CHECK(policy->live_data_stream_read_timeout_ms == 1500U);
+    CHECK(policy->live_data_availability_timeout_ms == 5000U);
+    CHECK(policy->min_ignition_read_delay_ms == 10000U);
+    CHECK(policy->max_ignition_read_speed == 10);
+    CHECK(policy->min_mileage_read_delay_ms == 30000U);
+    CHECK(policy->max_mileage_read_delay_ms == 300000U);
+    CHECK(policy->max_mileage_read_speed == 20);
+    CHECK(policy->min_fuel_read_distance == 5);
+    CHECK(policy->min_negative_mileage_difference == -2);
+    CHECK(policy->ignition_off_voltage_threshold_min == 12.2);
+    CHECK(policy->ignition_off_voltage_threshold_default == 13.2);
+    CHECK(policy->ignition_off_voltage_threshold_max == 13.2);
+    CHECK(policy->ignition_off_voltage_below_max_battery_margin == 0.2);
+    CHECK(policy->allowed_live_status_age_ms == 60000U);
+    CHECK(policy->allowed_run_cycle_status_age_ms == 90000U);
+    CHECK(policy->invalid_trip_start_mileage == -1.0);
 
     memset(&capture, 0, sizeof(capture));
     callbacks.measured_item = measured_callback;
