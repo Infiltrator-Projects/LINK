@@ -49,7 +49,7 @@ LINK currently owns:
 - shared native Linux diagnostic-adapter layer for tty/RFCOMM, BlueZ BLE/GATT, BlueZ Classic/SPP, genuine Mercedes me Adapter native Bluetooth capture and direct-libUSB Tactrix OpenPort 2.0;
 - shared native Windows OpenPort 2.0/J2534 Discover scanner shell.
 
-The genuine Mercedes me Adapter is handled as a distinct native transport rather than being made to impersonate an ELM327. LINK recognises the documented `MB-xxxx` Bluetooth name, can establish the available RFCOMM/GATT byte channel and passively preserve incoming bytes, while deliberately suppressing ELM `ATI`/initialisation traffic. Exact Mercedes me application framing remains evidence-gated until hardware capture proves it.
+The genuine Mercedes me Adapter is handled as a distinct native transport rather than being made to impersonate an ELM327. Archived official Mercedes me Adapter 4.7.61 interoperability evidence, including generation-name rules and exact Bluetooth UUIDs, is preserved in [`docs/MERCEDES-ME-ADAPTER-INTEROP.md`](docs/MERCEDES-ME-ADAPTER-INTEROP.md). LINK recognises the documented `MB-xxxx` Bluetooth name, can establish the available RFCOMM/GATT byte channel and passively preserve incoming bytes, while deliberately suppressing ELM `ATI`/initialisation traffic. Exact Mercedes me application framing remains evidence-gated until hardware capture proves it.
 
 Codec support does not grant transmit permission. Discover remains independently deny-by-default; adding a UDS codec cannot silently broaden its request allowlist.
 
