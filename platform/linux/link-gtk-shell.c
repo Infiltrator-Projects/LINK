@@ -51,6 +51,9 @@ typedef struct LinkGtkShell {
     bool diagnostic_retry_pending;
     uint64_t diagnostic_retry_at_ms;
     bool diagnostic_had_failure;
+    guint render_source_id;
+    bool render_in_progress;
+    bool render_pending;
 } LinkGtkShell;
 
 static const char link_gtk_base_css[] =
@@ -588,20 +591,76 @@ static guint selected_locale_index(void)
     return 0U;
 }
 
-static void render_current_section(LinkGtkShell *shell)
+/*
+ * GTK page construction is intentionally serialized. Diagnostic traffic can
+ * generate many model changes per second; rebuilding the widget subtree from
+ * those callbacks while a user is navigating creates needless destruction and
+ * recreation of interactive widgets. Navigation renders immediately, while
+ * telemetry refreshes are coalesced through the main loop.
+ */
+static void render_current_section_now(LinkGtkShell *shell)
 {
     const LinkWorkspaceSectionDescriptor *section;
     if (shell == NULL || shell->body == NULL) return;
-    section = link_workspace_section_at(shell->current_section);
-    if (section == NULL) return;
-    if (shell->title != NULL) gtk_label_set_text(GTK_LABEL(shell->title), section->title);
-    if (shell->summary != NULL) gtk_label_set_text(GTK_LABEL(shell->summary), section->summary);
-    clear_box(shell->body);
-    if (shell->descriptor->render_section != NULL) {
-        shell->descriptor->render_section(shell->current_section,
-                                          shell->body,
-                                          shell->descriptor->context);
+    if (shell->render_in_progress) {
+        shell->render_pending = true;
+        return;
     }
+
+    shell->render_in_progress = true;
+    do {
+        shell->render_pending = false;
+        section = link_workspace_section_at(shell->current_section);
+        if (section == NULL) break;
+        if (shell->title != NULL)
+            gtk_label_set_text(GTK_LABEL(shell->title), section->title);
+        if (shell->summary != NULL)
+            gtk_label_set_text(GTK_LABEL(shell->summary), section->summary);
+        clear_box(shell->body);
+        if (shell->descriptor->render_section != NULL) {
+            shell->descriptor->render_section(
+                shell->current_section, shell->body,
+                shell->descriptor->context);
+        }
+    } while (shell->render_pending);
+    shell->render_in_progress = false;
+}
+
+static gboolean render_current_section_deferred(gpointer user_data)
+{
+    LinkGtkShell *shell = user_data;
+    if (shell == NULL) return G_SOURCE_REMOVE;
+    shell->render_source_id = 0U;
+    render_current_section_now(shell);
+    return G_SOURCE_REMOVE;
+}
+
+static void queue_current_section_render(LinkGtkShell *shell)
+{
+    if (shell == NULL || shell->body == NULL) return;
+    if (shell->render_in_progress) {
+        shell->render_pending = true;
+        return;
+    }
+    if (shell->render_source_id == 0U) {
+        /*
+         * 100 ms caps live GTK reconstruction at 10 Hz while preserving a
+         * responsive diagnostic display. Multiple samples collapse into one
+         * presentation update.
+         */
+        shell->render_source_id = g_timeout_add(
+            100U, render_current_section_deferred, shell);
+    }
+}
+
+static void render_navigation_selection(LinkGtkShell *shell)
+{
+    if (shell == NULL) return;
+    if (shell->render_source_id != 0U) {
+        g_source_remove(shell->render_source_id);
+        shell->render_source_id = 0U;
+    }
+    render_current_section_now(shell);
 }
 
 static void rebuild_navigation(LinkGtkShell *shell)
@@ -689,7 +748,7 @@ static void notify_diagnostic(LinkGtkShell *shell,
             shell->diagnostics_ready,
             shell->descriptor->context);
     }
-    render_current_section(shell);
+    queue_current_section_render(shell);
 }
 
 static void set_connection_state(LinkGtkShell *shell, bool connected, const char *message)
@@ -793,7 +852,7 @@ static void refresh_visible_language(LinkGtkShell *shell)
         else
             set_connection_state(shell, false, "Disconnected");
     }
-    render_current_section(shell);
+    render_navigation_selection(shell);
 }
 
 static void language_changed(GObject *object, GParamSpec *spec, gpointer user_data)
@@ -848,7 +907,7 @@ static void fail_diagnostics(LinkGtkShell *shell,
                                               false,
                                               shell->descriptor->context);
     }
-    render_current_section(shell);
+    queue_current_section_render(shell);
 }
 
 static void session_event(void *context,
@@ -1038,7 +1097,7 @@ static void process_session_event(LinkGtkShell *shell)
             }
             if (extension->progress_changed != NULL &&
                 extension->progress_changed(shell->descriptor->context)) {
-                render_current_section(shell);
+                queue_current_section_render(shell);
             }
             if (complete) {
                 (void)finish_manufacturer_extension(shell, true);
@@ -1147,7 +1206,7 @@ static void stop_diagnostics(LinkGtkShell *shell)
                                               false,
                                               shell->descriptor->context);
     }
-    render_current_section(shell);
+    queue_current_section_render(shell);
 }
 
 static void link_clicked(GtkButton *button, gpointer user_data)
@@ -1316,11 +1375,15 @@ static gboolean pump_serial(gpointer user_data)
 static void select_section(GtkListBox *list, GtkListBoxRow *row, gpointer user_data)
 {
     LinkGtkShell *shell = user_data;
+    size_t section;
     (void)list;
-    if (row == NULL) return;
-    shell->current_section =
-        (size_t)GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(row), "link-section"));
-    render_current_section(shell);
+    if (shell == NULL || row == NULL) return;
+    section = (size_t)GPOINTER_TO_UINT(
+        g_object_get_data(G_OBJECT(row), "link-section"));
+    if (section >= link_workspace_section_count()) return;
+    if (section == shell->current_section) return;
+    shell->current_section = section;
+    render_navigation_selection(shell);
 }
 
 static void about_clicked(GtkButton *button, gpointer user_data)
@@ -1472,7 +1535,7 @@ static void activate(GtkApplication *application, gpointer user_data)
     gtk_box_append(GTK_BOX(root), sidebar);
     gtk_box_append(GTK_BOX(root), main);
     gtk_window_set_child(shell->window, root);
-    render_current_section(shell);
+    render_current_section_now(shell);
     (void)g_timeout_add(25U, pump_serial, shell);
     gtk_window_present(shell->window);
     if (d->auto_connect)
@@ -1500,6 +1563,10 @@ int link_gtk_shell_run(int argc, char **argv,
     stop_diagnostics(&shell);
     if (shell.transport.is_connected(shell.transport.context))
         shell.transport.disconnect(shell.transport.context);
+    if (shell.render_source_id != 0U) {
+        g_source_remove(shell.render_source_id);
+        shell.render_source_id = 0U;
+    }
     if (shell.exchange_json != NULL) g_string_free(shell.exchange_json, TRUE);
     g_object_unref(application);
     return status;
