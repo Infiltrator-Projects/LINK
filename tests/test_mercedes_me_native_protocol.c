@@ -65,6 +65,35 @@ int main(void)
     CHECK(link_mercedes_me_secure_ciphertext_size(505U) == 512U);
     CHECK(link_mercedes_me_secure_ciphertext_size(506U) == 0U);
 
+    {
+        uint8_t device_random[LINK_MERCEDES_ME_DEVICE_RANDOM_SIZE];
+        uint8_t auth_response[LINK_MERCEDES_ME_AUTH_RESPONSE_SIZE];
+        static const uint8_t expected_auth_response[16] = {
+            0x36U,0x23U,0x6cU,0xcdU,0x1eU,0x4aU,0xb8U,0x1aU,
+            0xd7U,0xf8U,0x54U,0x8aU,0xd3U,0x90U,0xd6U,0x24U
+        };
+        for (index = 0U; index < sizeof(device_random); ++index)
+            device_random[index] = (uint8_t)index;
+        CHECK(link_mercedes_me_authentication_response(
+                  device_random, auth_response) ==
+              LINK_MERCEDES_ME_NATIVE_OK);
+        CHECK(memcmp(auth_response, expected_auth_response,
+                     sizeof(auth_response)) == 0);
+        CHECK(link_mercedes_me_build_login_set_key(
+                  device_random, command, sizeof(command), &command_size) ==
+              LINK_MERCEDES_ME_NATIVE_OK);
+        CHECK(command_size == 26U &&
+              memcmp(command, "YNiNszR5KuBrX+FSK05DWJA==\r", 26U) == 0);
+    }
+
+    {
+        uint8_t named_key[LINK_MERCEDES_ME_SESSION_KEY_SIZE];
+        CHECK(link_mercedes_me_derive_secure_session_key(
+                  smk, random1, random2, named_key) ==
+              LINK_MERCEDES_ME_NATIVE_OK);
+        CHECK(memcmp(named_key, expected_key, sizeof(named_key)) == 0);
+    }
+
     CHECK(link_mercedes_me_build_can_open(
               command, sizeof(command), &command_size) ==
           LINK_MERCEDES_ME_NATIVE_OK);
