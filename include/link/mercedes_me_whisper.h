@@ -2,6 +2,8 @@
 #ifndef LINK_MERCEDES_ME_WHISPER_H
 #define LINK_MERCEDES_ME_WHISPER_H
 
+#include <stddef.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -23,6 +25,16 @@ typedef enum LinkMercedesMeWhisperDtcPresentation {
     LINK_MERCEDES_ME_WHISPER_DTC_PRESENTATION_UNKNOWN
 } LinkMercedesMeWhisperDtcPresentation;
 
+typedef enum LinkMercedesMeWhisperVocabularyKind {
+    LINK_MERCEDES_ME_WHISPER_VOCAB_RESOURCE = 0,
+    LINK_MERCEDES_ME_WHISPER_VOCAB_CONFIGURATION_KEY
+} LinkMercedesMeWhisperVocabularyKind;
+
+typedef struct LinkMercedesMeWhisperVocabularyEntry {
+    const char *name;
+    LinkMercedesMeWhisperVocabularyKind kind;
+} LinkMercedesMeWhisperVocabularyEntry;
+
 const char *link_mercedes_me_whisper_response_selection_name(
     LinkMercedesMeWhisperResponseSelection selection);
 LinkMercedesMeWhisperResponseSelection
@@ -31,6 +43,13 @@ const char *link_mercedes_me_whisper_dtc_presentation_name(
     LinkMercedesMeWhisperDtcPresentation presentation);
 LinkMercedesMeWhisperDtcPresentation
 link_mercedes_me_whisper_dtc_presentation_from_name(const char *name);
+
+/** Exact standalone configuration/resource strings recovered from libwhisper.so. */
+size_t link_mercedes_me_whisper_vocabulary_count(void);
+const LinkMercedesMeWhisperVocabularyEntry *
+link_mercedes_me_whisper_vocabulary_at(size_t index);
+const LinkMercedesMeWhisperVocabularyEntry *
+link_mercedes_me_whisper_vocabulary_find(const char *name);
 
 #ifdef __cplusplus
 }
