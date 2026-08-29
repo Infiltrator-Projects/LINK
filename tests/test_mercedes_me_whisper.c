@@ -39,7 +39,7 @@ int main(void)
               "bogus") ==
           LINK_MERCEDES_ME_WHISPER_RESPONSE_SELECTION_UNKNOWN);
 
-    CHECK(link_mercedes_me_whisper_vocabulary_count() == 32U);
+    CHECK(link_mercedes_me_whisper_vocabulary_count() == 31U);
     entry = link_mercedes_me_whisper_vocabulary_find("config.properties");
     CHECK(entry != NULL);
     CHECK(entry->kind == LINK_MERCEDES_ME_WHISPER_VOCAB_RESOURCE);
@@ -55,6 +55,6 @@ int main(void)
     CHECK(link_mercedes_me_whisper_vocabulary_find("PaddingByte") != NULL);
     CHECK(link_mercedes_me_whisper_vocabulary_find("PduTransceive") != NULL);
     CHECK(link_mercedes_me_whisper_vocabulary_find("not-recovered") == NULL);
-    CHECK(link_mercedes_me_whisper_vocabulary_at(32U) == NULL);
+    CHECK(link_mercedes_me_whisper_vocabulary_at(31U) == NULL);
     return 0;
 }
