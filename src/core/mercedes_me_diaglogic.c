@@ -609,3 +609,29 @@ LinkMercedesMeDiaglogicResult link_mercedes_me_diaglogic_decode_preview(
         ? LINK_MERCEDES_ME_DIAGLOGIC_OK
         : LINK_MERCEDES_ME_DIAGLOGIC_REQUIRED_FIELD_MISSING;
 }
+
+const LinkMercedesMeDiaglogicReferencePolicy *
+link_mercedes_me_diaglogic_reference_policy(void)
+{
+    static const LinkMercedesMeDiaglogicReferencePolicy policy = {
+        1500U,
+        5000U,
+        10000U,
+        10,
+        30000U,
+        300000U,
+        20,
+        5,
+        -2,
+        30000U,
+        10000U,
+        12.2,
+        13.2,
+        13.2,
+        0.2,
+        60000U,
+        90000U,
+        -1.0
+    };
+    return &policy;
+}

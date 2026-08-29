@@ -5,7 +5,7 @@
  *
  * The schema is an interoperability fact recovered from the official Mercedes
  * me Adapter 4.7.61 application. Decoding this protobuf does not imply that
- * LINK knows how to invoke the missing native diaglogic/gdk libraries.
+ * LINK can decode the native ABI independently; active adapter use remains evidence-gated.
  */
 #ifndef LINK_MERCEDES_ME_DIAGLOGIC_H
 #define LINK_MERCEDES_ME_DIAGLOGIC_H
@@ -124,6 +124,38 @@ typedef struct LinkMercedesMeDiaglogicCallbacks {
     LinkMercedesMeDiaglogicDtcFn dtc;
     void *context;
 } LinkMercedesMeDiaglogicCallbacks;
+
+typedef struct LinkMercedesMeDiaglogicReferencePolicy {
+    unsigned int live_data_stream_read_timeout_ms;
+    unsigned int live_data_availability_timeout_ms;
+    unsigned int min_ignition_read_delay_ms;
+    int max_ignition_read_speed;
+    unsigned int min_mileage_read_delay_ms;
+    unsigned int max_mileage_read_delay_ms;
+    int max_mileage_read_speed;
+    int min_fuel_read_distance;
+    int min_negative_mileage_difference;
+    unsigned int
+        max_distance_since_codes_cleared_measured_mileage_time_difference_ms;
+    unsigned int max_speed_age_for_ignition_ms;
+    double ignition_off_voltage_threshold_min;
+    double ignition_off_voltage_threshold_default;
+    double ignition_off_voltage_threshold_max;
+    double ignition_off_voltage_below_max_battery_margin;
+    unsigned int allowed_live_status_age_ms;
+    unsigned int allowed_run_cycle_status_age_ms;
+    double invalid_trip_start_mileage;
+} LinkMercedesMeDiaglogicReferencePolicy;
+
+/**
+ * Exact scheduling/sanity defaults recovered from libdiaglogic.so.
+ *
+ * Fields whose native names explicitly encode milliseconds or volts carry
+ * those units here. Speed/distance-like fields intentionally keep the native
+ * semantic name without inventing a physical unit.
+ */
+const LinkMercedesMeDiaglogicReferencePolicy *
+link_mercedes_me_diaglogic_reference_policy(void);
 
 const char *link_mercedes_me_diaglogic_result_name(
     LinkMercedesMeDiaglogicResult result);
