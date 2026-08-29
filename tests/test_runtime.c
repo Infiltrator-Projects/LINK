@@ -64,6 +64,23 @@ int main(void)
     CHECK(strcmp(link_adapter_kind_name(
                      LINK_ADAPTER_KIND_MERCEDES_ME_NATIVE),
                  "mercedes-me-native") == 0);
+    {
+        LinkAdapterCapabilities capabilities;
+        CHECK(link_adapter_capabilities(
+            LINK_ADAPTER_KIND_MERCEDES_ME_NATIVE, &capabilities));
+        CHECK((capabilities.flags & LINK_ADAPTER_CAP_NATIVE_DIAGNOSTIC) != 0U);
+        CHECK((capabilities.flags & LINK_ADAPTER_CAP_SECURE_SESSION) != 0U);
+        CHECK((capabilities.flags & LINK_ADAPTER_CAP_CAN_29BIT) == 0U);
+        CHECK(capabilities.max_standard_can_id == UINT32_C(0x7ff));
+        CHECK(capabilities.max_raw_can_payload == 8U);
+        CHECK(capabilities.max_isotp_payload == 100U);
+        CHECK(capabilities.max_filter_ids == 15U);
+        CHECK(link_adapter_has_capability(
+            LINK_ADAPTER_KIND_TACTRIX_OPENPORT2,
+            LINK_ADAPTER_CAP_ISOTP | LINK_ADAPTER_CAP_CAN_29BIT));
+        CHECK(link_adapter_kind_requires_native_protocol(
+            LINK_ADAPTER_KIND_STM32_LINK));
+    }
 
     CHECK(link_parameter_obd2_definition_count() == 28U);
     CHECK(link_parameter_from_obd2_scalar(0x0cU, LINK_OBD2_UNIT_RPM, 1234.5, 10U, &parameter));
