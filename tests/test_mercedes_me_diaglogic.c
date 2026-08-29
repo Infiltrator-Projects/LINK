@@ -107,6 +107,9 @@ int main(void)
     static const uint8_t missing_required_value[] = {
         0x10,0x01
     };
+    static const uint8_t malformed_value[] = {
+        0x18,0x01
+    };
     LinkMercedesMeDiaglogicVehicleStatus status;
     LinkMercedesMeDiaglogicCallbacks callbacks;
     LinkMercedesMeDiaglogicPreview preview;
@@ -155,6 +158,10 @@ int main(void)
     result = link_mercedes_me_diaglogic_decode_value(
         missing_required_value, sizeof(missing_required_value), &value);
     CHECK(result == LINK_MERCEDES_ME_DIAGLOGIC_REQUIRED_FIELD_MISSING);
+
+    result = link_mercedes_me_diaglogic_decode_value(
+        malformed_value, sizeof(malformed_value), &value);
+    CHECK(result == LINK_MERCEDES_ME_DIAGLOGIC_MALFORMED);
 
     result = link_mercedes_me_diaglogic_decode_vehicle_status(
         vehicle_status, sizeof(vehicle_status) - 1U, &status, &callbacks);
