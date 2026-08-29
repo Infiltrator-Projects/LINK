@@ -514,14 +514,23 @@ static int full_sweep_probe_target(
     int found = 0;
     char identity_label[96] = "";
     PASSTHRU_MSG matched;
+    const link_discover_sweep_probe *presence_probes = NULL;
+    size_t presence_probe_count = 0U;
+    const link_discover_sweep_probe *identity = NULL;
+    link_discover_sweep_decode_identity_fn decode_identity = NULL;
 
+    if (!link_discover_sweep_plan_probes_for_target(
+            plan, target, &presence_probes, &presence_probe_count,
+            &identity, &decode_identity)) {
+        return 0;
+    }
     if (!full_sweep_start_filter(target, &filter_id)) return 0;
 
     for (probe_index = 0U;
-         probe_index < plan->presence_probe_count;
+         probe_index < presence_probe_count;
          ++probe_index) {
         const link_discover_sweep_probe *probe =
-            &plan->presence_probes[probe_index];
+            &presence_probes[probe_index];
         if (full_sweep_cancelled()) break;
         if (!send_read_only_target(
                 target->tx_can_id, target->extended_id ? 1 : 0,
@@ -537,9 +546,7 @@ static int full_sweep_probe_target(
     }
 
     if (found && !full_sweep_cancelled() &&
-        plan->identity_probe != NULL &&
-        plan->decode_identity != NULL) {
-        const link_discover_sweep_probe *identity = plan->identity_probe;
+        identity != NULL && decode_identity != NULL) {
         if (send_read_only_target(
                 target->tx_can_id, target->extended_id ? 1 : 0,
                 identity->payload, identity->payload_length,
@@ -551,7 +558,7 @@ static int full_sweep_probe_target(
             full_sweep_response_payload(
                 &matched, &payload, &payload_length);
             if (payload != NULL) {
-                (void)plan->decode_identity(
+                (void)decode_identity(
                     payload, payload_length,
                     identity_label, sizeof(identity_label));
             }
