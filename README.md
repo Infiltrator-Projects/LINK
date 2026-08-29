@@ -46,8 +46,10 @@ LINK currently owns:
 - portable diagnostic-flow controller state machine;
 - Discover safety classification and evidence writing;
 - common ECU/module discovery, identification and raw-response acquisition primitives; and
-- shared native Linux diagnostic-adapter layer for tty/RFCOMM, BlueZ BLE/GATT, BlueZ Classic/SPP and direct-libUSB Tactrix OpenPort 2.0;
+- shared native Linux diagnostic-adapter layer for tty/RFCOMM, BlueZ BLE/GATT, BlueZ Classic/SPP, genuine Mercedes me Adapter native Bluetooth capture and direct-libUSB Tactrix OpenPort 2.0;
 - shared native Windows OpenPort 2.0/J2534 Discover scanner shell.
+
+The genuine Mercedes me Adapter is handled as a distinct native transport rather than being made to impersonate an ELM327. LINK recognises the documented `MB-xxxx` Bluetooth name, can establish the available RFCOMM/GATT byte channel and passively preserve incoming bytes, while deliberately suppressing ELM `ATI`/initialisation traffic. Exact Mercedes me application framing remains evidence-gated until hardware capture proves it.
 
 Codec support does not grant transmit permission. Discover remains independently deny-by-default; adding a UDS codec cannot silently broaden its request allowlist.
 
