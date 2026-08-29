@@ -27,6 +27,7 @@ extern "C" {
 #define LINK_MERCEDES_ME_NACK_TERMINATOR UINT8_C(0x07)
 #define LINK_MERCEDES_ME_RX_BUFFER_CAPACITY 700U
 #define LINK_MERCEDES_ME_RX_CLEAR_THRESHOLD 698U
+#define LINK_MERCEDES_ME_STATE_CALLBACK_SLEEP_SENTINEL 4711
 
 typedef enum LinkMercedesMeAdapterFamily {
     LINK_MERCEDES_ME_ADAPTER_UNKNOWN = 0,
@@ -95,6 +96,11 @@ typedef enum LinkMercedesMeCommState {
     LINK_MERCEDES_ME_COMM_UNKNOWN = 255
 } LinkMercedesMeCommState;
 
+typedef struct LinkMercedesMeConnectionProblemDefinition {
+    const char *name;
+    int error_code;
+} LinkMercedesMeConnectionProblemDefinition;
+
 typedef enum LinkMercedesMeStreamEventKind {
     LINK_MERCEDES_ME_STREAM_RECORD = 0,
     LINK_MERCEDES_ME_STREAM_NACK,
@@ -126,6 +132,16 @@ const char *link_mercedes_me_qos_state_name(int ordinal);
 const char *link_mercedes_me_execution_state_name(int ordinal);
 const char *link_mercedes_me_reason_name(int ordinal);
 const char *link_mercedes_me_comm_state_name(int ordinal);
+
+/**
+ * Official application-layer connection-problem catalogue. Ordinal access is
+ * intentional because the archived Java enum carries stable 0..28 ordering.
+ */
+size_t link_mercedes_me_connection_problem_count(void);
+const LinkMercedesMeConnectionProblemDefinition *
+link_mercedes_me_connection_problem_at(size_t ordinal);
+const LinkMercedesMeConnectionProblemDefinition *
+link_mercedes_me_connection_problem_find_error_code(int error_code);
 
 /**
  * The archived official bridge refuses outbound GDK commands that do not end

@@ -79,6 +79,7 @@ int main(void)
     CHECK(LINK_MERCEDES_ME_NACK_TERMINATOR == 0x07U);
     CHECK(LINK_MERCEDES_ME_RX_BUFFER_CAPACITY == 700U);
     CHECK(LINK_MERCEDES_ME_RX_CLEAR_THRESHOLD == 698U);
+    CHECK(LINK_MERCEDES_ME_STATE_CALLBACK_SLEEP_SENTINEL == 4711);
 
     CHECK(strcmp(link_mercedes_me_qos_state_name(2), "QOS_WEAK") == 0);
     CHECK(strcmp(link_mercedes_me_execution_state_name(3),
@@ -94,6 +95,20 @@ int main(void)
                  "COMM_STATE_DEVICE_NO_SPP") == 0);
     CHECK(strcmp(link_mercedes_me_comm_state_name(6),
                  "COMM_STATE_UNKNOWN") == 0);
+    CHECK(link_mercedes_me_connection_problem_count() == 29U);
+    CHECK(strcmp(link_mercedes_me_connection_problem_at(0U)->name,
+                 "NO_PROBLEM") == 0);
+    CHECK(link_mercedes_me_connection_problem_at(0U)->error_code == 0);
+    CHECK(strcmp(link_mercedes_me_connection_problem_at(12U)->name,
+                 "SMK_NOT_AVAILABLE") == 0);
+    CHECK(link_mercedes_me_connection_problem_at(12U)->error_code == 611);
+    CHECK(strcmp(link_mercedes_me_connection_problem_at(28U)->name,
+                 "GATT_FAILURE") == 0);
+    CHECK(link_mercedes_me_connection_problem_at(28U)->error_code == 650);
+    CHECK(link_mercedes_me_connection_problem_at(29U) == NULL);
+    CHECK(strcmp(link_mercedes_me_connection_problem_find_error_code(647)->name,
+                 "PARALLEL_OBD_ADAPTER_CONNECTED") == 0);
+    CHECK(link_mercedes_me_connection_problem_find_error_code(649) == NULL);
 
     CHECK(link_mercedes_me_command_has_valid_terminator(
         command, sizeof(command)));

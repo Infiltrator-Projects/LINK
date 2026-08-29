@@ -335,6 +335,68 @@ The evidence supports these changes without guessing:
 8. expose the proved CR/NACK record framing and native state ordinals in portable code;
 9. keep SMK/setup/read command bytes evidence-gated.
 
+
+## Additional native callback, error-code and logging vocabulary
+
+A deeper pass over the Java/native boundary exposed one native callback sentinel
+that must **not** be mistaken for a `Reason` enum ordinal. In
+`StateListenerCallback.notifyReasonChanged(int)`, integer **4711** causes
+`notifySleepCommandSent()` and returns immediately. Every other value follows
+the normal `Reason.values()[ordinal]` path. LINK therefore records 4711 as a
+separate sleep-command callback sentinel.
+
+The application-layer `ConnectionProblem` enum contains 29 ordered entries
+with explicit user-facing/error-telemetry codes:
+
+| Ordinal | Connection problem | Error code |
+| ---: | --- | ---: |
+| 0 | `NO_PROBLEM` | 0 |
+| 1 | `DEVICE_NOT_PAIRED` | 600 |
+| 2 | `NO_PING` | 601 |
+| 3 | `WRONG_PARTMU_VERSION` | 602 |
+| 4 | `BLUETOOTH_DISABLED` | 603 |
+| 5 | `DEVICE_DISAPPEARED` | 604 |
+| 6 | `DEVICE_NO_SPP` | 605 |
+| 7 | `NOT_CONNECTABLE` | 606 |
+| 8 | `ILLEGAL_STATE_BT_DISCOVERY` | 607 |
+| 9 | `CONNECT_TIMEOUT` | 608 |
+| 10 | `NO_BLUETOOTH_AVAILABLE` | 609 |
+| 11 | `UNKNOWN` | 610 |
+| 12 | `SMK_NOT_AVAILABLE` | 611 |
+| 13 | `SMK_INVALID_PASSKEY` | 612 |
+| 14 | `SMK_BLOCK_TEMPORARY` | 613 |
+| 15 | `ADAPTER_ERROR_BT_RX_OVERFLOW_18` | 618 |
+| 16 | `ADAPTER_ERROR_CAN_OFF_21` | 621 |
+| 17 | `ADAPTER_ERROR_BT_TX_OVERFLOW_30` | 630 |
+| 18 | `ADAPTER_ERROR_CAN_RX_OVERFLOW_31` | 631 |
+| 19 | `ADAPTER_ERROR_CAN_TX_OVERFLOW_32` | 632 |
+| 20 | `BUS_ERROR_35` | 635 |
+| 21 | `ADAPTER_ERROR_NO_AUTHENTICATION_01` | 641 |
+| 22 | `ADAPTER_ERROR_AUTHENTICATION_FAILED_02` | 642 |
+| 23 | `ADAPTER_ERROR_ADC_SELFTEST_ERROR_03` | 643 |
+| 24 | `ADAPTER_ERROR_MAC_ERROR_04` | 644 |
+| 25 | `ADAPTER_ERROR_SELFTEST_ERROR_05` | 645 |
+| 26 | `ADAPTER_ERROR_INVALID_MAC_MAPPING_11` | 646 |
+| 27 | `PARALLEL_OBD_ADAPTER_CONNECTED` | 647 |
+| 28 | `GATT_FAILURE` | 650 |
+
+These are distinct from the lower GDK `Reason` ordinals and should remain
+distinct in LINK.
+
+Useful official logging identifiers recovered from the same DEX are:
+
+- `GdkConnectionLog`: `connection attempt`, `connection end`,
+  `connection start`, `connection trigger`, and ` time to connect: `;
+- domain events: `ConnectionAttempted`, `ConnectionEnded`,
+  `ConnectionStarted`, `ConnectionTriggered`, with `|` as the observed
+  separator;
+- log tags: `carla-ble-----------`, `carla-fw-bluetooth--`,
+  `carla-connection----`, `carla-gdkjava-------` and
+  `carla-fw-status-----`.
+
+These strings are useful when correlating archived app logs with native
+captures. They are evidence labels, not commands to the adapter.
+
 ## Evidence still required
 
 The APK has not yet yielded, with sufficient confidence, all of the following:

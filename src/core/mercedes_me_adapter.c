@@ -3,6 +3,39 @@
 
 #include <stddef.h>
 
+static const LinkMercedesMeConnectionProblemDefinition
+mercedes_me_connection_problems[] = {
+    { "NO_PROBLEM", 0 },
+    { "DEVICE_NOT_PAIRED", 600 },
+    { "NO_PING", 601 },
+    { "WRONG_PARTMU_VERSION", 602 },
+    { "BLUETOOTH_DISABLED", 603 },
+    { "DEVICE_DISAPPEARED", 604 },
+    { "DEVICE_NO_SPP", 605 },
+    { "NOT_CONNECTABLE", 606 },
+    { "ILLEGAL_STATE_BT_DISCOVERY", 607 },
+    { "CONNECT_TIMEOUT", 608 },
+    { "NO_BLUETOOTH_AVAILABLE", 609 },
+    { "UNKNOWN", 610 },
+    { "SMK_NOT_AVAILABLE", 611 },
+    { "SMK_INVALID_PASSKEY", 612 },
+    { "SMK_BLOCK_TEMPORARY", 613 },
+    { "ADAPTER_ERROR_BT_RX_OVERFLOW_18", 618 },
+    { "ADAPTER_ERROR_CAN_OFF_21", 621 },
+    { "ADAPTER_ERROR_BT_TX_OVERFLOW_30", 630 },
+    { "ADAPTER_ERROR_CAN_RX_OVERFLOW_31", 631 },
+    { "ADAPTER_ERROR_CAN_TX_OVERFLOW_32", 632 },
+    { "BUS_ERROR_35", 635 },
+    { "ADAPTER_ERROR_NO_AUTHENTICATION_01", 641 },
+    { "ADAPTER_ERROR_AUTHENTICATION_FAILED_02", 642 },
+    { "ADAPTER_ERROR_ADC_SELFTEST_ERROR_03", 643 },
+    { "ADAPTER_ERROR_MAC_ERROR_04", 644 },
+    { "ADAPTER_ERROR_SELFTEST_ERROR_05", 645 },
+    { "ADAPTER_ERROR_INVALID_MAC_MAPPING_11", 646 },
+    { "PARALLEL_OBD_ADAPTER_CONNECTED", 647 },
+    { "GATT_FAILURE", 650 }
+};
+
 static unsigned char ascii_lower(unsigned char value)
 {
     if (value >= (unsigned char)'A' && value <= (unsigned char)'Z')
@@ -139,6 +172,32 @@ const char *link_mercedes_me_comm_state_name(int ordinal)
     case 11: return "COMM_STATE_GATT_FAILURE";
     default: return "COMM_STATE_UNKNOWN";
     }
+}
+
+size_t link_mercedes_me_connection_problem_count(void)
+{
+    return sizeof(mercedes_me_connection_problems) /
+           sizeof(mercedes_me_connection_problems[0]);
+}
+
+const LinkMercedesMeConnectionProblemDefinition *
+link_mercedes_me_connection_problem_at(size_t ordinal)
+{
+    return ordinal < link_mercedes_me_connection_problem_count()
+        ? &mercedes_me_connection_problems[ordinal] : NULL;
+}
+
+const LinkMercedesMeConnectionProblemDefinition *
+link_mercedes_me_connection_problem_find_error_code(int error_code)
+{
+    size_t index;
+    for (index = 0U;
+         index < link_mercedes_me_connection_problem_count();
+         ++index) {
+        if (mercedes_me_connection_problems[index].error_code == error_code)
+            return &mercedes_me_connection_problems[index];
+    }
+    return NULL;
 }
 
 bool link_mercedes_me_command_has_valid_terminator(
