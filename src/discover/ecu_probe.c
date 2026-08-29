@@ -214,6 +214,212 @@ LinkEcuProbeResult link_ecu_probe_begin(
     return LINK_ECU_PROBE_RESULT_OK;
 }
 
+LinkEcuProbeResult link_ecu_probe_begin_direct(
+    LinkEcuProbe *probe,
+    const LinkEcuProbeProfile *profile)
+{
+    LinkEcuProbeResult result = link_ecu_probe_begin(probe, profile);
+
+    if (result != LINK_ECU_PROBE_RESULT_OK) return result;
+    if (profile->tester_present) {
+        probe->stage = LINK_ECU_PROBE_STAGE_TESTER_PRESENT;
+        return LINK_ECU_PROBE_RESULT_OK;
+    }
+    return link_ecu_probe_begin_reads(probe);
+}
+
+LinkEcuProbeResult link_ecu_probe_diagnostic_request(
+    const LinkEcuProbe *probe,
+    uint8_t *pdu_storage,
+    size_t pdu_capacity,
+    size_t *pdu_length,
+    LinkDiagnosticRequestDefinition *request)
+{
+    LinkUdsResult uds_result;
+    link_safety_result safety;
+
+    if (pdu_length != NULL) *pdu_length = 0U;
+    if (request != NULL) memset(request, 0, sizeof(*request));
+    if (probe == NULL || pdu_storage == NULL || pdu_capacity == 0U ||
+        pdu_length == NULL || request == NULL ||
+        !link_ecu_probe_profile_is_valid(&probe->profile)) {
+        return LINK_ECU_PROBE_RESULT_INVALID_ARGUMENT;
+    }
+
+    switch (probe->stage) {
+    case LINK_ECU_PROBE_STAGE_TESTER_PRESENT:
+        uds_result = link_uds_build_tester_present_request(
+            false, pdu_storage, pdu_capacity, pdu_length);
+        break;
+    case LINK_ECU_PROBE_STAGE_READ_DID:
+        if (probe->did_index >= probe->profile.did_count)
+            return LINK_ECU_PROBE_RESULT_FAILED_STATE;
+        uds_result = link_uds_build_read_did_request(
+            probe->profile.dids[probe->did_index].did,
+            pdu_storage, pdu_capacity, pdu_length);
+        break;
+    case LINK_ECU_PROBE_STAGE_READ_DTC_INFORMATION:
+        uds_result = link_uds_build_report_dtcs_by_status_mask_request(
+            LINK_UDS_DTC_STATUS_MASK_ALL,
+            pdu_storage, pdu_capacity, pdu_length);
+        break;
+    case LINK_ECU_PROBE_STAGE_CONFIGURE_CHANNEL:
+    case LINK_ECU_PROBE_STAGE_COMPLETE:
+    case LINK_ECU_PROBE_STAGE_FAILED:
+        return LINK_ECU_PROBE_RESULT_FAILED_STATE;
+    }
+
+    if (uds_result != LINK_UDS_RESULT_OK)
+        return LINK_ECU_PROBE_RESULT_UDS_ERROR;
+    safety = link_safety_classify(pdu_storage, *pdu_length);
+    if (safety.decision != LINK_SAFETY_ALLOW_READ_ONLY)
+        return LINK_ECU_PROBE_RESULT_BLOCKED_BY_POLICY;
+
+    request->request_can_id = probe->profile.channel.tx_can_id;
+    request->response_can_id = probe->profile.channel.rx_can_id;
+    request->response_can_id_known = true;
+    request->extended_id = probe->profile.channel.extended_id;
+    request->payload = pdu_storage;
+    request->payload_size = *pdu_length;
+    request->response_selection = LINK_DIAGNOSTIC_RESPONSE_SELECT_FIRST;
+    return link_diagnostic_request_is_valid(request)
+        ? LINK_ECU_PROBE_RESULT_OK
+        : LINK_ECU_PROBE_RESULT_PDU_ERROR;
+}
+
+static LinkEcuProbeResult link_ecu_probe_accept_pdu_tester_present(
+    LinkEcuProbe *probe,
+    bool response_available,
+    const uint8_t *pdu,
+    size_t pdu_length)
+{
+    LinkUdsResult uds_result;
+
+    if (!response_available)
+        return link_ecu_probe_fail(probe, LINK_ECU_PROBE_RESULT_UDS_ERROR);
+    uds_result = link_uds_decode_tester_present_response(pdu, pdu_length);
+    if (uds_result == LINK_UDS_RESULT_NEGATIVE_RESPONSE) {
+        probe->uds_failure = uds_result;
+        link_ecu_probe_record_negative_response(
+            LINK_UDS_SERVICE_TESTER_PRESENT,
+            pdu, pdu_length, &probe->uds_negative_response_code);
+        return link_ecu_probe_begin_reads(probe);
+    }
+    if (uds_result != LINK_UDS_RESULT_OK) {
+        probe->uds_failure = uds_result;
+        return link_ecu_probe_fail(probe, LINK_ECU_PROBE_RESULT_UDS_ERROR);
+    }
+    return link_ecu_probe_begin_reads(probe);
+}
+
+static LinkEcuProbeResult link_ecu_probe_accept_pdu_did(
+    LinkEcuProbe *probe,
+    bool response_available,
+    const uint8_t *pdu,
+    size_t pdu_length)
+{
+    LinkEcuProbeDidResult *result;
+    LinkUdsDidRecord record;
+    LinkUdsResult uds_result;
+    const uint16_t did = probe->profile.dids[probe->did_index].did;
+
+    result = &probe->did_results[probe->did_index];
+    if (!response_available) {
+        result->status = LINK_ECU_PROBE_READ_NO_RESPONSE;
+        return link_ecu_probe_advance_did(probe);
+    }
+
+    uds_result = link_uds_decode_read_did_response(
+        pdu, pdu_length, did, &record);
+    result->uds_result = uds_result;
+    if (uds_result == LINK_UDS_RESULT_NEGATIVE_RESPONSE) {
+        result->status = LINK_ECU_PROBE_READ_NEGATIVE_RESPONSE;
+        link_ecu_probe_record_negative_response(
+            LINK_UDS_SERVICE_READ_DATA_BY_IDENTIFIER,
+            pdu, pdu_length, &result->negative_response_code);
+        return link_ecu_probe_advance_did(probe);
+    }
+    if (uds_result != LINK_UDS_RESULT_OK) {
+        result->status = LINK_ECU_PROBE_READ_INVALID_RESPONSE;
+        return link_ecu_probe_advance_did(probe);
+    }
+
+    result->status = LINK_ECU_PROBE_READ_AVAILABLE;
+    result->data_length = record.data_length;
+    if (result->data_length > sizeof(result->data)) {
+        result->data_length = sizeof(result->data);
+        result->truncated = true;
+    }
+    if (result->data_length != 0U)
+        memcpy(result->data, record.data, result->data_length);
+    return link_ecu_probe_advance_did(probe);
+}
+
+static LinkEcuProbeResult link_ecu_probe_accept_pdu_dtc(
+    LinkEcuProbe *probe,
+    bool response_available,
+    const uint8_t *pdu,
+    size_t pdu_length)
+{
+    LinkUdsResult uds_result;
+
+    if (!response_available) {
+        probe->dtc_status = LINK_ECU_PROBE_READ_NO_RESPONSE;
+        return link_ecu_probe_complete(probe);
+    }
+
+    uds_result = link_uds_decode_report_dtcs_by_status_mask_response(
+        pdu, pdu_length, &probe->dtcs);
+    probe->dtc_uds_result = uds_result;
+    if (uds_result == LINK_UDS_RESULT_NEGATIVE_RESPONSE) {
+        probe->dtc_status = LINK_ECU_PROBE_READ_NEGATIVE_RESPONSE;
+        link_ecu_probe_record_negative_response(
+            LINK_UDS_SERVICE_READ_DTC_INFORMATION,
+            pdu, pdu_length, &probe->dtc_negative_response_code);
+        return link_ecu_probe_complete(probe);
+    }
+    if (uds_result != LINK_UDS_RESULT_OK) {
+        probe->dtc_status = LINK_ECU_PROBE_READ_INVALID_RESPONSE;
+        return link_ecu_probe_complete(probe);
+    }
+
+    probe->dtc_status = LINK_ECU_PROBE_READ_AVAILABLE;
+    return link_ecu_probe_complete(probe);
+}
+
+LinkEcuProbeResult link_ecu_probe_accept_pdu(
+    LinkEcuProbe *probe,
+    bool response_available,
+    const uint8_t *pdu,
+    size_t pdu_length)
+{
+    if (probe == NULL ||
+        (response_available && (pdu == NULL || pdu_length == 0U)) ||
+        !link_ecu_probe_profile_is_valid(&probe->profile)) {
+        return LINK_ECU_PROBE_RESULT_INVALID_ARGUMENT;
+    }
+
+    switch (probe->stage) {
+    case LINK_ECU_PROBE_STAGE_TESTER_PRESENT:
+        return link_ecu_probe_accept_pdu_tester_present(
+            probe, response_available, pdu, pdu_length);
+    case LINK_ECU_PROBE_STAGE_READ_DID:
+        if (probe->did_index >= probe->profile.did_count)
+            return link_ecu_probe_fail(
+                probe, LINK_ECU_PROBE_RESULT_FAILED_STATE);
+        return link_ecu_probe_accept_pdu_did(
+            probe, response_available, pdu, pdu_length);
+    case LINK_ECU_PROBE_STAGE_READ_DTC_INFORMATION:
+        return link_ecu_probe_accept_pdu_dtc(
+            probe, response_available, pdu, pdu_length);
+    case LINK_ECU_PROBE_STAGE_CONFIGURE_CHANNEL:
+    case LINK_ECU_PROBE_STAGE_COMPLETE:
+    case LINK_ECU_PROBE_STAGE_FAILED:
+        return LINK_ECU_PROBE_RESULT_FAILED_STATE;
+    }
+    return LINK_ECU_PROBE_RESULT_FAILED_STATE;
+}
+
 LinkEcuProbeResult link_ecu_probe_command(
     const LinkEcuProbe *probe,
     char *buffer,
