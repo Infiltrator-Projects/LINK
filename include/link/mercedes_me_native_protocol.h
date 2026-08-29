@@ -11,6 +11,10 @@ extern "C" {
 
 #define LINK_MERCEDES_ME_SESSION_MASTER_KEY_SIZE 32U
 #define LINK_MERCEDES_ME_SESSION_RANDOM_SIZE 16U
+#define LINK_MERCEDES_ME_ADAPTER_AUTH_KEY_SIZE 32U
+#define LINK_MERCEDES_ME_DEVICE_RANDOM_SIZE 16U
+#define LINK_MERCEDES_ME_APP_RANDOM_SIZE 16U
+#define LINK_MERCEDES_ME_AUTH_RESPONSE_SIZE 16U
 #define LINK_MERCEDES_ME_SESSION_KEY_SIZE 32U
 #define LINK_MERCEDES_ME_AES_BLOCK_SIZE 16U
 #define LINK_MERCEDES_ME_SECURE_HEADER_SIZE 6U
@@ -103,6 +107,32 @@ LinkMercedesMeNativeResult link_mercedes_me_derive_session_key(
     const uint8_t random_argument_1[LINK_MERCEDES_ME_SESSION_RANDOM_SIZE],
     const uint8_t random_argument_2[LINK_MERCEDES_ME_SESSION_RANDOM_SIZE],
     uint8_t session_key[LINK_MERCEDES_ME_SESSION_KEY_SIZE]);
+
+/**
+ * Named form of the secure-session derivation proven from
+ * ConfigureSecureModeAction::run():
+ * SHA-256(SMK || device_random || app_random).
+ */
+LinkMercedesMeNativeResult link_mercedes_me_derive_secure_session_key(
+    const uint8_t session_master_key[LINK_MERCEDES_ME_SESSION_MASTER_KEY_SIZE],
+    const uint8_t device_random[LINK_MERCEDES_ME_DEVICE_RANDOM_SIZE],
+    const uint8_t app_random[LINK_MERCEDES_ME_APP_RANDOM_SIZE],
+    uint8_t session_key[LINK_MERCEDES_ME_SESSION_KEY_SIZE]);
+
+/**
+ * Produce the 16-byte response used by the archived GDK SeedKeyAction:
+ * AES-256-ECB(adapter_auth_key, device_random).
+ */
+LinkMercedesMeNativeResult link_mercedes_me_authentication_response(
+    const uint8_t device_random[LINK_MERCEDES_ME_DEVICE_RANDOM_SIZE],
+    uint8_t response[LINK_MERCEDES_ME_AUTH_RESPONSE_SIZE]);
+
+/** Build Y<Base64(authentication_response)>CR directly from device random. */
+LinkMercedesMeNativeResult link_mercedes_me_build_login_set_key(
+    const uint8_t device_random[LINK_MERCEDES_ME_DEVICE_RANDOM_SIZE],
+    uint8_t *out,
+    size_t capacity,
+    size_t *out_size);
 
 LinkMercedesMeNativeResult link_mercedes_me_secure_encode(
     const uint8_t session_key[LINK_MERCEDES_ME_SESSION_KEY_SIZE],
