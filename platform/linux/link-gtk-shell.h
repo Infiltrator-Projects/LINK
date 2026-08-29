@@ -90,10 +90,11 @@ typedef struct LinkGtkShellDescriptor {
     bool (*polling_enabled)(uint8_t pid, void *context);
     void (*append_session_state_json)(GString *json, void *context);
     /*
-     * Optional product action that deliberately restarts the active diagnostic
-     * session after the callback marks product-owned state (for example,
-     * requesting an exhaustive manufacturer sweep). The shell owns the restart
-     * so products never reach into ELM327 session internals.
+     * Optional product action that requests a fresh manufacturer-extension
+     * pass after the callback marks product-owned state (for example, selecting
+     * an exhaustive sweep). The Linux shell waits for any in-flight live sample,
+     * preserves the transport and standard OBD model, pauses live polling, runs
+     * the extension, restores the adapter channel and resumes live polling.
      */
     const char *diagnostic_restart_action_label;
     void (*diagnostic_restart_action)(void *context);
