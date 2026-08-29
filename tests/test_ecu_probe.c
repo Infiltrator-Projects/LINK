@@ -114,6 +114,76 @@ int main(void)
     CHECK(probe.dtcs.records[0].status == 0x09U);
     CHECK(link_ecu_probe_did_result_count(&probe) == 2U);
 
+    {
+        LinkEcuProbe direct;
+        LinkDiagnosticRequestDefinition request;
+        uint8_t pdu[8];
+        size_t pdu_length = 0U;
+        static const uint8_t tester_response[] = { 0x7eU, 0x00U };
+        static const uint8_t vin_response[] = {
+            0x62U, 0xf1U, 0x90U,
+            'W','D','D','2','0','7','3','0','2','2','F','1','2','3','4','5','6'
+        };
+        static const uint8_t serial_negative[] = { 0x7fU, 0x22U, 0x31U };
+        static const uint8_t dtc_response[] = {
+            0x59U, 0x02U, 0xffU, 0x12U, 0x34U, 0x56U, 0x09U
+        };
+
+        CHECK(link_ecu_probe_begin_direct(&direct, &profile) ==
+              LINK_ECU_PROBE_RESULT_OK);
+        CHECK(direct.stage == LINK_ECU_PROBE_STAGE_TESTER_PRESENT);
+        CHECK(link_ecu_probe_diagnostic_request(
+                  &direct, pdu, sizeof(pdu), &pdu_length, &request) ==
+              LINK_ECU_PROBE_RESULT_OK);
+        CHECK(pdu_length == 2U && pdu[0] == 0x3eU && pdu[1] == 0x00U);
+        CHECK(request.request_can_id == UINT32_C(0x7e0));
+        CHECK(request.response_can_id == UINT32_C(0x7e8));
+        CHECK(request.response_can_id_known && !request.extended_id);
+        CHECK(link_ecu_probe_accept_pdu(
+                  &direct, true, tester_response,
+                  sizeof(tester_response)) == LINK_ECU_PROBE_RESULT_OK);
+
+        CHECK(link_ecu_probe_diagnostic_request(
+                  &direct, pdu, sizeof(pdu), &pdu_length, &request) ==
+              LINK_ECU_PROBE_RESULT_OK);
+        CHECK(pdu_length == 3U &&
+              pdu[0] == 0x22U && pdu[1] == 0xf1U && pdu[2] == 0x90U);
+        CHECK(link_ecu_probe_accept_pdu(
+                  &direct, true, vin_response, sizeof(vin_response)) ==
+              LINK_ECU_PROBE_RESULT_OK);
+        did_result = link_ecu_probe_did_result_at(&direct, 0U);
+        CHECK(did_result != NULL &&
+              did_result->status == LINK_ECU_PROBE_READ_AVAILABLE);
+        CHECK(did_result->data_length == 17U);
+        CHECK(memcmp(did_result->data, "WDD2073022F123456", 17U) == 0);
+
+        CHECK(link_ecu_probe_diagnostic_request(
+                  &direct, pdu, sizeof(pdu), &pdu_length, &request) ==
+              LINK_ECU_PROBE_RESULT_OK);
+        CHECK(link_ecu_probe_accept_pdu(
+                  &direct, true, serial_negative,
+                  sizeof(serial_negative)) == LINK_ECU_PROBE_RESULT_OK);
+        did_result = link_ecu_probe_did_result_at(&direct, 1U);
+        CHECK(did_result != NULL &&
+              did_result->status ==
+                  LINK_ECU_PROBE_READ_NEGATIVE_RESPONSE);
+        CHECK(did_result->negative_response_code == 0x31U);
+
+        CHECK(direct.stage == LINK_ECU_PROBE_STAGE_READ_DTC_INFORMATION);
+        CHECK(link_ecu_probe_diagnostic_request(
+                  &direct, pdu, sizeof(pdu), &pdu_length, &request) ==
+              LINK_ECU_PROBE_RESULT_OK);
+        CHECK(pdu_length == 3U &&
+              pdu[0] == 0x19U && pdu[1] == 0x02U && pdu[2] == 0xffU);
+        CHECK(link_ecu_probe_accept_pdu(
+                  &direct, true, dtc_response, sizeof(dtc_response)) ==
+              LINK_ECU_PROBE_RESULT_COMPLETE);
+        CHECK(direct.stage == LINK_ECU_PROBE_STAGE_COMPLETE);
+        CHECK(direct.dtc_status == LINK_ECU_PROBE_READ_AVAILABLE);
+        CHECK(direct.dtcs.count == 1U);
+        CHECK(direct.dtcs.records[0].code == UINT32_C(0x123456));
+    }
+
     puts("LINK ECU probe tests passed");
     return 0;
 }
