@@ -961,6 +961,56 @@ LinkMercedesMeNativeResult link_mercedes_me_build_login_set_key(
     return result;
 }
 
+LinkMercedesMeNativeResult link_mercedes_me_build_legacy_seed_request(
+    uint8_t *out,
+    size_t capacity,
+    size_t *out_size)
+{
+    return link_mercedes_me_build_get_seed(
+        NULL, 0U, out, capacity, out_size);
+}
+
+LinkMercedesMeNativeResult link_mercedes_me_build_secure_seed_request(
+    const uint8_t app_random[LINK_MERCEDES_ME_APP_RANDOM_SIZE],
+    uint8_t *out,
+    size_t capacity,
+    size_t *out_size)
+{
+    if (app_random == NULL)
+        return LINK_MERCEDES_ME_NATIVE_INVALID_ARGUMENT;
+    return link_mercedes_me_build_get_seed(
+        app_random, LINK_MERCEDES_ME_APP_RANDOM_SIZE,
+        out, capacity, out_size);
+}
+
+LinkMercedesMeNativeResult link_mercedes_me_parse_seed_response(
+    const uint8_t *wire,
+    size_t wire_size,
+    uint8_t device_random[LINK_MERCEDES_ME_DEVICE_RANDOM_SIZE])
+{
+    size_t decoded_size = 0U;
+
+    if (wire == NULL || device_random == NULL)
+        return LINK_MERCEDES_ME_NATIVE_INVALID_ARGUMENT;
+    if (wire_size < 3U ||
+        wire[0] != (uint8_t)LINK_MERCEDES_ME_CMD_GET_SEED ||
+        wire[wire_size - 1U] != UINT8_C(0x0d)) {
+        return LINK_MERCEDES_ME_NATIVE_MALFORMED;
+    }
+    if (!base64_decode(
+            wire + 1U, wire_size - 2U,
+            device_random, LINK_MERCEDES_ME_DEVICE_RANDOM_SIZE,
+            &decoded_size)) {
+        memset(device_random, 0, LINK_MERCEDES_ME_DEVICE_RANDOM_SIZE);
+        return LINK_MERCEDES_ME_NATIVE_BASE64;
+    }
+    if (decoded_size != LINK_MERCEDES_ME_DEVICE_RANDOM_SIZE) {
+        memset(device_random, 0, LINK_MERCEDES_ME_DEVICE_RANDOM_SIZE);
+        return LINK_MERCEDES_ME_NATIVE_MALFORMED;
+    }
+    return LINK_MERCEDES_ME_NATIVE_OK;
+}
+
 static LinkMercedesMeNativeResult write_x_prefix(
     unsigned int mode,
     uint8_t *out,
