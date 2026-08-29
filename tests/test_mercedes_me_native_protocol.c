@@ -119,6 +119,18 @@ int main(void)
     CHECK(command_size == 16U &&
           memcmp(command, "I0107E007E80100\r", 16U) == 0);
     CHECK(link_mercedes_me_build_isotp_config(
+              0x7e0U, 0x7e8U, 1, LINK_MERCEDES_ME_ISOTP_PADDING_OFF,
+              command, sizeof(command), &command_size) ==
+          LINK_MERCEDES_ME_NATIVE_OK);
+    CHECK(command_size == 16U &&
+          memcmp(command, "I0107E007E800AA\r", 16U) == 0);
+    CHECK(link_mercedes_me_build_isotp_config(
+              0x7e0U, 0x7e8U, 0, 0,
+              command, sizeof(command), &command_size) ==
+          LINK_MERCEDES_ME_NATIVE_OK);
+    CHECK(command_size == 16U &&
+          memcmp(command, "I0107E007E88100\r", 16U) == 0);
+    CHECK(link_mercedes_me_build_isotp_config(
               0x7e0U, 0x7e8U, 0, LINK_MERCEDES_ME_ISOTP_PADDING_OFF,
               command, sizeof(command), &command_size) ==
           LINK_MERCEDES_ME_NATIVE_OK);
