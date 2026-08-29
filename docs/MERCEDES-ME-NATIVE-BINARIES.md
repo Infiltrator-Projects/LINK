@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+
 # Mercedes me Adapter native-library evidence
 
 This note preserves interoperability facts recovered from the native Android libraries supplied from the archived official Mercedes me Adapter 4.7.61 application. It is intended for the current `Infiltrator-Projects/LINK` repository.
