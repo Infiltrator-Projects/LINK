@@ -54,6 +54,7 @@ typedef struct LinkGtkShell {
     guint render_source_id;
     bool render_in_progress;
     bool render_pending;
+    bool diagnostic_restart_pending;
 } LinkGtkShell;
 
 static const char link_gtk_base_css[] =
@@ -757,7 +758,11 @@ static void set_connection_state(LinkGtkShell *shell, bool connected, const char
     gtk_button_set_label(GTK_BUTTON(shell->link_button), connected ? "LINK DOWN" : "LINK UP");
     gtk_widget_set_sensitive(shell->device_combo, !connected);
     if (shell->diagnostic_restart_button != NULL)
-        gtk_widget_set_sensitive(shell->diagnostic_restart_button, connected);
+        gtk_widget_set_sensitive(
+            shell->diagnostic_restart_button,
+            connected && shell->diagnostics_ready &&
+            !shell->manufacturer_extension_active &&
+            !shell->diagnostic_restart_pending);
     if (shell->save_session_button != NULL) {
         const char *label = "SAVE SESSION";
         if (connected && shell->flow.stage == LINK_DIAGNOSTIC_FLOW_FAILED)
@@ -1018,6 +1023,8 @@ static bool drive_diagnostics(LinkGtkShell *shell)
 
     if (shell == NULL || !shell->session_initialized || !shell->diagnostics_active)
         return false;
+    if (shell->diagnostic_restart_pending)
+        return true;
     if (shell->manufacturer_extension_active)
         return drive_manufacturer_extension(shell);
     if (shell->session.status == LINK_ELM327_SESSION_WAITING) return true;
@@ -1198,6 +1205,7 @@ static void stop_diagnostics(LinkGtkShell *shell)
     shell->diagnostics_active = false;
     shell->diagnostics_ready = false;
     shell->session_event_pending = false;
+    shell->diagnostic_restart_pending = false;
     memset(&shell->flow, 0, sizeof(shell->flow));
     if (shell->descriptor->diagnostic_changed != NULL) {
         shell->descriptor->diagnostic_changed(NULL,
@@ -1314,6 +1322,37 @@ static void refresh_clicked(GtkButton *button, gpointer user_data)
     refresh_devices((LinkGtkShell *)user_data);
 }
 
+static bool begin_requested_manufacturer_rescan(LinkGtkShell *shell)
+{
+    if (shell == NULL || !shell->diagnostic_restart_pending ||
+        !shell->diagnostics_active || !shell->session_initialized ||
+        shell->manufacturer_extension_active ||
+        shell->flow.stage != LINK_DIAGNOSTIC_FLOW_LIVE ||
+        shell->session.status == LINK_ELM327_SESSION_WAITING ||
+        shell->session.status == LINK_ELM327_SESSION_RESYNCHRONIZING) {
+        return false;
+    }
+
+    /*
+     * A product rescan is a manufacturer-extension operation, not a new
+     * transport session. Preserve the Bluetooth/USB link and the already
+     * discovered standard OBD model; only suspend live polling while the
+     * product-specific scan runs. finish_manufacturer_extension() restores the
+     * ELM configuration and then returns to the existing live scheduler.
+     */
+    shell->diagnostic_restart_pending = false;
+    shell->descriptor->diagnostic_restart_action(shell->descriptor->context);
+    shell->diagnostic_retry_count = 0U;
+    shell->diagnostic_retry_pending = false;
+    shell->diagnostic_retry_at_ms = 0U;
+    shell->diagnostics_ready = false;
+    shell->flow.awaiting_response = false;
+    shell->flow.stage = LINK_DIAGNOSTIC_FLOW_MANUFACTURER_EXTENSION;
+    set_connection_state(shell, true,
+                         "Linked · running requested factory rescan");
+    return begin_manufacturer_extension(shell);
+}
+
 static void diagnostic_restart_action_clicked(
     GtkButton *button, gpointer user_data)
 {
@@ -1324,22 +1363,27 @@ static void diagnostic_restart_action_clicked(
         shell->descriptor->diagnostic_restart_action == NULL) return;
     if (shell->transport.is_connected == NULL ||
         !shell->transport.is_connected(shell->transport.context)) {
-        set_connection_state(shell, false, "Connect an adapter before restarting diagnostics");
+        set_connection_state(shell, false,
+                             "Connect an adapter before rescanning");
         return;
     }
+    if (!shell->diagnostics_active || !shell->diagnostics_ready ||
+        shell->manufacturer_extension_active) {
+        set_connection_state(shell, true,
+                             "Linked · wait for current diagnostics before rescanning");
+        return;
+    }
+    if (shell->diagnostic_restart_pending) return;
 
     /*
-     * Stop the current session cleanly, let the product mark the next
-     * manufacturer extension mode, then restart on the already-open transport.
+     * If a live PID request is in flight, queue the rescan. drive_diagnostics()
+     * will not dispatch another PID while this flag is set, so the current
+     * response becomes a clean hand-off point into the manufacturer extension.
      */
-    stop_diagnostics(shell);
-    shell->descriptor->diagnostic_restart_action(shell->descriptor->context);
-    shell->diagnostic_retry_count = 0U;
-    shell->diagnostic_retry_pending = false;
-    shell->diagnostic_retry_at_ms = 0U;
-    set_connection_state(shell, true, "Linked · restarting diagnostics");
-    if (!start_diagnostics(shell))
-        fail_diagnostics(shell, LINK_DIAGNOSTIC_FLOW_RESULT_ELM_ERROR);
+    shell->diagnostic_restart_pending = true;
+    set_connection_state(shell, true,
+                         "Linked · factory rescan queued after current sample");
+    (void)begin_requested_manufacturer_rescan(shell);
 }
 
 static gboolean pump_serial(gpointer user_data)
@@ -1364,6 +1408,12 @@ static gboolean pump_serial(gpointer user_data)
     if (shell->session_initialized) {
         (void)link_elm327_session_tick(&shell->session, monotonic_ms());
         if (shell->session_event_pending) process_session_event(shell);
+        if (shell->diagnostic_restart_pending &&
+            shell->flow.stage == LINK_DIAGNOSTIC_FLOW_LIVE &&
+            shell->session.status != LINK_ELM327_SESSION_WAITING &&
+            shell->session.status != LINK_ELM327_SESSION_RESYNCHRONIZING) {
+            (void)begin_requested_manufacturer_rescan(shell);
+        }
         if (shell->diagnostics_active &&
             shell->session.status != LINK_ELM327_SESSION_WAITING) {
             (void)drive_diagnostics(shell);
