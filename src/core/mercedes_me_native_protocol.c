@@ -757,8 +757,6 @@ LinkMercedesMeNativeResult link_mercedes_me_build_set_key(
     size_t capacity,
     size_t *out_size)
 {
-    if (payload_size == 0U)
-        return LINK_MERCEDES_ME_NATIVE_RANGE;
     return build_base64_command(
         (uint8_t)LINK_MERCEDES_ME_CMD_SET_KEY,
         payload, payload_size, false,

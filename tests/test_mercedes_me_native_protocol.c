@@ -94,6 +94,10 @@ int main(void)
               NULL, 0U, command, sizeof(command), &command_size) ==
           LINK_MERCEDES_ME_NATIVE_OK);
     CHECK(command_size == 2U && memcmp(command, "y\r", 2U) == 0);
+    CHECK(link_mercedes_me_build_set_key(
+              NULL, 0U, command, sizeof(command), &command_size) ==
+          LINK_MERCEDES_ME_NATIVE_OK);
+    CHECK(command_size == 2U && memcmp(command, "Y\r", 2U) == 0);
     {
         static const uint8_t payload[] = {1U, 2U, 3U};
         CHECK(link_mercedes_me_build_get_seed(
