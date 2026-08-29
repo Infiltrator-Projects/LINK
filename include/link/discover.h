@@ -88,6 +88,18 @@ typedef int (*link_discover_sweep_decode_identity_fn)(
 typedef const char *(*link_discover_sweep_fallback_label_fn)(
     const link_discover_sweep_target *target);
 
+/*
+ * Optional product callback for mixed-protocol networks. It may replace the
+ * plan-wide probe set for one target while leaving every other target on the
+ * default probes. Returning zero rejects the override for that target.
+ */
+typedef int (*link_discover_sweep_target_probes_fn)(
+    const link_discover_sweep_target *target,
+    const link_discover_sweep_probe **presence_probes,
+    size_t *presence_probe_count,
+    const link_discover_sweep_probe **identity_probe,
+    link_discover_sweep_decode_identity_fn *decode_identity);
+
 typedef struct link_discover_sweep_plan {
     const char *name;
     size_t target_count;
@@ -97,6 +109,7 @@ typedef struct link_discover_sweep_plan {
     const link_discover_sweep_probe *identity_probe;
     link_discover_sweep_decode_identity_fn decode_identity;
     link_discover_sweep_fallback_label_fn fallback_label;
+    link_discover_sweep_target_probes_fn target_probes;
 } link_discover_sweep_plan;
 
 int link_discover_sweep_target_is_valid(
@@ -107,6 +120,13 @@ int link_discover_sweep_plan_target_at(
     const link_discover_sweep_plan *plan,
     size_t index,
     link_discover_sweep_target *target);
+int link_discover_sweep_plan_probes_for_target(
+    const link_discover_sweep_plan *plan,
+    const link_discover_sweep_target *target,
+    const link_discover_sweep_probe **presence_probes,
+    size_t *presence_probe_count,
+    const link_discover_sweep_probe **identity_probe,
+    link_discover_sweep_decode_identity_fn *decode_identity);
 
 #ifdef __cplusplus
 }
