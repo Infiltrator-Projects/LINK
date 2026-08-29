@@ -87,6 +87,11 @@ jobs:
           grep -Fq 'LinkBLETransportStateFailed' platform/apple/LinkDiagnosticsController.m
           grep -Fq 'LINK_ADAPTER_KIND_MERCEDES_ME_NATIVE' include/link/transport.h
           grep -Fq 'link_adapter_kind_from_bluetooth_name' src/core/transport.c
+          grep -Fq 'LINK_MERCEDES_ME_NUS_SERVICE_UUID' include/link/mercedes_me_adapter.h
+          grep -Fq 'LINK_MERCEDES_ME_REFERENCE_CLASSIC_CONNECT_TIMEOUT_MS 44000U' include/link/mercedes_me_adapter.h
+          grep -Fq 'link_mercedes_me_adapter_family_from_name' src/core/mercedes_me_adapter.c
+          grep -Fq 'link-test-mercedes-me-adapter tests/test_mercedes_me_adapter.c link-mercedes-me-adapter' CMakeLists.txt
+          grep -Fq 'docs/MERCEDES-ME-ADAPTER-INTEROP.md' README.md
           grep -Fq 'link_linux_serial_probe_adapter' platform/linux/link-gtk-shell.c
           grep -Fq 'native protocol capture' platform/linux/link-gtk-shell.c
           grep -Fq 'transport.isNativeAdapter' platform/apple/LinkDiagnosticsController.m
