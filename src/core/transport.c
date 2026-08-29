@@ -58,13 +58,122 @@ const char *link_adapter_kind_name(LinkAdapterKind kind)
     case LINK_ADAPTER_KIND_ELM327: return "elm327";
     case LINK_ADAPTER_KIND_TACTRIX_OPENPORT2: return "tactrix-openport2";
     case LINK_ADAPTER_KIND_MERCEDES_ME_NATIVE: return "mercedes-me-native";
+    case LINK_ADAPTER_KIND_STM32_LINK: return "stm32-link";
     }
     return "unknown";
 }
 
 bool link_adapter_kind_requires_native_protocol(LinkAdapterKind kind)
 {
-    return kind == LINK_ADAPTER_KIND_MERCEDES_ME_NATIVE;
+    return kind == LINK_ADAPTER_KIND_MERCEDES_ME_NATIVE ||
+           kind == LINK_ADAPTER_KIND_STM32_LINK;
+}
+
+bool link_adapter_capabilities(
+    LinkAdapterKind kind,
+    LinkAdapterCapabilities *capabilities)
+{
+    LinkAdapterCapabilities resolved;
+
+    if (capabilities == NULL) return false;
+    memset(&resolved, 0, sizeof(resolved));
+    resolved.kind = kind;
+
+    switch (kind) {
+    case LINK_ADAPTER_KIND_ELM327:
+        /*
+         * This describes LINK's supported ELM command surface, not a promise
+         * that every clone implements every command correctly. Runtime
+         * protocol discovery remains authoritative for an individual device.
+         */
+        resolved.flags =
+            LINK_ADAPTER_CAP_BYTE_STREAM |
+            LINK_ADAPTER_CAP_ELM_COMMAND_SURFACE |
+            LINK_ADAPTER_CAP_ISOTP |
+            LINK_ADAPTER_CAP_CAN_11BIT |
+            LINK_ADAPTER_CAP_CAN_29BIT |
+            LINK_ADAPTER_CAP_CAN_FILTERS |
+            LINK_ADAPTER_CAP_MULTI_RESPONSE |
+            LINK_ADAPTER_CAP_RESPONSE_CAN_ID;
+        break;
+
+    case LINK_ADAPTER_KIND_TACTRIX_OPENPORT2:
+        /*
+         * The LINK OpenPort provider exposes the existing ELM-compatible
+         * command surface while executing ISO15765 through native J2534.
+         */
+        resolved.flags =
+            LINK_ADAPTER_CAP_BYTE_STREAM |
+            LINK_ADAPTER_CAP_ELM_COMMAND_SURFACE |
+            LINK_ADAPTER_CAP_ISOTP |
+            LINK_ADAPTER_CAP_CAN_11BIT |
+            LINK_ADAPTER_CAP_CAN_29BIT |
+            LINK_ADAPTER_CAP_CAN_FILTERS |
+            LINK_ADAPTER_CAP_MULTI_RESPONSE |
+            LINK_ADAPTER_CAP_RESPONSE_CAN_ID;
+        resolved.default_response_timeout_ms = UINT64_C(400);
+        break;
+
+    case LINK_ADAPTER_KIND_MERCEDES_ME_NATIVE:
+        /*
+         * Limits below are recovered from archived Mercedes me Adapter
+         * 4.7.61 native GDK.  29-bit CAN is intentionally not advertised:
+         * the recovered command validation currently proves standard 0x7ff
+         * CAN filtering, not a complete extended-ID command encoding.
+         */
+        resolved.flags =
+            LINK_ADAPTER_CAP_BYTE_STREAM |
+            LINK_ADAPTER_CAP_RAW_CAN |
+            LINK_ADAPTER_CAP_ISOTP |
+            LINK_ADAPTER_CAP_CAN_11BIT |
+            LINK_ADAPTER_CAP_CAN_FILTERS |
+            LINK_ADAPTER_CAP_MULTI_RESPONSE |
+            LINK_ADAPTER_CAP_RESPONSE_CAN_ID |
+            LINK_ADAPTER_CAP_SECURE_SESSION |
+            LINK_ADAPTER_CAP_NATIVE_DIAGNOSTIC;
+        resolved.max_standard_can_id = UINT32_C(0x7ff);
+        resolved.max_raw_can_payload = 8U;
+        resolved.max_isotp_payload = 100U;
+        resolved.max_filter_ids = 15U;
+        resolved.default_response_timeout_ms = UINT64_C(400);
+        break;
+
+    case LINK_ADAPTER_KIND_STM32_LINK:
+        /*
+         * LINK's STM32 edge is a direct CAN/ISO-TP tester. The current
+         * reference binding uses classic CAN payloads; ISO-TP length remains
+         * governed by the portable engine rather than an invented MCU limit.
+         */
+        resolved.flags =
+            LINK_ADAPTER_CAP_RAW_CAN |
+            LINK_ADAPTER_CAP_ISOTP |
+            LINK_ADAPTER_CAP_CAN_11BIT |
+            LINK_ADAPTER_CAP_CAN_29BIT |
+            LINK_ADAPTER_CAP_CAN_FILTERS |
+            LINK_ADAPTER_CAP_MULTI_RESPONSE |
+            LINK_ADAPTER_CAP_RESPONSE_CAN_ID |
+            LINK_ADAPTER_CAP_NATIVE_DIAGNOSTIC;
+        resolved.max_standard_can_id = UINT32_C(0x7ff);
+        resolved.max_raw_can_payload = 8U;
+        break;
+
+    case LINK_ADAPTER_KIND_UNKNOWN:
+        *capabilities = resolved;
+        return false;
+    }
+
+    *capabilities = resolved;
+    return true;
+}
+
+bool link_adapter_has_capability(LinkAdapterKind kind, uint32_t capability)
+{
+    LinkAdapterCapabilities capabilities;
+    if (capability == 0U ||
+        !link_adapter_capabilities(kind, &capabilities)) {
+        return false;
+    }
+    return (capabilities.flags & capability) == capability;
 }
 
 bool link_transport_is_valid(const LinkTransport *transport)
