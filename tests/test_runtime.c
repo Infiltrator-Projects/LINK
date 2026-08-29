@@ -3,6 +3,7 @@
 #include "link/parameter_store.h"
 #include "link/scheduler.h"
 #include "link/telemetry.h"
+#include "link/transport.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -42,6 +43,24 @@ int main(void)
     LinkTelemetryRecorder recorder;
     Buffer output = {{0}, 0U};
     char formatted[64];
+
+    CHECK(link_adapter_kind_from_bluetooth_name("MB-123456") ==
+          LINK_ADAPTER_KIND_MERCEDES_ME_NATIVE);
+    CHECK(link_adapter_kind_from_bluetooth_name("mb-A1B2C3") ==
+          LINK_ADAPTER_KIND_MERCEDES_ME_NATIVE);
+    CHECK(link_adapter_kind_from_bluetooth_name("MB-12") ==
+          LINK_ADAPTER_KIND_UNKNOWN);
+    CHECK(link_adapter_kind_from_bluetooth_name("iOS-VLink") ==
+          LINK_ADAPTER_KIND_ELM327);
+    CHECK(link_adapter_kind_from_bluetooth_name("Vgate iCar Pro") ==
+          LINK_ADAPTER_KIND_ELM327);
+    CHECK(link_adapter_kind_requires_native_protocol(
+              LINK_ADAPTER_KIND_MERCEDES_ME_NATIVE));
+    CHECK(!link_adapter_kind_requires_native_protocol(
+              LINK_ADAPTER_KIND_ELM327));
+    CHECK(strcmp(link_adapter_kind_name(
+                     LINK_ADAPTER_KIND_MERCEDES_ME_NATIVE),
+                 "mercedes-me-native") == 0);
 
     CHECK(link_parameter_obd2_definition_count() == 28U);
     CHECK(link_parameter_from_obd2_scalar(0x0cU, LINK_OBD2_UNIT_RPM, 1234.5, 10U, &parameter));

@@ -31,6 +31,20 @@ typedef enum LinkTransportStatus {
     LINK_TRANSPORT_INVALID_ARGUMENT
 } LinkTransportStatus;
 
+typedef enum LinkAdapterKind {
+    LINK_ADAPTER_KIND_UNKNOWN = 0,
+    LINK_ADAPTER_KIND_ELM327,
+    LINK_ADAPTER_KIND_TACTRIX_OPENPORT2,
+    LINK_ADAPTER_KIND_MERCEDES_ME_NATIVE
+} LinkAdapterKind;
+
+/** Classify a Bluetooth local/alias name without probing or transmitting. */
+LinkAdapterKind link_adapter_kind_from_bluetooth_name(const char *name);
+/** Stable diagnostic/log label for an adapter kind. */
+const char *link_adapter_kind_name(LinkAdapterKind kind);
+/** True only for adapters whose bytes require a native non-ELM session. */
+bool link_adapter_kind_requires_native_protocol(LinkAdapterKind kind);
+
 /** Borrowed receive bytes are valid only for the duration of the callback. */
 typedef void (*LinkTransportReceiveFn)(void *context,
                                        const uint8_t *data,

@@ -9,6 +9,85 @@
 #include <stdio.h>
 #include <string.h>
 
+static unsigned char link_ascii_lower(unsigned char value)
+{
+    if (value >= (unsigned char)'A' && value <= (unsigned char)'Z')
+        return (unsigned char)(value - (unsigned char)'A' + (unsigned char)'a');
+    return value;
+}
+
+static bool link_ascii_alnum(unsigned char value)
+{
+    value = link_ascii_lower(value);
+    return (value >= (unsigned char)'a' && value <= (unsigned char)'z') ||
+           (value >= (unsigned char)'0' && value <= (unsigned char)'9');
+}
+
+static bool link_ascii_contains_nocase(const char *text, const char *needle)
+{
+    size_t text_length, needle_length, start, offset;
+    if (text == NULL || needle == NULL || needle[0] == '\0') return false;
+    text_length = strlen(text);
+    needle_length = strlen(needle);
+    if (needle_length > text_length) return false;
+    for (start = 0U; start + needle_length <= text_length; ++start) {
+        for (offset = 0U; offset < needle_length; ++offset) {
+            if (link_ascii_lower((unsigned char)text[start + offset]) !=
+                link_ascii_lower((unsigned char)needle[offset])) break;
+        }
+        if (offset == needle_length) return true;
+    }
+    return false;
+}
+
+static bool link_mercedes_me_name(const char *name)
+{
+    size_t suffix_length = 0U;
+    if (name == NULL ||
+        link_ascii_lower((unsigned char)name[0]) != (unsigned char)'m' ||
+        link_ascii_lower((unsigned char)name[1]) != (unsigned char)'b' ||
+        name[2] != '-') return false;
+    name += 3;
+    while (*name != '\0') {
+        if (!link_ascii_alnum((unsigned char)*name)) return false;
+        ++suffix_length;
+        ++name;
+    }
+    return suffix_length >= 4U && suffix_length <= 32U;
+}
+
+LinkAdapterKind link_adapter_kind_from_bluetooth_name(const char *name)
+{
+    if (link_mercedes_me_name(name))
+        return LINK_ADAPTER_KIND_MERCEDES_ME_NATIVE;
+    if (name == NULL || name[0] == '\0') return LINK_ADAPTER_KIND_UNKNOWN;
+    if (link_ascii_contains_nocase(name, "vgate") ||
+        link_ascii_contains_nocase(name, "v-link") ||
+        link_ascii_contains_nocase(name, "vlink") ||
+        link_ascii_contains_nocase(name, "icar") ||
+        link_ascii_contains_nocase(name, "obd") ||
+        link_ascii_contains_nocase(name, "elm") ||
+        link_ascii_contains_nocase(name, "car pro"))
+        return LINK_ADAPTER_KIND_ELM327;
+    return LINK_ADAPTER_KIND_UNKNOWN;
+}
+
+const char *link_adapter_kind_name(LinkAdapterKind kind)
+{
+    switch (kind) {
+    case LINK_ADAPTER_KIND_UNKNOWN: return "unknown";
+    case LINK_ADAPTER_KIND_ELM327: return "elm327";
+    case LINK_ADAPTER_KIND_TACTRIX_OPENPORT2: return "tactrix-openport2";
+    case LINK_ADAPTER_KIND_MERCEDES_ME_NATIVE: return "mercedes-me-native";
+    }
+    return "unknown";
+}
+
+bool link_adapter_kind_requires_native_protocol(LinkAdapterKind kind)
+{
+    return kind == LINK_ADAPTER_KIND_MERCEDES_ME_NATIVE;
+}
+
 bool link_transport_is_valid(const LinkTransport *transport)
 {
     if (transport == NULL || transport->struct_size < sizeof(*transport) ||
