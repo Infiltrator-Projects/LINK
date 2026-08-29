@@ -2,7 +2,7 @@
 
 # LINK
 
-[![LINK CI](https://github.com/The-First-Infiltrator/LINK/actions/workflows/ci.yml/badge.svg)](https://github.com/The-First-Infiltrator/LINK/actions/workflows/ci.yml)
+[![LINK CI](https://github.com/Infiltrator-Projects/LINK/actions/workflows/ci.yml/badge.svg)](https://github.com/Infiltrator-Projects/LINK/actions/workflows/ci.yml)
 
 LINK is the shared C11 vehicle-diagnostics and application engine used by MBLINK and JAGLINK.
 
@@ -109,7 +109,7 @@ Bare-metal STM32 support keeps STM32Cube HAL outside the portable core: the host
 ## Build and test
 
 ```bash
-git clone --recurse-submodules https://github.com/The-First-Infiltrator/LINK.git
+git clone --recurse-submodules https://github.com/Infiltrator-Projects/LINK.git
 cd LINK
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --config Release --parallel

@@ -231,7 +231,7 @@ function(link_add_windows_discover target)
         set(LINK_FACE_PRODUCT_SUBTITLE "Vehicle Diagnostics")
     endif()
     if(NOT LINK_FACE_PRODUCT_WEBSITE)
-        set(LINK_FACE_PRODUCT_WEBSITE "https://github.com/The-First-Infiltrator/LINK")
+        set(LINK_FACE_PRODUCT_WEBSITE "https://github.com/Infiltrator-Projects/LINK")
     endif()
 
     set(link_windows_discover_source "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platform/windows/link-discover-ui.c")
@@ -315,16 +315,16 @@ if(WIN32 AND PROJECT_IS_TOP_LEVEL)
         PRODUCT_NAME "LINK" PRODUCT_SLUG "link" WINDOW_CLASS "LINKDiscoverWindow"
         PRODUCT_VERSION "${PROJECT_VERSION}" PRODUCT_COPYRIGHT "Copyright (C) 2026 The First Infiltrator"
         PRODUCT_SUBTITLE "Shared Vehicle Diagnostics"
-        PRODUCT_WEBSITE "https://github.com/The-First-Infiltrator/LINK")
+        PRODUCT_WEBSITE "https://github.com/Infiltrator-Projects/LINK")
     if(LINK_BUILD_REFERENCE_PRODUCT_FACES)
         link_add_windows_discover(mblink-discover PRODUCT_NAME "MBLINK" PRODUCT_SLUG "mblink"
             WINDOW_CLASS "MBLINKDiscoverWindow" PRODUCT_VERSION "${PROJECT_VERSION}"
             PRODUCT_COPYRIGHT "Copyright (C) 2026 Shannon Smith" PRODUCT_SUBTITLE "Mercedes-Benz Diagnostics"
-            PRODUCT_WEBSITE "https://github.com/The-First-Infiltrator/MBLINK")
+            PRODUCT_WEBSITE "https://github.com/Infiltrator-Projects/MBLINK")
         link_add_windows_discover(jaglink-discover PRODUCT_NAME "JAGLINK" PRODUCT_SLUG "jaglink"
             WINDOW_CLASS "JAGLINKDiscoverWindow" PRODUCT_VERSION "${PROJECT_VERSION}"
             PRODUCT_COPYRIGHT "Copyright (C) 2026 Xavier Wheaton and Shannon Smith" PRODUCT_SUBTITLE "Jaguar X400 Diagnostics"
-            PRODUCT_WEBSITE "https://github.com/The-First-Infiltrator/Jaglink")
+            PRODUCT_WEBSITE "https://github.com/Infiltrator-Projects/Jaglink")
     endif()
 endif()
 

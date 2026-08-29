@@ -26,7 +26,7 @@
 #define LINK_PRODUCT_SUBTITLE "Vehicle Diagnostics"
 #endif
 #ifndef LINK_PRODUCT_WEBSITE
-#define LINK_PRODUCT_WEBSITE "https://github.com/The-First-Infiltrator/LINK"
+#define LINK_PRODUCT_WEBSITE "https://github.com/Infiltrator-Projects/LINK"
 #endif
 
 #define IDM_FILE_EXPORT 41001
