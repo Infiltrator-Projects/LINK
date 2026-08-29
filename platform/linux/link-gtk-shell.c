@@ -742,6 +742,8 @@ static const char *diagnostic_stage_message(const LinkGtkShell *shell)
         return "Linked · scanning pending OBD-II faults";
     case LINK_DIAGNOSTIC_FLOW_SCANNING_PERMANENT_DTCS:
         return "Linked · scanning permanent OBD-II faults";
+    case LINK_DIAGNOSTIC_FLOW_CONFIGURING_LIVE_HEADERS:
+        return "Linked · enabling CAN responder headers";
     case LINK_DIAGNOSTIC_FLOW_LIVE:
     case LINK_DIAGNOSTIC_FLOW_READING_LIVE:
         return "Linked · live OBD-II polling active";
