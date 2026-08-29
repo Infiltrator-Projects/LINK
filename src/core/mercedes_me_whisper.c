@@ -30,7 +30,26 @@ static const LinkMercedesMeWhisperVocabularyEntry whisper_vocabulary[] = {
     { "p2star", LINK_MERCEDES_ME_WHISPER_VOCAB_CONFIGURATION_KEY },
     { "readInterval", LINK_MERCEDES_ME_WHISPER_VOCAB_CONFIGURATION_KEY },
     { "encoding", LINK_MERCEDES_ME_WHISPER_VOCAB_CONFIGURATION_KEY },
-    { "formula", LINK_MERCEDES_ME_WHISPER_VOCAB_CONFIGURATION_KEY }
+    { "formula", LINK_MERCEDES_ME_WHISPER_VOCAB_CONFIGURATION_KEY },
+    { "unit", LINK_MERCEDES_ME_WHISPER_VOCAB_CONFIGURATION_KEY },
+    { "relevance", LINK_MERCEDES_ME_WHISPER_VOCAB_CONFIGURATION_KEY },
+    { "throttle", LINK_MERCEDES_ME_WHISPER_VOCAB_CONFIGURATION_KEY },
+    { "bitmask", LINK_MERCEDES_ME_WHISPER_VOCAB_CONFIGURATION_KEY },
+    { "responseselection", LINK_MERCEDES_ME_WHISPER_VOCAB_CONFIGURATION_KEY },
+    { "message_limit", LINK_MERCEDES_ME_WHISPER_VOCAB_CONFIGURATION_KEY },
+    { "channel", LINK_MERCEDES_ME_WHISPER_VOCAB_CONFIGURATION_KEY },
+    { "requestid", LINK_MERCEDES_ME_WHISPER_VOCAB_CONFIGURATION_KEY },
+    { "resultid", LINK_MERCEDES_ME_WHISPER_VOCAB_CONFIGURATION_KEY },
+    { "timeout", LINK_MERCEDES_ME_WHISPER_VOCAB_CONFIGURATION_KEY },
+    { "filter", LINK_MERCEDES_ME_WHISPER_VOCAB_CONFIGURATION_KEY },
+    { "extract", LINK_MERCEDES_ME_WHISPER_VOCAB_CONFIGURATION_KEY },
+    { "PaddingByte", LINK_MERCEDES_ME_WHISPER_VOCAB_CONFIGURATION_KEY },
+    { "Timeout", LINK_MERCEDES_ME_WHISPER_VOCAB_CONFIGURATION_KEY },
+    { "DATAID", LINK_MERCEDES_ME_WHISPER_VOCAB_CONFIGURATION_KEY },
+    { "DATAID.dataPoints", LINK_MERCEDES_ME_WHISPER_VOCAB_CONFIGURATION_KEY },
+    { "DATAID.dataPoints.children", LINK_MERCEDES_ME_WHISPER_VOCAB_CONFIGURATION_KEY },
+    { "REQUESTID", LINK_MERCEDES_ME_WHISPER_VOCAB_CONFIGURATION_KEY },
+    { "PduTransceive", LINK_MERCEDES_ME_WHISPER_VOCAB_CONFIGURATION_KEY }
 };
 
 const char *link_mercedes_me_whisper_response_selection_name(
@@ -58,6 +77,30 @@ link_mercedes_me_whisper_response_selection_from_name(const char *name)
             return (LinkMercedesMeWhisperResponseSelection)index;
     }
     return LINK_MERCEDES_ME_WHISPER_RESPONSE_SELECTION_UNKNOWN;
+}
+
+bool link_mercedes_me_whisper_response_selection_policy(
+    LinkMercedesMeWhisperResponseSelection selection,
+    LinkDiagnosticResponseSelectionPolicy *policy)
+{
+    if (policy == NULL) return false;
+    switch (selection) {
+    case LINK_MERCEDES_ME_WHISPER_SELECT_FIRST:
+        *policy = LINK_DIAGNOSTIC_RESPONSE_SELECT_FIRST;
+        return true;
+    case LINK_MERCEDES_ME_WHISPER_SELECT_LOWEST_CANID_CACHED:
+        *policy = LINK_DIAGNOSTIC_RESPONSE_SELECT_LOWEST_CAN_ID_CACHED;
+        return true;
+    case LINK_MERCEDES_ME_WHISPER_SELECT_MAXIMUM:
+        *policy = LINK_DIAGNOSTIC_RESPONSE_SELECT_MAXIMUM;
+        return true;
+    case LINK_MERCEDES_ME_WHISPER_MERGE_ELIMINATE_DUPLICATES:
+        *policy = LINK_DIAGNOSTIC_RESPONSE_MERGE_ELIMINATE_DUPLICATES;
+        return true;
+    case LINK_MERCEDES_ME_WHISPER_RESPONSE_SELECTION_UNKNOWN:
+        break;
+    }
+    return false;
 }
 
 const char *link_mercedes_me_whisper_dtc_presentation_name(
