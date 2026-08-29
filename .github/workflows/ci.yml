@@ -148,14 +148,13 @@ jobs:
           Write-Host "JAGLINK face: $($jag.FullName)"
 
   linux-native-adapters:
-    name: Local Linux / native adapter providers
-    runs-on: linux-native
+    name: Ubuntu / native Linux adapter providers
+    runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install native transport build dependencies
-        if: runner.environment == 'github-hosted'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends libbluetooth-dev libglib2.0-dev libusb-1.0-0-dev pkg-config
