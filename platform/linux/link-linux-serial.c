@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "link/linux_serial.h"
+#include "link/mercedes_me_adapter.h"
 #include "link-linux-openport2.h"
 
 #include <string.h>
@@ -119,7 +120,8 @@ static bool ble_refresh_le_presence(GDBusConnection *bus,
                                     size_t device_capacity,
                                     int scan_ms);
 static bool ble_wait_services(LinkLinuxBleState *state);
-static bool ble_find_characteristics(LinkLinuxBleState *state);
+static bool ble_find_characteristics(LinkLinuxBleState *state,
+                                     LinkMercedesMeAdapterFamily family);
 static void ble_properties_changed(GDBusConnection *connection,
                                    const gchar *sender_name,
                                    const gchar *object_path,
@@ -374,14 +376,20 @@ static bool bluetooth_name_contains(const char *name, const char *needle)
 
 static bool bluetooth_name_prefers_classic(const char *name)
 {
-    return bluetooth_name_contains(name, "android-vlink") ||
+    LinkMercedesMeAdapterFamily family =
+        link_mercedes_me_adapter_family_from_name(name);
+    return link_mercedes_me_adapter_prefers_classic_spp(family) ||
+           bluetooth_name_contains(name, "android-vlink") ||
            bluetooth_name_contains(name, "android vlink") ||
            bluetooth_name_contains(name, "android_vlink");
 }
 
 static bool bluetooth_name_prefers_ble(const char *name)
 {
-    return bluetooth_name_contains(name, "ios-vlink") ||
+    LinkMercedesMeAdapterFamily family =
+        link_mercedes_me_adapter_family_from_name(name);
+    return link_mercedes_me_adapter_prefers_ble(family) ||
+           bluetooth_name_contains(name, "ios-vlink") ||
            bluetooth_name_contains(name, "ios vlink") ||
            bluetooth_name_contains(name, "ios_vlink");
 }
@@ -681,12 +689,6 @@ static int classic_spp_channel(const char *address)
         address, (uint16_t)SERIAL_PORT_SVCLASS_ID);
 }
 
-static int classic_public_rfcomm_channel(const char *address)
-{
-    return classic_rfcomm_channel_for_service(
-        address, (uint16_t)PUBLIC_BROWSE_GROUP);
-}
-
 static LinkTransportStatus classic_connect(LinkLinuxSerialTransport *transport)
 {
     char address[18];
@@ -694,6 +696,7 @@ static LinkTransportStatus classic_connect(LinkLinuxSerialTransport *transport)
     struct sockaddr_rc remote;
     struct pollfd descriptor;
     int channel;
+    int connect_timeout_ms;
     int fd;
     int flags;
     int socket_error = 0;
@@ -705,11 +708,16 @@ static LinkTransportStatus classic_connect(LinkLinuxSerialTransport *transport)
     if (!classic_extract_address(transport->device, address) ||
         str2ba(address, &target) != 0) return LINK_TRANSPORT_INVALID_ARGUMENT;
 
-    channel = transport->adapter_kind ==
-                  LINK_ADAPTER_KIND_MERCEDES_ME_NATIVE
-        ? classic_public_rfcomm_channel(address) : -1;
-    if (channel <= 0) channel = classic_spp_channel(address);
+    /*
+     * Archived Mercedes me 4.7.61 uses the standard SPP UUID directly.
+     * Do not search the unrelated public-browse group first.
+     */
+    channel = classic_spp_channel(address);
     if (channel <= 0) channel = 1;
+    connect_timeout_ms =
+        transport->adapter_kind == LINK_ADAPTER_KIND_MERCEDES_ME_NATIVE
+            ? (int)LINK_MERCEDES_ME_REFERENCE_CLASSIC_CONNECT_TIMEOUT_MS
+            : LINK_CLASSIC_CONNECT_TIMEOUT_MS;
     fd = socket(AF_BLUETOOTH, SOCK_STREAM, BTPROTO_RFCOMM);
     if (fd < 0) return LINK_TRANSPORT_IO_ERROR;
     flags = fcntl(fd, F_GETFL, 0);
@@ -728,7 +736,7 @@ static LinkTransportStatus classic_connect(LinkLinuxSerialTransport *transport)
         descriptor.fd = fd;
         descriptor.events = POLLOUT;
         descriptor.revents = 0;
-        if (poll(&descriptor, 1, LINK_CLASSIC_CONNECT_TIMEOUT_MS) <= 0 ||
+        if (poll(&descriptor, 1, connect_timeout_ms) <= 0 ||
             getsockopt(fd, SOL_SOCKET, SO_ERROR, &socket_error,
                        &socket_error_size) != 0 || socket_error != 0) {
             close(fd);
@@ -813,7 +821,8 @@ static bool ble_wait_services(LinkLinuxBleState *state)
     return false;
 }
 
-static bool ble_find_characteristics(LinkLinuxBleState *state)
+static bool ble_find_characteristics(LinkLinuxBleState *state,
+                                     LinkMercedesMeAdapterFamily family)
 {
     GVariant *objects;
     GVariantIter iterator;
@@ -890,6 +899,52 @@ static bool ble_find_characteristics(LinkLinuxBleState *state)
         g_variant_unref(interfaces);
     }
     g_variant_unref(objects);
+
+    if (family == LINK_MERCEDES_ME_ADAPTER_BLE) {
+        /*
+         * The archived official app binds MB-[189] devices to Nordic UART.
+         * Prefer that exact pair before LINK's generic UART heuristic.
+         */
+        for (i = 0U; i < count; ++i) {
+            if (!characteristics[i].writable ||
+                g_ascii_strcasecmp(characteristics[i].uuid,
+                    LINK_MERCEDES_ME_NUS_RX_UUID) != 0) continue;
+            for (j = 0U; j < count; ++j) {
+                if (!characteristics[j].notifiable ||
+                    g_ascii_strcasecmp(characteristics[j].uuid,
+                        LINK_MERCEDES_ME_NUS_TX_UUID) != 0 ||
+                    strcmp(characteristics[i].service,
+                           characteristics[j].service) != 0) continue;
+                (void)snprintf(state->write_path, sizeof(state->write_path),
+                               "%s", characteristics[i].path);
+                (void)snprintf(state->notify_path, sizeof(state->notify_path),
+                               "%s", characteristics[j].path);
+                state->write_without_response =
+                    characteristics[i].write_without_response;
+                return true;
+            }
+        }
+
+        /*
+         * Toshiba SPP-over-BLE is also present in the official transport
+         * formatters. Treat its single characteristic as a corroborated
+         * fallback when it exposes both write and notify semantics.
+         */
+        for (i = 0U; i < count; ++i) {
+            if (characteristics[i].writable &&
+                characteristics[i].notifiable &&
+                g_ascii_strcasecmp(characteristics[i].uuid,
+                    LINK_MERCEDES_ME_TOSHIBA_CHARACTERISTIC_UUID) == 0) {
+                (void)snprintf(state->write_path, sizeof(state->write_path),
+                               "%s", characteristics[i].path);
+                (void)snprintf(state->notify_path, sizeof(state->notify_path),
+                               "%s", characteristics[i].path);
+                state->write_without_response =
+                    characteristics[i].write_without_response;
+                return true;
+            }
+        }
+    }
 
     for (i = 0U; i < count; ++i) {
         if (!characteristics[i].writable) continue;
@@ -1068,7 +1123,8 @@ static LinkTransportStatus ble_connect(LinkLinuxSerialTransport *transport)
         }
         g_variant_unref(reply);
     }
-    if (!ble_wait_services(state) || !ble_find_characteristics(state) ||
+    if (!ble_wait_services(state) ||
+        !ble_find_characteristics(state, transport->mercedes_me_family) ||
         !ble_start_notifications(transport)) {
         ble_disconnect(transport);
         return LINK_TRANSPORT_UNSUPPORTED;
@@ -1335,15 +1391,20 @@ bool link_linux_serial_configure(LinkLinuxSerialTransport *transport,
         classic_extract_address(device, classic_address);
     transport->openport2 = link_linux_openport2_is_selection(device);
     transport->adapter_kind = LINK_ADAPTER_KIND_UNKNOWN;
+    transport->mercedes_me_family = LINK_MERCEDES_ME_ADAPTER_UNKNOWN;
     if (transport->openport2) {
         transport->adapter_kind = LINK_ADAPTER_KIND_TACTRIX_OPENPORT2;
     } else if (transport->bluetooth_le) {
         const char *name = device + 21U;
         while (*name == ' ') ++name;
+        transport->mercedes_me_family =
+            link_mercedes_me_adapter_family_from_name(name);
         transport->adapter_kind = bluetooth_adapter_kind(name);
     } else if (transport->bluetooth_classic) {
         const char *name = device + 20U;
         while (*name == ' ') ++name;
+        transport->mercedes_me_family =
+            link_mercedes_me_adapter_family_from_name(name);
         transport->adapter_kind = bluetooth_adapter_kind(name);
     }
 
@@ -1456,9 +1517,11 @@ bool link_linux_serial_probe_adapter(LinkLinuxSerialTransport *transport,
     if (identity != NULL && identity_capacity != 0U) {
         (void)snprintf(
             identity, identity_capacity,
-            "Mercedes me Adapter%s%s (native Bluetooth)",
+            "Mercedes me Adapter%s%s · %s (native Bluetooth)",
             *name != '\0' ? " · " : "",
-            *name != '\0' ? name : "");
+            *name != '\0' ? name : "",
+            link_mercedes_me_adapter_family_name(
+                transport->mercedes_me_family));
     }
     return true;
 }

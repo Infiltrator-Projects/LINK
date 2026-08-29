@@ -2,6 +2,7 @@
 #import "LinkBLETransport.h"
 
 #import "link/elm327.h"
+#import "link/mercedes_me_adapter.h"
 
 #import <CoreBluetooth/CoreBluetooth.h>
 
@@ -67,7 +68,23 @@ static LinkAdapterKind LinkPeripheralAdapterKind(NSString *name)
 
 static BOOL LinkPeripheralNameLooksLikeAdapter(NSString *name)
 {
+    LinkMercedesMeAdapterFamily family;
+    if (name.length == 0U) return NO;
+    family = link_mercedes_me_adapter_family_from_name(name.UTF8String);
+    if (family != LINK_MERCEDES_ME_ADAPTER_UNKNOWN)
+        return family == LINK_MERCEDES_ME_ADAPTER_BLE;
     return LinkPeripheralAdapterKind(name) != LINK_ADAPTER_KIND_UNKNOWN;
+}
+
+static BOOL LinkUUIDEquals(CBUUID *uuid, const char *value)
+{
+    NSString *candidate;
+    NSString *expected;
+    if (uuid == nil || value == NULL) return NO;
+    candidate = uuid.UUIDString;
+    expected = [NSString stringWithUTF8String:value];
+    return expected != nil &&
+        [candidate caseInsensitiveCompare:expected] == NSOrderedSame;
 }
 
 static BOOL LinkRemainingBytesAreWhitespace(const uint8_t *bytes,
@@ -544,7 +561,36 @@ didDiscoverCharacteristicsForService:(CBService *)service
     }
 
     if (self.isNativeAdapter) {
-        LinkBLECandidate *candidate = _candidates.firstObject;
+        LinkBLECandidate *candidate = nil;
+        for (LinkBLECandidate *current in _candidates) {
+            if (LinkUUIDEquals(current.service.UUID,
+                               LINK_MERCEDES_ME_NUS_SERVICE_UUID) &&
+                LinkUUIDEquals(current.writeCharacteristic.UUID,
+                               LINK_MERCEDES_ME_NUS_RX_UUID) &&
+                LinkUUIDEquals(current.notifyCharacteristic.UUID,
+                               LINK_MERCEDES_ME_NUS_TX_UUID)) {
+                candidate = current;
+                break;
+            }
+        }
+        if (candidate == nil) {
+            for (LinkBLECandidate *current in _candidates) {
+                if (LinkUUIDEquals(current.service.UUID,
+                                   LINK_MERCEDES_ME_TOSHIBA_SERVICE_UUID) &&
+                    LinkUUIDEquals(current.writeCharacteristic.UUID,
+                                   LINK_MERCEDES_ME_TOSHIBA_CHARACTERISTIC_UUID) &&
+                    current.writeCharacteristic == current.notifyCharacteristic) {
+                    candidate = current;
+                    break;
+                }
+            }
+        }
+        /*
+         * Preserve passive-capture capability for an unexpected firmware
+         * variant, but only after the two channels present in the official app
+         * have been checked explicitly.
+         */
+        if (candidate == nil) candidate = _candidates.firstObject;
         _selectedWrite = candidate.writeCharacteristic;
         _selectedNotify = candidate.notifyCharacteristic;
         _selectedWriteType = candidate.writeType;
@@ -554,9 +600,9 @@ didDiscoverCharacteristicsForService:(CBService *)service
         self.notifyCharacteristicUUID =
             candidate.notifyCharacteristic.UUID.UUIDString;
         self.adapterIdentifier =
-            @"Mercedes me Adapter A2138203202 (native Bluetooth)";
+            @"Mercedes me Adapter A2138203202 · BLE family (native Bluetooth)";
         [self setState:LinkBLETransportStateProbing
-                status:@"Preparing Mercedes me native Bluetooth capture"];
+                status:@"Preparing Mercedes me Nordic UART capture"];
         [_peripheral setNotifyValue:YES forCharacteristic:_selectedNotify];
         return;
     }

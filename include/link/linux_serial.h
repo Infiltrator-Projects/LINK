@@ -3,6 +3,7 @@
 #define LINK_LINUX_SERIAL_H
 
 #include "link/transport.h"
+#include "link/mercedes_me_adapter.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -35,6 +36,7 @@ typedef struct LinkLinuxSerialTransport {
     bool bluetooth_classic;
     bool openport2;
     LinkAdapterKind adapter_kind;
+    LinkMercedesMeAdapterFamily mercedes_me_family;
 } LinkLinuxSerialTransport;
 
 void link_linux_serial_init(LinkLinuxSerialTransport *transport);
