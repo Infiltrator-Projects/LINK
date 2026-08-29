@@ -37,6 +37,8 @@ LINK currently owns:
 - ISO 14229 UDS request/response, DID and client-state handling;
 - a compiled 27-service ISO 14229 service catalogue and bounded request/response codecs;
 - read-only UDS `ReadDTCInformation` helpers;
+- ISO 14230-3 KWP2000 read-only response, TesterPresent, common-identifier, ECU-identification and DTC-by-status codecs;
+- target-specific Discover probe sets for mixed-protocol networks, while retaining deny-by-default transmit safety;
 - Classical CAN and CAN-FD ISO-TP, including CAN-FD payloads through 64 bytes and extended First Frame lengths for PDUs above 4095 bytes;
 - bare-metal STM32 CAN/FDCAN edge with a bounded interrupt queue and direct ISO-TP/UDS orchestration;
 - parameter definitions, store/history, scheduler and telemetry/CSV;
