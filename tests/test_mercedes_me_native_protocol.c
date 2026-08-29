@@ -35,6 +35,9 @@ int main(void)
     static const uint8_t expected_wire[] =
         "aq/UUM2JUmn6X/ABmJ//LrQ==\r";
 
+    CHECK(LINK_MERCEDES_ME_DEFAULT_BAUD_ORDINAL == 6U);
+    CHECK(LINK_MERCEDES_ME_ADAPTER_VIN_MIN_LENGTH == 1U);
+    CHECK(LINK_MERCEDES_ME_ADAPTER_VIN_MAX_LENGTH == 17U);
     CHECK(link_mercedes_me_crc16_ccitt(
               (const uint8_t *)"123456789", 9U) == UINT16_C(0x31c3));
 
@@ -83,7 +86,8 @@ int main(void)
           LINK_MERCEDES_ME_NATIVE_OK);
     CHECK(command_size == 2U && memcmp(command, "p\r", 2U) == 0);
     CHECK(link_mercedes_me_build_set_baudrate(
-              6U, command, sizeof(command), &command_size) ==
+              LINK_MERCEDES_ME_DEFAULT_BAUD_ORDINAL,
+              command, sizeof(command), &command_size) ==
           LINK_MERCEDES_ME_NATIVE_OK);
     CHECK(command_size == 3U && memcmp(command, "S6\r", 3U) == 0);
     CHECK(link_mercedes_me_build_set_baudrate(
