@@ -96,6 +96,13 @@ jobs:
           grep -Fq 'link-test-mercedes-me-diaglogic tests/test_mercedes_me_diaglogic.c link-mercedes-me-diaglogic' CMakeLists.txt
           grep -Fq '**120 exact static data-ID constants**' docs/MERCEDES-ME-DATA-IDS.md
           grep -Fq 'link-test-mercedes-me-adapter tests/test_mercedes_me_adapter.c link-mercedes-me-adapter' CMakeLists.txt
+          grep -Fq 'link-test-mercedes-me-native-protocol tests/test_mercedes_me_native_protocol.c link-mercedes-me-native-protocol' CMakeLists.txt
+          grep -Fq 'link_mercedes_me_secure_encode' src/core/mercedes_me_native_protocol.c
+          grep -Fq 'LINK_MERCEDES_ME_SECURE_MAX_PLAINTEXT 505U' include/link/mercedes_me_native_protocol.h
+          grep -Fq 'link_mercedes_me_diaglogic_reference_policy' src/core/mercedes_me_diaglogic.c
+          grep -Fq 'link-test-mercedes-me-whisper tests/test_mercedes_me_whisper.c link-mercedes-me-whisper' CMakeLists.txt
+          grep -Fq 'SELECT_LOWEST_CANID_CACHED' src/core/mercedes_me_whisper.c
+          grep -Fq 'docs/MERCEDES-ME-NATIVE-BINARIES.md' README.md
           grep -Fq 'docs/MERCEDES-ME-ADAPTER-INTEROP.md' README.md
           grep -Fq 'link_linux_serial_probe_adapter' platform/linux/link-gtk-shell.c
           grep -Fq 'native protocol capture' platform/linux/link-gtk-shell.c
