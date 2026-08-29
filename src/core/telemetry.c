@@ -267,6 +267,11 @@ static bool emit_build_identity(LinkTelemetryTextSink sink,
             sink, context, "link_version", LINK_VERSION_STRING) ||
         !emit_metadata(sink, context, "build_id", LINK_TELEMETRY_BUILD_ID))
         return false;
+#ifdef LINK_SOURCE_REVISION
+    if (!emit_metadata(
+            sink, context, "link_revision", LINK_SOURCE_REVISION))
+        return false;
+#endif
 
 #ifdef LINK_TELEMETRY_PRODUCT_VERSION
     written = snprintf(key, sizeof(key), "%s_version", product_slug);
