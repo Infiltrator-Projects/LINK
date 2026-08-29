@@ -84,6 +84,7 @@ add_library(link-core STATIC
     src/core/i18n_platform.c
     src/core/language_pack.c
     src/core/fuel_economy.c
+    src/core/diagnostic_request.c
     src/core/diagnostic_flow.c
     src/core/isotp.c
     src/core/parameter.c
@@ -380,6 +381,7 @@ if(BUILD_TESTING AND PROJECT_IS_TOP_LEVEL)
     link_add_test(link-test-mercedes-me-data-ids tests/test_mercedes_me_data_ids.c link-mercedes-me-data-ids)
     link_add_test(link-test-mercedes-me-diaglogic tests/test_mercedes_me_diaglogic.c link-mercedes-me-diaglogic)
     link_add_test(link-test-mercedes-me-whisper tests/test_mercedes_me_whisper.c link-mercedes-me-whisper)
+    link_add_test(link-test-diagnostic-request tests/test_diagnostic_request.c link-diagnostic-request)
     link_add_test(link-test-diagnostic-flow tests/test_diagnostic_flow.c link-diagnostic-flow)
     link_add_test(link-test-isotp tests/test_isotp.c link-isotp)
     add_executable(link-test-stm32
