@@ -34,6 +34,7 @@ typedef struct LinkLinuxSerialTransport {
     bool bluetooth_le;
     bool bluetooth_classic;
     bool openport2;
+    LinkAdapterKind adapter_kind;
 } LinkLinuxSerialTransport;
 
 void link_linux_serial_init(LinkLinuxSerialTransport *transport);
@@ -52,6 +53,13 @@ bool link_linux_serial_is_connected(const LinkLinuxSerialTransport *transport);
 bool link_linux_serial_probe_elm327(LinkLinuxSerialTransport *transport,
                                     char *identity,
                                     size_t identity_capacity);
+bool link_linux_serial_probe_adapter(LinkLinuxSerialTransport *transport,
+                                     char *identity,
+                                     size_t identity_capacity);
+LinkAdapterKind link_linux_serial_adapter_kind(
+    const LinkLinuxSerialTransport *transport);
+bool link_linux_serial_native_protocol_mode(
+    const LinkLinuxSerialTransport *transport);
 void link_linux_serial_pump(LinkLinuxSerialTransport *transport);
 LinkTransport link_linux_serial_as_transport(LinkLinuxSerialTransport *transport);
 size_t link_linux_serial_discover(char paths[][256], size_t capacity);

@@ -55,6 +55,8 @@ typedef struct LinkGtkShell {
     bool render_in_progress;
     bool render_pending;
     bool diagnostic_restart_pending;
+    bool native_adapter_mode;
+    size_t native_receive_chunks;
 } LinkGtkShell;
 
 static const char link_gtk_base_css[] =
@@ -165,6 +167,8 @@ static void reset_session_capture(LinkGtkShell *shell)
     shell->diagnostic_retry_pending = false;
     shell->diagnostic_retry_at_ms = 0U;
     shell->diagnostic_had_failure = false;
+    shell->native_adapter_mode = false;
+    shell->native_receive_chunks = 0U;
 }
 
 static bool append_trace_record(LinkGtkShell *shell, GString *record)
@@ -297,7 +301,9 @@ static void end_capture_attempt(LinkGtkShell *shell, const char *outcome)
     json_string(
         record,
         shell->capture_attempt_linked
-            ? link_diagnostic_flow_stage_name(shell->flow.stage)
+            ? (shell->native_adapter_mode
+                ? "native-transport-capture"
+                : link_diagnostic_flow_stage_name(shell->flow.stage))
             : "not-started");
     if (shell->flow.stage == LINK_DIAGNOSTIC_FLOW_FAILED) {
         g_string_append(record, ",\"diagnostic_failure\":");
@@ -316,6 +322,29 @@ static void end_capture_attempt(LinkGtkShell *shell, const char *outcome)
     shell->current_capture_attempt = 0U;
     shell->attempt_started_ms = 0U;
     shell->capture_attempt_linked = false;
+}
+
+static void native_transport_receive(
+    void *context, const uint8_t *data, size_t size)
+{
+    LinkGtkShell *shell = context;
+    GString *record;
+    if (shell == NULL || data == NULL || size == 0U ||
+        shell->current_capture_attempt == 0U) return;
+
+    record = g_string_sized_new(256U + size * 2U);
+    g_string_append_printf(
+        record,
+        "{\"record_type\":\"native-rx\",\"attempt\":%u,"
+        "\"investigation_elapsed_ms\":%llu,\"attempt_elapsed_ms\":%llu,"
+        "\"adapter_kind\":\"mercedes-me-native\",\"raw_hex\":",
+        shell->current_capture_attempt,
+        (unsigned long long)investigation_elapsed_ms(shell),
+        (unsigned long long)attempt_elapsed_ms(shell));
+    json_hex(record, data, size);
+    g_string_append_c(record, '}');
+    if (append_trace_record(shell, record)) ++shell->native_receive_chunks;
+    g_string_free(record, TRUE);
 }
 
 static void record_session_exchange(LinkGtkShell *shell)
@@ -399,6 +428,12 @@ static GString *build_session_json(const LinkGtkShell *shell)
     json_string(out, shell->adapter_device);
     g_string_append(out, ",\n\"latest_adapter_identity\":");
     json_string(out, shell->adapter_identity);
+    g_string_append_printf(
+        out,
+        ",\n\"native_adapter_mode\":%s,"
+        "\n\"native_receive_chunks\":%zu",
+        shell->native_adapter_mode ? "true" : "false",
+        shell->native_receive_chunks);
     g_string_append(out, ",\n\"diagnostic_stage\":");
     json_string(out, link_diagnostic_flow_stage_name(shell->flow.stage));
     g_string_append_printf(
@@ -764,10 +799,13 @@ static void set_connection_state(LinkGtkShell *shell, bool connected, const char
             !shell->manufacturer_extension_active &&
             !shell->diagnostic_restart_pending);
     if (shell->save_session_button != NULL) {
-        const char *label = "SAVE SESSION";
-        if (connected && shell->flow.stage == LINK_DIAGNOSTIC_FLOW_FAILED)
+        const char *label = shell->native_adapter_mode
+            ? "SAVE NATIVE SESSION" : "SAVE SESSION";
+        if (!shell->native_adapter_mode &&
+            connected && shell->flow.stage == LINK_DIAGNOSTIC_FLOW_FAILED)
             label = "SAVE FAILED SESSION";
-        else if (connected && !shell->diagnostics_ready)
+        else if (!shell->native_adapter_mode &&
+                 connected && !shell->diagnostics_ready)
             label = "SAVE PARTIAL SESSION";
         gtk_button_set_label(GTK_BUTTON(shell->save_session_button), label);
     }
@@ -785,6 +823,8 @@ static bool manufacturer_extension_available(const LinkGtkShell *shell)
 static const char *diagnostic_stage_message(const LinkGtkShell *shell)
 {
     if (shell == NULL) return "Diagnostic state unavailable";
+    if (shell->native_adapter_mode)
+        return "Linked · Mercedes me Adapter · native protocol capture";
     switch (shell->flow.stage) {
     case LINK_DIAGNOSTIC_FLOW_IDLE:
         return "Linked · diagnostic session idle";
@@ -850,10 +890,12 @@ static void refresh_visible_language(LinkGtkShell *shell)
     if (shell->status != NULL && shell->link_button != NULL) {
         if (connected)
             set_connection_state(shell, true,
-                (shell->diagnostics_active || shell->diagnostics_ready ||
-                 shell->flow.stage == LINK_DIAGNOSTIC_FLOW_FAILED)
+                shell->native_adapter_mode
                     ? diagnostic_stage_message(shell)
-                    : "Linked · diagnostic session idle");
+                    : ((shell->diagnostics_active || shell->diagnostics_ready ||
+                        shell->flow.stage == LINK_DIAGNOSTIC_FLOW_FAILED)
+                        ? diagnostic_stage_message(shell)
+                        : "Linked · diagnostic session idle"));
         else
             set_connection_state(shell, false, "Disconnected");
     }
@@ -1227,6 +1269,10 @@ static void link_clicked(GtkButton *button, gpointer user_data)
     if (shell->transport.is_connected(shell->transport.context)) {
         end_capture_attempt(shell, "user-disconnect");
         stop_diagnostics(shell);
+        if (shell->transport.set_receiver != NULL)
+            shell->transport.set_receiver(
+                shell->transport.context, NULL, NULL);
+        shell->native_adapter_mode = false;
         if (shell->transport.is_connected(shell->transport.context))
             shell->transport.disconnect(shell->transport.context);
         set_connection_state(shell, false, "Disconnected");
@@ -1284,7 +1330,7 @@ static void link_clicked(GtkButton *button, gpointer user_data)
             end_capture_attempt(shell, "adapter-identity-failed");
             return;
         }
-    } else if (!link_linux_serial_probe_elm327(
+    } else if (!link_linux_serial_probe_adapter(
                    &shell->serial, identity, sizeof(identity))) {
         shell->transport.disconnect(shell->transport.context);
         set_connection_state(shell, false,
@@ -1296,6 +1342,21 @@ static void link_clicked(GtkButton *button, gpointer user_data)
         (void)snprintf(
             identity, sizeof(identity), "Diagnostic adapter");
     mark_capture_attempt_linked(shell, identity);
+    shell->native_adapter_mode =
+        shell->descriptor->transport_provider == NULL &&
+        link_linux_serial_native_protocol_mode(&shell->serial);
+
+    if (shell->native_adapter_mode) {
+        if (shell->transport.set_receiver != NULL)
+            shell->transport.set_receiver(
+                shell->transport.context, native_transport_receive, shell);
+        set_connection_state(
+            shell, true,
+            "Linked · Mercedes me Adapter · native protocol capture");
+        notify_connection(shell, true, identity);
+        queue_current_section_render(shell);
+        return;
+    }
 
     {
         char message[256];
@@ -1303,9 +1364,8 @@ static void link_clicked(GtkButton *button, gpointer user_data)
         set_connection_state(shell, true, message);
     }
     notify_connection(shell, true, identity);
-    if (!start_diagnostics(shell)) {
+    if (!start_diagnostics(shell))
         fail_diagnostics(shell, LINK_DIAGNOSTIC_FLOW_RESULT_ELM_ERROR);
-    }
 }
 
 static gboolean auto_link_idle(gpointer user_data)

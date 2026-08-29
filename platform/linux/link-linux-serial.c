@@ -64,7 +64,7 @@ typedef struct LinkLinuxBleCharacteristic {
 typedef struct LinkLinuxBleDiscovered {
     char address[18];
     char name[128];
-    bool likely_elm;
+    LinkAdapterKind kind;
     bool has_rssi;
     gint16 rssi;
 } LinkLinuxBleDiscovered;
@@ -105,7 +105,7 @@ static bool ble_extract_address(const char *device,
                                 char address[18]);
 static bool classic_extract_address(const char *device,
                                     char address[18]);
-static bool ble_name_likely_elm(const char *name);
+static LinkAdapterKind bluetooth_adapter_kind(const char *name);
 static bool bluetooth_name_prefers_classic(const char *name);
 static bool bluetooth_name_prefers_ble(const char *name);
 static int ble_discovered_compare(const void *left, const void *right);
@@ -348,22 +348,9 @@ static bool classic_extract_address(const char *device,
     return device[20] == '\0' || device[20] == ' ';
 }
 
-static bool ble_name_likely_elm(const char *name)
+static LinkAdapterKind bluetooth_adapter_kind(const char *name)
 {
-    gchar *lower;
-    bool likely;
-    if (name == NULL || name[0] == '\0') return false;
-    lower = g_ascii_strdown(name, -1);
-    if (lower == NULL) return false;
-    likely = strstr(lower, "vgate") != NULL ||
-             strstr(lower, "v-link") != NULL ||
-             strstr(lower, "vlink") != NULL ||
-             strstr(lower, "icar") != NULL ||
-             strstr(lower, "obd") != NULL ||
-             strstr(lower, "elm") != NULL ||
-             strstr(lower, "car pro") != NULL;
-    g_free(lower);
-    return likely;
+    return link_adapter_kind_from_bluetooth_name(name);
 }
 
 static bool bluetooth_name_contains(const char *name, const char *needle)
@@ -403,7 +390,10 @@ static int ble_discovered_compare(const void *left, const void *right)
 {
     const LinkLinuxBleDiscovered *a = left;
     const LinkLinuxBleDiscovered *b = right;
-    if (a->likely_elm != b->likely_elm) return a->likely_elm ? -1 : 1;
+    if (a->kind != b->kind) {
+        if (a->kind == LINK_ADAPTER_KIND_ELM327) return -1;
+        if (b->kind == LINK_ADAPTER_KIND_ELM327) return 1;
+    }
     if (a->has_rssi != b->has_rssi) return a->has_rssi ? -1 : 1;
     if (a->has_rssi && b->has_rssi && a->rssi != b->rssi)
         return a->rssi > b->rssi ? -1 : 1;
@@ -489,7 +479,7 @@ static size_t ble_discover_devices(char paths[][256], size_t capacity)
                                sizeof(devices[device_count].name), "%s",
                                name != NULL && name[0] != '\0'
                                    ? name : "Bluetooth LE device");
-                devices[device_count].likely_elm = ble_name_likely_elm(name);
+                devices[device_count].kind = bluetooth_adapter_kind(name);
                 devices[device_count].has_rssi = has_rssi;
                 devices[device_count].rssi = rssi;
                 device_count++;
@@ -512,7 +502,7 @@ static size_t ble_discover_devices(char paths[][256], size_t capacity)
     {
         size_t written_count = 0U;
         for (index = 0U; index < device_count && written_count < capacity; ++index) {
-            if (!devices[index].likely_elm ||
+            if (devices[index].kind == LINK_ADAPTER_KIND_UNKNOWN ||
                 bluetooth_name_prefers_classic(devices[index].name)) continue;
             (void)snprintf(paths[written_count], 256U, "BLE:%.17s %.127s",
                            devices[index].address, devices[index].name);
@@ -602,7 +592,7 @@ static size_t classic_discover_devices(char paths[][256], size_t capacity)
                                sizeof(devices[device_count].name), "%s",
                                name != NULL && name[0] != '\0'
                                    ? name : "Bluetooth Classic device");
-                devices[device_count].likely_elm = ble_name_likely_elm(name);
+                devices[device_count].kind = bluetooth_adapter_kind(name);
                 devices[device_count].has_rssi = has_rssi;
                 devices[device_count].rssi = rssi;
                 device_count++;
@@ -623,7 +613,7 @@ static size_t classic_discover_devices(char paths[][256], size_t capacity)
 
     qsort(devices, device_count, sizeof(devices[0]), ble_discovered_compare);
     for (index = 0U; index < device_count && written_count < capacity; ++index) {
-        if (!devices[index].likely_elm ||
+        if (devices[index].kind == LINK_ADAPTER_KIND_UNKNOWN ||
             bluetooth_name_prefers_ble(devices[index].name)) continue;
         (void)snprintf(paths[written_count], 256U, "BT:%.17s %.127s",
                        devices[index].address, devices[index].name);
@@ -632,7 +622,8 @@ static size_t classic_discover_devices(char paths[][256], size_t capacity)
     return written_count;
 }
 
-static int classic_spp_channel(const char *address)
+static int classic_rfcomm_channel_for_service(
+    const char *address, uint16_t service_class)
 {
     bdaddr_t target;
     uuid_t service_uuid;
@@ -647,7 +638,7 @@ static int classic_spp_channel(const char *address)
     if (address == NULL || str2ba(address, &target) != 0) return -1;
     session = sdp_connect(BDADDR_ANY, &target, SDP_RETRY_IF_BUSY);
     if (session == NULL) return -1;
-    sdp_uuid16_create(&service_uuid, SERIAL_PORT_SVCLASS_ID);
+    sdp_uuid16_create(&service_uuid, service_class);
     search_list = sdp_list_append(NULL, &service_uuid);
     attribute_list = sdp_list_append(NULL, &attribute_range);
     if (search_list != NULL && attribute_list != NULL &&
@@ -684,6 +675,18 @@ static int classic_spp_channel(const char *address)
     return channel;
 }
 
+static int classic_spp_channel(const char *address)
+{
+    return classic_rfcomm_channel_for_service(
+        address, (uint16_t)SERIAL_PORT_SVCLASS_ID);
+}
+
+static int classic_public_rfcomm_channel(const char *address)
+{
+    return classic_rfcomm_channel_for_service(
+        address, (uint16_t)PUBLIC_BROWSE_GROUP);
+}
+
 static LinkTransportStatus classic_connect(LinkLinuxSerialTransport *transport)
 {
     char address[18];
@@ -702,7 +705,10 @@ static LinkTransportStatus classic_connect(LinkLinuxSerialTransport *transport)
     if (!classic_extract_address(transport->device, address) ||
         str2ba(address, &target) != 0) return LINK_TRANSPORT_INVALID_ARGUMENT;
 
-    channel = classic_spp_channel(address);
+    channel = transport->adapter_kind ==
+                  LINK_ADAPTER_KIND_MERCEDES_ME_NATIVE
+        ? classic_public_rfcomm_channel(address) : -1;
+    if (channel <= 0) channel = classic_spp_channel(address);
     if (channel <= 0) channel = 1;
     fd = socket(AF_BLUETOOTH, SOCK_STREAM, BTPROTO_RFCOMM);
     if (fd < 0) return LINK_TRANSPORT_IO_ERROR;
@@ -1328,6 +1334,18 @@ bool link_linux_serial_configure(LinkLinuxSerialTransport *transport,
     transport->bluetooth_classic =
         classic_extract_address(device, classic_address);
     transport->openport2 = link_linux_openport2_is_selection(device);
+    transport->adapter_kind = LINK_ADAPTER_KIND_UNKNOWN;
+    if (transport->openport2) {
+        transport->adapter_kind = LINK_ADAPTER_KIND_TACTRIX_OPENPORT2;
+    } else if (transport->bluetooth_le) {
+        const char *name = device + 21U;
+        while (*name == ' ') ++name;
+        transport->adapter_kind = bluetooth_adapter_kind(name);
+    } else if (transport->bluetooth_classic) {
+        const char *name = device + 20U;
+        while (*name == ' ') ++name;
+        transport->adapter_kind = bluetooth_adapter_kind(name);
+    }
 
     if (strncmp(device, "BLE:", 4U) == 0 && !transport->bluetooth_le)
         return false;
@@ -1381,6 +1399,8 @@ bool link_linux_serial_probe_elm327(LinkLinuxSerialTransport *transport,
     int elapsed = 0;
     if (identity != NULL && identity_capacity != 0U) identity[0] = '\0';
     if (!link_linux_serial_is_connected(transport)) return false;
+    if (transport->adapter_kind == LINK_ADAPTER_KIND_MERCEDES_ME_NATIVE)
+        return false;
     if (transport->openport2)
         return link_linux_openport2_probe(
             transport, identity, identity_capacity);
@@ -1408,7 +1428,53 @@ bool link_linux_serial_probe_elm327(LinkLinuxSerialTransport *transport,
     }
     if (used == 0U || !response_has_prompt(response, used)) return false;
     copy_elm_identity(response, used, identity, identity_capacity);
+    if (transport->adapter_kind == LINK_ADAPTER_KIND_UNKNOWN)
+        transport->adapter_kind = LINK_ADAPTER_KIND_ELM327;
     return true;
+}
+
+bool link_linux_serial_probe_adapter(LinkLinuxSerialTransport *transport,
+                                     char *identity,
+                                     size_t identity_capacity)
+{
+    const char *selection;
+    const char *name;
+    if (identity != NULL && identity_capacity != 0U) identity[0] = '\0';
+    if (!link_linux_serial_is_connected(transport)) return false;
+
+    if (transport->adapter_kind != LINK_ADAPTER_KIND_MERCEDES_ME_NATIVE)
+        return link_linux_serial_probe_elm327(
+            transport, identity, identity_capacity);
+
+    selection = transport->device;
+    name = selection;
+    if (transport->bluetooth_le && strlen(selection) >= 21U)
+        name = selection + 21U;
+    else if (transport->bluetooth_classic && strlen(selection) >= 20U)
+        name = selection + 20U;
+    while (*name == ' ') ++name;
+    if (identity != NULL && identity_capacity != 0U) {
+        (void)snprintf(
+            identity, identity_capacity,
+            "Mercedes me Adapter%s%s (native Bluetooth)",
+            *name != '\0' ? " · " : "",
+            *name != '\0' ? name : "");
+    }
+    return true;
+}
+
+LinkAdapterKind link_linux_serial_adapter_kind(
+    const LinkLinuxSerialTransport *transport)
+{
+    return transport != NULL
+        ? transport->adapter_kind : LINK_ADAPTER_KIND_UNKNOWN;
+}
+
+bool link_linux_serial_native_protocol_mode(
+    const LinkLinuxSerialTransport *transport)
+{
+    return transport != NULL &&
+        link_adapter_kind_requires_native_protocol(transport->adapter_kind);
 }
 
 void link_linux_serial_pump(LinkLinuxSerialTransport *transport)
@@ -1481,11 +1547,14 @@ size_t link_linux_serial_discover(char paths[][256], size_t capacity)
     return count;
 }
 #else
-void link_linux_serial_init(LinkLinuxSerialTransport *transport) { if (transport != NULL) { memset(transport, 0, sizeof(*transport)); transport->fd = -1; } }
+void link_linux_serial_init(LinkLinuxSerialTransport *transport) { if (transport != NULL) { memset(transport, 0, sizeof(*transport)); transport->fd = -1; transport->adapter_kind = LINK_ADAPTER_KIND_UNKNOWN; } }
 bool link_linux_serial_configure(LinkLinuxSerialTransport *transport, const char *device, unsigned int baud_rate) { (void)transport; (void)device; (void)baud_rate; return false; }
 void link_linux_serial_disconnect(LinkLinuxSerialTransport *transport) { (void)transport; }
 bool link_linux_serial_is_connected(const LinkLinuxSerialTransport *transport) { (void)transport; return false; }
 bool link_linux_serial_probe_elm327(LinkLinuxSerialTransport *transport, char *identity, size_t identity_capacity) { (void)transport; if (identity != NULL && identity_capacity != 0U) identity[0] = '\0'; return false; }
+bool link_linux_serial_probe_adapter(LinkLinuxSerialTransport *transport, char *identity, size_t identity_capacity) { (void)transport; if (identity != NULL && identity_capacity != 0U) identity[0] = '\0'; return false; }
+LinkAdapterKind link_linux_serial_adapter_kind(const LinkLinuxSerialTransport *transport) { return transport != NULL ? transport->adapter_kind : LINK_ADAPTER_KIND_UNKNOWN; }
+bool link_linux_serial_native_protocol_mode(const LinkLinuxSerialTransport *transport) { return transport != NULL && link_adapter_kind_requires_native_protocol(transport->adapter_kind); }
 void link_linux_serial_pump(LinkLinuxSerialTransport *transport) { (void)transport; }
 LinkTransport link_linux_serial_as_transport(LinkLinuxSerialTransport *transport) { LinkTransport result = LINK_TRANSPORT_INIT; (void)transport; return result; }
 size_t link_linux_serial_discover(char paths[][256], size_t capacity) { (void)paths; (void)capacity; return 0U; }
