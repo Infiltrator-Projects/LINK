@@ -10,6 +10,7 @@
 #ifndef LINK_ECU_PROBE_H
 #define LINK_ECU_PROBE_H
 
+#include "link/diagnostic_request.h"
 #include "link/elm327_can.h"
 #include "link/uds_dtc.h"
 
@@ -105,6 +106,38 @@ bool link_ecu_probe_profile_is_valid(const LinkEcuProbeProfile *profile);
 LinkEcuProbeResult link_ecu_probe_begin(
     LinkEcuProbe *probe,
     const LinkEcuProbeProfile *profile);
+
+/**
+ * Begin the same ECU probe without an ELM command-configuration phase.
+ * Native ISO-TP/J2534/MCU providers use this entry point and obtain complete
+ * diagnostic requests through link_ecu_probe_diagnostic_request().
+ */
+LinkEcuProbeResult link_ecu_probe_begin_direct(
+    LinkEcuProbe *probe,
+    const LinkEcuProbeProfile *profile);
+
+/**
+ * Build the current read-only UDS request in transport-neutral form.
+ *
+ * pdu_storage belongs to the caller and must remain valid while request is
+ * consumed. The profile's physical TX/RX endpoint is retained unchanged.
+ */
+LinkEcuProbeResult link_ecu_probe_diagnostic_request(
+    const LinkEcuProbe *probe,
+    uint8_t *pdu_storage,
+    size_t pdu_capacity,
+    size_t *pdu_length,
+    LinkDiagnosticRequestDefinition *request);
+
+/**
+ * Feed one complete ISO-TP PDU from a native provider. Pass
+ * response_available=false for a bounded no-response result.
+ */
+LinkEcuProbeResult link_ecu_probe_accept_pdu(
+    LinkEcuProbe *probe,
+    bool response_available,
+    const uint8_t *pdu,
+    size_t pdu_length);
 LinkEcuProbeResult link_ecu_probe_command(
     const LinkEcuProbe *probe,
     char *buffer,
