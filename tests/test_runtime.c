@@ -4,6 +4,7 @@
 #include "link/scheduler.h"
 #include "link/telemetry.h"
 #include "link/transport.h"
+#include "link/mercedes_me_adapter.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -46,9 +47,11 @@ int main(void)
 
     CHECK(link_adapter_kind_from_bluetooth_name("MB-123456") ==
           LINK_ADAPTER_KIND_MERCEDES_ME_NATIVE);
-    CHECK(link_adapter_kind_from_bluetooth_name("mb-A1B2C3") ==
+    CHECK(link_adapter_kind_from_bluetooth_name("MB-812345") ==
           LINK_ADAPTER_KIND_MERCEDES_ME_NATIVE);
-    CHECK(link_adapter_kind_from_bluetooth_name("MB-12") ==
+    CHECK(link_adapter_kind_from_bluetooth_name("MB-512345") ==
+          LINK_ADAPTER_KIND_MERCEDES_ME_NATIVE);
+    CHECK(link_adapter_kind_from_bluetooth_name("MB-012345") ==
           LINK_ADAPTER_KIND_UNKNOWN);
     CHECK(link_adapter_kind_from_bluetooth_name("iOS-VLink") ==
           LINK_ADAPTER_KIND_ELM327);

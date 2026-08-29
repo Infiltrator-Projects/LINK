@@ -4,6 +4,7 @@
  * @brief Transport validation plus deterministic in-process ELM327 simulator.
  */
 #include "link/transport.h"
+#include "link/mercedes_me_adapter.h"
 #include "link/elm327_simulator.h"
 
 #include <stdio.h>
@@ -14,13 +15,6 @@ static unsigned char link_ascii_lower(unsigned char value)
     if (value >= (unsigned char)'A' && value <= (unsigned char)'Z')
         return (unsigned char)(value - (unsigned char)'A' + (unsigned char)'a');
     return value;
-}
-
-static bool link_ascii_alnum(unsigned char value)
-{
-    value = link_ascii_lower(value);
-    return (value >= (unsigned char)'a' && value <= (unsigned char)'z') ||
-           (value >= (unsigned char)'0' && value <= (unsigned char)'9');
 }
 
 static bool link_ascii_contains_nocase(const char *text, const char *needle)
@@ -40,25 +34,10 @@ static bool link_ascii_contains_nocase(const char *text, const char *needle)
     return false;
 }
 
-static bool link_mercedes_me_name(const char *name)
-{
-    size_t suffix_length = 0U;
-    if (name == NULL ||
-        link_ascii_lower((unsigned char)name[0]) != (unsigned char)'m' ||
-        link_ascii_lower((unsigned char)name[1]) != (unsigned char)'b' ||
-        name[2] != '-') return false;
-    name += 3;
-    while (*name != '\0') {
-        if (!link_ascii_alnum((unsigned char)*name)) return false;
-        ++suffix_length;
-        ++name;
-    }
-    return suffix_length >= 4U && suffix_length <= 32U;
-}
-
 LinkAdapterKind link_adapter_kind_from_bluetooth_name(const char *name)
 {
-    if (link_mercedes_me_name(name))
+    if (link_mercedes_me_adapter_family_from_name(name) !=
+        LINK_MERCEDES_ME_ADAPTER_UNKNOWN)
         return LINK_ADAPTER_KIND_MERCEDES_ME_NATIVE;
     if (name == NULL || name[0] == '\0') return LINK_ADAPTER_KIND_UNKNOWN;
     if (link_ascii_contains_nocase(name, "vgate") ||
