@@ -2,7 +2,7 @@
 
 # Mercedes me Adapter diagnostic data IDs
 
-This catalogue preserves the **115 exact static data-ID constants** recovered
+This catalogue preserves the **120 exact static data-ID constants** recovered
 from the archived official Mercedes me Adapter 4.7.61 Android build,
 principally `classes3.dex` SHA-256
 `83cd980cac55e517926469f165cdd83f55eddec7c45e1590c45b6686c5685ae0`.
@@ -25,14 +25,19 @@ vehicle or adapter generation returns it.
 | `BATTERY_VOLTAGE_CRITICAL_OCCURRED_ON_TRIP` | `batteryVoltageCriticalOccurredOnTrip` |
 | `BRAKE_FLUID_LEVEL_CRITICAL` | `brakeFluidLevelCritical` |
 | `BRAKE_FLUID_LEVEL_CRITICAL_OCCURRED_ON_TRIP` | `brakeFluidLevelCriticalOccurredOnTrip` |
-| `BRAKE_LAMP3_FAULT_OCCURRED_ON_TRIP` | `brakeLamp3FaultOccurredOnTrip` |
 | `BRAKE_LAMP_LEFT_FAULT_OCCURRED_ON_TRIP` | `brakeLampLeftFaultOccurredOnTrip` |
 | `BRAKE_LAMP_RIGHT_FAULT_OCCURRED_ON_TRIP` | `brakeLampRightFaultOccurredOnTrip` |
+| `BRAKE_LAMP3_FAULT_OCCURRED_ON_TRIP` | `brakeLamp3FaultOccurredOnTrip` |
 | `BRAKE_LINING_CRITICAL` | `brakeLiningCritical` |
 | `BRAKE_LINING_CRITICAL_OCCURRED_ON_TRIP` | `brakeLiningCriticalOccurredOnTrip` |
 | `BRAKE_TAIL_LAMP_LEFT_FAULT_OCCURRED_ON_TRIP` | `brakeTailLampLeftFaultOccurredOnTrip` |
 | `BRAKE_TAIL_LAMP_RIGHT_FAULT_OCCURRED_ON_TRIP` | `brakeTailLampRightFaultOccurredOnTrip` |
+| `BT_RX_OVERFLOW_COUNT` | `btRxOverflowCount` |
+| `BT_TX_OVERFLOW_COUNT` | `btTxOverflowCount` |
+| `BUS_ERROR_COUNT` | `busErrorCount` |
 | `CALCULATED_ENGINE_LOAD` | `calculatedEngineLoad` |
+| `CAN_RX_OVERFLOW_COUNT` | `canRxOverflowCount` |
+| `CAN_TX_OVERFLOW_COUNT` | `canTxOverflowCount` |
 | `DATA_POINT_LOOP_ENDED` | `dataPointLoopEnded` |
 | `DAYTIME_RUNNING_LAMPS_LEFT_FAULT_OCCURRED_ON_TRIP` | `daytimeRunningLampsLeftFaultOccurredOnTrip` |
 | `DAYTIME_RUNNING_LAMPS_RIGHT_FAULT_OCCURRED_ON_TRIP` | `daytimeRunningLampsRightFaultOccurredOnTrip` |
@@ -97,8 +102,8 @@ vehicle or adapter generation returns it.
 | `MAINTENANCE_SERVICE_INTERVAL_DAY_UNIT` | `Day` |
 | `MAINTENANCE_SERVICE_INTERVAL_KM` | `maintenanceServiceIntervalKm` |
 | `MAINTENANCE_SERVICE_INTERVAL_KM_UNIT` | `km` |
-| `MAXIMUM_BATTERY_VOLTAGE` | `maximumBatteryVoltage` |
 | `MAX_FLICKERING_BLUETOOTH_CONNECTION_COUNT` | `maxFlickeringBluetoothConnectionCount` |
+| `MAXIMUM_BATTERY_VOLTAGE` | `maximumBatteryVoltage` |
 | `MEASURED_MILEAGE` | `measuredMileage` |
 | `MILEAGE` | `mileage` |
 | `MILEAGE_DOUBLE` | `mileageDouble` |
@@ -122,12 +127,12 @@ vehicle or adapter generation returns it.
 | `TIRE_PRESSURE_CRITICAL_OCCURRED_ON_TRIP` | `tirePressureCriticalOccurredOnTrip` |
 | `TRIP_AVERAGE_SPEED` | `tripAverageSpeed` |
 | `TRIP_START_MILEAGE_DOUBLE` | `tripStartMileageDouble` |
-| `TURN_INDICATION_LAMPS_REAR_FAULT_OCCURRED_ON_TRIP` | `turnIndicationLampsRearFaultOccurredOnTrip` |
-| `TURN_INDICATION_LAMPS_REAR_FAULT_TM_OCCURRED_ON_TRIP` | `turnIndicationLampsRearFaultTmOccurredOnTrip` |
 | `TURN_INDICATION_LAMP_FRONT_LEFT_FAULT_OCCURRED_ON_TRIP` | `turnIndicationLampFrontLeftFaultOccurredOnTrip` |
 | `TURN_INDICATION_LAMP_FRONT_RIGHT_FAULT_OCCURRED_ON_TRIP` | `turnIndicationLampFrontRightFaultOccurredOnTrip` |
 | `TURN_INDICATION_LAMP_REAR_LEFT_FAULT_OCCURRED_ON_TRIP` | `turnIndicationLampRearLeftFaultOccurredOnTrip` |
 | `TURN_INDICATION_LAMP_REAR_RIGHT_FAULT_OCCURRED_ON_TRIP` | `turnIndicationLampRearRightFaultOccurredOnTrip` |
+| `TURN_INDICATION_LAMPS_REAR_FAULT_OCCURRED_ON_TRIP` | `turnIndicationLampsRearFaultOccurredOnTrip` |
+| `TURN_INDICATION_LAMPS_REAR_FAULT_TM_OCCURRED_ON_TRIP` | `turnIndicationLampsRearFaultTmOccurredOnTrip` |
 | `VEHICLE_SPEED` | `vehicleSpeed` |
 
 Particularly relevant to current MBLINK work are the separate
@@ -135,4 +140,6 @@ Particularly relevant to current MBLINK work are the separate
 `engineReferenceThrottle` identities, which confirm that the official
 framework did not conflate accelerator position with throttle-valve position.
 The fuel group also separately identifies `fuelVolume`, `fuelLevelMin`,
-`fuelPressure`, `engineFuelRate` and `tankRange`.
+`fuelPressure`, `engineFuelRate` and `tankRange`. The adapter-health group
+additionally exposes `btRxOverflowCount`, `btTxOverflowCount`,
+`canRxOverflowCount`, `canTxOverflowCount` and `busErrorCount`.

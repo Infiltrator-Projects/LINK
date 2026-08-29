@@ -90,6 +90,9 @@ jobs:
           grep -Fq 'LINK_MERCEDES_ME_NUS_SERVICE_UUID' include/link/mercedes_me_adapter.h
           grep -Fq 'LINK_MERCEDES_ME_REFERENCE_CLASSIC_CONNECT_TIMEOUT_MS 44000U' include/link/mercedes_me_adapter.h
           grep -Fq 'link_mercedes_me_adapter_family_from_name' src/core/mercedes_me_adapter.c
+          grep -Fq 'link_mercedes_me_data_id_count' src/core/mercedes_me_data_ids.c
+          grep -Fq 'link-test-mercedes-me-data-ids tests/test_mercedes_me_data_ids.c link-mercedes-me-data-ids' CMakeLists.txt
+          grep -Fq '**120 exact static data-ID constants**' docs/MERCEDES-ME-DATA-IDS.md
           grep -Fq 'link-test-mercedes-me-adapter tests/test_mercedes_me_adapter.c link-mercedes-me-adapter' CMakeLists.txt
           grep -Fq 'docs/MERCEDES-ME-ADAPTER-INTEROP.md' README.md
           grep -Fq 'link_linux_serial_probe_adapter' platform/linux/link-gtk-shell.c
