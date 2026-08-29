@@ -58,6 +58,12 @@ link_safety_result link_safety_classify(const uint8_t *payload, size_t length)
         return result(LINK_SAFETY_ALLOW_READ_ONLY,
                       LINK_SAFETY_REASON_ALLOWED_UDS_READ,
                       service);
+    case 0x18U:
+    case 0x1AU:
+    case 0x21U:
+        return result(LINK_SAFETY_ALLOW_READ_ONLY,
+                      LINK_SAFETY_REASON_ALLOWED_KWP_READ,
+                      service);
     case 0x11U:
         return result(LINK_SAFETY_BLOCK,
                       LINK_SAFETY_REASON_ECU_RESET,
@@ -111,6 +117,8 @@ const char *link_safety_reason_string(link_safety_reason reason)
         return "allowed OBD read";
     case LINK_SAFETY_REASON_ALLOWED_UDS_READ:
         return "allowed UDS read/keepalive";
+    case LINK_SAFETY_REASON_ALLOWED_KWP_READ:
+        return "allowed KWP2000 read";
     case LINK_SAFETY_REASON_EMPTY_REQUEST:
         return "empty request";
     case LINK_SAFETY_REASON_WRITE_OR_CONTROL:
