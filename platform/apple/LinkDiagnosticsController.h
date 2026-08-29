@@ -45,6 +45,8 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic, copy, readonly) NSArray<NSString *> *permanentDTCs;
 @property(nonatomic, readonly, getter=isActive) BOOL active;
 @property(nonatomic, readonly, getter=isReady) BOOL ready;
+@property(nonatomic, readonly, getter=isNativeAdapterConnected)
+    BOOL nativeAdapterConnected;
 @property(nonatomic, readonly, getter=isSimulated) BOOL simulated;
 @property(nonatomic, readonly, getter=isManufacturerExtensionActive)
     BOOL manufacturerExtensionActive;

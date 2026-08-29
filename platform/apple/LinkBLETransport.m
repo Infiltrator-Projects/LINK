@@ -59,15 +59,15 @@ static void LinkSortCandidates(NSMutableArray<LinkBLECandidate *> *candidates)
     }
 }
 
+static LinkAdapterKind LinkPeripheralAdapterKind(NSString *name)
+{
+    if (name.length == 0U) return LINK_ADAPTER_KIND_UNKNOWN;
+    return link_adapter_kind_from_bluetooth_name(name.UTF8String);
+}
+
 static BOOL LinkPeripheralNameLooksLikeAdapter(NSString *name)
 {
-    NSString *lower = name.lowercaseString;
-    return [lower isEqualToString:@"ios-vlink"] ||
-           [lower containsString:@"vlink"] ||
-           [lower containsString:@"vgate"] ||
-           [lower containsString:@"icar"] ||
-           [lower containsString:@"obd"] ||
-           [lower containsString:@"elm"];
+    return LinkPeripheralAdapterKind(name) != LINK_ADAPTER_KIND_UNKNOWN;
 }
 
 static BOOL LinkRemainingBytesAreWhitespace(const uint8_t *bytes,
@@ -91,6 +91,7 @@ static BOOL LinkRemainingBytesAreWhitespace(const uint8_t *bytes,
 @property(nonatomic, copy, readwrite, nullable) NSString *serviceUUID;
 @property(nonatomic, copy, readwrite, nullable) NSString *writeCharacteristicUUID;
 @property(nonatomic, copy, readwrite, nullable) NSString *notifyCharacteristicUUID;
+@property(nonatomic, readwrite) LinkAdapterKind adapterKind;
 - (void)beginScan;
 - (void)connectPeripheral:(CBPeripheral *)peripheral
                      name:(NSString *)name;
@@ -144,9 +145,15 @@ static BOOL LinkRemainingBytesAreWhitespace(const uint8_t *bytes,
     if (self != nil) {
         _state = LinkBLETransportStateIdle;
         _statusText = @"Idle";
+        _adapterKind = LINK_ADAPTER_KIND_UNKNOWN;
         _writeQueue = [[NSMutableData alloc] init];
     }
     return self;
+}
+
+- (BOOL)isNativeAdapter
+{
+    return self.adapterKind == LINK_ADAPTER_KIND_MERCEDES_ME_NATIVE;
 }
 
 - (BOOL)isReady
@@ -319,6 +326,7 @@ static BOOL LinkRemainingBytesAreWhitespace(const uint8_t *bytes,
         [_central cancelPeripheralConnection:oldPeripheral];
     self.peripheralName = nil;
     self.adapterIdentifier = nil;
+    self.adapterKind = LINK_ADAPTER_KIND_UNKNOWN;
     [self resetSelection];
 
     /*
@@ -363,13 +371,13 @@ static BOOL LinkRemainingBytesAreWhitespace(const uint8_t *bytes,
     }];
     [self setState:LinkBLETransportStateScanning
             status:_scanAttempt == 1U
-                ? @"Scanning for BLE OBD adapter"
-                : @"Retrying BLE OBD adapter scan"];
+                ? @"Scanning for Bluetooth diagnostic adapter"
+                : @"Retrying Bluetooth diagnostic adapter scan"];
     [self scheduleStateTimeout:LinkBLETransportStateScanning generation:generation
                          after:LinkScanTimeoutSeconds
                        message:_scanAttempt < LinkScanAttemptLimit
-                           ? @"No BLE OBD adapter found; retrying"
-                           : @"No BLE OBD adapter found"
+                           ? @"No Bluetooth diagnostic adapter found; retrying"
+                           : @"No Bluetooth diagnostic adapter found"
                        recover:_scanAttempt < LinkScanAttemptLimit];
 }
 
@@ -383,6 +391,7 @@ static BOOL LinkRemainingBytesAreWhitespace(const uint8_t *bytes,
     _peripheral = peripheral;
     _peripheral.delegate = self;
     self.peripheralName = name;
+    self.adapterKind = LinkPeripheralAdapterKind(name);
     [self setState:LinkBLETransportStateConnecting
             status:[NSString stringWithFormat:@"Connecting to %@", name]];
     [_central connectPeripheral:peripheral options:nil];
@@ -529,7 +538,29 @@ didDiscoverCharacteristicsForService:(CBService *)service
     LinkSortCandidates(result);
     _candidates = [result copy];
     _candidateIndex = 0U;
-    if (_candidates.count == 0U) { [self failAndStop:@"No writable/notify BLE command channel found"]; return; }
+    if (_candidates.count == 0U) {
+        [self failAndStop:@"No writable/notify Bluetooth data channel found"];
+        return;
+    }
+
+    if (self.isNativeAdapter) {
+        LinkBLECandidate *candidate = _candidates.firstObject;
+        _selectedWrite = candidate.writeCharacteristic;
+        _selectedNotify = candidate.notifyCharacteristic;
+        _selectedWriteType = candidate.writeType;
+        self.serviceUUID = candidate.service.UUID.UUIDString;
+        self.writeCharacteristicUUID =
+            candidate.writeCharacteristic.UUID.UUIDString;
+        self.notifyCharacteristicUUID =
+            candidate.notifyCharacteristic.UUID.UUIDString;
+        self.adapterIdentifier =
+            @"Mercedes me Adapter A2138203202 (native Bluetooth)";
+        [self setState:LinkBLETransportStateProbing
+                status:@"Preparing Mercedes me native Bluetooth capture"];
+        [_peripheral setNotifyValue:YES forCharacteristic:_selectedNotify];
+        return;
+    }
+
     [self setState:LinkBLETransportStateProbing
             status:_channelProbeAttempt == 1U
                 ? @"Validating ELM327 BLE channel"
@@ -603,6 +634,26 @@ didUpdateNotificationStateForCharacteristic:(CBCharacteristic *)characteristic
     if (_probingCandidate != nil && characteristic == _probingCandidate.notifyCharacteristic) {
         if (error != nil || !characteristic.isNotifying) { [self failCurrentProbe]; return; }
         [self sendProbeIfPossible];
+        return;
+    }
+    if (self.isNativeAdapter &&
+        self.state == LinkBLETransportStateProbing &&
+        characteristic == _selectedNotify) {
+        if (error != nil || !characteristic.isNotifying) {
+            [self recoverAfterTransientFailure:
+                error.localizedDescription != nil
+                    ? error.localizedDescription
+                    : @"Mercedes me notification channel could not be enabled"];
+            return;
+        }
+        [[NSUserDefaults standardUserDefaults]
+            setObject:_peripheral.identifier.UUIDString
+               forKey:LinkKnownPeripheralDefaultsKey];
+        _scanAttempt = 0U;
+        _recoveryAttempt = 0U;
+        _channelProbeAttempt = 0U;
+        [self setState:LinkBLETransportStateReady
+                status:@"Mercedes me Adapter connected · native capture ready"];
         return;
     }
     if (characteristic == _selectedNotify && error != nil)

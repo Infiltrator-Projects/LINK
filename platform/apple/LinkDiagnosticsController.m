@@ -18,6 +18,8 @@
 @property(nonatomic, copy, readwrite) NSArray<NSString *> *permanentDTCs;
 @property(nonatomic, readwrite, getter=isActive) BOOL active;
 @property(nonatomic, readwrite, getter=isReady) BOOL ready;
+@property(nonatomic, readwrite, getter=isNativeAdapterConnected)
+    BOOL nativeAdapterConnected;
 
 - (void)notifyDelegate;
 - (void)setSharedStatus:(NSString *)status;
@@ -25,6 +27,7 @@
 - (void)rewriteCurrentSessionMetadataKey:(NSString *)key
                                    value:(const char *)value;
 - (void)beginPortableSession;
+- (void)recordNativeTransportBytes:(const uint8_t *)data size:(size_t)size;
 - (void)startTickTimer;
 - (void)stopTickTimer;
 - (BOOL)beginCommand:(const char *)command timeout:(uint64_t)timeoutMs;
@@ -146,6 +149,15 @@ static bool LinkAppleFlowIsFaultScan(const LinkDiagnosticFlow *flow)
            flow->stage == LINK_DIAGNOSTIC_FLOW_SCANNING_PERMANENT_DTCS;
 }
 
+static void LinkAppleNativeTransportReceive(
+    void *context, const uint8_t *data, size_t size)
+{
+    LinkDiagnosticsController *controller =
+        (__bridge LinkDiagnosticsController *)context;
+    if (controller == nil || data == NULL || size == 0U) return;
+    [controller recordNativeTransportBytes:data size:size];
+}
+
 static void LinkAppleSessionEvent(
     void *context,
     const LinkElm327Session *session)
@@ -251,6 +263,7 @@ static void LinkAppleSessionEvent(
     self.active = YES;
     self.ready = NO;
     self.adapterIdentifier = nil;
+    self.nativeAdapterConnected = NO;
     self.faultScanStatusText = @"Waiting for vehicle connection";
     self.storedDTCs = @[];
     self.pendingDTCs = @[];
@@ -392,6 +405,7 @@ static void LinkAppleSessionEvent(
     _liveRecoveryActive = NO;
     _consecutiveLiveTimeouts = 0U;
     _simulated = NO;
+    self.nativeAdapterConnected = NO;
     self.active = NO;
     self.ready = NO;
     [self setSharedStatus:@"Disconnected"];
@@ -424,9 +438,39 @@ static void LinkAppleSessionEvent(
             "BLE", stateName.UTF8String, transportStatus.UTF8String);
     }
 
-    if (transport.isReady && !_sessionInitialized) {
+    if (transport.isReady && transport.isNativeAdapter &&
+        !_sessionInitialized) {
+        if (!self.nativeAdapterConnected) {
+            LinkTransport native = LinkBLETransportMakeCTransport(_provider);
+            if (link_transport_is_valid(&native) &&
+                native.set_receiver != NULL) {
+                native.set_receiver(
+                    native.context, LinkAppleNativeTransportReceive,
+                    (__bridge void *)self);
+            }
+            self.nativeAdapterConnected = YES;
+            self.ready = NO;
+            self.faultScanStatusText =
+                @"Not available through native Mercedes me capture yet";
+            [self setSharedStatus:
+                @"Mercedes me Adapter connected · native protocol capture"];
+        }
+        return;
+    }
+
+    if (transport.isReady && !_sessionInitialized &&
+        !transport.isNativeAdapter) {
         [self beginPortableSession];
         return;
+    }
+
+    if (!transport.isReady && self.nativeAdapterConnected) {
+        LinkTransport native = LinkBLETransportMakeCTransport(_provider);
+        if (link_transport_is_valid(&native) &&
+            native.set_receiver != NULL)
+            native.set_receiver(native.context, NULL, NULL);
+        self.nativeAdapterConnected = NO;
+        self.ready = NO;
     }
 
     if (!transport.isReady &&
@@ -455,6 +499,21 @@ static void LinkAppleSessionEvent(
         self.ready = NO;
     }
     [self notifyDelegate];
+}
+
+- (void)recordNativeTransportBytes:(const uint8_t *)data size:(size_t)size
+{
+    NSMutableString *hex;
+    if (!self.nativeAdapterConnected || data == NULL || size == 0U ||
+        !_recorder.started || _recorder.finished) return;
+
+    hex = [[NSMutableString alloc] initWithCapacity:(NSUInteger)size * 2U];
+    for (size_t index = 0U; index < size; ++index)
+        [hex appendFormat:@"%02X", (unsigned int)data[index]];
+    (void)link_telemetry_recorder_record_response_named(
+        &_recorder,
+        LinkAppleElapsedMilliseconds(_sessionMonotonicStartMs),
+        "NATIVE_RX", "bytes", hex.UTF8String);
 }
 
 - (void)beginPortableSession

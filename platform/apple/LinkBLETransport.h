@@ -41,6 +41,8 @@ typedef NS_ENUM(NSInteger, LinkBLETransportState) {
 @property(nonatomic, copy, readonly, nullable) NSString *writeCharacteristicUUID;
 @property(nonatomic, copy, readonly, nullable) NSString *notifyCharacteristicUUID;
 @property(nonatomic, readonly, getter=isReady) BOOL ready;
+@property(nonatomic, readonly) LinkAdapterKind adapterKind;
+@property(nonatomic, readonly, getter=isNativeAdapter) BOOL nativeAdapter;
 
 - (void)start;
 - (void)disconnect;
