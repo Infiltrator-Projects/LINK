@@ -15,6 +15,7 @@
 int main(void)
 {
     const LinkMercedesMeWhisperVocabularyEntry *entry;
+    LinkDiagnosticResponseSelectionPolicy policy;
 
     CHECK(strcmp(
         link_mercedes_me_whisper_response_selection_name(
@@ -23,6 +24,10 @@ int main(void)
     CHECK(link_mercedes_me_whisper_response_selection_from_name(
               "SELECT_MAXIMUM") ==
           LINK_MERCEDES_ME_WHISPER_SELECT_MAXIMUM);
+    CHECK(link_mercedes_me_whisper_response_selection_policy(
+              LINK_MERCEDES_ME_WHISPER_SELECT_LOWEST_CANID_CACHED,
+              &policy));
+    CHECK(policy == LINK_DIAGNOSTIC_RESPONSE_SELECT_LOWEST_CAN_ID_CACHED);
     CHECK(strcmp(
         link_mercedes_me_whisper_dtc_presentation_name(
             LINK_MERCEDES_ME_WHISPER_SAE_DTC_UDS_DAI),
@@ -34,7 +39,7 @@ int main(void)
               "bogus") ==
           LINK_MERCEDES_ME_WHISPER_RESPONSE_SELECTION_UNKNOWN);
 
-    CHECK(link_mercedes_me_whisper_vocabulary_count() == 12U);
+    CHECK(link_mercedes_me_whisper_vocabulary_count() == 32U);
     entry = link_mercedes_me_whisper_vocabulary_find("config.properties");
     CHECK(entry != NULL);
     CHECK(entry->kind == LINK_MERCEDES_ME_WHISPER_VOCAB_RESOURCE);
@@ -44,7 +49,12 @@ int main(void)
     entry = link_mercedes_me_whisper_vocabulary_find("alwaysAvailable");
     CHECK(entry != NULL);
     CHECK(entry->kind == LINK_MERCEDES_ME_WHISPER_VOCAB_CONFIGURATION_KEY);
+    CHECK(link_mercedes_me_whisper_vocabulary_find("responseselection") != NULL);
+    CHECK(link_mercedes_me_whisper_vocabulary_find("DATAID.dataPoints") != NULL);
+    CHECK(link_mercedes_me_whisper_vocabulary_find("DATAID.dataPoints.children") != NULL);
+    CHECK(link_mercedes_me_whisper_vocabulary_find("PaddingByte") != NULL);
+    CHECK(link_mercedes_me_whisper_vocabulary_find("PduTransceive") != NULL);
     CHECK(link_mercedes_me_whisper_vocabulary_find("not-recovered") == NULL);
-    CHECK(link_mercedes_me_whisper_vocabulary_at(12U) == NULL);
+    CHECK(link_mercedes_me_whisper_vocabulary_at(32U) == NULL);
     return 0;
 }
