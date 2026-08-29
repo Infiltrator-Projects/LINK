@@ -14,6 +14,23 @@ typedef struct Aes256Context {
     uint8_t inverse_sbox[256];
 } Aes256Context;
 
+/*
+ * Clean-room interoperability constant recovered from the literal pool used
+ * identically by SeedKeyAction::logIntoAdapter() and
+ * ConfigureSecureModeAction::logIntoAdapter() in archived GDK 4.7.61.
+ */
+static const uint8_t mercedes_me_adapter_auth_key[
+    LINK_MERCEDES_ME_ADAPTER_AUTH_KEY_SIZE] = {
+    UINT8_C(0x4f), UINT8_C(0xf3), UINT8_C(0x64), UINT8_C(0xf1),
+    UINT8_C(0x14), UINT8_C(0xd4), UINT8_C(0x8b), UINT8_C(0xe9),
+    UINT8_C(0x36), UINT8_C(0xf9), UINT8_C(0x7b), UINT8_C(0xe6),
+    UINT8_C(0x48), UINT8_C(0x2f), UINT8_C(0xa5), UINT8_C(0x6e),
+    UINT8_C(0x3d), UINT8_C(0x9c), UINT8_C(0x60), UINT8_C(0x80),
+    UINT8_C(0x71), UINT8_C(0xce), UINT8_C(0xfc), UINT8_C(0x20),
+    UINT8_C(0x2f), UINT8_C(0xb6), UINT8_C(0xf7), UINT8_C(0xf9),
+    UINT8_C(0xa5), UINT8_C(0x86), UINT8_C(0xd1), UINT8_C(0x57)
+};
+
 static uint8_t gf_xtime(uint8_t value)
 {
     return (uint8_t)((value << 1U) ^
@@ -519,6 +536,30 @@ LinkMercedesMeNativeResult link_mercedes_me_derive_session_key(
     return LINK_MERCEDES_ME_NATIVE_OK;
 }
 
+LinkMercedesMeNativeResult link_mercedes_me_derive_secure_session_key(
+    const uint8_t session_master_key[LINK_MERCEDES_ME_SESSION_MASTER_KEY_SIZE],
+    const uint8_t device_random[LINK_MERCEDES_ME_DEVICE_RANDOM_SIZE],
+    const uint8_t app_random[LINK_MERCEDES_ME_APP_RANDOM_SIZE],
+    uint8_t session_key[LINK_MERCEDES_ME_SESSION_KEY_SIZE])
+{
+    return link_mercedes_me_derive_session_key(
+        session_master_key, device_random, app_random, session_key);
+}
+
+LinkMercedesMeNativeResult link_mercedes_me_authentication_response(
+    const uint8_t device_random[LINK_MERCEDES_ME_DEVICE_RANDOM_SIZE],
+    uint8_t response[LINK_MERCEDES_ME_AUTH_RESPONSE_SIZE])
+{
+    Aes256Context aes;
+
+    if (device_random == NULL || response == NULL)
+        return LINK_MERCEDES_ME_NATIVE_INVALID_ARGUMENT;
+    aes256_init(&aes, mercedes_me_adapter_auth_key);
+    aes256_encrypt_block(&aes, device_random, response);
+    memset(&aes, 0, sizeof(aes));
+    return LINK_MERCEDES_ME_NATIVE_OK;
+}
+
 LinkMercedesMeNativeResult link_mercedes_me_secure_encode(
     const uint8_t session_key[LINK_MERCEDES_ME_SESSION_KEY_SIZE],
     const uint8_t *plaintext,
@@ -898,6 +939,26 @@ LinkMercedesMeNativeResult link_mercedes_me_build_set_key(
         (uint8_t)LINK_MERCEDES_ME_CMD_SET_KEY,
         payload, payload_size, false,
         out, capacity, out_size);
+}
+
+LinkMercedesMeNativeResult link_mercedes_me_build_login_set_key(
+    const uint8_t device_random[LINK_MERCEDES_ME_DEVICE_RANDOM_SIZE],
+    uint8_t *out,
+    size_t capacity,
+    size_t *out_size)
+{
+    uint8_t response[LINK_MERCEDES_ME_AUTH_RESPONSE_SIZE];
+    LinkMercedesMeNativeResult result;
+
+    if (device_random == NULL)
+        return LINK_MERCEDES_ME_NATIVE_INVALID_ARGUMENT;
+    result = link_mercedes_me_authentication_response(
+        device_random, response);
+    if (result != LINK_MERCEDES_ME_NATIVE_OK) return result;
+    result = link_mercedes_me_build_set_key(
+        response, sizeof(response), out, capacity, out_size);
+    memset(response, 0, sizeof(response));
+    return result;
 }
 
 static LinkMercedesMeNativeResult write_x_prefix(
