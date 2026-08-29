@@ -130,7 +130,7 @@ int main(void)
     {
         char expected_link_version[64];
         (void)snprintf(expected_link_version, sizeof(expected_link_version),
-                       "# link_version,\\\"%s\\\"\\n", LINK_VERSION_STRING);
+                       "# link_version,\"%s\"\n", LINK_VERSION_STRING);
         CHECK(strstr(output.data, expected_link_version) != NULL);
         CHECK(occurrence_count(output.data, "# link_version,") == 1U);
     }
