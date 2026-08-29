@@ -99,7 +99,7 @@ int main(void)
         uint8_t decoded_seed[LINK_MERCEDES_ME_DEVICE_RANDOM_SIZE];
         uint8_t app_random[LINK_MERCEDES_ME_APP_RANDOM_SIZE];
         static const uint8_t seed_response[] =
-            "yAAECAwQFBgcICQoLDA0ODw==\\r";
+            "yAAECAwQFBgcICQoLDA0ODw==\r";
         size_t seed_request_size = 0U;
 
         for (index = 0U; index < sizeof(app_random); ++index)
@@ -108,19 +108,19 @@ int main(void)
                   seed_request, sizeof(seed_request),
                   &seed_request_size) == LINK_MERCEDES_ME_NATIVE_OK);
         CHECK(seed_request_size == 2U &&
-              memcmp(seed_request, "y\\r", 2U) == 0);
+              memcmp(seed_request, "y\r", 2U) == 0);
         CHECK(link_mercedes_me_build_secure_seed_request(
                   app_random, seed_request, sizeof(seed_request),
                   &seed_request_size) == LINK_MERCEDES_ME_NATIVE_OK);
         CHECK(seed_request_size == 26U &&
               memcmp(seed_request,
-                     "yAAECAwQFBgcICQoLDA0ODw==\\r", 26U) == 0);
+                     "yAAECAwQFBgcICQoLDA0ODw==\r", 26U) == 0);
         CHECK(link_mercedes_me_parse_seed_response(
                   seed_response, sizeof(seed_response) - 1U,
                   decoded_seed) == LINK_MERCEDES_ME_NATIVE_OK);
         CHECK(memcmp(decoded_seed, app_random, sizeof(decoded_seed)) == 0);
         CHECK(link_mercedes_me_parse_seed_response(
-                  (const uint8_t *)"yAQI=\\r", 6U,
+                  (const uint8_t *)"yAQI=\r", 6U,
                   decoded_seed) == LINK_MERCEDES_ME_NATIVE_MALFORMED);
     }
 

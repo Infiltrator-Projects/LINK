@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "link/telemetry.h"
+#include "link/version.h"
 
 #include "infiltratr/core.h"
 #include "infiltratr/format.h"
@@ -29,10 +30,6 @@
 #define LINK_TELEMETRY_PRODUCT_BUILD_REVISION MBLINK_BUILD_REVISION
 #elif defined(JAGLINK_BUILD_REVISION)
 #define LINK_TELEMETRY_PRODUCT_BUILD_REVISION JAGLINK_BUILD_REVISION
-#endif
-
-#ifndef LINK_TELEMETRY_LINK_VERSION
-#define LINK_TELEMETRY_LINK_VERSION "0.14.26"
 #endif
 
 #ifndef LINK_TELEMETRY_BUILD_ID
@@ -267,7 +264,7 @@ static bool emit_build_identity(LinkTelemetryTextSink sink,
     int written;
 
     if (!emit_metadata(
-            sink, context, "link_version", LINK_TELEMETRY_LINK_VERSION) ||
+            sink, context, "link_version", LINK_VERSION_STRING) ||
         !emit_metadata(sink, context, "build_id", LINK_TELEMETRY_BUILD_ID))
         return false;
 

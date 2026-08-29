@@ -12,6 +12,18 @@ if(NOT LINK_PROJECT_VERSION MATCHES "^[0-9]+\.[0-9]+\.[0-9]+$")
 endif()
 project(LINK VERSION "${LINK_PROJECT_VERSION}" LANGUAGES C)
 
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/include/link/version.h" LINK_PUBLIC_VERSION_HEADER)
+string(REGEX MATCH
+    "#define[ \t]+LINK_VERSION_STRING[ \t]+\"([0-9]+\\.[0-9]+\\.[0-9]+)\""
+    LINK_PUBLIC_VERSION_MATCH "${LINK_PUBLIC_VERSION_HEADER}")
+if(NOT LINK_PUBLIC_VERSION_MATCH)
+    message(FATAL_ERROR "include/link/version.h must define LINK_VERSION_STRING.")
+endif()
+if(NOT CMAKE_MATCH_1 STREQUAL PROJECT_VERSION)
+    message(FATAL_ERROR
+        "VERSION (${PROJECT_VERSION}) and LINK_VERSION_STRING (${CMAKE_MATCH_1}) disagree.")
+endif()
+
 if(MSVC)
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 endif()

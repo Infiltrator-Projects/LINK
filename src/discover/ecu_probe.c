@@ -235,7 +235,7 @@ LinkEcuProbeResult link_ecu_probe_diagnostic_request(
     size_t *pdu_length,
     LinkDiagnosticRequestDefinition *request)
 {
-    LinkUdsResult uds_result;
+    LinkUdsResult uds_result = LINK_UDS_RESULT_FAILED_STATE;
     link_safety_result safety;
 
     if (pdu_length != NULL) *pdu_length = 0U;
@@ -266,6 +266,8 @@ LinkEcuProbeResult link_ecu_probe_diagnostic_request(
     case LINK_ECU_PROBE_STAGE_CONFIGURE_CHANNEL:
     case LINK_ECU_PROBE_STAGE_COMPLETE:
     case LINK_ECU_PROBE_STAGE_FAILED:
+        return LINK_ECU_PROBE_RESULT_FAILED_STATE;
+    default:
         return LINK_ECU_PROBE_RESULT_FAILED_STATE;
     }
 

@@ -4,6 +4,7 @@
 #include "link/scheduler.h"
 #include "link/telemetry.h"
 #include "link/transport.h"
+#include "link/version.h"
 #include "link/mercedes_me_adapter.h"
 
 #include <stdio.h>
@@ -126,6 +127,13 @@ int main(void)
     link_telemetry_session_metadata_finish(&metadata, 2U);
     CHECK(link_telemetry_export_csv_named(&telemetry, &metadata, "link", pid_name, unit_name, result_name, sink, &output));
     CHECK(strstr(output.data, "# link_csv_version,1\n") != NULL);
+    {
+        char expected_link_version[64];
+        (void)snprintf(expected_link_version, sizeof(expected_link_version),
+                       "# link_version,\\\"%s\\\"\\n", LINK_VERSION_STRING);
+        CHECK(strstr(output.data, expected_link_version) != NULL);
+        CHECK(occurrence_count(output.data, "# link_version,") == 1U);
+    }
     CHECK(strstr(output.data, "\"Engine speed\"") != NULL);
 
     memset(&output, 0, sizeof(output));
