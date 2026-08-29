@@ -142,11 +142,13 @@ The diagnostic engine similarly loads native library name `diaglogic`.
 `DiagLogicJni` class exposes native `preview()` and `runCycleStep()`
 methods returning byte arrays.
 
-On a normal Android installation these library names conventionally resolve to
-ABI-specific shared objects such as `libgdk.so` and `libdiaglogic.so`.
-Those native objects were not among the extracted files supplied for this
-analysis, so the lower command generator, SMK application and vehicle decoder
-remain outside the present evidence set.
+The native objects have now been recovered and analysed. Their hashes,
+dependency graph, exported protocol classes, cryptographic dependencies and
+configuration vocabulary are preserved in
+[`MERCEDES-ME-NATIVE-BINARIES.md`](MERCEDES-ME-NATIVE-BINARIES.md).
+That evidence materially narrows the remaining work to exact command builders,
+the complete secure exchange, the APK configuration assets and physical
+validation.
 
 ## Java/native Bluetooth bridge and stream contract
 
@@ -263,7 +265,7 @@ The distinction between **requested device ID** and **responding device
 address** is explicit in this schema and should be preserved when LINK/MBLINK
 eventually ingest native DiagLogic output.
 
-The archived application also exposes 115 exact diagnostic/live-data IDs.
+The archived application also exposes 120 exact diagnostic/live-data IDs.
 They are preserved separately in
 [`MERCEDES-ME-DATA-IDS.md`](MERCEDES-ME-DATA-IDS.md) so the catalogue can be
 used as an implementation checklist without bloating the transport notes.
@@ -401,11 +403,11 @@ captures. They are evidence labels, not commands to the adapter.
 
 The APK has not yet yielded, with sufficient confidence, all of the following:
 
-- the command vocabulary and payload syntax inside the now-proved CR/NACK record framing;
-- checksum/length/escaping rules;
-- exact request bytes for `setupObdAdapter` and `readObdAdapterData`;
-- SMK derivation/use on the local Bluetooth channel;
-- mapping from native command/DiagLogic payload bytes to the now-known data IDs such as fuel level, odometer, trip and other vehicle values;
+- exact wire syntax for the individual GDK command builders inside the now-proved CR/NACK record framing;
+- the complete active authentication/secure-envelope exchange;
+- exact request bytes for higher-level `setupObdAdapter` and `readObdAdapterData` lifecycle operations;
+- the APK configuration assets that bind Mercedes ECU addresses, requests, result extraction and formulas;
+- mapping from those configuration definitions to the now-known data IDs such as fuel level, odometer, trip and other vehicle values;
 - whether the Toshiba SPP-over-BLE channel applies to a specific hardware
   generation or is only a formatter compatibility path.
 
