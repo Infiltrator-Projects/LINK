@@ -357,6 +357,7 @@ static bool ble_name_likely_elm(const char *name)
     if (lower == NULL) return false;
     likely = strstr(lower, "vgate") != NULL ||
              strstr(lower, "v-link") != NULL ||
+             strstr(lower, "vlink") != NULL ||
              strstr(lower, "icar") != NULL ||
              strstr(lower, "obd") != NULL ||
              strstr(lower, "elm") != NULL ||
