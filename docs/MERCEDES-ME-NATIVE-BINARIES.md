@@ -4,6 +4,8 @@
 
 This note preserves interoperability facts recovered from the native Android libraries supplied from the archived official Mercedes me Adapter 4.7.61 application. It is intended for the current `Infiltrator-Projects/LINK` repository.
 
+Authentication call-flow analysis continued after this inventory was written. [`MERCEDES-ME-AUTH-FORENSICS.md`](MERCEDES-ME-AUTH-FORENSICS.md) is authoritative for the random-value direction, GetSeed/SetKey ordering and Session Master Key boundary; this note remains authoritative for the binary inventory, framing, builders, limits and DiagLogic/Whisper evidence.
+
 ## Evidence set
 
 All analysed vehicle-stack libraries are 32-bit little-endian ARM ELF shared objects for Android 21. The main stack was built with Android NDK r24; `libSAL.so` reports NDK r21.
@@ -68,13 +70,13 @@ The command-class vocabulary and single-character command family are consistent 
 
 `SessionMasterKey::deriveSessionKey()` uses `Sha256ContextFactory::createContext()`. Thumb disassembly validates both random inputs as 16 bytes, then updates the digest with the stored Session Master Key followed by the first and second random arguments before obtaining the digest and constructing a `SessionKey`.
 
-Current binary-supported shape:
+The later call-flow reconstruction assigns the two arguments:
 
-`SessionKey = SHA-256(SMK || random-argument-1 || random-argument-2)`
+`SessionKey = SHA-256(SMK || device_random || app_random)`
 
 `libgdk.so` also imports `Aes256Utils::encodeMessage/decodeMessage`, raw `Aes256Utils::encode/decode`, and Base64 encode/decode from `libcommon.so`. `libcommon.so` exports AES-256 ECB primitives plus the higher-level message helpers.
 
-This proves AES-256/Base64 are part of the secure native stack. The exact active command envelope should remain evidence-gated until the relevant GDK builders/decrypt path are fully reconstructed.
+This proves AES-256/Base64 are part of the secure native stack. The active command envelope and its bounds are reconstructed later in this note and covered by regression tests.
 
 ## Whisper configuration-driven vehicle protocol
 
@@ -165,8 +167,8 @@ proprietary Android binary.
 The native constants are now tied together:
 
 - Session Master Key: **32 bytes**
-- first derive-function random argument: **16 bytes**
-- second derive-function random argument: **16 bytes**
+- device/adapter random: **16 bytes**
+- application random: **16 bytes**
 - SHA-256 digest / SessionKey: **32 bytes**
 
 `SessionMasterKey::deriveSessionKey()` updates one SHA-256 context with the
@@ -174,13 +176,14 @@ stored SMK and then the two random arguments in call order. The independent
 interoperability formula is therefore:
 
 ```text
-SessionKey = SHA-256(SMK || random_argument_1 || random_argument_2)
+SessionKey = SHA-256(SMK || device_random || app_random)
 ```
 
-The surrounding native vocabulary names application/adapter random values,
-but the A/D direction of the two function arguments remains deliberately
-unlabelled until the complete authentication call sequence proves their
-ordering.
+The secure path sends the application random with GetSeed, receives the
+device random, authenticates that value with SetKey, and then derives the
+session key in the order above. The legacy path omits the application-random
+payload and performs the device-seed challenge/SetKey exchange only. The
+supporting call-flow evidence is recorded in `MERCEDES-ME-AUTH-FORENSICS.md`.
 
 ## Proved GDK command vocabulary and builders
 
@@ -411,12 +414,11 @@ challenge key or APK configuration bundle is copied into LINK.
 
 ## Still evidence-gated
 
-- the **authentication sequence** tying GetSeed/SetKey/GetPasskey, SMK
-  provisioning and the two random arguments together;
-- the exact role/order of application-random versus adapter-random in that
-  sequence;
+- acquisition of an adapter-specific SMK from the retired external provider
+  or a valid existing cache on a fresh installation;
+- the exact commissioning and backend-provisioning lifecycle that associates
+  an adapter ID/passkey with that SMK;
 - payload formats for X modes whose identifier is known but structure is not;
-- the role of the native fixed legacy challenge key in the complete handshake;
 - the actual compressed/raw APK configuration assets;
 - Mercedes ECU TX/RX CAN addresses and service/DID/PDU mappings from those
   assets;

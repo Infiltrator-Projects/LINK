@@ -87,12 +87,14 @@ plaintext command can be wrapped by the recovered:
 a<Base64(AES-256-ECB(inner-frame, SessionKey))>\r
 ```
 
-The remaining blocker for autonomous physical use is not CAN/ISO-TP framing
-anymore. It is the complete authentication/session-establishment ordering:
-which side supplies each 16-byte random value, when GetSeed/SetKey/Passkey are
-issued, and how the retired backend-provisioned SMK relates to a specific
-commissioned adapter. LINK keeps that last part explicit rather than guessing
-and risking lockout.
+The remaining blocker for autonomous physical use is not CAN/ISO-TP framing or
+local authentication ordering. The secure path is now proved as application
+random in GetSeed, device random in the response, device challenge through
+SetKey, then `SHA-256(SMK || device_random || app_random)`. What remains
+external is acquisition of the backend-provisioned SMK for a specific
+commissioned adapter, plus validation against physical hardware. LINK keeps
+that boundary explicit rather than guessing and risking lockout; see
+[`MERCEDES-ME-AUTH-FORENSICS.md`](MERCEDES-ME-AUTH-FORENSICS.md).
 
 ## Ownership boundary
 
