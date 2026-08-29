@@ -4,6 +4,8 @@
 
 This note records additional interoperability facts recovered from the archived official Mercedes me Adapter 4.7.61 native stack. It supplements `MERCEDES-ME-NATIVE-BINARIES.md` without changing the evidence boundary: only behaviour supported by the supplied binaries is stated as proved, and no backend credential, cached master key, or proprietary binary is redistributed here.
 
+**Evidence precedence:** this note contains the later authentication call-flow reconstruction and therefore supersedes older wording in `MERCEDES-ME-NATIVE-BINARIES.md` that left the device/application random ordering or the GetSeed/SetKey/GetPasskey sequence unresolved. The older note remains useful for protocol framing, command builders, limits and DiagLogic/Whisper evidence.
+
 ## Evidence boundary
 
 The relevant native classes in `libgdk.so` are:
@@ -139,6 +141,15 @@ The next highest-value evidence sources are consequently:
 2. archived application data containing the configuration cache/VIN mapping;
 3. the Session Master Key cache for a known adapter, if available;
 4. physical adapter captures to validate the reconstructed local command sequence.
+
+## Archived 4.7.61 package provenance
+
+Public archive indexes independently identify the final package as `com.daimler.mbfa.android`, version `4.7.61` / version code `4076103`. Two distribution forms are visible:
+
+- a full universal APK containing `armeabi-v7a` and `arm64-v8a`, approximately 216 MB, with published SHA-256 `d3b2005d1f6273885f7b96972bb058c14c797d0bea8c81d764095c0dbbeccbaa`;
+- an arm64 XAPK distribution of approximately 96.8 MB.
+
+These archive fingerprints are acquisition provenance only. LINK does not vendor either package, and no configuration asset is treated as recovered until its bytes have actually been obtained and inspected. The package indexes are useful because they provide an exact artifact target for the remaining Whisper/configuration-corpus work rather than relying on an unspecified APK copy.
 
 ## Current interoperability status
 
