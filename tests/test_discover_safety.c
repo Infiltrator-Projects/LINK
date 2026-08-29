@@ -63,6 +63,12 @@ int main(void)
                        LINK_SAFETY_REASON_ALLOWED_UDS_READ);
     failures += expect(0x3EU, LINK_SAFETY_ALLOW_READ_ONLY,
                        LINK_SAFETY_REASON_ALLOWED_UDS_READ);
+    failures += expect(0x18U, LINK_SAFETY_ALLOW_READ_ONLY,
+                       LINK_SAFETY_REASON_ALLOWED_KWP_READ);
+    failures += expect(0x1AU, LINK_SAFETY_ALLOW_READ_ONLY,
+                       LINK_SAFETY_REASON_ALLOWED_KWP_READ);
+    failures += expect(0x21U, LINK_SAFETY_ALLOW_READ_ONLY,
+                       LINK_SAFETY_REASON_ALLOWED_KWP_READ);
 
     failures += expect(0x04U, LINK_SAFETY_BLOCK,
                        LINK_SAFETY_REASON_DTC_CLEAR);
