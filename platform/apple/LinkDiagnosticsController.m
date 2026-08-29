@@ -2,6 +2,7 @@
 #import "LinkDiagnosticsController.h"
 
 #import "link/elm327.h"
+#import "link/mercedes_me_adapter.h"
 #import "link/obd2.h"
 #import "link/telemetry.h"
 #import "link/transport.h"
