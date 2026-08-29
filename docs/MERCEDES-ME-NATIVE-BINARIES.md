@@ -113,13 +113,291 @@ The evidence supports a clean architecture:
 3. Mercedes ECU/request/result/formula knowledge belongs in MBLINK's Mercedes knowledge layer.
 4. Once a Mercedes request is proven, the same vehicle-side definition can be executed through Mercedes me, Tactrix/OpenPort, STM32 CAN or an ELM transport where supported.
 
+## Secure native message format
+
+A deeper Thumb-disassembly pass over `libcommon.so` and `libgdk.so` now
+establishes the secure message format byte-for-byte.
+
+`libcommon.so` exports `crc16_ccitt`, `pmu_encrypt`, `pmu_decrypt`,
+AES-256 ECB primitives and Base64 helpers. The CRC implementation is the
+CRC-16/CCITT-XMODEM parameter set: polynomial `0x1021`, initial value
+`0x0000`, non-reflected processing and no observed final XOR. The standard
+`123456789` check value is therefore `0x31C3`.
+
+Before AES encryption, the plaintext is represented as:
+
+```text
++0  uint16  plaintext length, big endian
++2  uint16  CRC-16/CCITT-XMODEM over plaintext, big endian
++4  uint16  reserved, zero
++6  bytes   plaintext
+...         zero padding
+```
+
+The padded inner-frame length is:
+
+`(plaintext_length + 22) & ~15`
+
+which is the next 16-byte multiple strictly above the six-byte header plus
+payload. Ciphertext is capped at 512 bytes; consequently the largest plaintext
+that can be represented by the observed implementation is **505 bytes**.
+
+The frame is encrypted block-by-block with **AES-256 ECB** using the 32-byte
+session key. `AesCommandProcessor::onTransmit()` then Base64-encodes the
+ciphertext and wraps it as:
+
+```text
+a<Base64(ciphertext)>\r
+```
+
+The receive path requires the `a` identifier for encrypted records, strips
+the wrapper, Base64-decodes, AES-256-decrypts, validates the embedded length
+and CRC, and reconstructs the plaintext command. The two reserved bytes are
+observed as zero on transmit; no stronger receive-side semantic meaning is
+claimed.
+
+LINK independently implements this bounded envelope in
+`mercedes_me_native_protocol.c`. It does not use or redistribute the
+proprietary Android binary.
+
+## Session-key derivation
+
+The native constants are now tied together:
+
+- Session Master Key: **32 bytes**
+- first derive-function random argument: **16 bytes**
+- second derive-function random argument: **16 bytes**
+- SHA-256 digest / SessionKey: **32 bytes**
+
+`SessionMasterKey::deriveSessionKey()` updates one SHA-256 context with the
+stored SMK and then the two random arguments in call order. The independent
+interoperability formula is therefore:
+
+```text
+SessionKey = SHA-256(SMK || random_argument_1 || random_argument_2)
+```
+
+The surrounding native vocabulary names application/adapter random values,
+but the A/D direction of the two function arguments remains deliberately
+unlabelled until the complete authentication call sequence proves their
+ordering.
+
+## Proved GDK command vocabulary and builders
+
+Native command classes and their concrete builders establish these identifiers:
+
+| Purpose | Identifier / observed builder |
+| --- | --- |
+| CAN close | `C` |
+| CAN open | `O` |
+| baud-rate ordinal | `S` |
+| CAN filter code | `M` |
+| CAN filter mask | `m` |
+| timestamp control | `Z` |
+| echo control | `E` |
+| raw CAN family | `t` |
+| ISO-TP configuration | `I` |
+| ISO-TP transaction | `i` |
+| GetSeed | `y` |
+| SetKey | `Y` |
+| GetPasskey | `p` |
+| adapter status | `V` |
+| hardware information | `N` |
+| X-mode family | `X` |
+| secure wrapper | `a` |
+
+The following complete builders are now proved:
+
+- CAN open: `O\r`
+- CAN close: `C\r`
+- adapter status: `V\r`
+- hardware information: `N\r`
+- GetPasskey: `p\r`
+- GetSeed with no payload: `y\r`
+- GetSeed with payload: `y<Base64(payload)>\r`
+- SetKey: `Y<Base64(payload)>\r`
+- baud ordinal: `S0\r` through `S8\r`
+- X read: `X%02X\r`
+- X write: `X%02X<payload>\r`
+
+The official initialization path uses baud ordinal **6**, which constructs
+`S6\r`. The native binary does not by that fact alone prove the physical
+bit-rate meaning of ordinal 6, so LINK intentionally does not relabel it using
+generic SLCAN convention.
+
+The CAN-throttle extension also exposes `F10` run state, `F11` message
+limit, `F12` filter and `F13` reset, with corresponding `F10-E-` through
+`F13-E-` error prefixes.
+
+These builders are exposed as **pure bounded functions only**. LINK does not
+automatically transmit them to a real adapter.
+
+## X-mode identifiers
+
+`CommandString::COMMAND_ID_X(mode)` formats an uppercase two-digit hex mode
+after `X`. The observed valid mode range is `0x01..0x29`. Named modes
+currently proved are:
+
+| Mode | Native meaning |
+| ---: | --- |
+| `0x01` | Bluetooth MAC reset |
+| `0x10` | set/get data |
+| `0x19` | get Bluetooth link key |
+| `0x20` | enter sleep |
+| `0x22` | set adapter sleep period |
+| `0x23` | set CAN repeat count |
+| `0x24` | set CAN repeat wait time |
+| `0x25` | set ignition-off voltage threshold |
+| `0x28` | set app-launch mode |
+| `0x29` | set adapter SPP mode |
+
+The observed maximum value for the enter-sleep setting is 99. VIN-oriented
+XCommander interfaces accept one through 17 characters for adapter VIN.
+
+## GDK protocol bounds and watchdog policy
+
+Exact native constants now preserved in portable LINK include:
+
+- synchronous command timeout: **6900 ms**
+- standard CAN-ID range: **0..0x7FF**
+- block-all CAN filter value: **0x7FF**
+- maximum CAN IDs in one filter operation: **15**
+- raw CAN TX payload maximum: **8 bytes**
+- ISO-TP TX payload maximum: **100 bytes**
+- default raw-RX timeout: **400 ms**, observed range **200..10000 ms**
+- ISO-TP P2* maximum: **10000 ms**
+- ISO-TP P3 maximum: **5000 ms**
+- legislated OBD request ID: **0x7DF**
+- QoS loop queue size: **10**
+- QoS loop age: **3000 ms**
+- QoS-state maximum age: **90000 ms**
+- dead-man default adapter-stop delay: **30 s**
+- dead-man startup timeout: **3000 ms**
+- dead-man startup attempts: **3**
+- `ObdAdapterInit::USE_NO_RESPONSE_MODE = true`
+
+These constants describe the archived implementation. They are not permission
+to change adapter state or vehicle state.
+
+## DiagLogic acquisition and sanity policy
+
+`libdiaglogic.so` contains exact acquisition defaults that are independent of
+the Bluetooth transport. LINK exposes them as a read-only reference-policy
+structure so every transport can use the same evidence without duplicating
+magic numbers.
+
+| Native policy | Value |
+| --- | ---: |
+| live-data stream read timeout | 1500 ms |
+| live-data availability timeout | 5000 ms |
+| minimum ignition read delay | 10000 ms |
+| maximum ignition-read speed | 10 |
+| minimum mileage read delay | 30000 ms |
+| maximum mileage read delay | 300000 ms |
+| maximum mileage-read speed | 20 |
+| minimum fuel-read distance | 5 |
+| minimum negative mileage difference | -2 |
+| codes-cleared/measured-mileage time difference | 30000 ms |
+| maximum speed age for ignition | 10000 ms |
+| ignition-off threshold minimum | 12.2 V |
+| ignition-off threshold default | 13.2 V |
+| ignition-off threshold maximum | 13.2 V |
+| margin below observed max battery voltage | 0.2 V |
+| allowed live-status age | 60000 ms |
+| allowed run-cycle-status age | 90000 ms |
+| invalid trip-start mileage sentinel | -1.0 |
+
+Where the native symbol name does not prove a physical unit (notably the
+speed/distance thresholds), LINK preserves the numeric value without inventing
+one.
+
+The higher-level native pipeline also names
+`UnplausibleFuelVolumeFilter`,
+`MileageAdjustingVehicleStatusUpdater`,
+`TripAverageSpeedVehicleStatusUpdater`,
+`IrregularObdResponseVehicleStatusUpdater` and
+`TripWarningLampVehicleStatusUpdater`. It separately tracks concepts such as
+`actualFuelFlow`, `fuelFlowSinceReset`, `fuelFlowSinceStart`,
+`fuelFlowValues`, `fuelVolumeStatistics`, `mileageOfLastFuelRead` and
+`fuelRefreshRequired`.
+
+The architectural consequence is important: raw ECU samples and
+validated/derived vehicle state are distinct layers and should remain so in
+MBLINK regardless of which LINK transport supplied the raw measurement.
+
+## VIN cascade vocabulary
+
+DiagLogic contains separate VIN paths including `vinCascade`,
+`miniVinCascade`, `MSAVinCascadeVin`, `modelSpecificVin`, `vinPart3`,
+`vinPart3_0x071` and `vinPart3_0x204`. The suffixes are retained as native
+evidence labels only; LINK does not assume they are CAN addresses without
+call/configuration evidence.
+
+## Expanded Whisper configuration schema
+
+Whisper exposes considerably more than a generic PDU/formula pair. Its
+configuration vocabulary includes data points, throttle data points, data
+type/unit, read interval, always-available flags, dependencies/children,
+device provider, link/request/service identifiers, retry interval, PDU bytes,
+timeouts, matching responses, TX/RX addressing, baud rate, P2*/P3 timing,
+padding, CAN filter offset/byte mask/bit mask, result extraction, field length,
+encoding and formulas.
+
+Observed response-selection strategies are:
+
+- `SELECT_FIRST`
+- `SELECT_LOWEST_CANID_CACHED`
+- `SELECT_MAXIMUM`
+- `MERGE_ELIMINATE_DUPLICATES`
+
+Observed DTC presentation types are:
+
+- `SAEDTC_KWP_DAI`
+- `SAEDTC_KWP_VW`
+- `SAEDTC_UDS_DAI`
+- `SAEDTC_UDS_VW`
+- `SAEDTC_OBD`
+
+LINK preserves these exact names in a small portable Whisper vocabulary module.
+This is particularly relevant to multi-ECU OBD responses: the official stack
+has explicit select/merge policies rather than assuming every response is one
+anonymous value.
+
+Whisper also contains Poco ZIP decompression support, a native
+`DecompressHandler`, configuration revision/cache/blacklist handling,
+`activeconfiguration` and `vinmapping`. The diagnostic definition set may
+therefore be supplied as a compressed configuration bundle rather than a
+plain directory of obvious `.properties` files.
+
+## Implementation status
+
+LINK now independently implements and regression-tests:
+
+- session-key derivation from caller-supplied SMK/random values;
+- CRC-16/CCITT-XMODEM;
+- the bounded six-byte secure inner frame;
+- AES-256 ECB encryption/decryption for that frame;
+- Base64 `a...CR` secure wrapping/unwrapping;
+- the proved simple/seed/key/baud/X command builders;
+- observed GDK protocol limits and X-mode constants;
+- the DiagLogic acquisition-policy constants;
+- Whisper response-selection and DTC-presentation vocabularies.
+
+No proprietary shared object, decompiled function body, embedded fixed
+challenge key or APK configuration bundle is copied into LINK.
+
 ## Still evidence-gated
 
-- exact wire syntax for each GDK command builder
-- complete active authentication/secure-envelope byte sequence
-- exact X-mode identifiers where not yet tied to a specific builder
-- the actual APK configuration assets
-- Mercedes ECU TX/RX CAN addresses
-- service/DID/PDU mappings for the known data identities
-- result extraction/scaling formulas and units
-- physical validation against the A2138203202 adapter
+- the **authentication sequence** tying GetSeed/SetKey/GetPasskey, SMK
+  provisioning and the two random arguments together;
+- the exact role/order of application-random versus adapter-random in that
+  sequence;
+- the exact raw-CAN `t...` command layout;
+- the exact ISO-TP `I...` / `i...` command layouts;
+- payload formats for X modes whose identifier is known but structure is not;
+- the role of the native fixed legacy challenge key in the complete handshake;
+- the actual compressed/raw APK configuration assets;
+- Mercedes ECU TX/RX CAN addresses and service/DID/PDU mappings from those
+  assets;
+- result extraction/scaling formulas and units where not already explicit;
+- physical validation against the A2138203202 adapter.

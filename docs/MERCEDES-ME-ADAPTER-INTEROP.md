@@ -302,10 +302,13 @@ and the adapter resource itself appears as:
 
 This is strong evidence that a commissioned adapter session can depend on
 backend-provided/keyed state rather than being a completely unauthenticated
-serial telemetry stream. It is **not** evidence for an SMK algorithm or packet
-format. LINK must not invent one. Until the local wire framing is independently
-recovered, native Mercedes me operation remains read/passive or limited to
-requests whose bytes and security semantics are proven.
+serial telemetry stream. Subsequent native-binary analysis now proves the
+local session-key derivation and secure message envelope; those details are
+preserved in `MERCEDES-ME-NATIVE-BINARIES.md`. What remains evidence-gated
+is the complete authentication sequence, backend provisioning relationship
+and the still-unmapped vehicle configuration data. Active Mercedes me
+operation therefore remains limited to byte sequences whose purpose and
+security semantics are independently proved.
 
 The package also contains communication outcomes including
 `DEVICE_NO_SPP`, consistent with SPP availability being an explicit part of
@@ -401,15 +404,19 @@ captures. They are evidence labels, not commands to the adapter.
 
 ## Evidence still required
 
-The APK has not yet yielded, with sufficient confidence, all of the following:
+Native-library analysis has now resolved many individual GDK command builders,
+the SHA-256 session-key derivation and the AES-256/Base64 secure envelope. The
+remaining high-value unknowns are:
 
-- exact wire syntax for the individual GDK command builders inside the now-proved CR/NACK record framing;
-- the complete active authentication/secure-envelope exchange;
-- exact request bytes for higher-level `setupObdAdapter` and `readObdAdapterData` lifecycle operations;
-- the APK configuration assets that bind Mercedes ECU addresses, requests, result extraction and formulas;
-- mapping from those configuration definitions to the now-known data IDs such as fuel level, odometer, trip and other vehicle values;
-- whether the Toshiba SPP-over-BLE channel applies to a specific hardware
-  generation or is only a formatter compatibility path.
+- the complete authentication sequence and exact random/challenge direction;
+- exact raw-CAN and ISO-TP command payload layouts;
+- higher-level `setupObdAdapter` / `readObdAdapterData` sequencing;
+- the APK configuration bundle that binds Mercedes ECU addresses, requests,
+  extraction and formulas;
+- mapping from those definitions to the known data IDs such as fuel level,
+  odometer, trip and other vehicle values;
+- whether the Toshiba SPP-over-BLE channel belongs to a specific hardware
+  generation or is only a compatibility formatter.
 
 Those items should be added here as they become reproducible. A real adapter
 capture remains the final check that archived-app behaviour matches the

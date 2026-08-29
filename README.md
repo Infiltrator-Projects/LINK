@@ -50,7 +50,7 @@ LINK currently owns:
 - shared native Windows OpenPort 2.0/J2534 Discover scanner shell.
 
 The genuine Mercedes me Adapter is handled as a distinct native transport rather than being made to impersonate an ELM327. Archived official Mercedes me Adapter 4.7.61 interoperability evidence, including generation-name rules and exact Bluetooth UUIDs, is preserved in [`docs/MERCEDES-ME-ADAPTER-INTEROP.md`](docs/MERCEDES-ME-ADAPTER-INTEROP.md). LINK recognises the documented `MB-xxxx` Bluetooth name, can establish the available RFCOMM/GATT byte channel and passively preserve incoming bytes, while deliberately suppressing ELM `ATI`/initialisation traffic. Exact Mercedes me application framing remains evidence-gated until hardware capture proves it.
-
+- `docs/MERCEDES-ME-NATIVE-BINARIES.md` records the clean-room native GDK/DiagLogic/Whisper protocol evidence, secure envelope and proved command builders.\n
 Codec support does not grant transmit permission. Discover remains independently deny-by-default; adding a UDS codec cannot silently broaden its request allowlist.
 
 The DTC knowledge API is presentation-neutral and deliberately preserves the raw ECU code. Generic definitions come from a reproducible pinned OBDex CC0 data snapshot. SAE J2012 itself is not vendored or reproduced. A valid reserved or otherwise unmapped generic code remains explicit, and manufacturer-specific descriptions remain in the owning product repository rather than leaking into LINK.
