@@ -2,6 +2,9 @@
 #ifndef LINK_MERCEDES_ME_WHISPER_H
 #define LINK_MERCEDES_ME_WHISPER_H
 
+#include "link/diagnostic_request.h"
+
+#include <stdbool.h>
 #include <stddef.h>
 
 #ifdef __cplusplus
@@ -39,6 +42,11 @@ const char *link_mercedes_me_whisper_response_selection_name(
     LinkMercedesMeWhisperResponseSelection selection);
 LinkMercedesMeWhisperResponseSelection
 link_mercedes_me_whisper_response_selection_from_name(const char *name);
+
+/** Map recovered Whisper policy names onto LINK's transport-neutral engine. */
+bool link_mercedes_me_whisper_response_selection_policy(
+    LinkMercedesMeWhisperResponseSelection selection,
+    LinkDiagnosticResponseSelectionPolicy *policy);
 const char *link_mercedes_me_whisper_dtc_presentation_name(
     LinkMercedesMeWhisperDtcPresentation presentation);
 LinkMercedesMeWhisperDtcPresentation
