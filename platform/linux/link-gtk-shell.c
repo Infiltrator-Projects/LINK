@@ -79,7 +79,7 @@ static const char link_gtk_base_css[] =
     ".link-nav-row { margin: 3px 0; padding: 6px 8px; border-radius: 10px; border: 1px solid transparent; background: transparent; }"
     ".link-nav-row:hover { background: rgba(255,255,255,0.055); border-color: rgba(255,255,255,0.10); }"
     ".link-nav-row:selected { background: rgba(255,255,255,0.105); border-color: rgba(255,255,255,0.24); }"
-    ".link-about-button { margin-top: 6px; min-height: 34px; }"
+    ".link-about-button { margin-top: 6px; min-height: 34px; padding: 5px 14px; }"
     ".link-language-label { opacity: 0.72; font-size: 11px; font-weight: 700; }"
     ".link-settings-row { padding: 8px 0; }"
     ".link-settings-copy { margin-right: 18px; }"
@@ -1908,6 +1908,7 @@ static void activate(GtkApplication *application, gpointer user_data)
     shell->about_button = gtk_button_new_with_label("About");
     gtk_widget_add_css_class(shell->about_button, "link-about-button");
     gtk_widget_add_css_class(shell->about_button, "link-toolbar-button");
+    gtk_widget_set_halign(shell->about_button, GTK_ALIGN_START);
     g_signal_connect(shell->about_button, "clicked", G_CALLBACK(about_clicked), shell);
     gtk_box_append(GTK_BOX(sidebar), shell->about_button);
 
