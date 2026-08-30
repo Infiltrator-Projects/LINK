@@ -131,6 +131,7 @@ static HFONT g_ui_font;
 static HFONT g_title_font;
 static HFONT g_subtitle_font;
 static HFONT g_status_font;
+static HFONT g_log_font;
 static HICON g_product_icon;
 static BOOL g_product_icon_owned;
 
@@ -151,8 +152,9 @@ static int scale_px(HWND window, int logical_pixels)
     return MulDiv(logical_pixels, window_dpi(window), 96);
 }
 
-/** Create Segoe UI using the window's current logical DPI. */
-static HFONT make_font(HWND window, int point_size, int weight)
+/** Create a ClearType UI font using the window's current logical DPI. */
+static HFONT make_named_font(HWND window, int point_size, int weight,
+                             const char *family)
 {
     HDC dc = GetDC(window);
     int dpi = dc != NULL ? GetDeviceCaps(dc, LOGPIXELSY) : 96;
@@ -164,7 +166,13 @@ static HFONT make_font(HWND window, int point_size, int weight)
     return CreateFontA(height, 0, 0, 0, weight, FALSE, FALSE, FALSE,
                        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
                        CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
-                       DEFAULT_PITCH | FF_DONTCARE, "Segoe UI");
+                       DEFAULT_PITCH | FF_DONTCARE,
+                       family != NULL ? family : "Segoe UI");
+}
+
+static HFONT make_font(HWND window, int point_size, int weight)
+{
+    return make_named_font(window, point_size, weight, "Segoe UI");
 }
 
 static void apply_font(HWND control, HFONT font)
@@ -331,9 +339,19 @@ static void layout_controls(HWND window)
     int height;
     int margin;
     int content_width;
+    int inside_left;
+    int inside_width;
+    int group_top;
+    int group_height;
+    int input_y;
+    int action_y;
+    int second_action_y;
+    int status_y;
+    int log_label_y;
     int log_top;
     int note_y;
     int log_height;
+    int compact;
 
     GetClientRect(window, &client);
     dpi = window_dpi(window);
@@ -341,47 +359,119 @@ static void layout_controls(HWND window)
     height = client.bottom - client.top;
     margin = MulDiv(20, dpi, 96);
     content_width = width - (margin * 2);
-    log_top = MulDiv(300, dpi, 96);
-    note_y = height - MulDiv(66, dpi, 96);
-    log_height = note_y - log_top - MulDiv(36, dpi, 96);
-    if (log_height < MulDiv(120, dpi, 96)) {
-        log_height = MulDiv(120, dpi, 96);
-    }
 
 #define PX(value) MulDiv((value), dpi, 96)
-    MoveWindow(g_brand_icon, margin, PX(18), PX(64), PX(64), TRUE);
-    MoveWindow(g_brand_title, margin + PX(80), PX(14),
-               content_width - PX(80), PX(38), TRUE);
-    MoveWindow(g_brand_subtitle, margin + PX(82), PX(52),
-               content_width - PX(82), PX(24), TRUE);
-    MoveWindow(g_header_rule, margin, PX(88), content_width, PX(2), TRUE);
+    compact = content_width < PX(900);
+    group_top = PX(104);
+    group_height = compact ? PX(190) : PX(150);
+    inside_left = margin + PX(16);
+    inside_width = content_width - PX(32);
+    input_y = group_top + PX(46);
+    action_y = group_top + PX(88);
+    second_action_y = group_top + PX(132);
+    status_y = group_top + group_height + PX(12);
+    log_label_y = status_y + PX(40);
+    log_top = log_label_y + PX(24);
+    note_y = height - PX(42);
+    log_height = note_y - log_top - PX(38);
+    if (log_height < PX(100)) {
+        log_height = PX(100);
+    }
 
-    MoveWindow(g_connection_group, margin, PX(104), content_width, PX(142), TRUE);
-    MoveWindow(g_dll_label, margin + PX(16), PX(127), PX(230), PX(20), TRUE);
-    MoveWindow(g_app.dll_edit, margin + PX(16), PX(151),
-               content_width - PX(126), PX(28), TRUE);
-    MoveWindow(g_browse_button, width - margin - PX(96), PX(150),
-               PX(80), PX(30), TRUE);
+    MoveWindow(g_brand_icon, margin, PX(17), PX(60), PX(60), TRUE);
+    MoveWindow(g_brand_title, margin + PX(76), PX(12),
+               content_width - PX(76), PX(40), TRUE);
+    MoveWindow(g_brand_subtitle, margin + PX(78), PX(53),
+               content_width - PX(78), PX(24), TRUE);
+    MoveWindow(g_header_rule, margin, PX(88), content_width, PX(1), TRUE);
 
-    MoveWindow(g_connect_button, margin + PX(16), PX(193), PX(184), PX(34), TRUE);
+    MoveWindow(g_connection_group, margin, group_top,
+               content_width, group_height, TRUE);
+    MoveWindow(g_dll_label, inside_left, group_top + PX(22),
+               PX(250), PX(20), TRUE);
+    MoveWindow(g_app.dll_edit, inside_left, input_y,
+               inside_width - PX(100), PX(30), TRUE);
+    MoveWindow(g_browse_button,
+               inside_left + inside_width - PX(90), input_y - PX(1),
+               PX(90), PX(32), TRUE);
+
+    if (!compact) {
+        int gap = PX(10);
+        int action_width = inside_width - (gap * 4);
 #if LINK_ENABLE_FULL_SWEEP
-    MoveWindow(g_inventory_button, margin + PX(210), PX(193), PX(190), PX(34), TRUE);
-    MoveWindow(g_full_sweep_button, margin + PX(410), PX(193), PX(160), PX(34), TRUE);
-    MoveWindow(g_stop_button, margin + PX(580), PX(193), PX(76), PX(34), TRUE);
-    MoveWindow(g_export_button, margin + PX(666), PX(193), PX(160), PX(34), TRUE);
+        int connect_w = action_width * 24 / 100;
+        int inventory_w = action_width * 24 / 100;
+        int sweep_w = action_width * 18 / 100;
+        int stop_w = action_width * 12 / 100;
+        int export_w = action_width - connect_w - inventory_w - sweep_w - stop_w;
+        int x = inside_left;
+        MoveWindow(g_connect_button, x, action_y, connect_w, PX(34), TRUE);
+        x += connect_w + gap;
+        MoveWindow(g_inventory_button, x, action_y, inventory_w, PX(34), TRUE);
+        x += inventory_w + gap;
+        MoveWindow(g_full_sweep_button, x, action_y, sweep_w, PX(34), TRUE);
+        x += sweep_w + gap;
+        MoveWindow(g_stop_button, x, action_y, stop_w, PX(34), TRUE);
+        x += stop_w + gap;
+        MoveWindow(g_export_button, x, action_y, export_w, PX(34), TRUE);
 #else
-    MoveWindow(g_inventory_button, margin + PX(210), PX(193), PX(204), PX(34), TRUE);
-    MoveWindow(g_stop_button, margin + PX(424), PX(193), PX(86), PX(34), TRUE);
-    MoveWindow(g_export_button, margin + PX(520), PX(193), PX(146), PX(34), TRUE);
+        int connect_w = action_width * 28 / 100;
+        int inventory_w = action_width * 28 / 100;
+        int stop_w = action_width * 16 / 100;
+        int export_w = action_width - connect_w - inventory_w - stop_w;
+        int x = inside_left;
+        MoveWindow(g_connect_button, x, action_y, connect_w, PX(34), TRUE);
+        x += connect_w + gap;
+        MoveWindow(g_inventory_button, x, action_y, inventory_w, PX(34), TRUE);
+        x += inventory_w + gap;
+        MoveWindow(g_stop_button, x, action_y, stop_w, PX(34), TRUE);
+        x += stop_w + gap;
+        MoveWindow(g_export_button, x, action_y, export_w, PX(34), TRUE);
 #endif
+    } else {
+        int gap = PX(10);
+#if LINK_ENABLE_FULL_SWEEP
+        int row1_width = inside_width - (gap * 2);
+        int first_w = row1_width / 3;
+        int second_w = row1_width / 3;
+        int third_w = row1_width - first_w - second_w;
+        int stop_w = (inside_width - gap) * 32 / 100;
+        int export_w = inside_width - gap - stop_w;
+        MoveWindow(g_connect_button, inside_left, action_y,
+                   first_w, PX(34), TRUE);
+        MoveWindow(g_inventory_button, inside_left + first_w + gap, action_y,
+                   second_w, PX(34), TRUE);
+        MoveWindow(g_full_sweep_button,
+                   inside_left + first_w + gap + second_w + gap, action_y,
+                   third_w, PX(34), TRUE);
+        MoveWindow(g_stop_button, inside_left, second_action_y,
+                   stop_w, PX(34), TRUE);
+        MoveWindow(g_export_button, inside_left + stop_w + gap, second_action_y,
+                   export_w, PX(34), TRUE);
+#else
+        int row_width = inside_width - gap;
+        int first_w = row_width / 2;
+        int second_w = row_width - first_w;
+        int stop_w = row_width * 34 / 100;
+        int export_w = row_width - stop_w;
+        MoveWindow(g_connect_button, inside_left, action_y,
+                   first_w, PX(34), TRUE);
+        MoveWindow(g_inventory_button, inside_left + first_w + gap, action_y,
+                   second_w, PX(34), TRUE);
+        MoveWindow(g_stop_button, inside_left, second_action_y,
+                   stop_w, PX(34), TRUE);
+        MoveWindow(g_export_button, inside_left + stop_w + gap, second_action_y,
+                   export_w, PX(34), TRUE);
+#endif
+    }
 
-    MoveWindow(g_app.status, margin, PX(258), content_width, PX(30), TRUE);
-    MoveWindow(g_log_label, margin, PX(284), PX(190), PX(20), TRUE);
+    MoveWindow(g_app.status, margin, status_y, content_width, PX(32), TRUE);
+    MoveWindow(g_log_label, margin, log_label_y, PX(220), PX(20), TRUE);
     MoveWindow(g_app.log, margin, log_top, content_width, log_height, TRUE);
-    MoveWindow(g_note_label, margin, note_y - PX(22), PX(190), PX(20), TRUE);
-    MoveWindow(g_app.note, margin, note_y, content_width - PX(154), PX(30), TRUE);
-    MoveWindow(g_add_note_button, width - margin - PX(144), note_y,
-               PX(144), PX(30), TRUE);
+    MoveWindow(g_note_label, margin, note_y - PX(23), PX(210), PX(20), TRUE);
+    MoveWindow(g_app.note, margin, note_y, content_width - PX(160), PX(32), TRUE);
+    MoveWindow(g_add_note_button, width - margin - PX(150), note_y,
+               PX(150), PX(32), TRUE);
 #undef PX
 }
 
@@ -392,10 +482,11 @@ static void create_controls(HWND window)
     char subtitle[256];
     HINSTANCE instance = (HINSTANCE)GetWindowLongPtrA(window, GWLP_HINSTANCE);
 
-    g_ui_font = make_font(window, 9, FW_NORMAL);
-    g_title_font = make_font(window, 22, FW_SEMIBOLD);
+    g_ui_font = make_font(window, 10, FW_NORMAL);
+    g_title_font = make_font(window, 24, FW_SEMIBOLD);
     g_subtitle_font = make_font(window, 10, FW_NORMAL);
     g_status_font = make_font(window, 9, FW_SEMIBOLD);
+    g_log_font = make_named_font(window, 9, FW_NORMAL, "Consolas");
 
     g_brand_icon = CreateWindowA("STATIC", "",
                                  WS_CHILD | WS_VISIBLE | SS_ICON,
@@ -471,7 +562,7 @@ static void create_controls(HWND window)
                                      0, 0, 0, 0, window,
                                      (HMENU)(INT_PTR)IDC_EXPORT, instance, NULL);
 
-    g_app.status = CreateWindowExA(WS_EX_CLIENTEDGE, "STATIC",
+    g_app.status = CreateWindowExA(0U, "STATIC",
                                     "DISCONNECTED - deny-by-default safety policy active",
                                     WS_CHILD | WS_VISIBLE | SS_LEFT | SS_CENTERIMAGE,
                                     0, 0, 0, 0, window,
@@ -511,7 +602,7 @@ static void create_controls(HWND window)
     apply_font(g_export_button, g_ui_font);
     apply_font(g_app.status, g_status_font);
     apply_font(g_log_label, g_ui_font);
-    apply_font(g_app.log, g_ui_font);
+    apply_font(g_app.log, g_log_font != NULL ? g_log_font : g_ui_font);
     apply_font(g_note_label, g_ui_font);
     apply_font(g_app.note, g_ui_font);
     apply_font(g_add_note_button, g_ui_font);
@@ -533,10 +624,14 @@ static void destroy_ui_resources(void)
     if (g_ui_font != NULL) {
         DeleteObject(g_ui_font);
     }
+    if (g_log_font != NULL) {
+        DeleteObject(g_log_font);
+    }
     g_title_font = NULL;
     g_subtitle_font = NULL;
     g_status_font = NULL;
     g_ui_font = NULL;
+    g_log_font = NULL;
 
     if (g_product_icon_owned && g_product_icon != NULL) {
         DestroyIcon(g_product_icon);
@@ -559,8 +654,8 @@ static LRESULT CALLBACK window_proc(HWND window, UINT message,
         return 0;
     case WM_GETMINMAXINFO: {
         MINMAXINFO *limits = (MINMAXINFO *)lparam;
-        limits->ptMinTrackSize.x = scale_px(window, 800);
-        limits->ptMinTrackSize.y = scale_px(window, 610);
+        limits->ptMinTrackSize.x = scale_px(window, 760);
+        limits->ptMinTrackSize.y = scale_px(window, 560);
         return 0;
     }
     case WM_COMMAND:
@@ -617,11 +712,11 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previous,
 
     memset(&cls, 0, sizeof(cls));
     cls.cbSize = sizeof(cls);
-    cls.style = CS_HREDRAW | CS_VREDRAW;
+    cls.style = 0U;
     cls.lpfnWndProc = window_proc;
     cls.hInstance = instance;
     cls.hCursor = LoadCursor(NULL, IDC_ARROW);
-    cls.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
+    cls.hbrBackground = NULL;
     cls.hIcon = g_product_icon;
     cls.hIconSm = g_product_icon;
     cls.lpszClassName = LINK_PRODUCT_WINDOW_CLASS;
@@ -635,8 +730,8 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previous,
     window = CreateWindowExA(
         0U, cls.lpszClassName,
         LINK_PRODUCT_NAME " Discover - OpenPort 2.0 / J2534",
-        WS_OVERLAPPEDWINDOW,
-        CW_USEDEFAULT, CW_USEDEFAULT, 980, 680,
+        WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN,
+        CW_USEDEFAULT, CW_USEDEFAULT, 1100, 760,
         NULL, menu, instance, NULL);
     if (window == NULL) {
         if (menu != NULL) {
