@@ -773,6 +773,11 @@ static void append_shared_language_settings(
         const char *name = link_i18n_installed_locale_name(index);
         if (name != NULL) gtk_string_list_append(model, name);
     }
+    /*
+     * gtk_drop_down_new() takes ownership of the model. Do not unref it
+     * afterwards: doing so leaves GtkDropDown with a dangling GListModel and
+     * can crash later in g_list_model_get_n_items() during layout/teardown.
+     */
     shell->language_combo =
         gtk_drop_down_new(G_LIST_MODEL(model), NULL);
     gtk_widget_add_css_class(
@@ -780,7 +785,6 @@ static void append_shared_language_settings(
     gtk_drop_down_set_selected(
         GTK_DROP_DOWN(shell->language_combo),
         selected_locale_index());
-    g_object_unref(model);
     g_signal_connect(
         shell->language_combo, "notify::selected",
         G_CALLBACK(language_changed), shell);
