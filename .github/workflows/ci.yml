@@ -94,7 +94,7 @@ jobs:
           grep -Fq 'link-test-mercedes-me-data-ids tests/test_mercedes_me_data_ids.c link-mercedes-me-data-ids' CMakeLists.txt
           grep -Fq 'link_mercedes_me_diaglogic_decode_vehicle_status' src/core/mercedes_me_diaglogic.c
           grep -Fq 'link-test-mercedes-me-diaglogic tests/test_mercedes_me_diaglogic.c link-mercedes-me-diaglogic' CMakeLists.txt
-          grep -Fq '**120 exact static data-ID constants**' docs/MERCEDES-ME-DATA-IDS.md
+          grep -Fq '**194 exact static data-ID symbol/literal pairs**' docs/MERCEDES-ME-DATA-IDS.md
           grep -Fq 'link-test-mercedes-me-adapter tests/test_mercedes_me_adapter.c link-mercedes-me-adapter' CMakeLists.txt
           grep -Fq 'link-test-mercedes-me-native-protocol tests/test_mercedes_me_native_protocol.c link-mercedes-me-native-protocol' CMakeLists.txt
           grep -Fq 'link_mercedes_me_secure_encode' src/core/mercedes_me_native_protocol.c
