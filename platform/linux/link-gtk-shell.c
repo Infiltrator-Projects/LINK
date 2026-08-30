@@ -527,6 +527,66 @@ static GString *build_session_json(const LinkGtkShell *shell)
         shell->native_overflow_count);
     g_string_append(out, ",\n\"diagnostic_stage\":");
     json_string(out, link_diagnostic_flow_stage_name(shell->flow.stage));
+
+    g_string_append_printf(
+        out,
+        ",\n\"standard_fault_context\":{"
+        "\"dtc_inventory_complete\":%s,"
+        "\"context_complete\":%s,"
+        "\"readiness_attempted\":%s,"
+        "\"readiness_available\":%s,"
+        "\"freeze_frame_requested\":%s,"
+        "\"freeze_frame_complete\":%s,"
+        "\"freeze_frame_sample_count\":%zu",
+        shell->flow.standard_dtc_inventory_complete ? "true" : "false",
+        shell->flow.standard_diagnostic_context_complete ? "true" : "false",
+        shell->flow.readiness_attempted ? "true" : "false",
+        shell->flow.readiness_available ? "true" : "false",
+        shell->flow.freeze_frame_requested ? "true" : "false",
+        shell->flow.freeze_frame_complete ? "true" : "false",
+        shell->flow.freeze_frame_sample_count);
+    if (shell->flow.readiness_available) {
+        g_string_append_printf(
+            out,
+            ",\"readiness\":{"
+            "\"mil_on\":%s,"
+            "\"confirmed_dtc_count\":%u,"
+            "\"compression_ignition\":%s,"
+            "\"continuous_supported\":%u,"
+            "\"continuous_incomplete\":%u,"
+            "\"noncontinuous_supported\":%u,"
+            "\"noncontinuous_incomplete\":%u}",
+            shell->flow.readiness.mil_on ? "true" : "false",
+            (unsigned int)shell->flow.readiness.confirmed_dtc_count,
+            shell->flow.readiness.compression_ignition ? "true" : "false",
+            (unsigned int)shell->flow.readiness.continuous_supported,
+            (unsigned int)shell->flow.readiness.continuous_incomplete,
+            (unsigned int)shell->flow.readiness.noncontinuous_supported,
+            (unsigned int)shell->flow.readiness.noncontinuous_incomplete);
+    } else {
+        g_string_append(out, ",\"readiness\":null");
+    }
+    g_string_append(out, ",\"freeze_frame_samples\":[");
+    for (size_t freeze_index = 0U;
+         freeze_index < shell->flow.freeze_frame_sample_count;
+         ++freeze_index) {
+        const LinkObd2Sample *sample =
+            &shell->flow.freeze_frame_samples[freeze_index];
+        if (freeze_index != 0U) g_string_append_c(out, ',');
+        g_string_append_printf(
+            out,
+            "{\"pid\":%u,\"name\":",
+            (unsigned int)sample->pid);
+        json_string(out, link_obd2_pid_name(sample->pid));
+        g_string_append_printf(
+            out,
+            ",\"value\":%.9g,\"unit\":",
+            sample->value);
+        json_string(out, link_obd2_unit_name(sample->unit));
+        g_string_append_c(out, '}');
+    }
+    g_string_append(out, "]}");
+
     g_string_append_printf(
         out,
         ",\n\"session_complete\":%s,"
@@ -1072,6 +1132,10 @@ static const char *diagnostic_stage_message(const LinkGtkShell *shell)
         return "Linked · scanning pending OBD-II faults";
     case LINK_DIAGNOSTIC_FLOW_SCANNING_PERMANENT_DTCS:
         return "Linked · scanning permanent OBD-II faults";
+    case LINK_DIAGNOSTIC_FLOW_READING_READINESS:
+        return "Linked · reading emissions readiness context";
+    case LINK_DIAGNOSTIC_FLOW_READING_FREEZE_FRAME:
+        return "Linked · reading stored-fault freeze-frame context";
     case LINK_DIAGNOSTIC_FLOW_CONFIGURING_LIVE_HEADERS:
         return "Linked · enabling CAN responder headers";
     case LINK_DIAGNOSTIC_FLOW_LIVE:
