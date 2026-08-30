@@ -18,6 +18,7 @@ extern "C" {
 #define LINK_TELEMETRY_TRANSCRIPT_CAPACITY 64U
 #define LINK_TELEMETRY_TRANSCRIPT_COMMAND_LENGTH 64U
 #define LINK_TELEMETRY_TRANSCRIPT_RESPONSE_LENGTH 192U
+#define LINK_RESPONDER_TELEMETRY_HISTORY_CAPACITY 1024U
 
 typedef struct {
     uint8_t pid;
@@ -30,6 +31,28 @@ typedef struct {
     uint64_t timestamp_ms;
     LinkTelemetryMeasurement measurement;
 } LinkTelemetrySample;
+
+typedef struct {
+    uint64_t sequence;
+    uint64_t timestamp_ms;
+    uint32_t responder_id;
+    bool extended_id;
+    LinkTelemetryMeasurement measurement;
+} LinkResponderTelemetrySample;
+
+/**
+ * Independent bounded history for source-attributed OBD replies. The legacy
+ * PID store remains unchanged and continues to expose one preferred value per
+ * request to existing consumers.
+ */
+typedef struct {
+    LinkResponderTelemetrySample history[
+        LINK_RESPONDER_TELEMETRY_HISTORY_CAPACITY];
+    size_t history_head;
+    size_t history_count;
+    uint64_t next_sequence;
+    uint64_t total_sample_count;
+} LinkResponderTelemetryStore;
 
 typedef struct {
     uint64_t timestamp_ms;
@@ -85,6 +108,23 @@ bool link_telemetry_store_record_transcript(LinkTelemetryStore *store, uint64_t 
 size_t link_telemetry_store_transcript_count(const LinkTelemetryStore *store);
 bool link_telemetry_store_transcript_at(const LinkTelemetryStore *store, size_t chronological_index, LinkTelemetryTranscriptEntry *entry);
 
+void link_responder_telemetry_store_init(LinkResponderTelemetryStore *store);
+void link_responder_telemetry_store_clear(LinkResponderTelemetryStore *store);
+bool link_responder_telemetry_store_record(
+    LinkResponderTelemetryStore *store,
+    uint64_t timestamp_ms,
+    uint32_t responder_id,
+    bool extended_id,
+    const LinkTelemetryMeasurement *measurement);
+size_t link_responder_telemetry_store_history_count(
+    const LinkResponderTelemetryStore *store);
+uint64_t link_responder_telemetry_store_total_sample_count(
+    const LinkResponderTelemetryStore *store);
+bool link_responder_telemetry_store_history_at(
+    const LinkResponderTelemetryStore *store,
+    size_t chronological_index,
+    LinkResponderTelemetrySample *sample);
+
 void link_telemetry_session_metadata_init(LinkTelemetrySessionMetadata *metadata, uint64_t started_epoch_ms, const char *adapter_identifier, const char *vehicle_identifier);
 void link_telemetry_session_metadata_set_adapter(LinkTelemetrySessionMetadata *metadata, const char *adapter_identifier);
 void link_telemetry_session_metadata_set_vehicle(LinkTelemetrySessionMetadata *metadata, const char *vehicle_identifier);
@@ -102,6 +142,17 @@ bool link_telemetry_recorder_begin(LinkTelemetryRecorder *recorder, const LinkTe
  */
 bool link_telemetry_recorder_continue(LinkTelemetryRecorder *recorder, const LinkTelemetrySessionMetadata *metadata, const char *product_slug, LinkTelemetryTextSink sink, void *context);
 bool link_telemetry_recorder_record_sample_named(LinkTelemetryRecorder *recorder, const LinkTelemetrySample *sample, bool favourite, const char *pid_name, const char *unit_name);
+/**
+ * Record one live value with the exact CAN responder that supplied it.
+ * Stream schema v2 stores the address and addressing width in dedicated
+ * columns so simultaneous functional-OBD responders remain distinguishable.
+ */
+bool link_telemetry_recorder_record_responder_sample_named(
+    LinkTelemetryRecorder *recorder,
+    const LinkResponderTelemetrySample *sample,
+    bool favourite,
+    const char *pid_name,
+    const char *unit_name);
 bool link_telemetry_recorder_record_response_named(LinkTelemetryRecorder *recorder, uint64_t timestamp_ms, const char *command, const char *result_name, const char *response_text);
 bool link_telemetry_recorder_finish(LinkTelemetryRecorder *recorder, uint64_t ended_epoch_ms);
 bool link_telemetry_export_csv_named(const LinkTelemetryStore *store, const LinkTelemetrySessionMetadata *metadata, const char *product_slug, LinkTelemetryPidName pid_name, LinkTelemetryUnitName unit_name, LinkTelemetryResultName result_name, LinkTelemetryTextSink sink, void *context);

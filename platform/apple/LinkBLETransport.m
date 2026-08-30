@@ -5,6 +5,7 @@
 #import "link/mercedes_me_adapter.h"
 
 #import <CoreBluetooth/CoreBluetooth.h>
+#import <ExternalAccessory/ExternalAccessory.h>
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -74,6 +75,34 @@ static BOOL LinkPeripheralNameLooksLikeAdapter(NSString *name)
     if (family != LINK_MERCEDES_ME_ADAPTER_UNKNOWN)
         return family == LINK_MERCEDES_ME_ADAPTER_BLE;
     return LinkPeripheralAdapterKind(name) != LINK_ADAPTER_KIND_UNKNOWN;
+}
+
+/*
+ * CoreBluetooth cannot enumerate or open a Mercedes RFCOMM/SPP adapter.  When
+ * iOS exposes a paired MFi accessory through External Accessory, inspect its
+ * public identity fields so an MB-2/3/4/5/6/7 device produces an immediate,
+ * truthful result instead of an unrelated BLE scan loop.
+ */
+static NSString * _Nullable LinkConnectedClassicMercedesAdapterName(void)
+{
+    NSArray<EAAccessory *> *accessories =
+        [EAAccessoryManager sharedAccessoryManager].connectedAccessories;
+    for (EAAccessory *accessory in accessories) {
+        NSArray<NSString *> *identities = @[
+            accessory.name ?: @"",
+            accessory.modelNumber ?: @"",
+            accessory.serialNumber ?: @""
+        ];
+        for (NSString *identity in identities) {
+            LinkMercedesMeAdapterFamily family;
+            if (identity.length == 0U) continue;
+            family = link_mercedes_me_adapter_family_from_name(
+                identity.UTF8String);
+            if (link_mercedes_me_adapter_prefers_classic_spp(family))
+                return identity;
+        }
+    }
+    return nil;
 }
 
 static BOOL LinkUUIDEquals(CBUUID *uuid, const char *value)
@@ -332,6 +361,15 @@ static BOOL LinkRemainingBytesAreWhitespace(const uint8_t *bytes,
 - (void)beginScan
 {
     if (!_startRequested || _central.state != CBManagerStatePoweredOn) return;
+    NSString *classicAdapter = LinkConnectedClassicMercedesAdapterName();
+    if (classicAdapter != nil) {
+        self.peripheralName = classicAdapter;
+        self.adapterKind = LINK_ADAPTER_KIND_MERCEDES_ME_NATIVE;
+        [self failAndStop:[NSString stringWithFormat:
+            @"%@ is a Bluetooth Classic Mercedes adapter. iPhone cannot open its RFCOMM/SPP channel through CoreBluetooth; an authorised External Accessory protocol is required.",
+            classicAdapter]];
+        return;
+    }
     _operationGeneration++;
     _probeGeneration++;
     [_central stopScan];
@@ -389,12 +427,12 @@ static BOOL LinkRemainingBytesAreWhitespace(const uint8_t *bytes,
     [self setState:LinkBLETransportStateScanning
             status:_scanAttempt == 1U
                 ? @"Scanning for Bluetooth diagnostic adapter"
-                : @"Retrying Bluetooth diagnostic adapter scan"];
+                : @"Retrying compatible BLE diagnostic adapter scan"];
     [self scheduleStateTimeout:LinkBLETransportStateScanning generation:generation
                          after:LinkScanTimeoutSeconds
                        message:_scanAttempt < LinkScanAttemptLimit
                            ? @"No Bluetooth diagnostic adapter found; retrying"
-                           : @"No Bluetooth diagnostic adapter found"
+                           : @"No compatible BLE diagnostic adapter found. MB-2/3/4/5/6/7 Mercedes adapters use Bluetooth Classic and require an authorised iPhone External Accessory protocol."
                        recover:_scanAttempt < LinkScanAttemptLimit];
 }
 

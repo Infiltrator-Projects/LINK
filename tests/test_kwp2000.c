@@ -41,6 +41,22 @@ int main(void)
               "generic KWP negative response");
     }
 
+    check(link_kwp2000_build_read_local_identifier_request(
+              0x05U, request, sizeof(request), &written) ==
+              LINK_KWP2000_RESULT_OK &&
+          written == 2U && request[0] == 0x21U && request[1] == 0x05U,
+          "ReadDataByLocalIdentifier builder");
+    {
+        const uint8_t reply[] = { 0x61U, 0x05U, 'W', 'D', 'D' };
+        LinkKwp2000LocalIdentifierRecord record;
+        check(link_kwp2000_decode_read_local_identifier_response(
+                  reply, sizeof(reply), 0x05U, &record) ==
+                  LINK_KWP2000_RESULT_OK &&
+              record.identifier == 0x05U && record.data_length == 3U &&
+              memcmp(record.data, "WDD", 3U) == 0,
+              "ReadDataByLocalIdentifier decoder");
+    }
+
     check(link_kwp2000_build_read_common_identifier_request(
               0xf100U, request, sizeof(request), &written) ==
               LINK_KWP2000_RESULT_OK &&

@@ -32,7 +32,8 @@ LINK currently owns:
 - platform-neutral byte-stream transport ABI;
 - ELM327 framing, parsing, initialization and adapter/protocol probing;
 - ELM327-managed ISO 15765 CAN channels and transport-backed sessions;
-- standard OBD-II requests, PID/VIN/readiness/DTC decoding;
+- standard OBD-II requests, PID/VIN/readiness/DTC decoding, including bounded
+  multi-responder Mode 01 decoding that retains each 11/29-bit CAN source;
 - a complete pinned generic OBD-II DTC catalogue containing 9,533 definitions across the seven standardized generic families (`P0`, `P2`, standardized `P3`, `B0`, `C0`, `U0`, `U3`), with normalized classification, independently authored CC0 titles/categories, explicit unknown handling and ISO 14229 status translation;
 - ISO 14229 UDS request/response, DID and client-state handling;
 - a compiled 27-service ISO 14229 service catalogue and bounded request/response codecs;
@@ -41,7 +42,10 @@ LINK currently owns:
 - target-specific Discover probe sets for mixed-protocol networks, while retaining deny-by-default transmit safety;
 - Classical CAN and CAN-FD ISO-TP, including CAN-FD payloads through 64 bytes and extended First Frame lengths for PDUs above 4095 bytes;
 - bare-metal STM32 CAN/FDCAN edge with a bounded interrupt queue and direct ISO-TP/UDS orchestration;
-- parameter definitions, store/history, scheduler and telemetry/CSV;
+- parameter definitions, store/history, scheduler and telemetry/CSV, with a
+  separate responder-attributed history that leaves the legacy one-value-per-PID
+  interface intact; streaming CSV schema v2 records the responder CAN ID and
+  addressing width on every attributed sample;
 - diagnostic workspace model;
 - portable diagnostic-flow controller state machine;
 - Discover safety classification and evidence writing;

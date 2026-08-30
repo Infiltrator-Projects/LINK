@@ -45,6 +45,7 @@ typedef struct LinkElm327Simulator {
     void *receiver_context;
     bool connected;
     bool echo;
+    bool response_headers;
     char command[LINK_ELM327_MAX_COMMAND];
     size_t command_length;
     uint64_t sample_counter;

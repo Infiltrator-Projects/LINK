@@ -168,6 +168,7 @@ static int test_standard_sequence(void)
               &flow, &response, 1001U, &event) ==
           LINK_DIAGNOSTIC_FLOW_RESULT_OK);
     CHECK(event.kind == LINK_DIAGNOSTIC_FLOW_EVENT_LIVE_SAMPLE);
+    CHECK(event.responder_samples.count == 1U);
     CHECK(event.sample.pid == 0x0cU);
     CHECK(near_value(event.sample.value, 1726.0, 0.001));
     CHECK(flow.stage == LINK_DIAGNOSTIC_FLOW_LIVE);

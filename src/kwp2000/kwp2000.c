@@ -17,6 +17,7 @@ static int request_service_is_supported(uint8_t service)
     switch (service) {
     case LINK_KWP2000_SERVICE_READ_DTC_BY_STATUS:
     case LINK_KWP2000_SERVICE_READ_ECU_IDENTIFICATION:
+    case LINK_KWP2000_SERVICE_READ_DATA_BY_LOCAL_IDENTIFIER:
     case LINK_KWP2000_SERVICE_READ_DATA_BY_COMMON_IDENTIFIER:
     case LINK_KWP2000_SERVICE_TESTER_PRESENT:
         return 1;
@@ -75,6 +76,51 @@ LinkKwp2000Result link_kwp2000_decode_response(
     decoded.data = pdu + 1U;
     decoded.data_length = pdu_length - 1U;
     *response = decoded;
+    return LINK_KWP2000_RESULT_OK;
+}
+
+LinkKwp2000Result link_kwp2000_build_read_local_identifier_request(
+    uint8_t identifier,
+    uint8_t *buffer,
+    size_t buffer_size,
+    size_t *written)
+{
+    if (buffer == NULL || written == NULL || identifier == 0U)
+        return write_failure(buffer, buffer_size, written,
+                             LINK_KWP2000_RESULT_INVALID_ARGUMENT);
+    if (buffer_size < 2U)
+        return write_failure(buffer, buffer_size, written,
+                             LINK_KWP2000_RESULT_BUFFER_TOO_SMALL);
+    buffer[0] = LINK_KWP2000_SERVICE_READ_DATA_BY_LOCAL_IDENTIFIER;
+    buffer[1] = identifier;
+    *written = 2U;
+    return LINK_KWP2000_RESULT_OK;
+}
+
+LinkKwp2000Result link_kwp2000_decode_read_local_identifier_response(
+    const uint8_t *pdu,
+    size_t pdu_length,
+    uint8_t expected_identifier,
+    LinkKwp2000LocalIdentifierRecord *record)
+{
+    LinkKwp2000Response response;
+    LinkKwp2000LocalIdentifierRecord decoded;
+    LinkKwp2000Result result;
+
+    if (record == NULL || expected_identifier == 0U)
+        return LINK_KWP2000_RESULT_INVALID_ARGUMENT;
+    result = link_kwp2000_decode_response(
+        LINK_KWP2000_SERVICE_READ_DATA_BY_LOCAL_IDENTIFIER,
+        pdu, pdu_length, &response);
+    if (result != LINK_KWP2000_RESULT_OK) return result;
+    if (response.data_length < 1U) return LINK_KWP2000_RESULT_MALFORMED_PDU;
+    if (response.data[0] != expected_identifier)
+        return LINK_KWP2000_RESULT_UNEXPECTED_RESPONSE;
+
+    decoded.identifier = response.data[0];
+    decoded.data = response.data + 1U;
+    decoded.data_length = response.data_length - 1U;
+    *record = decoded;
     return LINK_KWP2000_RESULT_OK;
 }
 

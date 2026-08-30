@@ -173,6 +173,81 @@ bool link_telemetry_store_transcript_at(const LinkTelemetryStore *store,
     return true;
 }
 
+void link_responder_telemetry_store_init(LinkResponderTelemetryStore *store)
+{
+    if (store != NULL) memset(store, 0, sizeof(*store));
+}
+
+void link_responder_telemetry_store_clear(LinkResponderTelemetryStore *store)
+{
+    if (store != NULL) memset(store, 0, sizeof(*store));
+}
+
+bool link_responder_telemetry_store_record(
+    LinkResponderTelemetryStore *store,
+    uint64_t timestamp_ms,
+    uint32_t responder_id,
+    bool extended_id,
+    const LinkTelemetryMeasurement *measurement)
+{
+    LinkResponderTelemetrySample sample;
+    const uint32_t maximum_id = extended_id
+        ? UINT32_C(0x1fffffff) : UINT32_C(0x7ff);
+    if (store == NULL || measurement == NULL ||
+        responder_id > maximum_id || !isfinite(measurement->value)) {
+        return false;
+    }
+
+    sample.sequence = store->next_sequence;
+    sample.timestamp_ms = timestamp_ms;
+    sample.responder_id = responder_id;
+    sample.extended_id = extended_id;
+    sample.measurement = *measurement;
+    if (store->next_sequence != UINT64_MAX) store->next_sequence++;
+    store->total_sample_count = infiltratr_u64_add_saturating(
+        store->total_sample_count, 1U);
+    store->history[store->history_head] = sample;
+    store->history_head =
+        (store->history_head + 1U) %
+        LINK_RESPONDER_TELEMETRY_HISTORY_CAPACITY;
+    if (store->history_count < LINK_RESPONDER_TELEMETRY_HISTORY_CAPACITY)
+        store->history_count++;
+    return true;
+}
+
+size_t link_responder_telemetry_store_history_count(
+    const LinkResponderTelemetryStore *store)
+{
+    return store != NULL ? store->history_count : 0U;
+}
+
+uint64_t link_responder_telemetry_store_total_sample_count(
+    const LinkResponderTelemetryStore *store)
+{
+    return store != NULL ? store->total_sample_count : 0U;
+}
+
+bool link_responder_telemetry_store_history_at(
+    const LinkResponderTelemetryStore *store,
+    size_t chronological_index,
+    LinkResponderTelemetrySample *sample)
+{
+    size_t oldest;
+    size_t storage_index;
+    if (store == NULL || sample == NULL ||
+        chronological_index >= store->history_count) {
+        return false;
+    }
+    oldest =
+        (store->history_head + LINK_RESPONDER_TELEMETRY_HISTORY_CAPACITY -
+         store->history_count) % LINK_RESPONDER_TELEMETRY_HISTORY_CAPACITY;
+    storage_index =
+        (oldest + chronological_index) %
+        LINK_RESPONDER_TELEMETRY_HISTORY_CAPACITY;
+    *sample = store->history[storage_index];
+    return true;
+}
+
 void link_telemetry_session_metadata_init(
     LinkTelemetrySessionMetadata *metadata,
     uint64_t started_epoch_ms,
@@ -354,7 +429,7 @@ static bool recorder_begin_session(LinkTelemetryRecorder *recorder,
     recorder->failed = false;
     if (write_stream_header) {
         written = snprintf(line, sizeof(line),
-                           "# %s_session_stream_version,1\n", product_slug);
+                           "# %s_session_stream_version,2\n", product_slug);
         if (written < 0 || (size_t)written >= sizeof(line) ||
             !emit(sink, context, line))
             return latch_failure(recorder);
@@ -373,7 +448,8 @@ static bool recorder_begin_session(LinkTelemetryRecorder *recorder,
     if (write_stream_header &&
         !emit(sink, context,
               "record_type,sequence,timestamp_ms,pid,name,value,unit,"
-              "favourite,command,result,response\n"))
+              "favourite,responder_can_id,responder_extended,"
+              "command,result,response\n"))
         return latch_failure(recorder);
     return true;
 }
@@ -399,10 +475,15 @@ bool link_telemetry_recorder_continue(
         recorder, metadata, product_slug, sink, context, false);
 }
 
-bool link_telemetry_recorder_record_sample_named(
+static bool recorder_record_sample_named(
     LinkTelemetryRecorder *recorder,
-    const LinkTelemetrySample *sample,
+    uint64_t sequence,
+    uint64_t timestamp_ms,
+    const LinkTelemetryMeasurement *measurement,
     bool favourite,
+    bool responder_available,
+    uint32_t responder_id,
+    bool responder_extended,
     const char *pid_name,
     const char *unit_name)
 {
@@ -411,17 +492,19 @@ bool link_telemetry_recorder_record_sample_named(
     char value[64];
     int written;
     if (recorder == NULL || !recorder->started || recorder->finished ||
-        recorder->failed || sample == NULL || pid_name == NULL ||
-        unit_name == NULL || !isfinite(sample->measurement.value))
+        recorder->failed || measurement == NULL || pid_name == NULL ||
+        unit_name == NULL || !isfinite(measurement->value) ||
+        (responder_available && responder_id >
+            (responder_extended ? UINT32_C(0x1fffffff) : UINT32_C(0x7ff))))
         return false;
-    if (!format_value(sample->measurement.value, value, sizeof(value)))
+    if (!format_value(measurement->value, value, sizeof(value)))
         return false;
     written = snprintf(prefix, sizeof(prefix), "sample,%llu,",
-                       (unsigned long long)sample->sequence);
+                       (unsigned long long)sequence);
     if (written < 0 || (size_t)written >= sizeof(prefix)) return false;
     written = snprintf(row, sizeof(row), "%llu,0x%02X,",
-                       (unsigned long long)sample->timestamp_ms,
-                       (unsigned int)sample->measurement.pid);
+                       (unsigned long long)timestamp_ms,
+                       (unsigned int)measurement->pid);
     if (written < 0 || (size_t)written >= sizeof(row)) return false;
     if (!emit(recorder->sink, recorder->context, prefix) ||
         !emit(recorder->sink, recorder->context, row) ||
@@ -431,11 +514,52 @@ bool link_telemetry_recorder_record_sample_named(
         !emit(recorder->sink, recorder->context, ",") ||
         !emit_quoted(recorder->sink, recorder->context, unit_name))
         return latch_failure(recorder);
-    written = snprintf(row, sizeof(row), ",%u,\"\",\"\",\"\"\n",
-                       favourite ? 1U : 0U);
+    if (responder_available) {
+        written = responder_extended
+            ? snprintf(row, sizeof(row),
+                       ",%u,0x%08X,1,\"\",\"\",\"\"\n",
+                       favourite ? 1U : 0U,
+                       (unsigned int)responder_id)
+            : snprintf(row, sizeof(row),
+                       ",%u,0x%03X,0,\"\",\"\",\"\"\n",
+                       favourite ? 1U : 0U,
+                       (unsigned int)responder_id);
+    } else {
+        written = snprintf(row, sizeof(row),
+                           ",%u,\"\",\"\",\"\",\"\",\"\"\n",
+                           favourite ? 1U : 0U);
+    }
     if (written < 0 || (size_t)written >= sizeof(row)) return false;
     return emit(recorder->sink, recorder->context, row)
         ? true : latch_failure(recorder);
+}
+
+bool link_telemetry_recorder_record_sample_named(
+    LinkTelemetryRecorder *recorder,
+    const LinkTelemetrySample *sample,
+    bool favourite,
+    const char *pid_name,
+    const char *unit_name)
+{
+    if (sample == NULL) return false;
+    return recorder_record_sample_named(
+        recorder, sample->sequence, sample->timestamp_ms,
+        &sample->measurement, favourite, false, 0U, false,
+        pid_name, unit_name);
+}
+
+bool link_telemetry_recorder_record_responder_sample_named(
+    LinkTelemetryRecorder *recorder,
+    const LinkResponderTelemetrySample *sample,
+    bool favourite,
+    const char *pid_name,
+    const char *unit_name)
+{
+    if (sample == NULL) return false;
+    return recorder_record_sample_named(
+        recorder, sample->sequence, sample->timestamp_ms,
+        &sample->measurement, favourite, true, sample->responder_id,
+        sample->extended_id, pid_name, unit_name);
 }
 
 bool link_telemetry_recorder_record_response_named(
@@ -451,7 +575,7 @@ bool link_telemetry_recorder_record_response_named(
         recorder->failed || recorder->sink == NULL || command == NULL ||
         result_name == NULL || response_text == NULL)
         return false;
-    written = snprintf(line, sizeof(line), "transcript,,%llu,,,,,,",
+    written = snprintf(line, sizeof(line), "transcript,,%llu,,,,,,,,",
                        (unsigned long long)timestamp_ms);
     if (written < 0 || (size_t)written >= sizeof(line)) return false;
     if (!emit(recorder->sink, recorder->context, line) ||

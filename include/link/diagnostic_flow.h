@@ -111,6 +111,7 @@ typedef struct {
     const char *vin;
     bool vin_available;
     LinkObd2Sample sample;
+    LinkObd2ResponderSampleList responder_samples;
     bool became_ready;
     bool dtc_response_available;
     bool dtc_negative_response;

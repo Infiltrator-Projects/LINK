@@ -18,6 +18,7 @@ extern "C" {
  */
 #define LINK_KWP2000_SERVICE_READ_DTC_BY_STATUS UINT8_C(0x18)
 #define LINK_KWP2000_SERVICE_READ_ECU_IDENTIFICATION UINT8_C(0x1a)
+#define LINK_KWP2000_SERVICE_READ_DATA_BY_LOCAL_IDENTIFIER UINT8_C(0x21)
 #define LINK_KWP2000_SERVICE_READ_DATA_BY_COMMON_IDENTIFIER UINT8_C(0x22)
 #define LINK_KWP2000_SERVICE_TESTER_PRESENT UINT8_C(0x3e)
 #define LINK_KWP2000_SERVICE_NEGATIVE_RESPONSE UINT8_C(0x7f)
@@ -59,6 +60,12 @@ typedef struct LinkKwp2000CommonIdentifierRecord {
     size_t data_length;
 } LinkKwp2000CommonIdentifierRecord;
 
+typedef struct LinkKwp2000LocalIdentifierRecord {
+    uint8_t identifier;
+    const uint8_t *data;
+    size_t data_length;
+} LinkKwp2000LocalIdentifierRecord;
+
 typedef struct LinkKwp2000EcuIdentificationRecord {
     uint8_t option;
     const uint8_t *data;
@@ -95,6 +102,18 @@ LinkKwp2000Result link_kwp2000_decode_tester_present_response(
     const uint8_t *pdu,
     size_t pdu_length,
     int response_required);
+
+LinkKwp2000Result link_kwp2000_build_read_local_identifier_request(
+    uint8_t identifier,
+    uint8_t *buffer,
+    size_t buffer_size,
+    size_t *written);
+
+LinkKwp2000Result link_kwp2000_decode_read_local_identifier_response(
+    const uint8_t *pdu,
+    size_t pdu_length,
+    uint8_t expected_identifier,
+    LinkKwp2000LocalIdentifierRecord *record);
 
 LinkKwp2000Result link_kwp2000_build_read_common_identifier_request(
     uint16_t identifier,

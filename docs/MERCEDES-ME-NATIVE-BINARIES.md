@@ -102,9 +102,15 @@ Literal resource/configuration names include:
 - `activeconfiguration`
 - `vinmapping`
 
-The strongest architectural implication is that the actual Mercedes ECU addresses, services, PDU bytes, extraction rules and formulas are likely data consumed by Whisper, rather than all being hard-coded in the native binaries.
+The strongest architectural implication is that Mercedes ECU addresses,
+services, PDU bytes, extraction rules and formulas are data consumed by
+Whisper, rather than all being hard-coded in the native binaries.
 
-Those APK configuration assets are therefore the next highest-value evidence source.
+A later inventory recovered the production MSA/Whisper VIN bootstrap. It
+confirms configuration-driven CAN routes and UDS/KWP VIN probes, but it is only
+the connection/VIN cascade: it is not the complete runtime diagnostic data set
+or a substitute for vehicle validation. Product-specific route values remain
+in MBLINK rather than LINK.
 
 ## Cross-transport consequence
 
@@ -133,7 +139,7 @@ Before AES encryption, the plaintext is represented as:
 +2  uint16  CRC-16/CCITT-XMODEM over plaintext, big endian
 +4  uint16  reserved, zero
 +6  bytes   plaintext
-...         zero padding
+...         padding bytes, each equal to the padding length
 ```
 
 The padded inner-frame length is:
@@ -141,8 +147,10 @@ The padded inner-frame length is:
 `(plaintext_length + 22) & ~15`
 
 which is the next 16-byte multiple strictly above the six-byte header plus
-payload. Ciphertext is capped at 512 bytes; consequently the largest plaintext
-that can be represented by the observed implementation is **505 bytes**.
+payload. Every trailing byte contains the number of padding bytes (the same
+bounded convention used by PKCS#7). Ciphertext is capped at 512 bytes;
+consequently the largest plaintext that can be represented by the observed
+implementation is **505 bytes**.
 
 The frame is encrypted block-by-block with **AES-256 ECB** using the 32-byte
 session key. `AesCommandProcessor::onTransmit()` then Base64-encodes the
@@ -419,8 +427,9 @@ challenge key or APK configuration bundle is copied into LINK.
 - the exact commissioning and backend-provisioning lifecycle that associates
   an adapter ID/passkey with that SMK;
 - payload formats for X modes whose identifier is known but structure is not;
-- the actual compressed/raw APK configuration assets;
-- Mercedes ECU TX/RX CAN addresses and service/DID/PDU mappings from those
-  assets;
+- the complete runtime diagnostic configuration bundle beyond the recovered
+  production connection/VIN bootstrap;
+- Mercedes ECU TX/RX CAN addresses and service/DID/PDU mappings not present in
+  that bootstrap;
 - result extraction/scaling formulas and units where not already explicit;
 - physical validation against the A2138203202 adapter.

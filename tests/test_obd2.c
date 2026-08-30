@@ -90,6 +90,34 @@ int main(void)
               sample.value == 1726.0,
           "decode RPM while preserving spaced responder CAN headers");
 
+    {
+        LinkObd2ResponderSampleList responders;
+        response = parse_response(
+            "010C", "7E804410C0CF9\r7E904410C0CFC\r>");
+        check(link_obd2_decode_live_pid_responders(
+                  &response, 0x0cU, &responders) == LINK_OBD2_RESULT_OK &&
+                  responders.count == 2U && !responders.truncated,
+              "decode both captured C207 RPM responders");
+        check(responders.samples[0].responder_id_available &&
+                  !responders.samples[0].extended_id &&
+                  responders.samples[0].responder_id == 0x7e8U &&
+                  responders.samples[0].sample.value == 830.25,
+              "retain captured engine responder identity and RPM");
+        check(responders.samples[1].responder_id_available &&
+                  !responders.samples[1].extended_id &&
+                  responders.samples[1].responder_id == 0x7e9U &&
+                  responders.samples[1].sample.value == 831.0,
+              "retain captured secondary responder identity and RPM");
+
+        response = parse_response("010D", "410D5C\r>");
+        check(link_obd2_decode_live_pid_responders(
+                  &response, 0x0dU, &responders) == LINK_OBD2_RESULT_OK &&
+                  responders.count == 1U &&
+                  !responders.samples[0].responder_id_available &&
+                  responders.samples[0].sample.value == 92.0,
+              "retain one headerless OBD value without inventing a module");
+    }
+
     response = parse_response("010C", "7E804410C1AF8\r>");
     check(link_obd2_decode_live_pid(&response, 0x0cU, &sample) ==
               LINK_OBD2_RESULT_OK && sample.value == 1726.0,

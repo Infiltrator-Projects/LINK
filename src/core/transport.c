@@ -387,6 +387,18 @@ static bool simulator_live_response(
         return false;
     }
     response[0] = '\0';
+    if (simulator->response_headers) {
+        const int prefix = snprintf(response, response_size, "7E8");
+        const size_t payload_length =
+            2U + (frame_number_present ? 1U : 0U) + data_length;
+        if (prefix != 3 || payload_length > 8U) return false;
+        position = 3U;
+        if (!simulator_append_byte(
+                response, response_size, &position,
+                (uint8_t)payload_length)) {
+            return false;
+        }
+    }
     if (!simulator_append_byte(response, response_size, &position, service) ||
         !simulator_append_byte(response, response_size, &position, pid)) {
         return false;
@@ -455,6 +467,7 @@ static bool simulator_default_response(
         if (identifier == NULL || identifier[0] == '\0') identifier = "ELM327 v2.3 SIM";
         (void)snprintf(response, response_size, "%s", identifier);
         simulator->echo = true;
+        simulator->response_headers = false;
         simulator->sample_counter = 0U;
         return true;
     }
@@ -464,9 +477,18 @@ static bool simulator_default_response(
     if (strcmp(command, "ATE1") == 0) {
         (void)snprintf(response, response_size, "OK"); simulator->echo = true; return true;
     }
+    if (strcmp(command, "ATH0") == 0) {
+        (void)snprintf(response, response_size, "OK");
+        simulator->response_headers = false;
+        return true;
+    }
+    if (strcmp(command, "ATH1") == 0) {
+        (void)snprintf(response, response_size, "OK");
+        simulator->response_headers = true;
+        return true;
+    }
     if (strcmp(command, "ATL0") == 0 || strcmp(command, "ATL1") == 0 ||
         strcmp(command, "ATS0") == 0 || strcmp(command, "ATS1") == 0 ||
-        strcmp(command, "ATH0") == 0 || strcmp(command, "ATH1") == 0 ||
         strcmp(command, "ATSP0") == 0 || strcmp(command, "ATSP6") == 0 ||
         strcmp(command, "ATCAF1") == 0 || strcmp(command, "ATCFC1") == 0 ||
         strncmp(command, "ATSH", 4U) == 0 || strncmp(command, "ATCRA", 5U) == 0) {

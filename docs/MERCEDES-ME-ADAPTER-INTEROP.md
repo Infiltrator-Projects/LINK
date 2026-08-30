@@ -76,6 +76,13 @@ Static values recovered from that class are:
 - Bluetooth connect timeout: **44,000 ms**
 - minimum connection duration: **6,000 ms**
 
+On iPhone, Bluetooth Classic is not available through CoreBluetooth. LINK's
+Apple provider therefore checks the External Accessory inventory for a visible
+`MB-2/3/4/5/6/7...` accessory and fails immediately with an exact explanation.
+Opening its RFCOMM/SPP stream would additionally require an accessory-authorised
+MFi protocol string; LINK does not invent or guess one. BLE `MB-1/8/9...`
+adapters continue through CoreBluetooth normally.
+
 These timings are preserved as reference behaviour. LINK may use different
 bounded platform timing where necessary, but any divergence should be
 intentional and documented.

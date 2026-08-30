@@ -33,7 +33,7 @@ int main(void)
         0x8c,0x44,0x7c,0xd1,0xd9,0x15,0x11,0x08
     };
     static const uint8_t expected_wire[] =
-        "aq/UUM2JUmn6X/ABmJ//LrQ==\r";
+        "ax9Ql01e6DI8Jst0dUyNaDw==\r";
 
     CHECK(LINK_MERCEDES_ME_DEFAULT_BAUD_ORDINAL == 6U);
     CHECK(LINK_MERCEDES_ME_ADAPTER_VIN_MIN_LENGTH == 1U);

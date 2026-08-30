@@ -414,7 +414,7 @@ static LinkDiagnosticFlowResult flow_accept_live_sample(
     LinkDiagnosticFlowEvent *event)
 {
     LinkObd2Result result;
-    LinkObd2Sample sample;
+    LinkObd2ResponderSampleList responders;
 
     flow->stage = LINK_DIAGNOSTIC_FLOW_LIVE;
     if (response->result == LINK_ELM327_RESULT_NO_DATA) {
@@ -423,7 +423,8 @@ static LinkDiagnosticFlowResult flow_accept_live_sample(
         return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
     }
 
-    result = link_obd2_decode_live_pid(response, flow->active_pid, &sample);
+    result = link_obd2_decode_live_pid_responders(
+        response, flow->active_pid, &responders);
     if (result == LINK_OBD2_RESULT_UNSUPPORTED_PID) {
         event->kind = LINK_DIAGNOSTIC_FLOW_EVENT_LIVE_UNSUPPORTED;
         event->sample.pid = flow->active_pid;
@@ -434,7 +435,8 @@ static LinkDiagnosticFlowResult flow_accept_live_sample(
     }
 
     event->kind = LINK_DIAGNOSTIC_FLOW_EVENT_LIVE_SAMPLE;
-    event->sample = sample;
+    event->responder_samples = responders;
+    event->sample = responders.samples[0].sample;
     return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
 }
 

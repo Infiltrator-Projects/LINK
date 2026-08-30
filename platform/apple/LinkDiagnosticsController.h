@@ -77,6 +77,14 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (NSArray<NSNumber *> *)recentValuesForPID:(uint8_t)pid
                                       limit:(NSUInteger)limit;
+/** Recent values returned by one exact 11/29-bit CAN responder. */
+- (NSArray<NSNumber *> *)recentValuesForPID:(uint8_t)pid
+                     responderCANIdentifier:(uint32_t)responderCANIdentifier
+                                  extendedID:(BOOL)extendedID
+                                       limit:(NSUInteger)limit;
+- (NSArray<NSNumber *> *)observedPIDsForResponderCANIdentifier:
+    (uint32_t)responderCANIdentifier
+                                                      extendedID:(BOOL)extendedID;
 - (BOOL)favouriteForPID:(uint8_t)pid;
 - (void)setFavourite:(BOOL)favourite forPID:(uint8_t)pid;
 

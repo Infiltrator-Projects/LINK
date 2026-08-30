@@ -573,6 +573,7 @@ LinkMercedesMeNativeResult link_mercedes_me_secure_encode(
     uint8_t encrypted[LINK_MERCEDES_ME_SECURE_MAX_CIPHERTEXT];
     size_t ciphertext_size;
     size_t encoded_size;
+    size_t padding_size;
     size_t offset;
     uint16_t crc;
 
@@ -597,6 +598,16 @@ LinkMercedesMeNativeResult link_mercedes_me_secure_encode(
     if (plaintext_size != 0U)
         memcpy(inner + LINK_MERCEDES_ME_SECURE_HEADER_SIZE,
                plaintext, plaintext_size);
+    /*
+     * Daimler's pmu_encrypt fills every byte after the six-byte header and
+     * payload with the number of padding bytes.  The frame length deliberately
+     * advances to a fresh AES block when the unpadded length is already block
+     * aligned, so padding_size is always in the range 1..16.
+     */
+    padding_size = ciphertext_size -
+        (LINK_MERCEDES_ME_SECURE_HEADER_SIZE + plaintext_size);
+    memset(inner + LINK_MERCEDES_ME_SECURE_HEADER_SIZE + plaintext_size,
+           (int)padding_size, padding_size);
     aes256_init(&aes, session_key);
     for (offset = 0U; offset < ciphertext_size; offset += 16U)
         aes256_encrypt_block(&aes, inner + offset, encrypted + offset);

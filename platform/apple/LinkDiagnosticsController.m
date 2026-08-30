@@ -61,6 +61,7 @@
     LinkDiagnosticFlowConfig _flowConfig;
 
     LinkTelemetryStore _telemetry;
+    LinkResponderTelemetryStore _responderTelemetry;
     LinkTelemetryRecorder _recorder;
     LinkTelemetrySessionMetadata _sessionMetadata;
     LinkMercedesMeStreamParser _nativeStreamParser;
@@ -214,6 +215,7 @@ static void LinkAppleSessionEvent(
 
     (void)link_diagnostic_flow_init(&_flow, &_flowConfig);
     link_telemetry_store_init(&_telemetry);
+    link_responder_telemetry_store_init(&_responderTelemetry);
     link_telemetry_recorder_init(&_recorder);
     link_mercedes_me_stream_parser_init(&_nativeStreamParser);
     _sessionCSV = [[NSMutableData alloc] init];
@@ -294,6 +296,7 @@ static void LinkAppleSessionEvent(
 
     (void)link_diagnostic_flow_init(&_flow, &_flowConfig);
     link_telemetry_store_clear_samples(&_telemetry);
+    link_responder_telemetry_store_clear(&_responderTelemetry);
     link_telemetry_recorder_init(&_recorder);
     link_mercedes_me_stream_parser_init(&_nativeStreamParser);
     _sessionMonotonicStartMs = LinkAppleMonotonicMilliseconds();
@@ -1018,8 +1021,52 @@ static void LinkAppleSessionEvent(
             return NO;
         }
 
+        bool recordedAttributedSample = false;
+        for (size_t responderIndex = 0U;
+             responderIndex < event->responder_samples.count;
+             ++responderIndex) {
+            const LinkObd2ResponderSample *responder =
+                &event->responder_samples.samples[responderIndex];
+            if (!responder->responder_id_available) continue;
+            LinkTelemetryMeasurement attributed = {
+                .pid = responder->sample.pid,
+                .value = responder->sample.value,
+                .unit = responder->sample.unit
+            };
+            if (!link_responder_telemetry_store_record(
+                    &_responderTelemetry, elapsed,
+                    responder->responder_id, responder->extended_id,
+                    &attributed)) {
+                [self failWithStatus:
+                    @"Could not record responder-attributed telemetry sample"];
+                return NO;
+            }
+            recordedAttributedSample = true;
+
+            const size_t historyCount =
+                link_responder_telemetry_store_history_count(
+                    &_responderTelemetry);
+            LinkResponderTelemetrySample recordedResponder;
+            if (_recorder.started && !_recorder.finished &&
+                (historyCount == 0U ||
+                 !link_responder_telemetry_store_history_at(
+                    &_responderTelemetry, historyCount - 1U,
+                    &recordedResponder) ||
+                 !link_telemetry_recorder_record_responder_sample_named(
+                    &_recorder, &recordedResponder,
+                    link_telemetry_store_is_favourite(
+                        &_telemetry, responder->sample.pid),
+                    link_obd2_pid_name(responder->sample.pid),
+                    link_obd2_unit_name(responder->sample.unit)))) {
+                [self failWithStatus:
+                    @"Could not append responder-attributed session recording"];
+                return NO;
+            }
+        }
+
         LinkTelemetrySample recorded;
-        if (_recorder.started && !_recorder.finished &&
+        if (!recordedAttributedSample &&
+            _recorder.started && !_recorder.finished &&
             link_telemetry_store_latest(
                 &_telemetry, event->sample.pid, &recorded) &&
             !link_telemetry_recorder_record_sample_named(
@@ -1245,6 +1292,65 @@ static void LinkAppleSessionEvent(
         if (!link_telemetry_store_history_at(
                 &_telemetry, reverseIndex - 1U, &sample) ||
             sample.measurement.pid != pid) {
+            continue;
+        }
+        [values insertObject:@(sample.measurement.value) atIndex:0U];
+    }
+    return values;
+}
+
+- (NSArray<NSNumber *> *)observedPIDsForResponderCANIdentifier:
+    (uint32_t)responderCANIdentifier
+                                                      extendedID:(BOOL)extendedID
+{
+    const uint32_t maximumIdentifier = extendedID
+        ? UINT32_C(0x1fffffff) : UINT32_C(0x7ff);
+    if (responderCANIdentifier > maximumIdentifier) return @[];
+
+    bool observed[256] = {false};
+    const size_t count =
+        link_responder_telemetry_store_history_count(&_responderTelemetry);
+    for (size_t index = 0U; index < count; ++index) {
+        LinkResponderTelemetrySample sample;
+        if (!link_responder_telemetry_store_history_at(
+                &_responderTelemetry, index, &sample) ||
+            sample.responder_id != responderCANIdentifier ||
+            sample.extended_id != extendedID) {
+            continue;
+        }
+        observed[sample.measurement.pid] = true;
+    }
+
+    NSMutableArray<NSNumber *> *pids = [[NSMutableArray alloc] init];
+    for (NSUInteger pid = 0U; pid < 256U; ++pid) {
+        if (observed[pid]) [pids addObject:@(pid)];
+    }
+    return [pids copy];
+}
+
+- (NSArray<NSNumber *> *)recentValuesForPID:(uint8_t)pid
+                     responderCANIdentifier:(uint32_t)responderCANIdentifier
+                                  extendedID:(BOOL)extendedID
+                                       limit:(NSUInteger)limit
+{
+    if (limit == 0U) return @[];
+    const uint32_t maximumIdentifier = extendedID
+        ? UINT32_C(0x1fffffff) : UINT32_C(0x7ff);
+    if (responderCANIdentifier > maximumIdentifier) return @[];
+
+    NSMutableArray<NSNumber *> *values =
+        [[NSMutableArray alloc] initWithCapacity:limit];
+    const size_t count =
+        link_responder_telemetry_store_history_count(&_responderTelemetry);
+    for (size_t reverseIndex = count;
+         reverseIndex > 0U && values.count < limit;
+         --reverseIndex) {
+        LinkResponderTelemetrySample sample;
+        if (!link_responder_telemetry_store_history_at(
+                &_responderTelemetry, reverseIndex - 1U, &sample) ||
+            sample.measurement.pid != pid ||
+            sample.responder_id != responderCANIdentifier ||
+            sample.extended_id != extendedID) {
             continue;
         }
         [values insertObject:@(sample.measurement.value) atIndex:0U];

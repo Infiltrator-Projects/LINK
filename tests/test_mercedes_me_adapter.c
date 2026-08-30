@@ -63,10 +63,22 @@ int main(void)
           LINK_MERCEDES_ME_ADAPTER_SECOND_GENERATION);
     CHECK(link_mercedes_me_adapter_family_from_name("MB-712345") ==
           LINK_MERCEDES_ME_ADAPTER_SECOND_GENERATION);
+    CHECK(link_mercedes_me_adapter_family_from_name("MB-7098B69") ==
+          LINK_MERCEDES_ME_ADAPTER_SECOND_GENERATION);
     CHECK(link_mercedes_me_adapter_family_from_name("VAN-1234") ==
           LINK_MERCEDES_ME_ADAPTER_OTHER_APPS);
     CHECK(link_mercedes_me_adapter_family_from_name("MB-012345") ==
           LINK_MERCEDES_ME_ADAPTER_UNKNOWN);
+    CHECK(link_mercedes_me_adapter_prefers_ble(
+        LINK_MERCEDES_ME_ADAPTER_BLE));
+    CHECK(!link_mercedes_me_adapter_prefers_ble(
+        LINK_MERCEDES_ME_ADAPTER_SECOND_GENERATION));
+    CHECK(link_mercedes_me_adapter_prefers_classic_spp(
+        LINK_MERCEDES_ME_ADAPTER_FIRST_GENERATION));
+    CHECK(link_mercedes_me_adapter_prefers_classic_spp(
+        LINK_MERCEDES_ME_ADAPTER_SECOND_GENERATION));
+    CHECK(!link_mercedes_me_adapter_prefers_classic_spp(
+        LINK_MERCEDES_ME_ADAPTER_BLE));
 
     CHECK(strcmp(LINK_MERCEDES_ME_NUS_RX_UUID,
                  "6E400002-B5A3-F393-E0A9-E50E24DCCA9E") == 0);

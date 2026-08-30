@@ -109,9 +109,11 @@ static LinkObd2Result obd2_parse_hex_line(
  * "7E8 04 41 0C 1A F8". Strip only a positively identified 11/29-bit
  * header and optional DLC, leaving ordinary headerless OBD payloads untouched.
  */
-static LinkObd2Result obd2_parse_data_line(
+static LinkObd2Result obd2_parse_data_line_with_responder(
     const char *line, size_t line_length,
-    uint8_t *bytes, size_t bytes_size, size_t *byte_count)
+    uint8_t *bytes, size_t bytes_size, size_t *byte_count,
+    bool *responder_id_available, uint32_t *responder_id,
+    bool *extended_id)
 {
     size_t first = 0U;
     size_t last = line_length;
@@ -124,6 +126,9 @@ static LinkObd2Result obd2_parse_data_line(
     if (line == NULL || bytes == NULL || byte_count == NULL) {
         return LINK_OBD2_RESULT_INVALID_ARGUMENT;
     }
+    if (responder_id_available != NULL) *responder_id_available = false;
+    if (responder_id != NULL) *responder_id = 0U;
+    if (extended_id != NULL) *extended_id = false;
 
     while (first < last && obd2_space(line[first])) first++;
     while (last > first && obd2_space(line[last - 1U])) last--;
@@ -155,6 +160,20 @@ static LinkObd2Result obd2_parse_data_line(
     }
     if (data_start >= last) return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
 
+    if (responder_id_available != NULL || responder_id != NULL ||
+        extended_id != NULL) {
+        uint32_t identifier = 0U;
+        size_t digit;
+        for (digit = 0U; digit < header_digits; ++digit) {
+            const int nibble = obd2_hex_value(line[first + digit]);
+            if (nibble < 0) return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
+            identifier = (identifier << 4U) | (uint32_t)nibble;
+        }
+        if (responder_id_available != NULL) *responder_id_available = true;
+        if (responder_id != NULL) *responder_id = identifier;
+        if (extended_id != NULL) *extended_id = header_digits == 8U;
+    }
+
     result = obd2_parse_hex_line(
         line + data_start, last - data_start, bytes, bytes_size, byte_count);
     if (result != LINK_OBD2_RESULT_OK) return result;
@@ -170,6 +189,15 @@ static LinkObd2Result obd2_parse_data_line(
         *byte_count = declared;
     }
     return LINK_OBD2_RESULT_OK;
+}
+
+static LinkObd2Result obd2_parse_data_line(
+    const char *line, size_t line_length,
+    uint8_t *bytes, size_t bytes_size, size_t *byte_count)
+{
+    return obd2_parse_data_line_with_responder(
+        line, line_length, bytes, bytes_size, byte_count,
+        NULL, NULL, NULL);
 }
 
 static bool obd2_parse_indexed_length(
@@ -705,14 +733,101 @@ next_supported_line:
 LinkObd2Result link_obd2_decode_live_pid(
     const LinkElm327Response *response, uint8_t pid, LinkObd2Sample *sample)
 {
-    uint8_t data[16];
-    size_t length = 0U;
+    LinkObd2ResponderSampleList responders;
     LinkObd2Result result;
     if (sample == NULL) return LINK_OBD2_RESULT_INVALID_ARGUMENT;
-    result = obd2_find_pid_payload(response, 0x41U, pid, false, 0U,
-                                   data, sizeof(data), &length);
+    result = link_obd2_decode_live_pid_responders(
+        response, pid, &responders);
     if (result != LINK_OBD2_RESULT_OK) return result;
-    return obd2_decode_sample_data(pid, data, length, sample);
+    if (responders.count == 0U) return LINK_OBD2_RESULT_UNEXPECTED_RESPONSE;
+    *sample = responders.samples[0].sample;
+    return LINK_OBD2_RESULT_OK;
+}
+
+LinkObd2Result link_obd2_decode_live_pid_responders(
+    const LinkElm327Response *response,
+    uint8_t pid,
+    LinkObd2ResponderSampleList *responders)
+{
+    const char *cursor;
+    LinkObd2ResponderSampleList decoded = {0};
+    LinkObd2Result result;
+    LinkObd2Result first_decode_error = LINK_OBD2_RESULT_OK;
+
+    if (responders == NULL) return LINK_OBD2_RESULT_INVALID_ARGUMENT;
+    result = obd2_response_ready(response);
+    if (result != LINK_OBD2_RESULT_OK) return result;
+
+    cursor = response->text;
+    while (*cursor != '\0') {
+        const char *end = strchr(cursor, '\n');
+        const size_t line_length =
+            end == NULL ? strlen(cursor) : (size_t)(end - cursor);
+        uint8_t bytes[OBD2_MAX_LINE_BYTES];
+        size_t byte_count = 0U;
+        bool responder_available = false;
+        bool responder_extended = false;
+        uint32_t responder = 0U;
+
+        if (memchr(cursor, ':', line_length) != NULL) goto next_line;
+        result = obd2_parse_data_line_with_responder(
+            cursor, line_length, bytes, sizeof(bytes), &byte_count,
+            &responder_available, &responder, &responder_extended);
+        if (result != LINK_OBD2_RESULT_OK) {
+            size_t indexed_length = 0U;
+            if (obd2_parse_indexed_length(
+                    cursor, line_length, &indexed_length)) {
+                goto next_line;
+            }
+            return result;
+        }
+        if (byte_count >= 2U && bytes[0] == UINT8_C(0x41) &&
+            bytes[1] == pid) {
+            LinkObd2Sample sample;
+            size_t existing;
+            const LinkObd2Result decode_result =
+                obd2_decode_sample_data(
+                    pid, bytes + 2U, byte_count - 2U, &sample);
+            if (decode_result != LINK_OBD2_RESULT_OK) {
+                if (first_decode_error == LINK_OBD2_RESULT_OK)
+                    first_decode_error = decode_result;
+                goto next_line;
+            }
+
+            for (existing = 0U; existing < decoded.count; ++existing) {
+                LinkObd2ResponderSample *candidate =
+                    &decoded.samples[existing];
+                if (candidate->responder_id_available ==
+                        responder_available &&
+                    (!responder_available ||
+                     (candidate->responder_id == responder &&
+                      candidate->extended_id == responder_extended))) {
+                    candidate->sample = sample;
+                    goto next_line;
+                }
+            }
+            if (decoded.count < LINK_OBD2_MAX_RESPONDER_SAMPLES) {
+                LinkObd2ResponderSample *candidate =
+                    &decoded.samples[decoded.count++];
+                candidate->responder_id_available = responder_available;
+                candidate->extended_id = responder_extended;
+                candidate->responder_id = responder;
+                candidate->sample = sample;
+            } else {
+                decoded.truncated = true;
+            }
+        }
+next_line:
+        if (end == NULL) break;
+        cursor = end + 1;
+    }
+
+    if (decoded.count == 0U) {
+        return first_decode_error != LINK_OBD2_RESULT_OK
+            ? first_decode_error : LINK_OBD2_RESULT_UNEXPECTED_RESPONSE;
+    }
+    *responders = decoded;
+    return LINK_OBD2_RESULT_OK;
 }
 
 LinkObd2Result link_obd2_decode_freeze_pid(

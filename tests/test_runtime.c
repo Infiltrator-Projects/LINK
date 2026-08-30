@@ -123,6 +123,26 @@ int main(void)
     CHECK(link_telemetry_store_latest(&telemetry, 0x0cU, &sample));
     CHECK(sample.measurement.value == 1234.5);
     CHECK(link_telemetry_store_record_transcript(&telemetry, 30U, "010C", 0U, "41 0C 13 4A"));
+
+    {
+        LinkResponderTelemetryStore responders;
+        LinkResponderTelemetrySample responder_sample;
+        link_responder_telemetry_store_init(&responders);
+        CHECK(link_responder_telemetry_store_record(
+            &responders, 21U, 0x7e8U, false, &measurement));
+        CHECK(link_responder_telemetry_store_record(
+            &responders, 22U, 0x7e9U, false, &measurement));
+        CHECK(link_responder_telemetry_store_history_count(&responders) == 2U);
+        CHECK(link_responder_telemetry_store_total_sample_count(&responders) == 2U);
+        CHECK(link_responder_telemetry_store_history_at(
+            &responders, 1U, &responder_sample));
+        CHECK(responder_sample.responder_id == 0x7e9U);
+        CHECK(responder_sample.measurement.pid == measurement.pid);
+        link_responder_telemetry_store_clear(&responders);
+        CHECK(link_responder_telemetry_store_history_count(&responders) == 0U);
+        CHECK(!link_responder_telemetry_store_record(
+            &responders, 23U, 0x800U, false, &measurement));
+    }
     link_telemetry_session_metadata_init(&metadata, 1U, "adapter", "vehicle");
     link_telemetry_session_metadata_finish(&metadata, 2U);
     CHECK(link_telemetry_export_csv_named(&telemetry, &metadata, "link", pid_name, unit_name, result_name, sink, &output));
@@ -140,16 +160,28 @@ int main(void)
     link_telemetry_recorder_init(&recorder);
     CHECK(link_telemetry_recorder_begin(&recorder, &metadata, "link", sink, &output));
     CHECK(link_telemetry_recorder_record_sample_named(&recorder, &sample, true, "Engine speed", "rpm"));
+    {
+        LinkResponderTelemetrySample responder_sample = {
+            .sequence = 2U,
+            .timestamp_ms = 21U,
+            .responder_id = 0x7e9U,
+            .extended_id = false,
+            .measurement = measurement
+        };
+        CHECK(link_telemetry_recorder_record_responder_sample_named(
+            &recorder, &responder_sample, true, "Engine speed", "rpm"));
+    }
     CHECK(link_telemetry_recorder_record_response_named(&recorder, 30U, "010C", "ok", "41 0C 13 4A"));
     CHECK(link_telemetry_recorder_finish(&recorder, 3U));
-    CHECK(strstr(output.data, "# link_session_stream_version,1\n") != NULL);
+    CHECK(strstr(output.data, "# link_session_stream_version,2\n") != NULL);
+    CHECK(strstr(output.data, ",0x7E9,0,\"\",\"\",\"\"\n") != NULL);
     link_telemetry_recorder_init(&recorder);
     link_telemetry_session_metadata_init(&metadata, 4U, "adapter", "vehicle");
     CHECK(link_telemetry_recorder_continue(&recorder, &metadata, "link", sink, &output));
     CHECK(link_telemetry_recorder_record_response_named(&recorder, 5U, "ATI", "ok", "ELM327"));
     CHECK(link_telemetry_recorder_finish(&recorder, 6U));
-    CHECK(occurrence_count(output.data, "# link_session_stream_version,1\n") == 1U);
+    CHECK(occurrence_count(output.data, "# link_session_stream_version,2\n") == 1U);
     CHECK(occurrence_count(output.data, "# session_started_epoch_ms,") == 2U);
-    CHECK(occurrence_count(output.data, "record_type,sequence,timestamp_ms,pid,name,value,unit,favourite,command,result,response\n") == 1U);
+    CHECK(occurrence_count(output.data, "record_type,sequence,timestamp_ms,pid,name,value,unit,favourite,responder_can_id,responder_extended,command,result,response\n") == 1U);
     return 0;
 }

@@ -56,6 +56,23 @@ typedef struct {
     LinkObd2Unit unit;
 } LinkObd2Sample;
 
+#define LINK_OBD2_MAX_RESPONDER_SAMPLES 8U
+
+/** One standard OBD-II value attributed to the CAN ECU that returned it. */
+typedef struct {
+    bool responder_id_available;
+    bool extended_id;
+    uint32_t responder_id;
+    LinkObd2Sample sample;
+} LinkObd2ResponderSample;
+
+/** Bounded set of replies to one functional Mode 01 PID request. */
+typedef struct {
+    LinkObd2ResponderSample samples[LINK_OBD2_MAX_RESPONDER_SAMPLES];
+    size_t count;
+    bool truncated;
+} LinkObd2ResponderSampleList;
+
 typedef struct {
     uint8_t bits[LINK_OBD2_PID_SET_BYTES];
 } LinkObd2PidSet;
@@ -124,6 +141,15 @@ LinkObd2Result link_obd2_decode_live_pid(
     const LinkElm327Response *response,
     uint8_t pid,
     LinkObd2Sample *sample);
+/**
+ * Decode every matching Mode 01 reply while retaining its 11/29-bit CAN
+ * responder identifier. Headerless transports still yield one sample with
+ * `responder_id_available == false`.
+ */
+LinkObd2Result link_obd2_decode_live_pid_responders(
+    const LinkElm327Response *response,
+    uint8_t pid,
+    LinkObd2ResponderSampleList *responders);
 LinkObd2Result link_obd2_decode_freeze_pid(
     const LinkElm327Response *response,
     uint8_t pid,
