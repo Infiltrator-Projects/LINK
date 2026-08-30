@@ -42,7 +42,12 @@
 #endif
 
 #define LINK_THEME_ID_CONNECT 1002
+#define LINK_THEME_ID_INVENTORY 1003
+#define LINK_THEME_ID_STOP 1004
+#define LINK_THEME_ID_EXPORT 1005
+#define LINK_THEME_ID_ADD_NOTE 1007
 #define LINK_THEME_ID_STATUS 1009
+#define LINK_THEME_ID_FULL_SWEEP 1011
 
 static HBRUSH link_theme_background_brush;
 static HBRUSH link_theme_panel_brush;
@@ -130,9 +135,21 @@ static BOOL CALLBACK link_theme_prepare_child(HWND child, LPARAM parameter)
 
 static COLORREF link_theme_button_fill(const DRAWITEMSTRUCT *item)
 {
+    if (item == NULL) return (COLORREF)LINK_THEME_PANEL;
+    if ((item->itemState & ODS_DISABLED) != 0U)
+        return (COLORREF)LINK_THEME_INPUT;
+    if (item->CtlID == LINK_THEME_ID_CONNECT)
+        return (COLORREF)LINK_THEME_ACCENT;
+    if ((item->itemState & ODS_SELECTED) != 0U)
+        return (COLORREF)LINK_THEME_INPUT;
+    return (COLORREF)LINK_THEME_PANEL;
+}
+
+static COLORREF link_theme_button_border(const DRAWITEMSTRUCT *item)
+{
     if (item != NULL && item->CtlID == LINK_THEME_ID_CONNECT)
         return (COLORREF)LINK_THEME_ACCENT;
-    return (COLORREF)LINK_THEME_PANEL;
+    return (COLORREF)LINK_THEME_MUTED;
 }
 
 static COLORREF link_theme_button_text(const DRAWITEMSTRUCT *item)
@@ -148,10 +165,14 @@ static COLORREF link_theme_button_text(const DRAWITEMSTRUCT *item)
 static LRESULT link_theme_draw_button(const DRAWITEMSTRUCT *item)
 {
     RECT rect;
+    RECT text_rect;
     char text[256];
     HBRUSH fill;
-    HBRUSH border;
+    HPEN pen;
+    HGDIOBJ old_brush;
+    HGDIOBJ old_pen;
     COLORREF fill_color;
+    COLORREF border_color;
     COLORREF text_color;
     int old_mode;
     COLORREF old_text;
@@ -159,31 +180,34 @@ static LRESULT link_theme_draw_button(const DRAWITEMSTRUCT *item)
     if (item == NULL || item->CtlType != ODT_BUTTON) return FALSE;
     rect = item->rcItem;
     fill_color = link_theme_button_fill(item);
+    border_color = link_theme_button_border(item);
     text_color = link_theme_button_text(item);
     fill = CreateSolidBrush(fill_color);
-    border = CreateSolidBrush((COLORREF)LINK_THEME_ACCENT);
-    if (fill != NULL) {
-        FillRect(item->hDC, &rect, fill);
-        DeleteObject(fill);
-    }
-    if (border != NULL) {
-        FrameRect(item->hDC, &rect, border);
-        DeleteObject(border);
-    }
-    if ((item->itemState & ODS_SELECTED) != 0U)
-        InflateRect(&rect, -2, -2);
+    pen = CreatePen(PS_SOLID, 1, border_color);
+    old_brush = fill != NULL ? SelectObject(item->hDC, fill) : NULL;
+    old_pen = pen != NULL ? SelectObject(item->hDC, pen) : NULL;
 
+    (void)RoundRect(item->hDC, rect.left, rect.top,
+                    rect.right, rect.bottom, 10, 10);
+
+    if (old_brush != NULL) (void)SelectObject(item->hDC, old_brush);
+    if (old_pen != NULL) (void)SelectObject(item->hDC, old_pen);
+    if (fill != NULL) DeleteObject(fill);
+    if (pen != NULL) DeleteObject(pen);
+
+    text_rect = rect;
+    InflateRect(&text_rect, -8, -3);
     text[0] = '\0';
     (void)GetWindowTextA(item->hwndItem, text, (int)sizeof(text));
     old_mode = SetBkMode(item->hDC, TRANSPARENT);
     old_text = SetTextColor(item->hDC, text_color);
-    (void)DrawTextA(item->hDC, text, -1, &rect,
+    (void)DrawTextA(item->hDC, text, -1, &text_rect,
                     DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
     (void)SetTextColor(item->hDC, old_text);
     (void)SetBkMode(item->hDC, old_mode);
     if ((item->itemState & ODS_FOCUS) != 0U) {
-        InflateRect(&rect, -3, -3);
-        DrawFocusRect(item->hDC, &rect);
+        InflateRect(&text_rect, -2, -2);
+        DrawFocusRect(item->hDC, &text_rect);
     }
     return TRUE;
 }
