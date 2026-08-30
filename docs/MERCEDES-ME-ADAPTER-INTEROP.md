@@ -272,8 +272,10 @@ The distinction between **requested device ID** and **responding device
 address** is explicit in this schema and should be preserved when LINK/MBLINK
 eventually ingest native DiagLogic output.
 
-The archived application also exposes 120 exact diagnostic/live-data IDs.
-They are preserved separately in
+The archived application evidence now exposes 194 exact
+diagnostic/live-data symbol/literal pairs: the original 120-entry DEX set plus
+74 additional exact native `DataIds::DATAID_*` pairs recovered from the
+supplied DiagLogic library. They are preserved separately in
 [`MERCEDES-ME-DATA-IDS.md`](MERCEDES-ME-DATA-IDS.md) so the catalogue can be
 used as an implementation checklist without bloating the transport notes.
 
