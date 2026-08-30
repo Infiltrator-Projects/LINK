@@ -140,6 +140,13 @@ static const InfiltratrI18nEntry en_au[] = {
     ENTRY("DPF bank 1 differential pressure", "DPF bank 1 differential pressure"),
     ENTRY("DPF bank 1 inlet temperature", "DPF bank 1 inlet temperature"),    ENTRY("Fuel tank level input", "Fuel tank level input"),
 
+    ENTRY("Engine run time since start", "Engine run time since start"),
+    ENTRY("Distance travelled with MIL on", "Distance travelled with MIL on"),
+    ENTRY("Oxygen sensor 1 equivalence ratio", "Oxygen sensor 1 equivalence ratio"),
+    ENTRY("Warm-ups since codes cleared", "Warm-ups since codes cleared"),
+    ENTRY("Distance since codes cleared", "Distance since codes cleared"),
+    ENTRY("Catalyst temperature B1S2", "Catalyst temperature B1S2"),
+    ENTRY("Time run with MIL on", "Time run with MIL on"),
 };
 
 static const InfiltratrI18nEntry en_us[] = {
@@ -280,6 +287,13 @@ static const InfiltratrI18nEntry de_de[] = {
     ENTRY("DPF bank 1 differential pressure", "DPF Bank 1 Differenzdruck"),
     ENTRY("DPF bank 1 inlet temperature", "DPF Bank 1 Einlasstemperatur"),    ENTRY("Fuel tank level input", "Kraftstofftankfüllstand"),
 
+    ENTRY("Engine run time since start", "Motorlaufzeit seit Start"),
+    ENTRY("Distance travelled with MIL on", "Gefahrene Strecke mit aktiver MIL"),
+    ENTRY("Oxygen sensor 1 equivalence ratio", "Äquivalenzverhältnis Lambdasonde 1"),
+    ENTRY("Warm-ups since codes cleared", "Warmlaufzyklen seit Fehlerlöschung"),
+    ENTRY("Distance since codes cleared", "Strecke seit Fehlerlöschung"),
+    ENTRY("Catalyst temperature B1S2", "Katalysatortemperatur B1S2"),
+    ENTRY("Time run with MIL on", "Laufzeit mit aktiver MIL"),
 };
 
 static const InfiltratrI18nEntry fr_fr[] = {
@@ -368,6 +382,13 @@ static const InfiltratrI18nEntry fr_fr[] = {
     ENTRY("DPF bank 1 differential pressure", "Pression différentielle DPF banc 1"),
     ENTRY("DPF bank 1 inlet temperature", "Température d’entrée DPF banc 1"),    ENTRY("Fuel tank level input", "Niveau de carburant"),
 
+    ENTRY("Engine run time since start", "Temps de fonctionnement moteur depuis le démarrage"),
+    ENTRY("Distance travelled with MIL on", "Distance parcourue avec MIL allumé"),
+    ENTRY("Oxygen sensor 1 equivalence ratio", "Rapport d’équivalence sonde O2 1"),
+    ENTRY("Warm-ups since codes cleared", "Cycles de chauffe depuis l’effacement des codes"),
+    ENTRY("Distance since codes cleared", "Distance depuis l’effacement des codes"),
+    ENTRY("Catalyst temperature B1S2", "Température catalyseur B1S2"),
+    ENTRY("Time run with MIL on", "Temps de fonctionnement avec MIL allumé"),
 };
 
 static const InfiltratrI18nEntry es_es[] = {
@@ -456,6 +477,13 @@ static const InfiltratrI18nEntry es_es[] = {
     ENTRY("DPF bank 1 differential pressure", "Presión diferencial DPF banco 1"),
     ENTRY("DPF bank 1 inlet temperature", "Temperatura de entrada DPF banco 1"),    ENTRY("Fuel tank level input", "Nivel de combustible"),
 
+    ENTRY("Engine run time since start", "Tiempo de funcionamiento del motor desde el arranque"),
+    ENTRY("Distance travelled with MIL on", "Distancia recorrida con MIL encendido"),
+    ENTRY("Oxygen sensor 1 equivalence ratio", "Relación de equivalencia del sensor de O2 1"),
+    ENTRY("Warm-ups since codes cleared", "Ciclos de calentamiento desde el borrado de códigos"),
+    ENTRY("Distance since codes cleared", "Distancia desde el borrado de códigos"),
+    ENTRY("Catalyst temperature B1S2", "Temperatura del catalizador B1S2"),
+    ENTRY("Time run with MIL on", "Tiempo de funcionamiento con MIL encendido"),
 };
 
 static const InfiltratrI18nEntry it_it[] = {
@@ -544,6 +572,13 @@ static const InfiltratrI18nEntry it_it[] = {
     ENTRY("DPF bank 1 differential pressure", "Pressione differenziale DPF banco 1"),
     ENTRY("DPF bank 1 inlet temperature", "Temperatura ingresso DPF banco 1"),    ENTRY("Fuel tank level input", "Livello carburante"),
 
+    ENTRY("Engine run time since start", "Tempo di funzionamento motore dall’avvio"),
+    ENTRY("Distance travelled with MIL on", "Distanza percorsa con MIL accesa"),
+    ENTRY("Oxygen sensor 1 equivalence ratio", "Rapporto di equivalenza sonda O2 1"),
+    ENTRY("Warm-ups since codes cleared", "Cicli di riscaldamento da cancellazione codici"),
+    ENTRY("Distance since codes cleared", "Distanza da cancellazione codici"),
+    ENTRY("Catalyst temperature B1S2", "Temperatura catalizzatore B1S2"),
+    ENTRY("Time run with MIL on", "Tempo di funzionamento con MIL accesa"),
 };
 
 static const InfiltratrI18nEntry pl_pl[] = {
@@ -680,6 +715,13 @@ static const InfiltratrI18nEntry pl_pl[] = {
     ENTRY("DPF bank 1 differential pressure", "Ciśnienie różnicowe DPF bank 1"),
     ENTRY("DPF bank 1 inlet temperature", "Temperatura wlotowa DPF bank 1"),    ENTRY("Fuel tank level input", "Poziom paliwa"),
 
+    ENTRY("Engine run time since start", "Czas pracy silnika od uruchomienia"),
+    ENTRY("Distance travelled with MIL on", "Dystans przejechany z włączoną kontrolką MIL"),
+    ENTRY("Oxygen sensor 1 equivalence ratio", "Współczynnik lambda sondy O2 1"),
+    ENTRY("Warm-ups since codes cleared", "Cykle rozgrzewania od skasowania kodów"),
+    ENTRY("Distance since codes cleared", "Dystans od skasowania kodów"),
+    ENTRY("Catalyst temperature B1S2", "Temperatura katalizatora B1S2"),
+    ENTRY("Time run with MIL on", "Czas pracy z włączoną kontrolką MIL"),
 };
 
 static const InfiltratrI18nEntry pt_br[] = {
@@ -816,6 +858,13 @@ static const InfiltratrI18nEntry pt_br[] = {
     ENTRY("DPF bank 1 differential pressure", "Pressão diferencial do DPF banco 1"),
     ENTRY("DPF bank 1 inlet temperature", "Temperatura de entrada do DPF banco 1"),    ENTRY("Fuel tank level input", "Nível de combustível"),
 
+    ENTRY("Engine run time since start", "Tempo de funcionamento do motor desde a partida"),
+    ENTRY("Distance travelled with MIL on", "Distância percorrida com MIL acesa"),
+    ENTRY("Oxygen sensor 1 equivalence ratio", "Razão de equivalência do sensor O2 1"),
+    ENTRY("Warm-ups since codes cleared", "Ciclos de aquecimento desde a limpeza dos códigos"),
+    ENTRY("Distance since codes cleared", "Distância desde a limpeza dos códigos"),
+    ENTRY("Catalyst temperature B1S2", "Temperatura do catalisador B1S2"),
+    ENTRY("Time run with MIL on", "Tempo de funcionamento com MIL acesa"),
 };
 
 static const InfiltratrI18nEntry zh_cn[] = {
@@ -952,6 +1001,13 @@ static const InfiltratrI18nEntry zh_cn[] = {
     ENTRY("DPF bank 1 differential pressure", "DPF 第1组差压"),
     ENTRY("DPF bank 1 inlet temperature", "DPF 第1组入口温度"),    ENTRY("Fuel tank level input", "燃油箱液位"),
 
+    ENTRY("Engine run time since start", "发动机自启动后的运行时间"),
+    ENTRY("Distance travelled with MIL on", "MIL 点亮时行驶距离"),
+    ENTRY("Oxygen sensor 1 equivalence ratio", "氧传感器 1 当量比"),
+    ENTRY("Warm-ups since codes cleared", "清除故障码后的暖机次数"),
+    ENTRY("Distance since codes cleared", "清除故障码后的行驶距离"),
+    ENTRY("Catalyst temperature B1S2", "催化器温度 B1S2"),
+    ENTRY("Time run with MIL on", "MIL 点亮时的运行时间"),
 };
 
 static const InfiltratrI18nEntry hi_in[] = {
@@ -1088,6 +1144,13 @@ static const InfiltratrI18nEntry hi_in[] = {
     ENTRY("DPF bank 1 differential pressure", "DPF बैंक 1 डिफरेंशियल दबाव"),
     ENTRY("DPF bank 1 inlet temperature", "DPF बैंक 1 इनलेट तापमान"),    ENTRY("Fuel tank level input", "ईंधन टैंक स्तर"),
 
+    ENTRY("Engine run time since start", "स्टार्ट के बाद इंजन चलने का समय"),
+    ENTRY("Distance travelled with MIL on", "MIL चालू रहने के दौरान चली दूरी"),
+    ENTRY("Oxygen sensor 1 equivalence ratio", "ऑक्सीजन सेंसर 1 समतुल्यता अनुपात"),
+    ENTRY("Warm-ups since codes cleared", "कोड साफ़ करने के बाद वार्म-अप चक्र"),
+    ENTRY("Distance since codes cleared", "कोड साफ़ करने के बाद चली दूरी"),
+    ENTRY("Catalyst temperature B1S2", "उत्प्रेरक तापमान B1S2"),
+    ENTRY("Time run with MIL on", "MIL चालू रहने का संचालन समय"),
 };
 
 static const InfiltratrI18nEntry ar[] = {
@@ -1224,6 +1287,13 @@ static const InfiltratrI18nEntry ar[] = {
     ENTRY("DPF bank 1 differential pressure", "فرق ضغط DPF للبنك 1"),
     ENTRY("DPF bank 1 inlet temperature", "درجة حرارة مدخل DPF للبنك 1"),    ENTRY("Fuel tank level input", "مستوى خزان الوقود"),
 
+    ENTRY("Engine run time since start", "مدة تشغيل المحرك منذ البدء"),
+    ENTRY("Distance travelled with MIL on", "المسافة المقطوعة مع إضاءة MIL"),
+    ENTRY("Oxygen sensor 1 equivalence ratio", "نسبة التكافؤ لمستشعر الأكسجين 1"),
+    ENTRY("Warm-ups since codes cleared", "دورات الإحماء منذ مسح الرموز"),
+    ENTRY("Distance since codes cleared", "المسافة منذ مسح الرموز"),
+    ENTRY("Catalyst temperature B1S2", "درجة حرارة المحفز B1S2"),
+    ENTRY("Time run with MIL on", "مدة التشغيل مع إضاءة MIL"),
 };
 
 static const InfiltratrI18nEntry ja_jp[] = {
@@ -1360,6 +1430,13 @@ static const InfiltratrI18nEntry ja_jp[] = {
     ENTRY("DPF bank 1 differential pressure", "DPF バンク1 差圧"),
     ENTRY("DPF bank 1 inlet temperature", "DPF バンク1 入口温度"),    ENTRY("Fuel tank level input", "燃料タンクレベル"),
 
+    ENTRY("Engine run time since start", "始動後のエンジン運転時間"),
+    ENTRY("Distance travelled with MIL on", "MIL点灯中の走行距離"),
+    ENTRY("Oxygen sensor 1 equivalence ratio", "酸素センサー1空燃比当量比"),
+    ENTRY("Warm-ups since codes cleared", "コード消去後の暖機回数"),
+    ENTRY("Distance since codes cleared", "コード消去後の走行距離"),
+    ENTRY("Catalyst temperature B1S2", "触媒温度 B1S2"),
+    ENTRY("Time run with MIL on", "MIL点灯中の運転時間"),
 };
 
 static const InfiltratrI18nEntry ko_kr[] = {
@@ -1496,6 +1573,13 @@ static const InfiltratrI18nEntry ko_kr[] = {
     ENTRY("DPF bank 1 differential pressure", "DPF 뱅크 1 차압"),
     ENTRY("DPF bank 1 inlet temperature", "DPF 뱅크 1 입구 온도"),    ENTRY("Fuel tank level input", "연료 탱크 레벨"),
 
+    ENTRY("Engine run time since start", "시동 후 엔진 작동 시간"),
+    ENTRY("Distance travelled with MIL on", "MIL 점등 상태 주행 거리"),
+    ENTRY("Oxygen sensor 1 equivalence ratio", "산소 센서 1 당량비"),
+    ENTRY("Warm-ups since codes cleared", "고장 코드 삭제 후 웜업 횟수"),
+    ENTRY("Distance since codes cleared", "고장 코드 삭제 후 주행 거리"),
+    ENTRY("Catalyst temperature B1S2", "촉매 온도 B1S2"),
+    ENTRY("Time run with MIL on", "MIL 점등 상태 작동 시간"),
 };
 
 static const InfiltratrI18nEntry id_id[] = {
@@ -1632,6 +1716,13 @@ static const InfiltratrI18nEntry id_id[] = {
     ENTRY("DPF bank 1 differential pressure", "Tekanan diferensial DPF bank 1"),
     ENTRY("DPF bank 1 inlet temperature", "Suhu masuk DPF bank 1"),    ENTRY("Fuel tank level input", "Tingkat tangki bahan bakar"),
 
+    ENTRY("Engine run time since start", "Waktu kerja mesin sejak start"),
+    ENTRY("Distance travelled with MIL on", "Jarak tempuh saat MIL menyala"),
+    ENTRY("Oxygen sensor 1 equivalence ratio", "Rasio ekuivalensi sensor oksigen 1"),
+    ENTRY("Warm-ups since codes cleared", "Siklus pemanasan sejak kode dihapus"),
+    ENTRY("Distance since codes cleared", "Jarak sejak kode dihapus"),
+    ENTRY("Catalyst temperature B1S2", "Suhu katalis B1S2"),
+    ENTRY("Time run with MIL on", "Waktu kerja saat MIL menyala"),
 };
 
 static const InfiltratrI18nCatalog catalogs[] = {
