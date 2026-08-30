@@ -89,9 +89,9 @@ static NSString * _Nullable LinkConnectedClassicMercedesAdapterName(void)
         [EAAccessoryManager sharedAccessoryManager].connectedAccessories;
     for (EAAccessory *accessory in accessories) {
         NSArray<NSString *> *identities = @[
-            accessory.name ?: @"",
-            accessory.modelNumber ?: @"",
-            accessory.serialNumber ?: @""
+            accessory.name != nil ? accessory.name : @"",
+            accessory.modelNumber != nil ? accessory.modelNumber : @"",
+            accessory.serialNumber != nil ? accessory.serialNumber : @""
         ];
         for (NSString *identity in identities) {
             LinkMercedesMeAdapterFamily family;
