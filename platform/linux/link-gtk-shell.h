@@ -88,6 +88,13 @@ typedef struct LinkGtkShellDescriptor {
      * effect without reconnecting or reaching into shell internals.
      */
     bool (*polling_enabled)(uint8_t pid, void *context);
+    /*
+     * Optional product UI revision. Increment when a presentation preference
+     * changes (for example temperature or pressure units) so disconnected GTK
+     * pages are rebuilt once with the new formatting while navigation remains
+     * cached and churn-free.
+     */
+    uint64_t (*presentation_revision)(void *context);
     void (*append_session_state_json)(GString *json, void *context);
     /*
      * Optional product action that requests a fresh manufacturer-extension

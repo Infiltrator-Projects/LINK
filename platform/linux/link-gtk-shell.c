@@ -17,6 +17,7 @@ typedef struct LinkGtkShell {
     GtkWidget *content_scroll;
     GtkWidget *section_bodies[LINK_WORKSPACE_SECTION_COUNT];
     bool section_rendered[LINK_WORKSPACE_SECTION_COUNT];
+    uint64_t section_revision[LINK_WORKSPACE_SECTION_COUNT];
     bool navigation_stress_mode;
     GtkWidget *title;
     GtkWidget *summary;
@@ -80,6 +81,11 @@ static const char link_gtk_base_css[] =
     ".link-nav-row:selected { background: rgba(255,255,255,0.105); border-color: rgba(255,255,255,0.24); }"
     ".link-about-button { margin-top: 6px; min-height: 34px; }"
     ".link-language-label { opacity: 0.72; font-size: 11px; font-weight: 700; }"
+    ".link-settings-row { padding: 8px 0; }"
+    ".link-settings-copy { margin-right: 18px; }"
+    ".link-settings-title { font-weight: 800; }"
+    ".link-settings-description { opacity: 0.68; font-size: 11px; }"
+    ".link-settings-dropdown { min-width: 230px; }"
     ".link-connection-bar { padding: 12px 14px; border-radius: 14px; }"
     ".link-toolbar-label { opacity: 0.78; font-size: 12px; font-weight: 700; }"
     ".link-adapter-combo { min-width: 220px; }"
@@ -710,6 +716,84 @@ static guint selected_locale_index(void)
     return 0U;
 }
 
+static void language_changed(
+    GObject *object, GParamSpec *spec, gpointer user_data);
+
+static uint64_t presentation_revision(const LinkGtkShell *shell)
+{
+    if (shell == NULL || shell->descriptor == NULL ||
+        shell->descriptor->presentation_revision == NULL) {
+        return 0U;
+    }
+    return shell->descriptor->presentation_revision(
+        shell->descriptor->context);
+}
+
+static void append_shared_language_settings(
+    LinkGtkShell *shell, GtkWidget *body)
+{
+    GtkWidget *card;
+    GtkWidget *row;
+    GtkWidget *copy;
+    GtkStringList *model;
+    size_t index;
+
+    if (shell == NULL || body == NULL) return;
+
+    card = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
+    gtk_widget_add_css_class(card, "link-card");
+    gtk_widget_set_hexpand(card, TRUE);
+    gtk_box_append(
+        GTK_BOX(card),
+        left_label("DISPLAY", "link-card-kicker"));
+    gtk_box_append(
+        GTK_BOX(card),
+        left_label("Language & region", "link-card-title"));
+
+    row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
+    copy = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
+    gtk_widget_add_css_class(row, "link-settings-row");
+    gtk_widget_add_css_class(copy, "link-settings-copy");
+    gtk_widget_set_hexpand(copy, TRUE);
+    gtk_box_append(
+        GTK_BOX(copy),
+        left_label("Display language", "link-settings-title"));
+    gtk_box_append(
+        GTK_BOX(copy),
+        left_label(
+            "Changes the application language immediately and remembers the selection.",
+            "link-settings-description"));
+
+    model = gtk_string_list_new(NULL);
+    for (index = 0U;
+         index < link_i18n_installed_locale_count();
+         ++index) {
+        const char *name = link_i18n_installed_locale_name(index);
+        if (name != NULL) gtk_string_list_append(model, name);
+    }
+    shell->language_combo =
+        gtk_drop_down_new(G_LIST_MODEL(model), NULL);
+    gtk_widget_add_css_class(
+        shell->language_combo, "link-settings-dropdown");
+    gtk_drop_down_set_selected(
+        GTK_DROP_DOWN(shell->language_combo),
+        selected_locale_index());
+    g_object_unref(model);
+    g_signal_connect(
+        shell->language_combo, "notify::selected",
+        G_CALLBACK(language_changed), shell);
+
+    gtk_box_append(GTK_BOX(row), copy);
+    gtk_box_append(GTK_BOX(row), shell->language_combo);
+    gtk_box_append(GTK_BOX(card), row);
+    gtk_box_append(
+        GTK_BOX(card),
+        left_label(
+            "Language is an application preference. Measurement units are configured independently by the diagnostic product.",
+            "link-card-note"));
+    gtk_box_append(GTK_BOX(body), card);
+}
+
 /*
  * GTK page construction is intentionally serialized. Diagnostic traffic can
  * generate many model changes per second; rebuilding the widget subtree from
@@ -758,25 +842,36 @@ static void render_current_section_now(LinkGtkShell *shell)
             gtk_label_set_text(GTK_LABEL(shell->summary), section->summary);
 
         /*
-         * An offline workspace is immutable apart from controls living in the
-         * page itself. Keep each already-visited page alive instead of
+         * An offline workspace is immutable apart from presentation
+         * preferences. Keep each already-visited page alive instead of
          * destroying and recreating its full GTK subtree on every sidebar
-         * click. This removes needless widget churn (especially the large Live
-         * Data catalogue) and makes repeated disconnected navigation safe.
-         *
-         * Live/diagnostic changes invalidate the cache, and connected pages
-         * continue to rebuild so telemetry remains current.
+         * click. Products may expose a monotonically increasing presentation
+         * revision so unit/theme preference changes invalidate cached pages
+         * without bringing back navigation-time widget churn.
          */
-        if (!connected && shell->section_rendered[shell->current_section])
-            continue;
+        {
+            const uint64_t revision = presentation_revision(shell);
+            if (!connected &&
+                shell->section_rendered[shell->current_section] &&
+                shell->section_revision[shell->current_section] == revision) {
+                continue;
+            }
 
-        clear_box(body);
-        if (shell->descriptor->render_section != NULL) {
-            shell->descriptor->render_section(
-                shell->current_section, body,
-                shell->descriptor->context);
+            if (shell->current_section == LINK_WORKSPACE_SETTINGS) {
+                shell->language_combo = NULL;
+                shell->language_label = NULL;
+            }
+            clear_box(body);
+            if (shell->current_section == LINK_WORKSPACE_SETTINGS)
+                append_shared_language_settings(shell, body);
+            if (shell->descriptor->render_section != NULL) {
+                shell->descriptor->render_section(
+                    shell->current_section, body,
+                    shell->descriptor->context);
+            }
+            shell->section_rendered[shell->current_section] = true;
+            shell->section_revision[shell->current_section] = revision;
         }
-        shell->section_rendered[shell->current_section] = true;
     } while (shell->render_pending);
     shell->render_in_progress = false;
 }
@@ -1025,7 +1120,24 @@ static void refresh_visible_language(LinkGtkShell *shell)
         else
             set_connection_state(shell, false, "Disconnected");
     }
-    render_navigation_selection(shell);
+    /*
+     * The language selector now lives inside Settings. Rebuilding that page
+     * synchronously from its own notify signal would destroy the active GTK
+     * control mid-callback. Keep the current Settings subtree alive; all other
+     * pages can refresh immediately.
+     */
+    if (shell->current_section != LINK_WORKSPACE_SETTINGS)
+        render_navigation_selection(shell);
+    else {
+        const LinkWorkspaceSectionDescriptor *section =
+            link_workspace_section_at(shell->current_section);
+        if (section != NULL) {
+            if (shell->title != NULL)
+                gtk_label_set_text(GTK_LABEL(shell->title), section->title);
+            if (shell->summary != NULL)
+                gtk_label_set_text(GTK_LABEL(shell->summary), section->summary);
+        }
+    }
 }
 
 static void language_changed(GObject *object, GParamSpec *spec, gpointer user_data)
@@ -1742,8 +1854,6 @@ static void activate(GtkApplication *application, gpointer user_data)
     GtkWidget *content_scroll = gtk_scrolled_window_new();
     GtkWidget *nav_scroll = gtk_scrolled_window_new();
     GtkWidget *page_stack = gtk_stack_new();
-    GtkStringList *language_model;
-    GtkWidget *language_row;
 
     scan_language_pack_directories(shell);
     initialise_selected_locale();
@@ -1794,28 +1904,6 @@ static void activate(GtkApplication *application, gpointer user_data)
     gtk_widget_set_vexpand(nav_scroll, TRUE);
     gtk_box_append(GTK_BOX(sidebar), nav_scroll);
     rebuild_navigation(shell);
-
-    shell->language_label = left_label("🌐", "link-language-label");
-    language_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
-    language_model = gtk_string_list_new(NULL);
-    {
-        size_t language_index;
-        for (language_index = 0U;
-             language_index < link_i18n_installed_locale_count();
-             ++language_index) {
-            const char *name = link_i18n_installed_locale_name(language_index);
-            if (name != NULL) gtk_string_list_append(language_model, name);
-        }
-    }
-    shell->language_combo = gtk_drop_down_new(G_LIST_MODEL(language_model), NULL);
-    gtk_drop_down_set_selected(GTK_DROP_DOWN(shell->language_combo), selected_locale_index());
-    g_object_unref(language_model);
-    gtk_box_append(GTK_BOX(language_row), shell->language_label);
-    gtk_box_append(GTK_BOX(language_row), shell->language_combo);
-    gtk_widget_set_hexpand(shell->language_combo, TRUE);
-    gtk_box_append(GTK_BOX(sidebar), language_row);
-    g_signal_connect(shell->language_combo, "notify::selected",
-                     G_CALLBACK(language_changed), shell);
 
     shell->about_button = gtk_button_new_with_label("About");
     gtk_widget_add_css_class(shell->about_button, "link-about-button");
