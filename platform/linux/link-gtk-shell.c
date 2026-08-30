@@ -65,25 +65,35 @@ typedef struct LinkGtkShell {
 
 static const char link_gtk_base_css[] =
     ".link-root { background: transparent; }"
-    ".link-sidebar { background: rgba(0,0,0,0.20); border-right: 1px solid rgba(255,255,255,0.12); padding: 16px; }"
-    ".link-brand-header { padding-bottom: 8px; }"
-    ".link-nav-list { background: transparent; }"
-    ".link-nav-row { margin: 4px 0; padding: 3px 5px; border-radius: 11px; border: 1px solid transparent; background: transparent; }"
-    ".link-nav-row:hover { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.12); }"
-    ".link-nav-row:selected { background: rgba(255,255,255,0.11); border-color: rgba(255,255,255,0.30); }"
-    ".link-about-button { margin-top: 6px; }"
+    ".link-sidebar { background: rgba(0,0,0,0.24); border-right: 1px solid rgba(255,255,255,0.10); padding: 18px 16px; }"
+    ".link-brand-header { padding: 2px 0 10px 0; }"
+    ".link-nav-scroll, .link-content-scroll { background: transparent; border: none; }"
+    ".link-nav-list { background: transparent; padding: 2px 0; }"
+    ".link-nav-row { margin: 3px 0; padding: 6px 8px; border-radius: 10px; border: 1px solid transparent; background: transparent; }"
+    ".link-nav-row:hover { background: rgba(255,255,255,0.055); border-color: rgba(255,255,255,0.10); }"
+    ".link-nav-row:selected { background: rgba(255,255,255,0.105); border-color: rgba(255,255,255,0.24); }"
+    ".link-about-button { margin-top: 6px; min-height: 34px; }"
     ".link-language-label { opacity: 0.72; font-size: 11px; font-weight: 700; }"
-    ".link-connection-bar { padding: 12px; border-radius: 14px; }"
-    ".link-link-button { font-weight: 800; padding: 8px 18px; }"
-    ".link-save-session-button { font-weight: 700; padding: 8px 14px; }"
-    ".link-connection-status { font-weight: 700; }"
+    ".link-connection-bar { padding: 12px 14px; border-radius: 14px; }"
+    ".link-toolbar-label { opacity: 0.78; font-size: 12px; font-weight: 700; }"
+    ".link-adapter-combo { min-width: 220px; }"
+    ".link-toolbar-button { min-height: 34px; padding: 5px 12px; font-weight: 700; }"
+    ".link-link-button { min-width: 92px; font-weight: 800; padding: 7px 18px; }"
+    ".link-save-session-button { font-weight: 700; padding: 7px 14px; }"
+    ".link-connection-status { font-weight: 700; padding: 6px 10px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.14); }"
+    ".link-status-online { background: rgba(82,151,105,0.10); border-color: rgba(99,171,124,0.46); }"
+    ".link-status-offline { background: rgba(209,158,71,0.08); border-color: rgba(209,158,71,0.34); }"
     ".link-brand { font-size: 28px; font-weight: 900; letter-spacing: 3px; }"
     ".link-brand-subtitle { font-size: 11px; font-weight: 800; }"
-    ".link-brand-version { opacity: 0.7; font-size: 11px; }"
+    ".link-brand-version { opacity: 0.66; font-size: 11px; }"
     ".link-section-title { font-weight: 800; }"
-    ".link-section-summary { opacity: 0.68; font-size: 11px; }"
-    ".link-content-title { font-size: 30px; font-weight: 900; }"
-    ".link-content-summary { opacity: 0.78; font-size: 14px; }";
+    ".link-section-summary { opacity: 0.66; font-size: 11px; }"
+    ".link-content-header { padding: 2px 2px 8px 2px; }"
+    ".link-content-body { padding: 2px 2px 24px 2px; }"
+    ".link-content-title { font-size: 28px; font-weight: 900; }"
+    ".link-content-summary { opacity: 0.76; font-size: 14px; }"
+    ".link-detail-row { padding: 4px 0; }"
+    ".link-card-note { margin-top: 4px; line-height: 1.25; }";
 
 static uint64_t monotonic_ms(void)
 {
@@ -857,6 +867,10 @@ static void notify_diagnostic(LinkGtkShell *shell,
 static void set_connection_state(LinkGtkShell *shell, bool connected, const char *message)
 {
     gtk_label_set_text(GTK_LABEL(shell->status), message);
+    gtk_widget_remove_css_class(
+        shell->status, connected ? "link-status-offline" : "link-status-online");
+    gtk_widget_add_css_class(
+        shell->status, connected ? "link-status-online" : "link-status-offline");
     gtk_button_set_label(GTK_BUTTON(shell->link_button), connected ? "LINK DOWN" : "LINK UP");
     gtk_widget_set_sensitive(shell->device_combo, !connected);
     if (shell->diagnostic_restart_button != NULL)
@@ -1573,7 +1587,10 @@ static void about_clicked(GtkButton *button, gpointer user_data)
 
 static GtkWidget *build_connection_bar(LinkGtkShell *shell)
 {
-    GtkWidget *bar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    GtkWidget *bar = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+    GtkWidget *device_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    GtkWidget *action_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+
     shell->refresh_button = gtk_button_new_with_label("Refresh");
     shell->adapter_label = left_label("Adapter", NULL);
     shell->device_combo = gtk_drop_down_new(NULL, NULL);
@@ -1586,26 +1603,43 @@ static GtkWidget *build_connection_bar(LinkGtkShell *shell)
         gtk_widget_set_sensitive(shell->diagnostic_restart_button, FALSE);
     }
     shell->link_button = gtk_button_new_with_label("LINK UP");
-    gtk_widget_set_hexpand(shell->status, TRUE);
+
     gtk_widget_add_css_class(bar, "link-connection-bar");
+    gtk_widget_add_css_class(shell->adapter_label, "link-toolbar-label");
+    gtk_widget_add_css_class(shell->device_combo, "link-adapter-combo");
+    gtk_widget_add_css_class(shell->refresh_button, "link-toolbar-button");
     gtk_widget_add_css_class(shell->link_button, "link-link-button");
     gtk_widget_add_css_class(shell->save_session_button, "link-save-session-button");
-    if (shell->diagnostic_restart_button != NULL)
+    gtk_widget_add_css_class(shell->save_session_button, "link-toolbar-button");
+    gtk_widget_add_css_class(shell->status, "link-status-offline");
+    if (shell->diagnostic_restart_button != NULL) {
         gtk_widget_add_css_class(shell->diagnostic_restart_button, "link-save-session-button");
+        gtk_widget_add_css_class(shell->diagnostic_restart_button, "link-toolbar-button");
+    }
+
+    gtk_widget_set_hexpand(shell->device_combo, TRUE);
+    gtk_widget_set_hexpand(shell->status, TRUE);
+    gtk_widget_set_halign(shell->status, GTK_ALIGN_FILL);
+
     g_signal_connect(shell->refresh_button, "clicked", G_CALLBACK(refresh_clicked), shell);
     g_signal_connect(shell->save_session_button, "clicked", G_CALLBACK(save_session_clicked), shell);
     if (shell->diagnostic_restart_button != NULL)
         g_signal_connect(shell->diagnostic_restart_button, "clicked",
                          G_CALLBACK(diagnostic_restart_action_clicked), shell);
     g_signal_connect(shell->link_button, "clicked", G_CALLBACK(link_clicked), shell);
-    gtk_box_append(GTK_BOX(bar), shell->adapter_label);
-    gtk_box_append(GTK_BOX(bar), shell->device_combo);
-    gtk_box_append(GTK_BOX(bar), shell->refresh_button);
-    gtk_box_append(GTK_BOX(bar), shell->save_session_button);
+
+    gtk_box_append(GTK_BOX(device_row), shell->adapter_label);
+    gtk_box_append(GTK_BOX(device_row), shell->device_combo);
+    gtk_box_append(GTK_BOX(device_row), shell->refresh_button);
+
+    gtk_box_append(GTK_BOX(action_row), shell->status);
+    gtk_box_append(GTK_BOX(action_row), shell->save_session_button);
     if (shell->diagnostic_restart_button != NULL)
-        gtk_box_append(GTK_BOX(bar), shell->diagnostic_restart_button);
-    gtk_box_append(GTK_BOX(bar), shell->status);
-    gtk_box_append(GTK_BOX(bar), shell->link_button);
+        gtk_box_append(GTK_BOX(action_row), shell->diagnostic_restart_button);
+    gtk_box_append(GTK_BOX(action_row), shell->link_button);
+
+    gtk_box_append(GTK_BOX(bar), device_row);
+    gtk_box_append(GTK_BOX(bar), action_row);
     refresh_devices(shell);
     return bar;
 }
@@ -1619,7 +1653,9 @@ static void activate(GtkApplication *application, gpointer user_data)
     GtkWidget *sidebar = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
     GtkWidget *main = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
     GtkWidget *brand = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
-    GtkWidget *content = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+    GtkWidget *page_header = gtk_box_new(GTK_ORIENTATION_VERTICAL, 3);
+    GtkWidget *content_scroll = gtk_scrolled_window_new();
+    GtkWidget *nav_scroll = gtk_scrolled_window_new();
     GtkStringList *language_model;
     GtkWidget *language_row;
 
@@ -1631,7 +1667,8 @@ static void activate(GtkApplication *application, gpointer user_data)
         strncmp(link_i18n_selected_locale(), "ar", 2U) == 0 ? GTK_TEXT_DIR_RTL : GTK_TEXT_DIR_LTR);
     gtk_window_set_title(shell->window,
                          link_gtk_i18n_translate_text(d->window_title));
-    gtk_window_set_default_size(shell->window, 1180, 760);
+    gtk_window_set_default_size(shell->window, 1240, 800);
+    gtk_window_set_resizable(shell->window, TRUE);
     if (d->brand_name != NULL && d->brand_name[0] != '\0') {
         char *icon_name = g_ascii_strdown(d->brand_name, -1);
         if (icon_name != NULL && icon_name[0] != '\0')
@@ -1643,9 +1680,13 @@ static void activate(GtkApplication *application, gpointer user_data)
     gtk_widget_add_css_class(root, "link-root");
     gtk_widget_add_css_class(sidebar, "link-sidebar");
     gtk_widget_add_css_class(brand, "link-brand-header");
+    gtk_widget_add_css_class(nav_scroll, "link-nav-scroll");
+    gtk_widget_add_css_class(page_header, "link-content-header");
+    gtk_widget_add_css_class(content_scroll, "link-content-scroll");
+
     if (d->emblem_resource != NULL) {
         GtkWidget *image = gtk_image_new_from_resource(d->emblem_resource);
-        gtk_image_set_pixel_size(GTK_IMAGE(image), 58);
+        gtk_image_set_pixel_size(GTK_IMAGE(image), 56);
         gtk_box_append(GTK_BOX(brand), image);
     }
     gtk_box_append(GTK_BOX(brand), left_label(d->brand_name, "link-brand"));
@@ -1658,8 +1699,11 @@ static void activate(GtkApplication *application, gpointer user_data)
     gtk_widget_add_css_class(shell->nav_list, "link-nav-list");
     gtk_list_box_set_selection_mode(GTK_LIST_BOX(shell->nav_list), GTK_SELECTION_SINGLE);
     g_signal_connect(shell->nav_list, "row-selected", G_CALLBACK(select_section), shell);
-    gtk_widget_set_vexpand(shell->nav_list, TRUE);
-    gtk_box_append(GTK_BOX(sidebar), shell->nav_list);
+    gtk_scrolled_window_set_policy(
+        GTK_SCROLLED_WINDOW(nav_scroll), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
+    gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(nav_scroll), shell->nav_list);
+    gtk_widget_set_vexpand(nav_scroll, TRUE);
+    gtk_box_append(GTK_BOX(sidebar), nav_scroll);
     rebuild_navigation(shell);
 
     shell->language_label = left_label("🌐", "link-language-label");
@@ -1686,6 +1730,7 @@ static void activate(GtkApplication *application, gpointer user_data)
 
     shell->about_button = gtk_button_new_with_label("About");
     gtk_widget_add_css_class(shell->about_button, "link-about-button");
+    gtk_widget_add_css_class(shell->about_button, "link-toolbar-button");
     g_signal_connect(shell->about_button, "clicked", G_CALLBACK(about_clicked), shell);
     gtk_box_append(GTK_BOX(sidebar), shell->about_button);
 
@@ -1694,20 +1739,29 @@ static void activate(GtkApplication *application, gpointer user_data)
         shell->title = left_label(first != NULL ? first->title : "Diagnostics", "link-content-title");
         shell->summary = left_label(first != NULL ? first->summary : "", "link-content-summary");
     }
-    shell->body = gtk_box_new(GTK_ORIENTATION_VERTICAL, 12);
-    gtk_box_append(GTK_BOX(content), shell->title);
-    gtk_box_append(GTK_BOX(content), shell->summary);
-    gtk_box_append(GTK_BOX(content), shell->body);
-    gtk_widget_set_vexpand(content, TRUE);
+    shell->body = gtk_box_new(GTK_ORIENTATION_VERTICAL, 14);
+    gtk_widget_add_css_class(shell->body, "link-content-body");
+    gtk_widget_set_hexpand(shell->body, TRUE);
+
+    gtk_box_append(GTK_BOX(page_header), shell->title);
+    gtk_box_append(GTK_BOX(page_header), shell->summary);
+
+    gtk_scrolled_window_set_policy(
+        GTK_SCROLLED_WINDOW(content_scroll), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
+    gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(content_scroll), shell->body);
+    gtk_widget_set_vexpand(content_scroll, TRUE);
+    gtk_widget_set_hexpand(content_scroll, TRUE);
 
     gtk_box_append(GTK_BOX(main), build_connection_bar(shell));
-    gtk_box_append(GTK_BOX(main), content);
+    gtk_box_append(GTK_BOX(main), page_header);
+    gtk_box_append(GTK_BOX(main), content_scroll);
     gtk_widget_set_hexpand(main, TRUE);
+    gtk_widget_set_vexpand(main, TRUE);
     gtk_widget_set_margin_top(main, 18);
     gtk_widget_set_margin_bottom(main, 18);
     gtk_widget_set_margin_start(main, 18);
     gtk_widget_set_margin_end(main, 18);
-    gtk_widget_set_size_request(sidebar, 320, -1);
+    gtk_widget_set_size_request(sidebar, 292, -1);
 
     gtk_box_append(GTK_BOX(root), sidebar);
     gtk_box_append(GTK_BOX(root), main);
