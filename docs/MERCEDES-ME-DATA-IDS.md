@@ -2,10 +2,15 @@
 
 # Mercedes me Adapter diagnostic data IDs
 
-This catalogue preserves the **120 exact static data-ID constants** recovered
-from the archived official Mercedes me Adapter 4.7.61 Android build,
-principally `classes3.dex` SHA-256
+This catalogue preserves **194 exact static data-ID symbol/literal pairs**
+recovered from the archived official Mercedes me Adapter 4.7.61 Android build.
+The original 120-entry evidence set came principally from `classes3.dex`
+SHA-256
 `83cd980cac55e517926469f165cdd83f55eddec7c45e1590c45b6686c5685ae0`.
+A later native-library pass recovered 74 additional exact `DataIds::DATAID_*`
+exports whose lower-camel literals also occur verbatim in the supplied
+`libdiaglogic.so`. Two exported native symbols whose exact application
+literal was not independently established were deliberately not added.
 
 These are model/protocol identifiers, not proof of the underlying CAN/UDS DID,
 byte offset or scaling. A key appearing here proves that the official
@@ -143,3 +148,18 @@ The fuel group also separately identifies `fuelVolume`, `fuelLevelMin`,
 `fuelPressure`, `engineFuelRate` and `tankRange`. The adapter-health group
 additionally exposes `btRxOverflowCount`, `btTxOverflowCount`,
 `canRxOverflowCount`, `canTxOverflowCount` and `busErrorCount`.
+
+
+## Additional native DiagLogic pairs
+
+The 74 later additions expose aggregate read groups and non-trip fault states
+that were absent from the first DEX-only catalogue. High-value exact pairs
+include `STORED_OBD_DTCS -> storedObdDtcs`,
+`PARTICLE_FILTER -> particleFilter`,
+`ACTUAL_FUEL_FLOW -> actualFuelFlow`,
+`FUEL_FLOW_VALUES -> fuelFlowValues`,
+`SPEED_AND_FUEL_VALUES -> speedAndFuelValues` and
+`IRREGULAR_OBD_RESPONSE -> irregularObdResponse`.
+
+These additions remain model identifiers only. They improve the implementation
+checklist but do not create a CAN/UDS/KWP request, payload or scaling mapping.
