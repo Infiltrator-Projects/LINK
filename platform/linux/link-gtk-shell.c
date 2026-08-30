@@ -93,7 +93,7 @@ static const char link_gtk_base_css[] =
     ".link-content-title { font-size: 28px; font-weight: 900; }"
     ".link-content-summary { opacity: 0.76; font-size: 14px; }"
     ".link-detail-row { padding: 4px 0; }"
-    ".link-card-note { margin-top: 4px; line-height: 1.25; }";
+    ".link-card-note { margin-top: 4px; }";
 
 static uint64_t monotonic_ms(void)
 {
