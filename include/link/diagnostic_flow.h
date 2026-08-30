@@ -28,6 +28,7 @@ extern "C" {
 #define LINK_DIAGNOSTIC_FLOW_DEFAULT_INIT_TIMEOUT_MS UINT64_C(4000)
 #define LINK_DIAGNOSTIC_FLOW_DEFAULT_QUERY_TIMEOUT_MS UINT64_C(8000)
 #define LINK_DIAGNOSTIC_FLOW_DEFAULT_LIVE_TIMEOUT_MS UINT64_C(2000)
+#define LINK_DIAGNOSTIC_FLOW_MAX_FREEZE_SAMPLES 8U
 
 typedef enum {
     LINK_DIAGNOSTIC_FLOW_RESULT_OK = 0,
@@ -48,6 +49,8 @@ typedef enum {
     LINK_DIAGNOSTIC_FLOW_SCANNING_STORED_DTCS,
     LINK_DIAGNOSTIC_FLOW_SCANNING_PENDING_DTCS,
     LINK_DIAGNOSTIC_FLOW_SCANNING_PERMANENT_DTCS,
+    LINK_DIAGNOSTIC_FLOW_READING_READINESS,
+    LINK_DIAGNOSTIC_FLOW_READING_FREEZE_FRAME,
     LINK_DIAGNOSTIC_FLOW_CONFIGURING_LIVE_HEADERS,
     LINK_DIAGNOSTIC_FLOW_LIVE,
     LINK_DIAGNOSTIC_FLOW_READING_LIVE,
@@ -69,6 +72,9 @@ typedef enum {
     LINK_DIAGNOSTIC_FLOW_EVENT_PID_DISCOVERY_COMPLETE,
     LINK_DIAGNOSTIC_FLOW_EVENT_STANDARD_VIN,
     LINK_DIAGNOSTIC_FLOW_EVENT_DTC_LIST,
+    LINK_DIAGNOSTIC_FLOW_EVENT_READINESS,
+    LINK_DIAGNOSTIC_FLOW_EVENT_FREEZE_FRAME_SAMPLE,
+    LINK_DIAGNOSTIC_FLOW_EVENT_DIAGNOSTIC_CONTEXT_COMPLETE,
     LINK_DIAGNOSTIC_FLOW_EVENT_LIVE_SAMPLE,
     LINK_DIAGNOSTIC_FLOW_EVENT_LIVE_NO_DATA,
     LINK_DIAGNOSTIC_FLOW_EVENT_LIVE_UNSUPPORTED
@@ -116,6 +122,8 @@ typedef struct {
     bool dtc_response_available;
     bool dtc_negative_response;
     uint8_t dtc_negative_response_code;
+    bool context_response_available;
+    bool diagnostic_context_complete;
 } LinkDiagnosticFlowEvent;
 
 typedef struct {
@@ -133,12 +141,22 @@ typedef struct {
     LinkObd2DtcList stored_dtcs;
     LinkObd2DtcList pending_dtcs;
     LinkObd2DtcList permanent_dtcs;
+    LinkObd2Readiness readiness;
+    bool readiness_attempted;
+    bool readiness_available;
+    LinkObd2Sample freeze_frame_samples[LINK_DIAGNOSTIC_FLOW_MAX_FREEZE_SAMPLES];
+    size_t freeze_frame_sample_count;
+    bool freeze_frame_requested;
+    bool freeze_frame_complete;
+    size_t freeze_frame_candidate_index;
+    uint8_t freeze_frame_number;
     LinkScheduler scheduler;
     uint8_t supported_pid_base;
     size_t active_schedule_index;
     uint8_t active_pid;
     bool awaiting_response;
     bool standard_dtc_inventory_complete;
+    bool standard_diagnostic_context_complete;
 } LinkDiagnosticFlow;
 
 const char *link_diagnostic_flow_result_name(LinkDiagnosticFlowResult result);
@@ -193,6 +211,15 @@ const LinkObd2PidSet *link_diagnostic_flow_supported_pids(
 const LinkObd2DtcList *link_diagnostic_flow_dtcs(
     const LinkDiagnosticFlow *flow,
     LinkObd2DtcKind kind);
+/** Readiness snapshot captured after standard fault inventory, when available. */
+const LinkObd2Readiness *link_diagnostic_flow_readiness(
+    const LinkDiagnosticFlow *flow);
+/** Bounded Mode 02 frame-zero samples captured for the current investigation. */
+const LinkObd2Sample *link_diagnostic_flow_freeze_frame_samples(
+    const LinkDiagnosticFlow *flow,
+    size_t *count);
+bool link_diagnostic_flow_standard_context_complete(
+    const LinkDiagnosticFlow *flow);
 const char *link_diagnostic_flow_adapter_identifier(
     const LinkDiagnosticFlow *flow);
 const char *link_diagnostic_flow_standard_vin(

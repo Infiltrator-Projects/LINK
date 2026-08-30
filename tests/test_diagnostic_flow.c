@@ -45,6 +45,45 @@ static LinkElm327Response response_no_data(void)
     response.result = LINK_ELM327_RESULT_NO_DATA;
     return response;
 }
+static int complete_optional_context(
+    LinkDiagnosticFlow *flow,
+    bool with_freeze)
+{
+    LinkDiagnosticFlowAction action;
+    LinkDiagnosticFlowEvent event;
+    LinkElm327Response response;
+
+    CHECK(flow->stage == LINK_DIAGNOSTIC_FLOW_READING_READINESS);
+    CHECK(link_diagnostic_flow_next_action(flow, 810U, &action) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(strcmp(action.command, "0101") == 0);
+    response = response_ok("410100078000", false);
+    CHECK(link_diagnostic_flow_accept_response(
+              flow, &response, 810U, &event) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(flow->readiness_attempted);
+    CHECK(flow->readiness_available);
+    CHECK(link_diagnostic_flow_readiness(flow) != NULL);
+
+    if (!with_freeze) {
+        CHECK(event.kind ==
+              LINK_DIAGNOSTIC_FLOW_EVENT_DIAGNOSTIC_CONTEXT_COMPLETE);
+        CHECK(flow->standard_diagnostic_context_complete);
+        return 0;
+    }
+
+    while (flow->stage == LINK_DIAGNOSTIC_FLOW_READING_FREEZE_FRAME) {
+        CHECK(link_diagnostic_flow_next_action(flow, 820U, &action) ==
+              LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+        response = response_no_data();
+        CHECK(link_diagnostic_flow_accept_response(
+                  flow, &response, 820U, &event) ==
+              LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    }
+    CHECK(flow->standard_diagnostic_context_complete);
+    return 0;
+}
+
 
 static int complete_initialization(LinkDiagnosticFlow *flow)
 {
@@ -323,9 +362,11 @@ static int test_manufacturer_extension_after_standard_dtcs(void)
     CHECK(event.dtc_negative_response);
     CHECK(event.dtc_negative_response_code == UINT8_C(0x22));
     CHECK(flow.standard_dtc_inventory_complete);
-    CHECK(flow.stage == LINK_DIAGNOSTIC_FLOW_MANUFACTURER_EXTENSION);
+    CHECK(flow.stage == LINK_DIAGNOSTIC_FLOW_READING_READINESS);
     CHECK(!event.became_ready);
-    CHECK(link_diagnostic_flow_next_action(&flow, 801U, &action) == LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(complete_optional_context(&flow, false) == 0);
+    CHECK(flow.stage == LINK_DIAGNOSTIC_FLOW_MANUFACTURER_EXTENSION);
+    CHECK(link_diagnostic_flow_next_action(&flow, 811U, &action) == LINK_DIAGNOSTIC_FLOW_RESULT_OK);
     CHECK(action.kind == LINK_DIAGNOSTIC_FLOW_ACTION_MANUFACTURER_EXTENSION);
     CHECK(link_diagnostic_flow_resume_after_manufacturer(&flow) == LINK_DIAGNOSTIC_FLOW_RESULT_OK);
     CHECK(flow.stage == LINK_DIAGNOSTIC_FLOW_RESTORING_AFTER_MANUFACTURER);
@@ -381,10 +422,77 @@ static int test_invalid_response_order(void)
     return 0;
 }
 
+static int test_readiness_and_freeze_context(void)
+{
+    LinkDiagnosticFlow flow;
+    LinkDiagnosticFlowConfig config = LINK_DIAGNOSTIC_FLOW_CONFIG_INIT;
+    LinkDiagnosticFlowAction action;
+    LinkDiagnosticFlowEvent event;
+    LinkElm327Response response;
+    size_t freeze_count = 0U;
+    const LinkObd2Sample *freeze_samples;
+
+    CHECK(link_diagnostic_flow_init(&flow, &config) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    link_obd2_pid_set_clear(&flow.supported_pids);
+    flow.supported_pids.bits[UINT8_C(0x05) >> 3U] |=
+        (uint8_t)(1U << (UINT8_C(0x05) & 7U));
+    flow.supported_pids.bits[UINT8_C(0x0c) >> 3U] |=
+        (uint8_t)(1U << (UINT8_C(0x0c) & 7U));
+    flow.stored_dtcs.count = 1U;
+    flow.stage = LINK_DIAGNOSTIC_FLOW_READING_READINESS;
+
+    CHECK(link_diagnostic_flow_next_action(&flow, 100U, &action) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(strcmp(action.command, "0101") == 0);
+    response = response_ok("4101810F8000", false);
+    CHECK(link_diagnostic_flow_accept_response(
+              &flow, &response, 100U, &event) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(event.kind == LINK_DIAGNOSTIC_FLOW_EVENT_READINESS);
+    CHECK(flow.readiness_available);
+    CHECK(flow.readiness.mil_on);
+    CHECK(flow.readiness.confirmed_dtc_count == 1U);
+    CHECK(flow.freeze_frame_requested);
+    CHECK(flow.stage == LINK_DIAGNOSTIC_FLOW_READING_FREEZE_FRAME);
+
+    CHECK(link_diagnostic_flow_next_action(&flow, 110U, &action) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(strcmp(action.command, "020500") == 0);
+    response = response_ok("4205005A", false);
+    CHECK(link_diagnostic_flow_accept_response(
+              &flow, &response, 110U, &event) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(event.kind == LINK_DIAGNOSTIC_FLOW_EVENT_FREEZE_FRAME_SAMPLE);
+    CHECK(event.context_response_available);
+    CHECK(event.sample.pid == UINT8_C(0x05));
+    CHECK(event.sample.value == 50.0);
+
+    CHECK(link_diagnostic_flow_next_action(&flow, 120U, &action) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(strcmp(action.command, "020C00") == 0);
+    response = response_no_data();
+    CHECK(link_diagnostic_flow_accept_response(
+              &flow, &response, 120U, &event) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(event.kind ==
+          LINK_DIAGNOSTIC_FLOW_EVENT_DIAGNOSTIC_CONTEXT_COMPLETE);
+    CHECK(flow.standard_diagnostic_context_complete);
+    CHECK(flow.freeze_frame_complete);
+    freeze_samples =
+        link_diagnostic_flow_freeze_frame_samples(&flow, &freeze_count);
+    CHECK(freeze_samples != NULL);
+    CHECK(freeze_count == 1U);
+    CHECK(freeze_samples[0].pid == UINT8_C(0x05));
+    CHECK(flow.stage == LINK_DIAGNOSTIC_FLOW_LIVE);
+    return 0;
+}
+
 int main(void)
 {
     if (test_standard_sequence() != 0) return 1;
     if (test_live_timeout_recovery() != 0) return 1;
+    if (test_readiness_and_freeze_context() != 0) return 1;
     if (test_manufacturer_extension_restore() != 0) return 1;
     if (test_manufacturer_extension_after_standard_dtcs() != 0) return 1;
     if (test_invalid_manufacturer_extension_configuration() != 0) return 1;

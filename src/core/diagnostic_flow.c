@@ -105,9 +105,38 @@ static LinkDiagnosticFlowStage flow_next_dtc_stage(LinkObd2DtcKind kind)
     case LINK_OBD2_DTC_PENDING:
         return LINK_DIAGNOSTIC_FLOW_SCANNING_PERMANENT_DTCS;
     case LINK_OBD2_DTC_PERMANENT:
-        return LINK_DIAGNOSTIC_FLOW_LIVE;
+        return LINK_DIAGNOSTIC_FLOW_READING_READINESS;
     }
     return LINK_DIAGNOSTIC_FLOW_FAILED;
+}
+
+static const uint8_t flow_freeze_candidates[] = {
+    UINT8_C(0x04), /* calculated load */
+    UINT8_C(0x05), /* coolant temperature */
+    UINT8_C(0x0b), /* manifold pressure */
+    UINT8_C(0x0c), /* engine RPM */
+    UINT8_C(0x0d), /* vehicle speed */
+    UINT8_C(0x0f), /* intake-air temperature */
+    UINT8_C(0x10), /* mass-air flow */
+    UINT8_C(0x11)  /* absolute throttle position */
+};
+
+static bool flow_next_freeze_candidate(
+    LinkDiagnosticFlow *flow, uint8_t *pid)
+{
+    const size_t count =
+        sizeof(flow_freeze_candidates) / sizeof(flow_freeze_candidates[0]);
+
+    if (flow == NULL || pid == NULL) return false;
+    while (flow->freeze_frame_candidate_index < count) {
+        const uint8_t candidate =
+            flow_freeze_candidates[flow->freeze_frame_candidate_index++];
+        if (link_obd2_pid_set_contains(&flow->supported_pids, candidate)) {
+            *pid = candidate;
+            return true;
+        }
+    }
+    return false;
 }
 
 static LinkDiagnosticFlowResult flow_emit_command(
@@ -194,6 +223,160 @@ static LinkDiagnosticFlowResult flow_next_dtc_action(
     return flow_emit_command(flow, action, command, flow->config.query_timeout_ms);
 }
 
+static LinkDiagnosticFlowResult flow_next_readiness_action(
+    LinkDiagnosticFlow *flow,
+    LinkDiagnosticFlowAction *action)
+{
+    char command[LINK_ELM327_MAX_COMMAND];
+    const LinkObd2Result result =
+        link_obd2_build_live_pid_request(
+            UINT8_C(0x01), command, sizeof(command));
+    if (result != LINK_OBD2_RESULT_OK)
+        return flow_fail_obd2(flow, result);
+    return flow_emit_command(
+        flow, action, command, flow->config.query_timeout_ms);
+}
+
+static LinkDiagnosticFlowResult flow_next_freeze_action(
+    LinkDiagnosticFlow *flow,
+    LinkDiagnosticFlowAction *action)
+{
+    char command[LINK_ELM327_MAX_COMMAND];
+    uint8_t pid;
+    LinkObd2Result result;
+
+    if (flow == NULL || action == NULL)
+        return LINK_DIAGNOSTIC_FLOW_RESULT_INVALID_ARGUMENT;
+    if (!flow_next_freeze_candidate(flow, &pid))
+        return LINK_DIAGNOSTIC_FLOW_RESULT_INVALID_STATE;
+
+    result = link_obd2_build_freeze_pid_request(
+        pid, flow->freeze_frame_number, command, sizeof(command));
+    if (result != LINK_OBD2_RESULT_OK)
+        return flow_fail_obd2(flow, result);
+    flow->active_pid = pid;
+    action->pid = pid;
+    return flow_emit_command(
+        flow, action, command, flow->config.query_timeout_ms);
+}
+
+static void flow_finish_standard_context(
+    LinkDiagnosticFlow *flow,
+    LinkDiagnosticFlowEvent *event)
+{
+    if (flow == NULL || event == NULL) return;
+    flow->standard_diagnostic_context_complete = true;
+    flow->freeze_frame_complete = true;
+    event->kind =
+        LINK_DIAGNOSTIC_FLOW_EVENT_DIAGNOSTIC_CONTEXT_COMPLETE;
+    event->diagnostic_context_complete = true;
+
+    if (flow->config.manufacturer_extension_after_standard_dtcs) {
+        flow->stage = LINK_DIAGNOSTIC_FLOW_MANUFACTURER_EXTENSION;
+        event->became_ready = false;
+    } else if (flow->config.preserve_live_response_headers) {
+        flow->stage = LINK_DIAGNOSTIC_FLOW_CONFIGURING_LIVE_HEADERS;
+        event->became_ready = false;
+    } else {
+        flow->stage = LINK_DIAGNOSTIC_FLOW_LIVE;
+        event->became_ready = true;
+    }
+}
+
+static LinkDiagnosticFlowResult flow_accept_readiness(
+    LinkDiagnosticFlow *flow,
+    const LinkElm327Response *response,
+    LinkDiagnosticFlowEvent *event)
+{
+    LinkObd2Result result = LINK_OBD2_RESULT_OK;
+    uint8_t nrc = 0U;
+    uint8_t pid;
+
+    flow->readiness_attempted = true;
+    flow->readiness_available = false;
+    event->kind = LINK_DIAGNOSTIC_FLOW_EVENT_READINESS;
+    event->context_response_available =
+        response->result != LINK_ELM327_RESULT_NO_DATA;
+
+    if (event->context_response_available) {
+        result = link_obd2_decode_readiness(response, &flow->readiness);
+        if (result == LINK_OBD2_RESULT_OK) {
+            flow->readiness_available = true;
+        } else if (link_obd2_is_negative_response(
+                       response, UINT8_C(0x01), &nrc) ||
+                   result == LINK_OBD2_RESULT_UNEXPECTED_RESPONSE ||
+                   result == LINK_OBD2_RESULT_MALFORMED_RESPONSE ||
+                   result == LINK_OBD2_RESULT_ELM_ERROR) {
+            event->context_response_available = false;
+        } else {
+            return flow_fail_obd2(flow, result);
+        }
+    }
+
+    /*
+     * Mode 02 is meaningful only when a stored DTC exists. Candidate PIDs are
+     * additionally gated by the vehicle's Mode 01 capability inventory; each
+     * Mode 02 request is still optional because ECUs may expose a smaller
+     * freeze-frame set than their live-data set.
+     */
+    flow->freeze_frame_requested = flow->stored_dtcs.count != 0U;
+    flow->freeze_frame_candidate_index = 0U;
+    flow->freeze_frame_number = 0U;
+    if (flow->freeze_frame_requested &&
+        flow_next_freeze_candidate(flow, &pid)) {
+        /* Rewind one candidate because the action builder owns selection. */
+        if (flow->freeze_frame_candidate_index != 0U)
+            --flow->freeze_frame_candidate_index;
+        flow->stage = LINK_DIAGNOSTIC_FLOW_READING_FREEZE_FRAME;
+        return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
+    }
+
+    flow_finish_standard_context(flow, event);
+    return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
+}
+
+static LinkDiagnosticFlowResult flow_accept_freeze_frame(
+    LinkDiagnosticFlow *flow,
+    const LinkElm327Response *response,
+    LinkDiagnosticFlowEvent *event)
+{
+    LinkObd2Sample sample;
+    LinkObd2Result result = LINK_OBD2_RESULT_OK;
+    uint8_t next_pid;
+
+    event->kind = LINK_DIAGNOSTIC_FLOW_EVENT_FREEZE_FRAME_SAMPLE;
+    event->context_response_available =
+        response->result != LINK_ELM327_RESULT_NO_DATA;
+    if (event->context_response_available) {
+        result = link_obd2_decode_freeze_pid(
+            response, flow->active_pid, flow->freeze_frame_number, &sample);
+        if (result == LINK_OBD2_RESULT_OK) {
+            if (flow->freeze_frame_sample_count <
+                LINK_DIAGNOSTIC_FLOW_MAX_FREEZE_SAMPLES) {
+                flow->freeze_frame_samples[
+                    flow->freeze_frame_sample_count++] = sample;
+            }
+            event->sample = sample;
+        } else if (result == LINK_OBD2_RESULT_UNEXPECTED_RESPONSE ||
+                   result == LINK_OBD2_RESULT_MALFORMED_RESPONSE ||
+                   result == LINK_OBD2_RESULT_ELM_ERROR) {
+            event->context_response_available = false;
+        } else {
+            return flow_fail_obd2(flow, result);
+        }
+    }
+
+    if (flow_next_freeze_candidate(flow, &next_pid)) {
+        if (flow->freeze_frame_candidate_index != 0U)
+            --flow->freeze_frame_candidate_index;
+        flow->stage = LINK_DIAGNOSTIC_FLOW_READING_FREEZE_FRAME;
+        return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
+    }
+
+    flow_finish_standard_context(flow, event);
+    return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
+}
+
 static LinkDiagnosticFlowResult flow_next_live_action(
     LinkDiagnosticFlow *flow,
     uint64_t now_ms,
@@ -261,11 +444,13 @@ static LinkDiagnosticFlowResult flow_accept_initialization(
     if (stage == LINK_DIAGNOSTIC_FLOW_RESTORING_AFTER_MANUFACTURER) {
         /* Manufacturer probing may change adapter state; resume only after the
          * standard ELM setup has been replayed in full. */
-        flow->stage = flow->standard_dtc_inventory_complete
+        flow->stage = flow->standard_diagnostic_context_complete
             ? (flow->config.preserve_live_response_headers
                 ? LINK_DIAGNOSTIC_FLOW_CONFIGURING_LIVE_HEADERS
                 : LINK_DIAGNOSTIC_FLOW_LIVE)
-            : LINK_DIAGNOSTIC_FLOW_SCANNING_STORED_DTCS;
+            : (flow->standard_dtc_inventory_complete
+                ? LINK_DIAGNOSTIC_FLOW_READING_READINESS
+                : LINK_DIAGNOSTIC_FLOW_SCANNING_STORED_DTCS);
     } else {
         flow->supported_pid_base = 0x00U;
         flow->stage = LINK_DIAGNOSTIC_FLOW_DISCOVERING_PIDS;
@@ -395,15 +580,14 @@ static LinkDiagnosticFlowResult flow_accept_dtc_inventory(
             return flow_fail_scheduler(flow, schedule_result);
         }
         flow->standard_dtc_inventory_complete = true;
-        if (flow->config.manufacturer_extension_after_standard_dtcs) {
-            flow->stage = LINK_DIAGNOSTIC_FLOW_MANUFACTURER_EXTENSION;
-            event->became_ready = false;
-        } else if (flow->config.preserve_live_response_headers) {
-            flow->stage = LINK_DIAGNOSTIC_FLOW_CONFIGURING_LIVE_HEADERS;
-            event->became_ready = false;
-        } else {
-            event->became_ready = true;
-        }
+        /*
+         * Readiness and Mode 02 freeze-frame context are part of the same
+         * standard fault investigation. Do not declare the investigation
+         * ready until those optional, capability-gated context requests have
+         * been attempted.
+         */
+        flow->stage = LINK_DIAGNOSTIC_FLOW_READING_READINESS;
+        event->became_ready = false;
     }
     return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
 }
@@ -465,6 +649,8 @@ const char *link_diagnostic_flow_stage_name(LinkDiagnosticFlowStage stage)
     case LINK_DIAGNOSTIC_FLOW_SCANNING_STORED_DTCS: return "scanning-stored-dtcs";
     case LINK_DIAGNOSTIC_FLOW_SCANNING_PENDING_DTCS: return "scanning-pending-dtcs";
     case LINK_DIAGNOSTIC_FLOW_SCANNING_PERMANENT_DTCS: return "scanning-permanent-dtcs";
+    case LINK_DIAGNOSTIC_FLOW_READING_READINESS: return "reading-readiness";
+    case LINK_DIAGNOSTIC_FLOW_READING_FREEZE_FRAME: return "reading-freeze-frame";
     case LINK_DIAGNOSTIC_FLOW_CONFIGURING_LIVE_HEADERS: return "configuring-live-headers";
     case LINK_DIAGNOSTIC_FLOW_LIVE: return "live";
     case LINK_DIAGNOSTIC_FLOW_READING_LIVE: return "reading-live";
@@ -566,6 +752,12 @@ LinkDiagnosticFlowResult link_diagnostic_flow_next_action(
     case LINK_DIAGNOSTIC_FLOW_SCANNING_PERMANENT_DTCS:
         return flow_next_dtc_action(flow, action);
 
+    case LINK_DIAGNOSTIC_FLOW_READING_READINESS:
+        return flow_next_readiness_action(flow, action);
+
+    case LINK_DIAGNOSTIC_FLOW_READING_FREEZE_FRAME:
+        return flow_next_freeze_action(flow, action);
+
     case LINK_DIAGNOSTIC_FLOW_CONFIGURING_LIVE_HEADERS:
         return flow_emit_command(
             flow, action, "ATH1", flow->config.init_timeout_ms);
@@ -622,6 +814,10 @@ LinkDiagnosticFlowResult link_diagnostic_flow_accept_response(
     case LINK_DIAGNOSTIC_FLOW_SCANNING_PERMANENT_DTCS:
         return flow_accept_dtc_inventory(
             flow, response, stage, now_ms, event);
+    case LINK_DIAGNOSTIC_FLOW_READING_READINESS:
+        return flow_accept_readiness(flow, response, event);
+    case LINK_DIAGNOSTIC_FLOW_READING_FREEZE_FRAME:
+        return flow_accept_freeze_frame(flow, response, event);
     case LINK_DIAGNOSTIC_FLOW_READING_LIVE:
         return flow_accept_live_sample(flow, response, event);
     case LINK_DIAGNOSTIC_FLOW_IDLE:
@@ -681,11 +877,13 @@ LinkDiagnosticFlowResult link_diagnostic_flow_resume_after_manufacturer(
         link_elm327_init_begin(&flow->initialization);
         flow->stage = LINK_DIAGNOSTIC_FLOW_RESTORING_AFTER_MANUFACTURER;
     } else {
-        flow->stage = flow->standard_dtc_inventory_complete
+        flow->stage = flow->standard_diagnostic_context_complete
             ? (flow->config.preserve_live_response_headers
                 ? LINK_DIAGNOSTIC_FLOW_CONFIGURING_LIVE_HEADERS
                 : LINK_DIAGNOSTIC_FLOW_LIVE)
-            : LINK_DIAGNOSTIC_FLOW_SCANNING_STORED_DTCS;
+            : (flow->standard_dtc_inventory_complete
+                ? LINK_DIAGNOSTIC_FLOW_READING_READINESS
+                : LINK_DIAGNOSTIC_FLOW_SCANNING_STORED_DTCS);
     }
     return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
 }
@@ -728,6 +926,29 @@ const LinkObd2DtcList *link_diagnostic_flow_dtcs(
         return &flow->permanent_dtcs;
     }
     return NULL;
+}
+
+const LinkObd2Readiness *link_diagnostic_flow_readiness(
+    const LinkDiagnosticFlow *flow)
+{
+    return flow != NULL && flow->readiness_available
+        ? &flow->readiness : NULL;
+}
+
+const LinkObd2Sample *link_diagnostic_flow_freeze_frame_samples(
+    const LinkDiagnosticFlow *flow,
+    size_t *count)
+{
+    if (count != NULL)
+        *count = flow != NULL ? flow->freeze_frame_sample_count : 0U;
+    return flow != NULL && flow->freeze_frame_sample_count != 0U
+        ? flow->freeze_frame_samples : NULL;
+}
+
+bool link_diagnostic_flow_standard_context_complete(
+    const LinkDiagnosticFlow *flow)
+{
+    return flow != NULL && flow->standard_diagnostic_context_complete;
 }
 
 const char *link_diagnostic_flow_adapter_identifier(
