@@ -398,6 +398,19 @@ static LinkObd2Result obd2_decode_sample_data(
         if (length < 2U) return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
         decoded.value = (double)(((unsigned int)data[0] << 8U) | data[1]) / 100.0;
         decoded.unit = LINK_OBD2_UNIT_GRAMS_PER_SECOND; break;
+    case 0x1fU:
+        if (length < 2U) return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
+        decoded.value = (double)(((unsigned int)data[0] << 8U) | data[1]);
+        decoded.unit = LINK_OBD2_UNIT_SECONDS; break;
+    case 0x21U:
+        if (length < 2U) return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
+        decoded.value = (double)(((unsigned int)data[0] << 8U) | data[1]);
+        decoded.unit = LINK_OBD2_UNIT_KILOMETRES; break;
+    case 0x24U:
+        if (length < 4U) return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
+        decoded.value =
+            (double)(((unsigned int)data[0] << 8U) | data[1]) / 32768.0;
+        decoded.unit = LINK_OBD2_UNIT_RATIO; break;
     case 0x11U:
     case 0x45U:
     case 0x47U:
@@ -419,6 +432,13 @@ static LinkObd2Result obd2_decode_sample_data(
     case 0x2fU:
         if (length < 1U) return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
         decoded.value = (double)data[0] * 100.0 / 255.0; decoded.unit = LINK_OBD2_UNIT_PERCENT; break;
+    case 0x30U:
+        if (length < 1U) return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
+        decoded.value = (double)data[0]; decoded.unit = LINK_OBD2_UNIT_COUNT; break;
+    case 0x31U:
+        if (length < 2U) return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
+        decoded.value = (double)(((unsigned int)data[0] << 8U) | data[1]);
+        decoded.unit = LINK_OBD2_UNIT_KILOMETRES; break;
     case 0x2dU:
         if (length < 1U) return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
         decoded.value = ((double)(int)data[0] - 128.0) * 100.0 / 128.0;
@@ -427,6 +447,7 @@ static LinkObd2Result obd2_decode_sample_data(
         if (length < 1U) return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
         decoded.value = (double)data[0]; decoded.unit = LINK_OBD2_UNIT_KPA; break;
     case 0x3cU:
+    case 0x3eU:
         if (length < 2U) return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
         decoded.value = (double)(((unsigned int)data[0] << 8U) | data[1]) / 10.0 - 40.0;
         decoded.unit = LINK_OBD2_UNIT_CELSIUS; break;
@@ -438,6 +459,10 @@ static LinkObd2Result obd2_decode_sample_data(
     case 0x5cU:
         if (length < 1U) return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
         decoded.value = (double)data[0] - 40.0; decoded.unit = LINK_OBD2_UNIT_CELSIUS; break;
+    case 0x4dU:
+        if (length < 2U) return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
+        decoded.value = (double)(((unsigned int)data[0] << 8U) | data[1]);
+        decoded.unit = LINK_OBD2_UNIT_MINUTES; break;
     case 0x5eU:
         if (length < 2U) return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
         decoded.value = (double)(((unsigned int)data[0] << 8U) | data[1]) / 20.0;
@@ -566,6 +591,11 @@ const char *link_obd2_unit_name(LinkObd2Unit unit)
     case LINK_OBD2_UNIT_GRAMS_PER_SECOND: return "g/s";
     case LINK_OBD2_UNIT_VOLTS: return "V";
     case LINK_OBD2_UNIT_LITRES_PER_HOUR: return "L/h";
+    case LINK_OBD2_UNIT_SECONDS: return "s";
+    case LINK_OBD2_UNIT_MINUTES: return "min";
+    case LINK_OBD2_UNIT_KILOMETRES: return "km";
+    case LINK_OBD2_UNIT_COUNT: return "count";
+    case LINK_OBD2_UNIT_RATIO: return "ratio";
     }
     return "";
 }
@@ -581,12 +611,18 @@ const char *link_obd2_pid_name(uint8_t pid)
     case 0x0fU: return "Intake air temperature";
     case 0x10U: return "Mass air flow rate";
     case 0x11U: return "Absolute throttle valve position";
+    case 0x1fU: return "Engine run time since start";
+    case 0x21U: return "Distance travelled with MIL on";
+    case 0x24U: return "Oxygen sensor 1 equivalence ratio";
     case 0x23U: return "Fuel rail gauge pressure";
     case 0x2cU: return "Commanded EGR";
     case 0x2fU: return "Fuel tank level input";
+    case 0x30U: return "Warm-ups since codes cleared";
+    case 0x31U: return "Distance since codes cleared";
     case 0x2dU: return "EGR error";
     case 0x33U: return "Barometric pressure";
     case 0x3cU: return "Catalyst temperature bank 1 sensor 1";
+    case 0x3eU: return "Catalyst temperature bank 1 sensor 2";
     case 0x42U: return "Control module voltage";
     case 0x45U: return "Relative throttle position";
     case 0x46U: return "Ambient air temperature";
@@ -596,6 +632,7 @@ const char *link_obd2_pid_name(uint8_t pid)
     case 0x4aU: return "Accelerator pedal position E";
     case 0x4bU: return "Accelerator pedal position F";
     case 0x4cU: return "Commanded throttle actuator";
+    case 0x4dU: return "Time run with MIL on";
     case 0x5cU: return "Engine oil temperature";
     case 0x5eU: return "Engine fuel rate";
     case 0x78U: return "Exhaust gas temperature bank 1 sensor 1";

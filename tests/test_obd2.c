@@ -153,6 +153,49 @@ int main(void)
               sample.value == 123450.0,
           "keep fuel rail pressure canonical in kPa");
 
+    response = parse_response("011F", "411F012C\r>");
+    check(link_obd2_decode_live_pid(&response, 0x1fU, &sample) ==
+              LINK_OBD2_RESULT_OK && sample.unit == LINK_OBD2_UNIT_SECONDS &&
+              sample.value == 300.0,
+          "decode engine run time");
+
+    response = parse_response("0121", "41210064\r>");
+    check(link_obd2_decode_live_pid(&response, 0x21U, &sample) ==
+              LINK_OBD2_RESULT_OK &&
+              sample.unit == LINK_OBD2_UNIT_KILOMETRES &&
+              sample.value == 100.0,
+          "decode distance with MIL on");
+
+    response = parse_response("0124", "412440000000\r>");
+    check(link_obd2_decode_live_pid(&response, 0x24U, &sample) ==
+              LINK_OBD2_RESULT_OK && sample.unit == LINK_OBD2_UNIT_RATIO &&
+              sample.value == 0.5,
+          "decode oxygen sensor 1 equivalence ratio");
+
+    response = parse_response("0130", "413005\r>");
+    check(link_obd2_decode_live_pid(&response, 0x30U, &sample) ==
+              LINK_OBD2_RESULT_OK && sample.unit == LINK_OBD2_UNIT_COUNT &&
+              sample.value == 5.0,
+          "decode warm-ups since codes cleared");
+
+    response = parse_response("0131", "413101F4\r>");
+    check(link_obd2_decode_live_pid(&response, 0x31U, &sample) ==
+              LINK_OBD2_RESULT_OK &&
+              sample.unit == LINK_OBD2_UNIT_KILOMETRES &&
+              sample.value == 500.0,
+          "decode distance since codes cleared");
+
+    response = parse_response("013E", "413E1234\r>");
+    check(link_obd2_decode_live_pid(&response, 0x3eU, &sample) ==
+              LINK_OBD2_RESULT_OK && sample.unit == LINK_OBD2_UNIT_CELSIUS,
+          "decode catalyst temperature B1S2");
+
+    response = parse_response("014D", "414D003C\r>");
+    check(link_obd2_decode_live_pid(&response, 0x4dU, &sample) ==
+              LINK_OBD2_RESULT_OK && sample.unit == LINK_OBD2_UNIT_MINUTES &&
+              sample.value == 60.0,
+          "decode time run with MIL on");
+
     response = parse_response("012F", "412F80\r>");
     check(link_obd2_decode_live_pid(&response, 0x2fU, &sample) ==
               LINK_OBD2_RESULT_OK && sample.unit == LINK_OBD2_UNIT_PERCENT &&

@@ -83,7 +83,7 @@ int main(void)
             LINK_ADAPTER_KIND_STM32_LINK));
     }
 
-    CHECK(link_parameter_obd2_definition_count() == 28U);
+    CHECK(link_parameter_obd2_definition_count() == 35U);
     CHECK(link_parameter_from_obd2_scalar(0x0cU, LINK_OBD2_UNIT_RPM, 1234.5, 10U, &parameter));
     CHECK(strcmp(parameter.definition->stable_key, "obd2.engine.rpm") == 0);
     CHECK(strcmp(link_parameter_obd2_definition(0x11U)->name,
@@ -92,6 +92,12 @@ int main(void)
                  "obd2.driver.accelerator_pedal_d") == 0);
     CHECK(strcmp(link_parameter_obd2_definition(0x2fU)->stable_key,
                  "obd2.fuel.tank_level") == 0);
+    CHECK(strcmp(link_parameter_obd2_definition(0x1fU)->stable_key,
+                 "obd2.engine.runtime") == 0);
+    CHECK(strcmp(link_parameter_obd2_definition(0x31U)->stable_key,
+                 "obd2.maintenance.distance_since_clear") == 0);
+    CHECK(strcmp(link_parameter_obd2_definition(0x4dU)->stable_key,
+                 "obd2.emissions.mil_runtime") == 0);
     CHECK(link_parameter_format_value(
               link_parameter_obd2_definition(0x23U),
               true, 123400.0, formatted, sizeof(formatted)));
