@@ -43,6 +43,12 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic, copy, readonly) NSArray<NSString *> *storedDTCs;
 @property(nonatomic, copy, readonly) NSArray<NSString *> *pendingDTCs;
 @property(nonatomic, copy, readonly) NSArray<NSString *> *permanentDTCs;
+/** Human-readable standards-backed readiness summary for the active investigation. */
+@property(nonatomic, copy, readonly) NSString *readinessStatusText;
+/** Named readiness monitor rows. Unsupported monitors are omitted. */
+@property(nonatomic, copy, readonly) NSArray<NSString *> *readinessMonitorStatus;
+/** Canonical Mode 02 frame-zero context values captured for stored faults. */
+@property(nonatomic, copy, readonly) NSArray<NSString *> *freezeFrameContext;
 @property(nonatomic, readonly, getter=isActive) BOOL active;
 @property(nonatomic, readonly, getter=isReady) BOOL ready;
 @property(nonatomic, readonly, getter=isNativeAdapterConnected)

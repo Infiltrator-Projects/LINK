@@ -152,7 +152,9 @@ static bool LinkAppleFlowIsFaultScan(const LinkDiagnosticFlow *flow)
     if (flow == NULL) return false;
     return flow->stage == LINK_DIAGNOSTIC_FLOW_SCANNING_STORED_DTCS ||
            flow->stage == LINK_DIAGNOSTIC_FLOW_SCANNING_PENDING_DTCS ||
-           flow->stage == LINK_DIAGNOSTIC_FLOW_SCANNING_PERMANENT_DTCS;
+           flow->stage == LINK_DIAGNOSTIC_FLOW_SCANNING_PERMANENT_DTCS ||
+           flow->stage == LINK_DIAGNOSTIC_FLOW_READING_READINESS ||
+           flow->stage == LINK_DIAGNOSTIC_FLOW_READING_FREEZE_FRAME;
 }
 
 static void LinkAppleNativeTransportReceive(
@@ -242,6 +244,102 @@ static void LinkAppleSessionEvent(
     } else if (!_simulated) {
         [_provider disconnect];
     }
+}
+
+static void LinkAppleAppendReadinessMonitor(
+    NSMutableArray<NSString *> *rows,
+    const char *name,
+    bool supported,
+    bool incomplete)
+{
+    if (rows == nil || name == NULL || !supported) return;
+    [rows addObject:[NSString stringWithFormat:
+        @"%s · %@", name, incomplete ? @"not ready" : @"ready"]];
+}
+
+- (NSString *)readinessStatusText
+{
+    const LinkObd2Readiness *readiness =
+        link_diagnostic_flow_readiness(&_flow);
+    if (!_flow.readiness_attempted)
+        return @"Not collected";
+    if (readiness == NULL)
+        return @"Unavailable / unsupported";
+    return [NSString stringWithFormat:
+        @"%@ · %u confirmed DTC%@ · %@ ignition",
+        readiness->mil_on ? @"MIL on" : @"MIL off",
+        (unsigned int)readiness->confirmed_dtc_count,
+        readiness->confirmed_dtc_count == 1U ? @"" : @"s",
+        readiness->compression_ignition ? @"compression" : @"spark"];
+}
+
+- (NSArray<NSString *> *)readinessMonitorStatus
+{
+    const LinkObd2Readiness *readiness =
+        link_diagnostic_flow_readiness(&_flow);
+    if (readiness == NULL) return @[];
+
+    NSMutableArray<NSString *> *rows = [[NSMutableArray alloc] init];
+    static const char *continuousNames[3] = {
+        "Misfire", "Fuel system", "Comprehensive components"
+    };
+    for (unsigned int bit = 0U; bit < 3U; ++bit) {
+        LinkAppleAppendReadinessMonitor(
+            rows, continuousNames[bit],
+            (readiness->continuous_supported & (1U << bit)) != 0U,
+            (readiness->continuous_incomplete & (1U << bit)) != 0U);
+    }
+
+    static const char *sparkNames[8] = {
+        "Catalyst", "Heated catalyst", "Evaporative system",
+        "Secondary air", "A/C refrigerant", "Oxygen sensor",
+        "Oxygen sensor heater", "EGR / VVT"
+    };
+    static const char *dieselNames[8] = {
+        "NMHC catalyst", "NOx / SCR", "Reserved",
+        "Boost pressure", "Reserved", "Exhaust gas sensor",
+        "Particulate filter", "EGR / VVT"
+    };
+    const char *const *names =
+        readiness->compression_ignition ? dieselNames : sparkNames;
+    for (unsigned int bit = 0U; bit < 8U; ++bit) {
+        if (strcmp(names[bit], "Reserved") == 0) continue;
+        LinkAppleAppendReadinessMonitor(
+            rows, names[bit],
+            (readiness->noncontinuous_supported & (1U << bit)) != 0U,
+            (readiness->noncontinuous_incomplete & (1U << bit)) != 0U);
+    }
+    return [rows copy];
+}
+
+- (NSArray<NSString *> *)freezeFrameContext
+{
+    size_t count = 0U;
+    const LinkObd2Sample *samples =
+        link_diagnostic_flow_freeze_frame_samples(&_flow, &count);
+    if (samples == NULL || count == 0U) return @[];
+
+    NSMutableArray<NSString *> *rows =
+        [[NSMutableArray alloc] initWithCapacity:count];
+    for (size_t index = 0U; index < count; ++index) {
+        const LinkObd2Sample *sample = &samples[index];
+        const char *name = link_obd2_pid_name(sample->pid);
+        const char *unit = link_obd2_unit_name(sample->unit);
+        NSString *value;
+        if (sample->unit == LINK_OBD2_UNIT_NONE ||
+            unit == NULL || unit[0] == '\0') {
+            value = [NSString stringWithFormat:@"%.2f", sample->value];
+        } else {
+            value = [NSString stringWithFormat:@"%.2f %s",
+                sample->value, unit];
+        }
+        [rows addObject:[NSString stringWithFormat:
+            @"PID 0x%02X · %s · %@",
+            (unsigned int)sample->pid,
+            name != NULL ? name : "Unknown PID",
+            value]];
+    }
+    return [rows copy];
 }
 
 - (BOOL)isSimulated
@@ -976,34 +1074,47 @@ static void LinkAppleSessionEvent(
         case LINK_OBD2_DTC_PERMANENT:
             self.permanentDTCs = codes;
             /*
-             * The portable flow has just constructed its capability-gated
-             * standard schedule. Reapply the caller's persistent runtime
-             * polling policy before the first live request can be emitted.
+             * The portable flow has constructed its capability-gated live
+             * schedule but now continues through readiness/freeze-frame
+             * investigation context before declaring the fault workflow done.
              */
             [self applyPollingPreferencesToScheduler];
-            if (!event->dtc_response_available) {
-                NSString *outcome = event->dtc_negative_response
-                    ? [NSString stringWithFormat:
-                        @"permanent unavailable (NRC 0x%02X)",
-                        (unsigned int)event->dtc_negative_response_code]
-                    : @"permanent unavailable";
-                self.faultScanStatusText = [NSString stringWithFormat:
-                    @"Complete · %lu stored · %lu pending · %@",
-                    (unsigned long)self.storedDTCs.count,
-                    (unsigned long)self.pendingDTCs.count,
-                    outcome];
-            } else {
-                self.faultScanStatusText = [NSString stringWithFormat:
-                    @"Complete · %lu stored · %lu pending · %lu permanent",
-                    (unsigned long)self.storedDTCs.count,
-                    (unsigned long)self.pendingDTCs.count,
-                    (unsigned long)self.permanentDTCs.count];
-            }
+            self.faultScanStatusText = [NSString stringWithFormat:
+                @"Fault inventory complete · %lu stored · %lu pending · %lu permanent · collecting diagnostic context",
+                (unsigned long)self.storedDTCs.count,
+                (unsigned long)self.pendingDTCs.count,
+                (unsigned long)self.permanentDTCs.count];
             break;
         }
         if (event->became_ready) self.ready = YES;
         break;
     }
+
+    case LINK_DIAGNOSTIC_FLOW_EVENT_READINESS:
+        self.faultScanStatusText = _flow.readiness_available
+            ? @"Fault inventory complete · readiness captured"
+            : @"Fault inventory complete · readiness unavailable";
+        break;
+
+    case LINK_DIAGNOSTIC_FLOW_EVENT_FREEZE_FRAME_SAMPLE:
+        self.faultScanStatusText = event->context_response_available
+            ? @"Fault inventory complete · freeze-frame context captured"
+            : @"Fault inventory complete · freeze-frame PID unavailable";
+        break;
+
+    case LINK_DIAGNOSTIC_FLOW_EVENT_DIAGNOSTIC_CONTEXT_COMPLETE:
+        self.faultScanStatusText = [NSString stringWithFormat:
+            @"Complete · %lu stored · %lu pending · %lu permanent · readiness %@ · freeze-frame %@",
+            (unsigned long)self.storedDTCs.count,
+            (unsigned long)self.pendingDTCs.count,
+            (unsigned long)self.permanentDTCs.count,
+            _flow.readiness_available ? @"captured" : @"unavailable",
+            _flow.freeze_frame_requested
+                ? (_flow.freeze_frame_sample_count != 0U
+                    ? @"captured" : @"unavailable")
+                : @"not required"];
+        if (event->became_ready) self.ready = YES;
+        break;
 
     case LINK_DIAGNOSTIC_FLOW_EVENT_LIVE_SAMPLE: {
         _consecutiveLiveTimeouts = 0U;
@@ -1166,6 +1277,14 @@ static void LinkAppleSessionEvent(
                    LINK_DIAGNOSTIC_FLOW_SCANNING_PERMANENT_DTCS) {
             self.statusText =
                 @"Scanning permanent OBD-II fault codes";
+        } else if (_flow.stage ==
+                   LINK_DIAGNOSTIC_FLOW_READING_READINESS) {
+            self.statusText =
+                @"Reading emissions readiness diagnostic context";
+        } else if (_flow.stage ==
+                   LINK_DIAGNOSTIC_FLOW_READING_FREEZE_FRAME) {
+            self.statusText =
+                @"Reading stored-fault freeze-frame context";
         } else if (_flow.stage ==
                    LINK_DIAGNOSTIC_FLOW_READING_LIVE) {
             self.statusText = _simulated
