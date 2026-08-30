@@ -11,7 +11,13 @@
 typedef struct LinkGtkShell {
     const LinkGtkShellDescriptor *descriptor;
     GtkWindow *window;
+    GtkApplication *application;
     GtkWidget *body;
+    GtkWidget *page_stack;
+    GtkWidget *content_scroll;
+    GtkWidget *section_bodies[LINK_WORKSPACE_SECTION_COUNT];
+    bool section_rendered[LINK_WORKSPACE_SECTION_COUNT];
+    bool navigation_stress_mode;
     GtkWidget *title;
     GtkWidget *summary;
     GtkWidget *nav_list;
@@ -711,10 +717,24 @@ static guint selected_locale_index(void)
  * recreation of interactive widgets. Navigation renders immediately, while
  * telemetry refreshes are coalesced through the main loop.
  */
+static void invalidate_section_cache(LinkGtkShell *shell)
+{
+    if (shell == NULL) return;
+    memset(shell->section_rendered, 0, sizeof(shell->section_rendered));
+}
+
+static bool shell_is_connected(const LinkGtkShell *shell)
+{
+    return shell != NULL &&
+        shell->transport.is_connected != NULL &&
+        shell->transport.is_connected(shell->transport.context);
+}
+
 static void render_current_section_now(LinkGtkShell *shell)
 {
     const LinkWorkspaceSectionDescriptor *section;
-    if (shell == NULL || shell->body == NULL) return;
+    if (shell == NULL ||
+        shell->current_section >= LINK_WORKSPACE_SECTION_COUNT) return;
     if (shell->render_in_progress) {
         shell->render_pending = true;
         return;
@@ -722,19 +742,41 @@ static void render_current_section_now(LinkGtkShell *shell)
 
     shell->render_in_progress = true;
     do {
+        GtkWidget *body;
+        const bool connected = shell_is_connected(shell);
         shell->render_pending = false;
         section = link_workspace_section_at(shell->current_section);
-        if (section == NULL) break;
+        body = shell->section_bodies[shell->current_section];
+        if (section == NULL || body == NULL) break;
+
+        shell->body = body;
+        if (shell->page_stack != NULL)
+            gtk_stack_set_visible_child(GTK_STACK(shell->page_stack), body);
         if (shell->title != NULL)
             gtk_label_set_text(GTK_LABEL(shell->title), section->title);
         if (shell->summary != NULL)
             gtk_label_set_text(GTK_LABEL(shell->summary), section->summary);
-        clear_box(shell->body);
+
+        /*
+         * An offline workspace is immutable apart from controls living in the
+         * page itself. Keep each already-visited page alive instead of
+         * destroying and recreating its full GTK subtree on every sidebar
+         * click. This removes needless widget churn (especially the large Live
+         * Data catalogue) and makes repeated disconnected navigation safe.
+         *
+         * Live/diagnostic changes invalidate the cache, and connected pages
+         * continue to rebuild so telemetry remains current.
+         */
+        if (!connected && shell->section_rendered[shell->current_section])
+            continue;
+
+        clear_box(body);
         if (shell->descriptor->render_section != NULL) {
             shell->descriptor->render_section(
-                shell->current_section, shell->body,
+                shell->current_section, body,
                 shell->descriptor->context);
         }
+        shell->section_rendered[shell->current_section] = true;
     } while (shell->render_pending);
     shell->render_in_progress = false;
 }
@@ -842,6 +884,7 @@ static const char *selected_device(LinkGtkShell *shell)
 
 static void notify_connection(LinkGtkShell *shell, bool connected, const char *identity)
 {
+    invalidate_section_cache(shell);
     if (shell->descriptor->connection_changed != NULL) {
         shell->descriptor->connection_changed(&shell->transport,
                                               connected,
@@ -853,6 +896,7 @@ static void notify_connection(LinkGtkShell *shell, bool connected, const char *i
 static void notify_diagnostic(LinkGtkShell *shell,
                               const LinkDiagnosticFlowEvent *event)
 {
+    invalidate_section_cache(shell);
     if (shell->descriptor->diagnostic_changed != NULL) {
         shell->descriptor->diagnostic_changed(
             shell->diagnostics_active ? &shell->flow : NULL,
@@ -968,6 +1012,7 @@ static void refresh_visible_language(LinkGtkShell *shell)
 
     refresh_devices(shell);
     rebuild_navigation(shell);
+    invalidate_section_cache(shell);
     if (shell->status != NULL && shell->link_button != NULL) {
         if (connected)
             set_connection_state(shell, true,
@@ -1571,10 +1616,50 @@ static void select_section(GtkListBox *list, GtkListBoxRow *row, gpointer user_d
     if (shell == NULL || row == NULL) return;
     section = (size_t)GPOINTER_TO_UINT(
         g_object_get_data(G_OBJECT(row), "link-section"));
-    if (section >= link_workspace_section_count()) return;
+    if (section >= link_workspace_section_count() ||
+        section >= LINK_WORKSPACE_SECTION_COUNT) return;
     if (section == shell->current_section) return;
     shell->current_section = section;
+    shell->body = shell->section_bodies[section];
+    if (shell->page_stack != NULL && shell->body != NULL)
+        gtk_stack_set_visible_child(GTK_STACK(shell->page_stack), shell->body);
+    if (shell->content_scroll != NULL) {
+        GtkAdjustment *adjustment =
+            gtk_scrolled_window_get_vadjustment(
+                GTK_SCROLLED_WINDOW(shell->content_scroll));
+        if (adjustment != NULL) gtk_adjustment_set_value(adjustment, 0.0);
+    }
     render_navigation_selection(shell);
+}
+
+static gboolean navigation_stress_idle(gpointer user_data)
+{
+    LinkGtkShell *shell = user_data;
+    size_t pass;
+    size_t section;
+    const size_t section_count = link_workspace_section_count();
+
+    if (shell == NULL || shell->nav_list == NULL || shell->application == NULL)
+        return G_SOURCE_REMOVE;
+
+    for (pass = 0U; pass < 250U; ++pass) {
+        for (section = 0U; section < section_count; ++section) {
+            GtkListBoxRow *row = gtk_list_box_get_row_at_index(
+                GTK_LIST_BOX(shell->nav_list), (int)section);
+            if (row == NULL) {
+                g_application_quit(G_APPLICATION(shell->application));
+                return G_SOURCE_REMOVE;
+            }
+            gtk_list_box_select_row(GTK_LIST_BOX(shell->nav_list), row);
+        }
+    }
+
+    (void)printf(
+        "LINK GTK navigation stress verified: %zu sidebar selections while disconnected\n",
+        section_count * 250U);
+    (void)fflush(stdout);
+    g_application_quit(G_APPLICATION(shell->application));
+    return G_SOURCE_REMOVE;
 }
 
 static void about_clicked(GtkButton *button, gpointer user_data)
@@ -1656,12 +1741,16 @@ static void activate(GtkApplication *application, gpointer user_data)
     GtkWidget *page_header = gtk_box_new(GTK_ORIENTATION_VERTICAL, 3);
     GtkWidget *content_scroll = gtk_scrolled_window_new();
     GtkWidget *nav_scroll = gtk_scrolled_window_new();
+    GtkWidget *page_stack = gtk_stack_new();
     GtkStringList *language_model;
     GtkWidget *language_row;
 
     scan_language_pack_directories(shell);
     initialise_selected_locale();
     shell->window = GTK_WINDOW(window);
+    shell->application = application;
+    shell->content_scroll = content_scroll;
+    shell->page_stack = page_stack;
     shell->current_section = 0U;
     gtk_widget_set_direction(window,
         strncmp(link_i18n_selected_locale(), "ar", 2U) == 0 ? GTK_TEXT_DIR_RTL : GTK_TEXT_DIR_LTR);
@@ -1739,16 +1828,36 @@ static void activate(GtkApplication *application, gpointer user_data)
         shell->title = left_label(first != NULL ? first->title : "Diagnostics", "link-content-title");
         shell->summary = left_label(first != NULL ? first->summary : "", "link-content-summary");
     }
-    shell->body = gtk_box_new(GTK_ORIENTATION_VERTICAL, 14);
-    gtk_widget_add_css_class(shell->body, "link-content-body");
-    gtk_widget_set_hexpand(shell->body, TRUE);
+    {
+        size_t section_index;
+        gtk_stack_set_hhomogeneous(GTK_STACK(page_stack), FALSE);
+        gtk_stack_set_vhomogeneous(GTK_STACK(page_stack), FALSE);
+        gtk_widget_set_hexpand(page_stack, TRUE);
+        gtk_widget_set_vexpand(page_stack, TRUE);
+        for (section_index = 0U;
+             section_index < LINK_WORKSPACE_SECTION_COUNT;
+             ++section_index) {
+            char name[32];
+            GtkWidget *section_body =
+                gtk_box_new(GTK_ORIENTATION_VERTICAL, 14);
+            gtk_widget_add_css_class(section_body, "link-content-body");
+            gtk_widget_set_hexpand(section_body, TRUE);
+            shell->section_bodies[section_index] = section_body;
+            (void)snprintf(
+                name, sizeof(name), "section-%zu", section_index);
+            gtk_stack_add_named(
+                GTK_STACK(page_stack), section_body, name);
+        }
+        shell->body = shell->section_bodies[0U];
+        gtk_stack_set_visible_child(GTK_STACK(page_stack), shell->body);
+    }
 
     gtk_box_append(GTK_BOX(page_header), shell->title);
     gtk_box_append(GTK_BOX(page_header), shell->summary);
 
     gtk_scrolled_window_set_policy(
         GTK_SCROLLED_WINDOW(content_scroll), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
-    gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(content_scroll), shell->body);
+    gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(content_scroll), page_stack);
     gtk_widget_set_vexpand(content_scroll, TRUE);
     gtk_widget_set_hexpand(content_scroll, TRUE);
 
@@ -1769,7 +1878,9 @@ static void activate(GtkApplication *application, gpointer user_data)
     render_current_section_now(shell);
     (void)g_timeout_add(25U, pump_serial, shell);
     gtk_window_present(shell->window);
-    if (d->auto_connect)
+    if (shell->navigation_stress_mode)
+        (void)g_idle_add(navigation_stress_idle, shell);
+    else if (d->auto_connect)
         (void)g_idle_add(auto_link_idle, shell);
 }
 
@@ -1779,8 +1890,20 @@ int link_gtk_shell_run(int argc, char **argv,
     GtkApplication *application;
     LinkGtkShell shell = {0};
     int status;
+    int argument_index;
     if (descriptor == NULL || descriptor->app_id == NULL) return 2;
     shell.descriptor = descriptor;
+
+    for (argument_index = 1; argument_index < argc; ++argument_index) {
+        if (strcmp(argv[argument_index], "--ui-navigation-stress") == 0) {
+            int move;
+            shell.navigation_stress_mode = true;
+            for (move = argument_index; move + 1 < argc; ++move)
+                argv[move] = argv[move + 1];
+            --argc;
+            --argument_index;
+        }
+    }
     initialise_selected_locale();
     reset_session_capture(&shell);
     link_linux_serial_init(&shell.serial);
