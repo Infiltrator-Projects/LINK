@@ -19,6 +19,8 @@ typedef struct LinkGtkShell {
     bool section_rendered[LINK_WORKSPACE_SECTION_COUNT];
     uint64_t section_revision[LINK_WORKSPACE_SECTION_COUNT];
     bool navigation_stress_mode;
+    size_t navigation_stress_step;
+    size_t navigation_stress_target;
     GtkWidget *title;
     GtkWidget *summary;
     GtkWidget *nav_list;
@@ -1744,34 +1746,48 @@ static void select_section(GtkListBox *list, GtkListBoxRow *row, gpointer user_d
     render_navigation_selection(shell);
 }
 
-static gboolean navigation_stress_idle(gpointer user_data)
+static gboolean navigation_stress_step(gpointer user_data)
 {
     LinkGtkShell *shell = user_data;
-    size_t pass;
-    size_t section;
     const size_t section_count = link_workspace_section_count();
+    GtkListBoxRow *row;
+    size_t section;
 
-    if (shell == NULL || shell->nav_list == NULL || shell->application == NULL)
+    if (shell == NULL || shell->nav_list == NULL ||
+        shell->application == NULL || section_count == 0U) {
         return G_SOURCE_REMOVE;
-
-    for (pass = 0U; pass < 250U; ++pass) {
-        for (section = 0U; section < section_count; ++section) {
-            GtkListBoxRow *row = gtk_list_box_get_row_at_index(
-                GTK_LIST_BOX(shell->nav_list), (int)section);
-            if (row == NULL) {
-                g_application_quit(G_APPLICATION(shell->application));
-                return G_SOURCE_REMOVE;
-            }
-            gtk_list_box_select_row(GTK_LIST_BOX(shell->nav_list), row);
-        }
     }
 
-    (void)printf(
-        "LINK GTK navigation stress verified: %zu sidebar selections while disconnected\n",
-        section_count * 250U);
-    (void)fflush(stdout);
-    g_application_quit(G_APPLICATION(shell->application));
-    return G_SOURCE_REMOVE;
+    if (shell->navigation_stress_step >= shell->navigation_stress_target) {
+        (void)printf(
+            "LINK GTK timed navigation stress verified: %zu sidebar selections while disconnected with main-loop interleaving\n",
+            shell->navigation_stress_step);
+        (void)fflush(stdout);
+        g_application_quit(G_APPLICATION(shell->application));
+        return G_SOURCE_REMOVE;
+    }
+
+    /*
+     * Advance one page per timeout instead of doing thousands of selections in
+     * one idle callback. This deliberately yields to GTK layout/paint and the
+     * shell's 25 ms transport pump between clicks, matching real human
+     * navigation and exposing time-dependent widget-lifetime faults that a
+     * synchronous loop cannot exercise.
+     *
+     * Use a non-sequential pattern so adjacent and distant pages are both
+     * exercised repeatedly, including the large Live Data and Settings pages.
+     */
+    section = (shell->navigation_stress_step * 5U + 3U) % section_count;
+    row = gtk_list_box_get_row_at_index(
+        GTK_LIST_BOX(shell->nav_list), (int)section);
+    if (row == NULL) {
+        g_application_quit(G_APPLICATION(shell->application));
+        return G_SOURCE_REMOVE;
+    }
+
+    gtk_list_box_select_row(GTK_LIST_BOX(shell->nav_list), row);
+    ++shell->navigation_stress_step;
+    return G_SOURCE_CONTINUE;
 }
 
 static void about_clicked(GtkButton *button, gpointer user_data)
@@ -1967,8 +1983,16 @@ static void activate(GtkApplication *application, gpointer user_data)
     render_current_section_now(shell);
     (void)g_timeout_add(25U, pump_serial, shell);
     gtk_window_present(shell->window);
-    if (shell->navigation_stress_mode)
-        (void)g_idle_add(navigation_stress_idle, shell);
+    if (shell->navigation_stress_mode) {
+        shell->navigation_stress_step = 0U;
+        shell->navigation_stress_target = 120U;
+        /*
+         * 90 ms is intentionally close to the 100 ms deferred-render cadence:
+         * it lets GTK's own frame clock and the 25 ms transport pump run
+         * between selections while repeatedly crossing that boundary.
+         */
+        (void)g_timeout_add(90U, navigation_stress_step, shell);
+    }
     else if (d->auto_connect)
         (void)g_idle_add(auto_link_idle, shell);
 }
