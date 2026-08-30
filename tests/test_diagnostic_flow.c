@@ -193,7 +193,9 @@ static int test_standard_sequence(void)
               &flow, &response, 1000U, &event) ==
           LINK_DIAGNOSTIC_FLOW_RESULT_OK);
     CHECK(event.dtc_kind == LINK_OBD2_DTC_PERMANENT);
-    CHECK(event.became_ready);
+    CHECK(!event.became_ready);
+    CHECK(flow.stage == LINK_DIAGNOSTIC_FLOW_READING_READINESS);
+    CHECK(complete_optional_context(&flow, false) == 0);
     CHECK(flow.stage == LINK_DIAGNOSTIC_FLOW_LIVE);
 
     CHECK(link_diagnostic_flow_next_action(&flow, 1000U, &action) ==

@@ -139,6 +139,22 @@ static bool flow_next_freeze_candidate(
     return false;
 }
 
+static bool flow_has_freeze_candidate(const LinkDiagnosticFlow *flow)
+{
+    const size_t count =
+        sizeof(flow_freeze_candidates) / sizeof(flow_freeze_candidates[0]);
+    size_t index;
+
+    if (flow == NULL) return false;
+    for (index = flow->freeze_frame_candidate_index; index < count; ++index) {
+        if (link_obd2_pid_set_contains(
+                &flow->supported_pids, flow_freeze_candidates[index])) {
+            return true;
+        }
+    }
+    return false;
+}
+
 static LinkDiagnosticFlowResult flow_emit_command(
     LinkDiagnosticFlow *flow,
     LinkDiagnosticFlowAction *action,
@@ -290,7 +306,6 @@ static LinkDiagnosticFlowResult flow_accept_readiness(
 {
     LinkObd2Result result = LINK_OBD2_RESULT_OK;
     uint8_t nrc = 0U;
-    uint8_t pid;
 
     flow->readiness_attempted = true;
     flow->readiness_available = false;
@@ -323,10 +338,7 @@ static LinkDiagnosticFlowResult flow_accept_readiness(
     flow->freeze_frame_candidate_index = 0U;
     flow->freeze_frame_number = 0U;
     if (flow->freeze_frame_requested &&
-        flow_next_freeze_candidate(flow, &pid)) {
-        /* Rewind one candidate because the action builder owns selection. */
-        if (flow->freeze_frame_candidate_index != 0U)
-            --flow->freeze_frame_candidate_index;
+        flow_has_freeze_candidate(flow)) {
         flow->stage = LINK_DIAGNOSTIC_FLOW_READING_FREEZE_FRAME;
         return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
     }
@@ -342,8 +354,6 @@ static LinkDiagnosticFlowResult flow_accept_freeze_frame(
 {
     LinkObd2Sample sample;
     LinkObd2Result result = LINK_OBD2_RESULT_OK;
-    uint8_t next_pid;
-
     event->kind = LINK_DIAGNOSTIC_FLOW_EVENT_FREEZE_FRAME_SAMPLE;
     event->context_response_available =
         response->result != LINK_ELM327_RESULT_NO_DATA;
@@ -366,9 +376,7 @@ static LinkDiagnosticFlowResult flow_accept_freeze_frame(
         }
     }
 
-    if (flow_next_freeze_candidate(flow, &next_pid)) {
-        if (flow->freeze_frame_candidate_index != 0U)
-            --flow->freeze_frame_candidate_index;
+    if (flow_has_freeze_candidate(flow)) {
         flow->stage = LINK_DIAGNOSTIC_FLOW_READING_FREEZE_FRAME;
         return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
     }
