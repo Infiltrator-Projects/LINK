@@ -18,8 +18,8 @@ int main(void)
     size_t index;
     size_t other;
 
-    CHECK(link_mercedes_me_data_id_count() == 120U);
-    CHECK(link_mercedes_me_data_id_at(120U) == NULL);
+    CHECK(link_mercedes_me_data_id_count() == 194U);
+    CHECK(link_mercedes_me_data_id_at(194U) == NULL);
 
     item = link_mercedes_me_data_id_find_symbol(
         "RELATIVE_ACCELERATOR_PEDAL_POSITION");
@@ -33,6 +33,22 @@ int main(void)
     item = link_mercedes_me_data_id_find_symbol("ENGINE_REFERENCE_THROTTLE");
     CHECK(item != NULL);
     CHECK(strcmp(item->data_id, "engineReferenceThrottle") == 0);
+
+    item = link_mercedes_me_data_id_find_symbol("STORED_OBD_DTCS");
+    CHECK(item != NULL);
+    CHECK(strcmp(item->data_id, "storedObdDtcs") == 0);
+
+    item = link_mercedes_me_data_id_find_symbol("PARTICLE_FILTER");
+    CHECK(item != NULL);
+    CHECK(strcmp(item->data_id, "particleFilter") == 0);
+
+    item = link_mercedes_me_data_id_find_symbol("IRREGULAR_OBD_RESPONSE");
+    CHECK(item != NULL);
+    CHECK(strcmp(item->data_id, "irregularObdResponse") == 0);
+
+    item = link_mercedes_me_data_id_find_symbol("SPEED_AND_FUEL_VALUES");
+    CHECK(item != NULL);
+    CHECK(strcmp(item->data_id, "speedAndFuelValues") == 0);
 
     item = link_mercedes_me_data_id_find_symbol("FUEL_VOLUME");
     CHECK(item != NULL);
