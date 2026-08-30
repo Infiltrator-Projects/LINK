@@ -1748,10 +1748,12 @@ static void select_section(GtkListBox *list, GtkListBoxRow *row, gpointer user_d
 
 static gboolean navigation_stress_step(gpointer user_data)
 {
+    static const guint delays_ms[] = { 40U, 95U, 180U, 360U, 720U };
     LinkGtkShell *shell = user_data;
     const size_t section_count = link_workspace_section_count();
     GtkListBoxRow *row;
     size_t section;
+    guint next_delay;
 
     if (shell == NULL || shell->nav_list == NULL ||
         shell->application == NULL || section_count == 0U) {
@@ -1768,14 +1770,11 @@ static gboolean navigation_stress_step(gpointer user_data)
     }
 
     /*
-     * Advance one page per timeout instead of doing thousands of selections in
-     * one idle callback. This deliberately yields to GTK layout/paint and the
-     * shell's 25 ms transport pump between clicks, matching real human
-     * navigation and exposing time-dependent widget-lifetime faults that a
-     * synchronous loop cannot exercise.
-     *
-     * Use a non-sequential pattern so adjacent and distant pages are both
-     * exercised repeatedly, including the large Live Data and Settings pages.
+     * Advance one page per timeout and deliberately vary the pause between
+     * selections. Real users do not click on a fixed cadence: they sometimes
+     * move quickly and sometimes leave a page on screen long enough for GTK
+     * frame/layout work and product timers to run. This pattern crosses the
+     * shell's 25 ms transport pump and 100 ms deferred-render boundaries.
      */
     section = (shell->navigation_stress_step * 5U + 3U) % section_count;
     row = gtk_list_box_get_row_at_index(
@@ -1785,9 +1784,20 @@ static gboolean navigation_stress_step(gpointer user_data)
         return G_SOURCE_REMOVE;
     }
 
+    (void)printf(
+        "LINK GTK timed navigation step %zu/%zu -> section %zu\n",
+        shell->navigation_stress_step + 1U,
+        shell->navigation_stress_target,
+        section);
+    (void)fflush(stdout);
     gtk_list_box_select_row(GTK_LIST_BOX(shell->nav_list), row);
     ++shell->navigation_stress_step;
-    return G_SOURCE_CONTINUE;
+
+    next_delay = delays_ms[
+        shell->navigation_stress_step %
+        (sizeof(delays_ms) / sizeof(delays_ms[0]))];
+    (void)g_timeout_add(next_delay, navigation_stress_step, shell);
+    return G_SOURCE_REMOVE;
 }
 
 static void about_clicked(GtkButton *button, gpointer user_data)
@@ -1985,13 +1995,12 @@ static void activate(GtkApplication *application, gpointer user_data)
     gtk_window_present(shell->window);
     if (shell->navigation_stress_mode) {
         shell->navigation_stress_step = 0U;
-        shell->navigation_stress_target = 120U;
+        shell->navigation_stress_target = 45U;
         /*
-         * 90 ms is intentionally close to the 100 ms deferred-render cadence:
-         * it lets GTK's own frame clock and the 25 ms transport pump run
-         * between selections while repeatedly crossing that boundary.
+         * The first selection happens quickly; subsequent pauses vary from
+         * 40 ms to 720 ms inside navigation_stress_step().
          */
-        (void)g_timeout_add(90U, navigation_stress_step, shell);
+        (void)g_timeout_add(40U, navigation_stress_step, shell);
     }
     else if (d->auto_connect)
         (void)g_idle_add(auto_link_idle, shell);
