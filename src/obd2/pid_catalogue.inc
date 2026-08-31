@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: CC0-1.0 */
 /* Generated from pinned OBDex PID data; do not edit by hand. */
-/* OBDex snapshot bc58b0eb7273226a1aabae98e956b70b8362bda1; 119 Mode 01 + 13 Mode 09 definitions. */
+/* OBDex snapshot bc58b0eb7273226a1aabae98e956b70b8362bda1 plus LINK modern-diesel supplement. */
 static const LinkObd2CatalogueEntry link_obd2_catalogue[] = {
     {{UINT8_C(0x01), UINT8_C(0x00), UINT8_C(4), LINK_OBD2_VALUE_BITMAP, "PIDs supported [01-20]", "bitmap", "", false, 0, 0}, LINK_OBD2_FORMULA_NONE},
     {{UINT8_C(0x01), UINT8_C(0x01), UINT8_C(4), LINK_OBD2_VALUE_BITMAP, "Monitor status since DTCs cleared", "bitmap", "", false, 0, 0}, LINK_OBD2_FORMULA_NONE},
@@ -109,7 +109,9 @@ static const LinkObd2CatalogueEntry link_obd2_catalogue[] = {
     {{UINT8_C(0x01), UINT8_C(0x68), UINT8_C(7), LINK_OBD2_VALUE_ENCODED, "Intake air temperature sensor (multiple, with bitfield support indicator)", "encoded", "", false, 0, 0}, LINK_OBD2_FORMULA_NONE},
     {{UINT8_C(0x01), UINT8_C(0x78), UINT8_C(9), LINK_OBD2_VALUE_MULTI_SCALAR, "Exhaust gas temperature (EGT) - Bank 1, sensors 1-4", "°C", "((256*B + C)/10) - 40 (sensor 1); ((256*D + E)/10) - 40 (sensor 2); ((256*F + G)/10) - 40 (sensor 3); ((256*H + I)/10) - 40 (sensor 4)", true, -40, 6513.5}, LINK_OBD2_FORMULA_EGT_FOUR},
     {{UINT8_C(0x01), UINT8_C(0x79), UINT8_C(9), LINK_OBD2_VALUE_MULTI_SCALAR, "Exhaust gas temperature (EGT) - Bank 2, sensors 1-4", "°C", "((256*B + C)/10) - 40 (sensor 1); ((256*D + E)/10) - 40 (sensor 2); ((256*F + G)/10) - 40 (sensor 3); ((256*H + I)/10) - 40 (sensor 4)", true, -40, 6513.5}, LINK_OBD2_FORMULA_EGT_FOUR},
-    {{UINT8_C(0x01), UINT8_C(0x7C), UINT8_C(9), LINK_OBD2_VALUE_ENCODED, "Diesel particulate filter (DPF) temperature", "encoded", "", false, 0, 0}, LINK_OBD2_FORMULA_NONE},
+    {{UINT8_C(0x01), UINT8_C(0x7A), UINT8_C(7), LINK_OBD2_VALUE_MULTI_SCALAR, "Diesel particulate filter (DPF) Bank 1 pressure", "kPa", "support bits + delta/inlet/outlet pressure", false, 0, 0}, LINK_OBD2_FORMULA_DPF_PRESSURE},
+    {{UINT8_C(0x01), UINT8_C(0x7B), UINT8_C(7), LINK_OBD2_VALUE_MULTI_SCALAR, "Diesel particulate filter (DPF) Bank 2 pressure", "kPa", "support bits + delta/inlet/outlet pressure", false, 0, 0}, LINK_OBD2_FORMULA_DPF_PRESSURE},
+    {{UINT8_C(0x01), UINT8_C(0x7C), UINT8_C(9), LINK_OBD2_VALUE_MULTI_SCALAR, "Diesel particulate filter (DPF) temperature", "°C", "support bits + four DPF temperatures", true, -40, 6513.5}, LINK_OBD2_FORMULA_DPF_TEMPERATURE},
     {{UINT8_C(0x01), UINT8_C(0x7D), UINT8_C(1), LINK_OBD2_VALUE_ENCODED, "NOx NTE (Not-To-Exceed) control area status", "encoded", "", false, 0, 0}, LINK_OBD2_FORMULA_NONE},
     {{UINT8_C(0x01), UINT8_C(0x7E), UINT8_C(1), LINK_OBD2_VALUE_ENCODED, "PM NTE (Not-To-Exceed) control area status", "encoded", "", false, 0, 0}, LINK_OBD2_FORMULA_NONE},
     {{UINT8_C(0x01), UINT8_C(0x80), UINT8_C(4), LINK_OBD2_VALUE_BITMAP, "PIDs supported [81-A0]", "bitmap", "", false, 0, 0}, LINK_OBD2_FORMULA_NONE},
@@ -135,5 +137,5 @@ static const LinkObd2CatalogueEntry link_obd2_catalogue[] = {
     {{UINT8_C(0x09), UINT8_C(0x0D), UINT8_C(32), LINK_OBD2_VALUE_ASCII, "Engine serial number (ESN)", "ascii", "", false, 0, 0}, LINK_OBD2_FORMULA_NONE},
     {{UINT8_C(0x09), UINT8_C(0x0E), UINT8_C(32), LINK_OBD2_VALUE_ASCII, "Exhaust regulation / type approval number", "ascii", "", false, 0, 0}, LINK_OBD2_FORMULA_NONE},
 };
-#define LINK_OBD2_CATALOGUE_EXPECTED_COUNT 132U
+#define LINK_OBD2_CATALOGUE_EXPECTED_COUNT 134U
 #define LINK_OBD2_CATALOGUE_SNAPSHOT "bc58b0eb7273226a1aabae98e956b70b8362bda1"
