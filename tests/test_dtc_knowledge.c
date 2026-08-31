@@ -47,6 +47,30 @@ static void check_origin(
     }
 }
 
+static void test_complete_namespace(void)
+{
+    size_t generic=0U, controlled=0U, manufacturer=0U, reserved=0U;
+    uint32_t raw;
+    check(link_dtc_namespace_count() == 65536U, "full DTC namespace exposed");
+    for (raw=0U; raw<65536U; ++raw) {
+        LinkDtcKnowledge k;
+        check(link_dtc_namespace_at((uint16_t)raw, &k), "every DTC value resolves");
+        switch (k.origin) {
+        case LINK_DTC_ORIGIN_STANDARD_GENERIC: ++generic; break;
+        case LINK_DTC_ORIGIN_STANDARD_CONTROLLED: ++controlled; break;
+        case LINK_DTC_ORIGIN_MANUFACTURER_SPECIFIC: ++manufacturer; break;
+        case LINK_DTC_ORIGIN_DOCUMENT_RESERVED: ++reserved; break;
+        case LINK_DTC_ORIGIN_UNKNOWN: check(false, "DTC ownership never unknown"); break;
+        }
+    }
+    check(generic == EXPECTED_OBDEX_DTC_COUNT, "all named generics represented");
+    check(controlled == 18115U, "all controlled unnamed slots represented");
+    check(manufacturer == 29696U, "all manufacturer slots represented");
+    check(reserved == 8192U, "all reserved slots represented");
+    check(generic + controlled + manufacturer + reserved == 65536U,
+          "DTC classes cover entire namespace");
+}
+
 static void test_complete_catalogue(void)
 {
     size_t counts_p0 = 0U, counts_p2 = 0U, counts_p3 = 0U;
@@ -125,6 +149,7 @@ int main(void)
     check(strcmp(link_dtc_catalogue_audit_revision(), "J2012DA_202607") == 0,
           "catalogue audit records current J2012 Digital Annex revision");
     test_complete_catalogue();
+    test_complete_namespace();
 
     /* One definition from every generic family owned by LINK. */
     check_known("P0420", LINK_DTC_SYSTEM_POWERTRAIN, "P0 generic definition");

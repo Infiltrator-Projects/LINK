@@ -148,6 +148,23 @@ bool link_dtc_resolve(const char *code, LinkDtcKnowledge *knowledge)
     return true;
 }
 
+size_t link_dtc_namespace_count(void) { return LINK_DTC_NAMESPACE_COUNT; }
+
+bool link_dtc_namespace_at(uint16_t raw, LinkDtcKnowledge *knowledge)
+{
+    static const char systems[] = "PCBU";
+    static const char hex[] = "0123456789ABCDEF";
+    char code[LINK_DTC_CODE_LENGTH];
+    if (knowledge == NULL) return false;
+    code[0] = systems[(raw >> 14U) & UINT16_C(3)];
+    code[1] = (char)('0' + ((raw >> 12U) & UINT16_C(3)));
+    code[2] = hex[(raw >> 8U) & UINT16_C(15)];
+    code[3] = hex[(raw >> 4U) & UINT16_C(15)];
+    code[4] = hex[raw & UINT16_C(15)];
+    code[5] = '\0';
+    return link_dtc_resolve(code, knowledge);
+}
+
 size_t link_dtc_catalogue_definition_count(void)
 {
     return sizeof(link_dtc_catalogue) / sizeof(link_dtc_catalogue[0]);

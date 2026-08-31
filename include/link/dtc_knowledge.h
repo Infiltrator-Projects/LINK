@@ -70,6 +70,12 @@ typedef struct {
  */
 bool link_dtc_resolve(const char *code, LinkDtcKnowledge *knowledge);
 
+#define LINK_DTC_NAMESPACE_COUNT 65536U
+
+/** Complete 16-bit SAE/ISO DTC namespace. */
+size_t link_dtc_namespace_count(void);
+bool link_dtc_namespace_at(uint16_t raw, LinkDtcKnowledge *knowledge);
+
 /** Number of generic definitions compiled into the current LINK catalogue. */
 size_t link_dtc_catalogue_definition_count(void);
 

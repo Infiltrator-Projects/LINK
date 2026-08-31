@@ -126,6 +126,9 @@ int main(void)
     }
     CHECK(link_parameter_obd2_definition(0x7aU) == NULL);
     CHECK(link_parameter_obd2_definition(0x7cU) == NULL);
+    CHECK(link_obd2_pid_definition(0x01U, 0x7aU) != NULL);
+    CHECK(link_obd2_mode01_identifier_count() == 256U);
+    CHECK(link_obd2_mode01_assigned_count() == 220U);
     CHECK(link_parameter_format_value(
               link_parameter_obd2_definition(0x23U),
               true, 123400.0, formatted, sizeof(formatted)));
@@ -164,7 +167,7 @@ int main(void)
     CHECK(link_scheduler_set_enabled(&scheduler, 0xa6U, false) ==
           LINK_SCHEDULER_RESULT_OK);
     CHECK(link_scheduler_set_enabled(&scheduler, 0x7aU, false) ==
-          LINK_SCHEDULER_RESULT_NOT_FOUND);
+          LINK_SCHEDULER_RESULT_OK);
 
     memset(bits, 0, sizeof(bits));
     for (size_t definition_index = 0U;

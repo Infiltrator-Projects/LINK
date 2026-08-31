@@ -36,14 +36,8 @@ LINK currently owns:
   including transport-neutral read helpers, explicit deny-by-default handling
   for control/clear operations, responder-attributed capability discovery,
   VIN/readiness/freeze-frame/DTC handling and bounded multi-responder decoding;
-- a pinned CC0 generic PID/InfoType catalogue generated from OBDex containing
-  **119 Mode 01 definitions + 13 Mode 09 definitions (132 total)**. The generic
-  decoder preserves bitmap/enum/encoded/DTC/ASCII/raw payloads and decodes
-  deterministic scalar or multi-scalar formulas without assuming one PID is
-  one `double`. The legacy scalar parameter facade now exposes 57 decoded
-  Mode 01 values while the full structured catalogue remains available to all
-  products and transports;
-- a complete pinned generic OBD-II DTC catalogue containing 9,533 definitions across the seven standardized generic families (`P0`, `P2`, standardized `P3`, `B0`, `C0`, `U0`, `U3`), with normalized classification, independently authored CC0 titles/categories, explicit unknown handling and ISO 14229 status translation;
+- the complete classic SAE J1979 Mode 01 identifier namespace: all **256** byte-wide slots are represented, with **220 assigned definitions** and **36** explicitly reserved/unassigned under the `J1979DA_202608` audit. Every advertised assigned data PID is schedulable, including structured/encoded/raw-preserving values rather than only the scalar compatibility subset; Mode 09 vehicle information and J1979-2 OBDonUDS mapping remain shared in LINK;
+- the complete **65,536-value** SAE/ISO DTC numeric namespace, with every value classified as standardized generic/controlled, manufacturer-specific or document-reserved, plus a pinned **9,533-definition** open generic catalogue audited against J2012/J2012DA;
 - ISO 14229 UDS request/response, DID and client-state handling;
 - a compiled 27-service ISO 14229 service catalogue and bounded request/response codecs;
 - read-only UDS `ReadDTCInformation` helpers;

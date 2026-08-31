@@ -262,6 +262,28 @@ static void test_catalogue(void)
           "preserve assigned electric-motor PID raw when layout is unverified");
 }
 
+static void test_complete_mode01_namespace(void)
+{
+    size_t assigned = 0U, reserved = 0U;
+    unsigned int raw;
+    check(link_obd2_mode01_identifier_count() == 256U, "all Mode 01 slots exposed");
+    check(strcmp(link_obd2_j1979_audit_revision(), "J1979DA_202608") == 0,
+          "J1979 audit revision");
+    for (raw = 0U; raw <= 0xffU; ++raw) {
+        const uint8_t pid = (uint8_t)raw;
+        const LinkObd2PidDefinition *d = link_obd2_pid_definition(0x01U, pid);
+        if (link_obd2_mode01_identifier_status(pid) == LINK_OBD2_IDENTIFIER_ASSIGNED) {
+            ++assigned;
+            check(d != NULL && d->pid == pid, "assigned slot has definition");
+        } else {
+            ++reserved;
+            check(d == NULL, "reserved slot has no fake definition");
+        }
+    }
+    check(assigned == 220U && reserved == 36U, "220 assigned plus 36 reserved");
+    check(assigned == link_obd2_mode01_assigned_count(), "assigned count matches");
+}
+
 static void test_requests(void)
 {
     char command[16];
@@ -446,6 +468,7 @@ static void test_negative_response(void)
 int main(void)
 {
     test_catalogue();
+    test_complete_mode01_namespace();
     test_requests();
     test_live_and_capabilities();
     test_negative_response();
