@@ -62,6 +62,7 @@ typedef struct {
 } LinkObd2Sample;
 
 #define LINK_OBD2_MAX_RESPONDER_SAMPLES 8U
+#define LINK_OBD2_MAX_RESPONDER_PID_SETS 8U
 
 /** One standard OBD-II value attributed to the CAN ECU that returned it. */
 typedef struct {
@@ -81,6 +82,20 @@ typedef struct {
 typedef struct {
     uint8_t bits[LINK_OBD2_PID_SET_BYTES];
 } LinkObd2PidSet;
+
+/** Standard PID capability bitmap attributed to one physical CAN responder. */
+typedef struct {
+    bool extended_id;
+    uint32_t responder_id;
+    LinkObd2PidSet supported_pids;
+} LinkObd2ResponderPidSet;
+
+/** Bounded set of responder-specific capability bitmaps. */
+typedef struct {
+    LinkObd2ResponderPidSet entries[LINK_OBD2_MAX_RESPONDER_PID_SETS];
+    size_t count;
+    bool truncated;
+} LinkObd2ResponderPidSetList;
 
 typedef enum {
     LINK_OBD2_DTC_STORED = 0,
@@ -142,6 +157,23 @@ LinkObd2Result link_obd2_accept_supported_pids(
     uint8_t base_pid,
     LinkObd2PidSet *set,
     bool *has_more);
+
+/**
+ * Decode one supported-PID block while retaining the responder CAN ID for
+ * every headered reply. The union set is always updated; responder_sets may
+ * be NULL for callers that only need the standards-level union.
+ */
+LinkObd2Result link_obd2_accept_supported_pid_responders(
+    const LinkElm327Response *response,
+    uint8_t base_pid,
+    LinkObd2PidSet *set,
+    LinkObd2ResponderPidSetList *responder_sets,
+    bool *has_more);
+
+const LinkObd2PidSet *link_obd2_responder_pid_set_find(
+    const LinkObd2ResponderPidSetList *responder_sets,
+    uint32_t responder_id,
+    bool extended_id);
 LinkObd2Result link_obd2_decode_live_pid(
     const LinkElm327Response *response,
     uint8_t pid,
