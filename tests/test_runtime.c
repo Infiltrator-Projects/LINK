@@ -186,6 +186,37 @@ int main(void)
               &scheduler, bits, 0U) == LINK_SCHEDULER_RESULT_OK);
     CHECK(scheduler.count == link_parameter_obd2_definition_count());
 
+    /*
+     * Full SAE live contract: if a vehicle advertises every assigned classic
+     * Mode 01 PID, the scheduler must retain every live PID rather than only
+     * the scalar compatibility subset. Support-page PIDs are discovery
+     * metadata and are intentionally not polled as live measurements.
+     */
+    {
+        size_t expected_live = 0U;
+        memset(bits, 0xff, sizeof(bits));
+        for (size_t definition_index = 0U;
+             definition_index < link_obd2_pid_definition_count();
+             ++definition_index) {
+            const LinkObd2PidDefinition *definition =
+                link_obd2_pid_definition_at(definition_index);
+            if (definition != NULL &&
+                definition->mode == UINT8_C(0x01) &&
+                (definition->pid & UINT8_C(0x1f)) != 0U) {
+                ++expected_live;
+            }
+        }
+        CHECK(expected_live > 64U);
+        CHECK(expected_live <= LINK_SCHEDULER_MAX_ITEMS);
+        CHECK(link_scheduler_configure_standard_obd2_bits(
+                  &scheduler, bits, 0U) == LINK_SCHEDULER_RESULT_OK);
+        CHECK(scheduler.count == expected_live);
+        CHECK(link_scheduler_set_enabled(&scheduler, 0x7aU, false) ==
+              LINK_SCHEDULER_RESULT_OK);
+        CHECK(link_scheduler_set_enabled(&scheduler, 0xccU, false) ==
+              LINK_SCHEDULER_RESULT_OK);
+    }
+
     link_telemetry_store_init(&telemetry);
     CHECK(link_telemetry_store_record(&telemetry, 20U, &measurement));
     CHECK(link_telemetry_store_latest(&telemetry, 0x0cU, &sample));
