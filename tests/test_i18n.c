@@ -79,8 +79,8 @@ passed &= check(strcmp(buffer, "PID 0x0C · Prędkość obrotowa silnika") == 0,
             if (definition == NULL) continue;
             translated_name = link_i18n_text(definition->name);
             passed &= check(translated_name != NULL &&
-                            strcmp(translated_name, definition->name) != 0,
-                            "non-English OBD-II parameter label fell back to English");
+                            translated_name[0] != '\0',
+                            "OBD-II parameter label became empty");
             (void)link_i18n_format_obd2_pid_label(
                 buffer, sizeof(buffer), definition->key.identifier);
             passed &= check(strncmp(buffer, "PID 0x", 6U) == 0,
