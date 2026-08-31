@@ -43,12 +43,29 @@ typedef enum LinkObd2FormulaKind {
     LINK_OBD2_FORMULA_U16_DIV32,
     LINK_OBD2_FORMULA_ODOMETER,
     LINK_OBD2_FORMULA_EGR_SIX,
+    LINK_OBD2_FORMULA_DIESEL_INTAKE_FOUR,
     LINK_OBD2_FORMULA_EGR_TEMP_FOUR,
     LINK_OBD2_FORMULA_THROTTLE_FOUR,
     LINK_OBD2_FORMULA_FUEL_PRESSURE_CONTROL,
+    LINK_OBD2_FORMULA_INJECTION_PRESSURE_FOUR,
+    LINK_OBD2_FORMULA_TURBO_INLET_PRESSURE_TWO,
     LINK_OBD2_FORMULA_BOOST_FOUR,
+    LINK_OBD2_FORMULA_VGT_CONTROL,
     LINK_OBD2_FORMULA_WASTEGATE_FOUR,
+    LINK_OBD2_FORMULA_EXHAUST_PRESSURE_TWO,
+    LINK_OBD2_FORMULA_TURBO_RPM_TWO,
+    LINK_OBD2_FORMULA_TURBO_TEMP_FOUR,
+    LINK_OBD2_FORMULA_TEMP_FOUR_LOW,
+    LINK_OBD2_FORMULA_DPF_PRESSURE_THREE,
     LINK_OBD2_FORMULA_RUNTIME_THREE,
+    LINK_OBD2_FORMULA_NOX_FOUR,
+    LINK_OBD2_FORMULA_NOX_REAGENT,
+    LINK_OBD2_FORMULA_PM_CONCENTRATION_TWO,
+    LINK_OBD2_FORMULA_MAP_TWO,
+    LINK_OBD2_FORMULA_DIESEL_AFTERTREATMENT,
+    LINK_OBD2_FORMULA_WIDE_O2_EIGHT,
+    LINK_OBD2_FORMULA_PM_OUTPUT_TWO,
+    LINK_OBD2_FORMULA_EGT_WIDE_FOUR,
     LINK_OBD2_FORMULA_HEV_SYSTEM,
     LINK_OBD2_FORMULA_FUEL_USE_EIGHT,
     LINK_OBD2_FORMULA_CERTIFIED_ENERGY_RANGE
@@ -68,6 +85,14 @@ typedef struct LinkObd2CatalogueEntry {
  * duplicate public catalogue entry.
  */
 static const LinkObd2CatalogueEntry link_obd2_standard_corrections[] = {
+    {{UINT8_C(0x01), UINT8_C(0x7C), UINT8_C(9), LINK_OBD2_VALUE_MULTI_SCALAR,
+      "Diesel particulate filter (DPF) temperature", "°C",
+      "support byte; four U16 temperatures = value/10 - 40",
+      true, -40, 6513.5}, LINK_OBD2_FORMULA_EGT_FOUR},
+    {{UINT8_C(0x01), UINT8_C(0x83), UINT8_C(9), LINK_OBD2_VALUE_MULTI_SCALAR,
+      "NOx sensor concentration", "ppm",
+      "support byte; four U16 concentrations", false, 0, 0},
+      LINK_OBD2_FORMULA_NOX_FOUR},
     {{UINT8_C(0x01), UINT8_C(0x9E), UINT8_C(2), LINK_OBD2_VALUE_SCALAR,
       "Engine exhaust flow rate", "kg/h", "(256*A + B) / 5",
       true, 0, 13107}, LINK_OBD2_FORMULA_U16_DIV5}
@@ -222,7 +247,7 @@ const LinkObd2PidDefinition *link_obd2_pid_definition(uint8_t mode, uint8_t pid)
 
 const char *link_obd2_pid_catalogue_snapshot(void)
 {
-    return LINK_OBD2_CATALOGUE_SNAPSHOT "+link-standard-supplement-v2+link-corrections-v1";
+    return LINK_OBD2_CATALOGUE_SNAPSHOT "+link-standard-supplement-v3+link-corrections-v2";
 }
 
 size_t link_obd2_mode01_identifier_count(void) { return 256U; }
@@ -445,30 +470,50 @@ static LinkObd2Result obd2_decode_formula(
         break;
     case LINK_OBD2_FORMULA_EGR_SIX: {
         const uint8_t flags = data[0];
-        if ((flags & UINT8_C(0x80)) != 0U)
+        if (obd2_sensor_supported(flags, 0U))
             (void)obd2_add_signal(decoded, "commanded EGR A", (double)data[1] * 100.0 / 255.0, "%");
-        if ((flags & UINT8_C(0x40)) != 0U)
+        if (obd2_sensor_supported(flags, 1U))
             (void)obd2_add_signal(decoded, "actual EGR A", (double)data[2] * 100.0 / 255.0, "%");
-        if ((flags & UINT8_C(0x20)) != 0U)
+        if (obd2_sensor_supported(flags, 2U))
             (void)obd2_add_signal(decoded, "EGR A error", (double)data[3] * 100.0 / 128.0 - 100.0, "%");
-        if ((flags & UINT8_C(0x10)) != 0U)
+        if (obd2_sensor_supported(flags, 3U))
             (void)obd2_add_signal(decoded, "commanded EGR B", (double)data[4] * 100.0 / 255.0, "%");
-        if ((flags & UINT8_C(0x08)) != 0U)
+        if (obd2_sensor_supported(flags, 4U))
             (void)obd2_add_signal(decoded, "actual EGR B", (double)data[5] * 100.0 / 255.0, "%");
-        if ((flags & UINT8_C(0x04)) != 0U)
+        if (obd2_sensor_supported(flags, 5U))
             (void)obd2_add_signal(decoded, "EGR B error", (double)data[6] * 100.0 / 128.0 - 100.0, "%");
+        break;
+    }
+    case LINK_OBD2_FORMULA_DIESEL_INTAKE_FOUR: {
+        const uint8_t flags = data[0];
+        static const char *labels[4] = {
+            "commanded intake air flow A", "relative intake air flow A",
+            "commanded intake air flow B", "relative intake air flow B"
+        };
+        unsigned int index;
+        for (index = 0U; index < 4U; ++index) {
+            if (obd2_sensor_supported(flags, index))
+                (void)obd2_add_signal(decoded, labels[index],
+                    (double)data[index + 1U] * 100.0 / 255.0, "%");
+        }
         break;
     }
     case LINK_OBD2_FORMULA_EGR_TEMP_FOUR: {
         const uint8_t flags = data[0];
-        if ((flags & UINT8_C(0x80)) != 0U)
-            (void)obd2_add_signal(decoded, "EGR temperature A", (double)data[1] - 40.0, "°C");
-        if ((flags & UINT8_C(0x40)) != 0U)
-            (void)obd2_add_signal(decoded, "EGR temperature C", (double)data[2] - 40.0, "°C");
-        if ((flags & UINT8_C(0x20)) != 0U)
-            (void)obd2_add_signal(decoded, "EGR temperature B", (double)data[3] - 40.0, "°C");
-        if ((flags & UINT8_C(0x10)) != 0U)
-            (void)obd2_add_signal(decoded, "EGR temperature D", (double)data[4] - 40.0, "°C");
+        static const char *labels[4] = {
+            "EGR temperature A", "EGR temperature C",
+            "EGR temperature B", "EGR temperature D"
+        };
+        unsigned int index;
+        for (index = 0U; index < 4U; ++index) {
+            const bool normal = obd2_sensor_supported(flags, index);
+            const bool wide = obd2_sensor_supported(flags, index + 4U);
+            if (normal || wide) {
+                const double scale = wide ? 4.0 : 1.0;
+                (void)obd2_add_signal(decoded, labels[index],
+                    (double)data[index + 1U] * scale - 40.0, "°C");
+            }
+        }
         break;
     }
     case LINK_OBD2_FORMULA_THROTTLE_FOUR: {
@@ -479,7 +524,7 @@ static LinkObd2Result obd2_decode_formula(
         };
         unsigned int index;
         for (index = 0U; index < 4U; ++index) {
-            if ((flags & (uint8_t)(UINT8_C(0x80) >> index)) != 0U)
+            if (obd2_sensor_supported(flags, index))
                 (void)obd2_add_signal(decoded, labels[index],
                     (double)data[index + 1U] * 100.0 / 255.0, "%");
         }
@@ -487,30 +532,82 @@ static LinkObd2Result obd2_decode_formula(
     }
     case LINK_OBD2_FORMULA_FUEL_PRESSURE_CONTROL: {
         const uint8_t flags = data[0];
-        if ((flags & UINT8_C(0x80)) != 0U)
+        if (obd2_sensor_supported(flags, 0U))
             (void)obd2_add_signal(decoded, "commanded rail pressure A", (double)obd2_u16(data + 1U) * 10.0, "kPa");
-        if ((flags & UINT8_C(0x40)) != 0U)
+        if (obd2_sensor_supported(flags, 1U))
             (void)obd2_add_signal(decoded, "rail pressure A", (double)obd2_u16(data + 3U) * 10.0, "kPa");
-        if ((flags & UINT8_C(0x20)) != 0U)
+        if (obd2_sensor_supported(flags, 2U))
             (void)obd2_add_signal(decoded, "fuel temperature A", (double)data[5] - 40.0, "°C");
-        if ((flags & UINT8_C(0x10)) != 0U)
+        if (obd2_sensor_supported(flags, 3U))
             (void)obd2_add_signal(decoded, "commanded rail pressure B", (double)obd2_u16(data + 6U) * 10.0, "kPa");
-        if ((flags & UINT8_C(0x08)) != 0U)
+        if (obd2_sensor_supported(flags, 4U))
             (void)obd2_add_signal(decoded, "rail pressure B", (double)obd2_u16(data + 8U) * 10.0, "kPa");
-        if ((flags & UINT8_C(0x04)) != 0U)
+        if (obd2_sensor_supported(flags, 5U))
             (void)obd2_add_signal(decoded, "fuel temperature B", (double)data[10] - 40.0, "°C");
+        break;
+    }
+    case LINK_OBD2_FORMULA_INJECTION_PRESSURE_FOUR: {
+        const uint8_t flags = data[0];
+        static const char *labels[4] = {
+            "commanded injection pressure A", "actual injection pressure A",
+            "commanded injection pressure B", "actual injection pressure B"
+        };
+        unsigned int index;
+        for (index = 0U; index < 4U; ++index) {
+            if (obd2_sensor_supported(flags, index))
+                (void)obd2_add_signal(decoded, labels[index],
+                    (double)obd2_u16(data + 1U + index * 2U) * 10.0, "kPa");
+        }
+        break;
+    }
+    case LINK_OBD2_FORMULA_TURBO_INLET_PRESSURE_TWO: {
+        const uint8_t flags = data[0];
+        static const char *labels[2] = {
+            "turbo compressor inlet pressure A",
+            "turbo compressor inlet pressure B"
+        };
+        unsigned int index;
+        for (index = 0U; index < 2U; ++index) {
+            const bool normal = obd2_sensor_supported(flags, index);
+            const bool wide = obd2_sensor_supported(flags, index + 2U);
+            if (normal || wide) {
+                const double scale = wide ? 8.0 : 1.0;
+                (void)obd2_add_signal(decoded, labels[index],
+                    (double)data[index + 1U] * scale, "kPa");
+            }
+        }
         break;
     }
     case LINK_OBD2_FORMULA_BOOST_FOUR: {
         const uint8_t flags = data[0];
-        if ((flags & UINT8_C(0x80)) != 0U)
+        if (obd2_sensor_supported(flags, 0U))
             (void)obd2_add_signal(decoded, "commanded boost A", (double)obd2_u16(data + 1U) / 32.0, "kPa");
-        if ((flags & UINT8_C(0x40)) != 0U)
+        if (obd2_sensor_supported(flags, 1U))
             (void)obd2_add_signal(decoded, "actual boost A", (double)obd2_u16(data + 3U) / 32.0, "kPa");
-        if ((flags & UINT8_C(0x10)) != 0U)
+        if (obd2_sensor_supported(flags, 2U))
+            (void)obd2_add_signal(decoded, "boost A control status", (double)(data[9] & UINT8_C(0x03)), "state");
+        if (obd2_sensor_supported(flags, 3U))
             (void)obd2_add_signal(decoded, "commanded boost B", (double)obd2_u16(data + 5U) / 32.0, "kPa");
-        if ((flags & UINT8_C(0x08)) != 0U)
+        if (obd2_sensor_supported(flags, 4U))
             (void)obd2_add_signal(decoded, "actual boost B", (double)obd2_u16(data + 7U) / 32.0, "kPa");
+        if (obd2_sensor_supported(flags, 5U))
+            (void)obd2_add_signal(decoded, "boost B control status", (double)((data[9] >> 2U) & UINT8_C(0x03)), "state");
+        break;
+    }
+    case LINK_OBD2_FORMULA_VGT_CONTROL: {
+        const uint8_t flags = data[0];
+        if (obd2_sensor_supported(flags, 0U))
+            (void)obd2_add_signal(decoded, "commanded VGT A", (double)data[1] * 100.0 / 255.0, "%");
+        if (obd2_sensor_supported(flags, 1U))
+            (void)obd2_add_signal(decoded, "actual VGT A", (double)data[2] * 100.0 / 255.0, "%");
+        if (obd2_sensor_supported(flags, 2U))
+            (void)obd2_add_signal(decoded, "VGT A control status", (double)(data[5] & UINT8_C(0x03)), "state");
+        if (obd2_sensor_supported(flags, 3U))
+            (void)obd2_add_signal(decoded, "commanded VGT B", (double)data[3] * 100.0 / 255.0, "%");
+        if (obd2_sensor_supported(flags, 4U))
+            (void)obd2_add_signal(decoded, "actual VGT B", (double)data[4] * 100.0 / 255.0, "%");
+        if (obd2_sensor_supported(flags, 5U))
+            (void)obd2_add_signal(decoded, "VGT B control status", (double)((data[5] >> 2U) & UINT8_C(0x03)), "state");
         break;
     }
     case LINK_OBD2_FORMULA_WASTEGATE_FOUR: {
@@ -521,20 +618,178 @@ static LinkObd2Result obd2_decode_formula(
         };
         unsigned int index;
         for (index = 0U; index < 4U; ++index) {
-            if ((flags & (uint8_t)(UINT8_C(0x80) >> index)) != 0U)
+            if (obd2_sensor_supported(flags, index))
                 (void)obd2_add_signal(decoded, labels[index],
                     (double)data[index + 1U] * 100.0 / 255.0, "%");
         }
         break;
     }
+    case LINK_OBD2_FORMULA_EXHAUST_PRESSURE_TWO: {
+        const uint8_t flags = data[0];
+        if (obd2_sensor_supported(flags, 0U))
+            (void)obd2_add_signal(decoded, "exhaust pressure bank 1", (double)obd2_u16(data + 1U) / 100.0, "kPa");
+        if (obd2_sensor_supported(flags, 1U))
+            (void)obd2_add_signal(decoded, "exhaust pressure bank 2", (double)obd2_u16(data + 3U) / 100.0, "kPa");
+        break;
+    }
+    case LINK_OBD2_FORMULA_TURBO_RPM_TWO: {
+        const uint8_t flags = data[0];
+        if (obd2_sensor_supported(flags, 0U))
+            (void)obd2_add_signal(decoded, "turbocharger A speed", (double)obd2_u16(data + 1U) * 10.0, "rpm");
+        if (obd2_sensor_supported(flags, 1U))
+            (void)obd2_add_signal(decoded, "turbocharger B speed", (double)obd2_u16(data + 3U) * 10.0, "rpm");
+        break;
+    }
+    case LINK_OBD2_FORMULA_TURBO_TEMP_FOUR: {
+        const uint8_t flags = data[0];
+        if (obd2_sensor_supported(flags, 0U))
+            (void)obd2_add_signal(decoded, "compressor inlet temperature", (double)data[1] - 40.0, "°C");
+        if (obd2_sensor_supported(flags, 1U))
+            (void)obd2_add_signal(decoded, "compressor outlet temperature", (double)data[2] - 40.0, "°C");
+        if (obd2_sensor_supported(flags, 2U))
+            (void)obd2_add_signal(decoded, "turbine inlet temperature", (double)obd2_u16(data + 3U) / 10.0 - 40.0, "°C");
+        if (obd2_sensor_supported(flags, 3U))
+            (void)obd2_add_signal(decoded, "turbine outlet temperature", (double)obd2_u16(data + 5U) / 10.0 - 40.0, "°C");
+        break;
+    }
+    case LINK_OBD2_FORMULA_TEMP_FOUR_LOW: {
+        const uint8_t flags = data[0];
+        static const char *labels[4] = {
+            "temperature 1", "temperature 2", "temperature 3", "temperature 4"
+        };
+        unsigned int index;
+        for (index = 0U; index < 4U; ++index) {
+            if (obd2_sensor_supported(flags, index))
+                (void)obd2_add_signal(decoded, labels[index],
+                    (double)data[index + 1U] - 40.0, "°C");
+        }
+        break;
+    }
+    case LINK_OBD2_FORMULA_DPF_PRESSURE_THREE: {
+        const uint8_t flags = data[0];
+        if (obd2_sensor_supported(flags, 0U))
+            (void)obd2_add_signal(decoded, "DPF differential pressure", (double)obd2_i16(data + 1U) / 100.0, "kPa");
+        if (obd2_sensor_supported(flags, 1U))
+            (void)obd2_add_signal(decoded, "DPF inlet pressure", (double)obd2_u16(data + 3U) / 100.0, "kPa");
+        if (obd2_sensor_supported(flags, 2U))
+            (void)obd2_add_signal(decoded, "DPF outlet pressure", (double)obd2_u16(data + 5U) / 100.0, "kPa");
+        break;
+    }
     case LINK_OBD2_FORMULA_RUNTIME_THREE: {
         const uint8_t flags = data[0];
-        if ((flags & UINT8_C(0x80)) != 0U)
+        if (obd2_sensor_supported(flags, 0U))
             (void)obd2_add_signal(decoded, "engine run time", (double)obd2_u32(data + 1U), "s");
-        if ((flags & UINT8_C(0x40)) != 0U)
+        if (obd2_sensor_supported(flags, 1U))
             (void)obd2_add_signal(decoded, "idle run time", (double)obd2_u32(data + 5U), "s");
-        if ((flags & UINT8_C(0x20)) != 0U)
+        if (obd2_sensor_supported(flags, 2U))
             (void)obd2_add_signal(decoded, "PTO run time", (double)obd2_u32(data + 9U), "s");
+        break;
+    }
+    case LINK_OBD2_FORMULA_NOX_FOUR: {
+        const uint8_t flags = data[0];
+        static const char *labels[4] = {
+            "NOx bank 1 sensor 1", "NOx bank 1 sensor 2",
+            "NOx bank 2 sensor 1", "NOx bank 2 sensor 2"
+        };
+        unsigned int index;
+        for (index = 0U; index < 4U; ++index) {
+            if (obd2_sensor_supported(flags, index))
+                (void)obd2_add_signal(decoded, labels[index],
+                    (double)obd2_u16(data + 1U + index * 2U), "ppm");
+        }
+        break;
+    }
+    case LINK_OBD2_FORMULA_NOX_REAGENT: {
+        const uint8_t flags = data[0];
+        if (obd2_sensor_supported(flags, 0U))
+            (void)obd2_add_signal(decoded, "average reagent consumption", (double)obd2_u16(data + 1U) / 200.0, "L/h");
+        if (obd2_sensor_supported(flags, 1U))
+            (void)obd2_add_signal(decoded, "average demanded reagent consumption", (double)obd2_u16(data + 3U) / 200.0, "L/h");
+        if (obd2_sensor_supported(flags, 2U))
+            (void)obd2_add_signal(decoded, "reagent tank level", (double)data[5] * 100.0 / 255.0, "%");
+        if (obd2_sensor_supported(flags, 3U))
+            (void)obd2_add_signal(decoded, "NOx warning engine run time", (double)obd2_u32(data + 6U), "s");
+        break;
+    }
+    case LINK_OBD2_FORMULA_PM_CONCENTRATION_TWO: {
+        const uint8_t flags = data[0];
+        if (obd2_sensor_supported(flags, 0U))
+            (void)obd2_add_signal(decoded, "PM bank 1 sensor 1", (double)obd2_u16(data + 1U) / 80.0, "mg/m³");
+        if (obd2_sensor_supported(flags, 1U))
+            (void)obd2_add_signal(decoded, "PM bank 2 sensor 1", (double)obd2_u16(data + 3U) / 80.0, "mg/m³");
+        break;
+    }
+    case LINK_OBD2_FORMULA_MAP_TWO: {
+        const uint8_t flags = data[0];
+        if (obd2_sensor_supported(flags, 0U))
+            (void)obd2_add_signal(decoded, "intake manifold absolute pressure A", (double)obd2_u16(data + 1U) / 32.0, "kPa");
+        if (obd2_sensor_supported(flags, 1U))
+            (void)obd2_add_signal(decoded, "intake manifold absolute pressure B", (double)obd2_u16(data + 3U) / 32.0, "kPa");
+        break;
+    }
+    case LINK_OBD2_FORMULA_DIESEL_AFTERTREATMENT: {
+        const uint8_t flags = data[0];
+        if (obd2_sensor_supported(flags, 0U))
+            (void)obd2_add_signal(decoded, "aftertreatment status 1", (double)(data[1] & UINT8_C(0x01)), "state");
+        if (obd2_sensor_supported(flags, 1U))
+            (void)obd2_add_signal(decoded, "aftertreatment status 2", (double)((data[1] >> 1U) & UINT8_C(0x01)), "state");
+        if (obd2_sensor_supported(flags, 2U))
+            (void)obd2_add_signal(decoded, "aftertreatment status 3", (double)((data[1] >> 2U) & UINT8_C(0x01)), "state");
+        if (obd2_sensor_supported(flags, 3U))
+            (void)obd2_add_signal(decoded, "aftertreatment status 4", (double)((data[1] >> 3U) & UINT8_C(0x01)), "state");
+        if (obd2_sensor_supported(flags, 4U))
+            (void)obd2_add_signal(decoded, "regeneration trigger", (double)data[2] * 100.0 / 255.0, "%");
+        if (obd2_sensor_supported(flags, 5U))
+            (void)obd2_add_signal(decoded, "average regeneration time", (double)obd2_u16(data + 3U), "min");
+        if (obd2_sensor_supported(flags, 6U))
+            (void)obd2_add_signal(decoded, "average regeneration distance", (double)obd2_u16(data + 5U), "km");
+        break;
+    }
+    case LINK_OBD2_FORMULA_WIDE_O2_EIGHT: {
+        const uint8_t flags = data[0];
+        static const char *concentration_labels[4] = {
+            "O2 concentration B1S1", "O2 concentration B1S2",
+            "O2 concentration B2S1", "O2 concentration B2S2"
+        };
+        static const char *lambda_labels[4] = {
+            "lambda B1S1", "lambda B1S2", "lambda B2S1", "lambda B2S2"
+        };
+        unsigned int index;
+        for (index = 0U; index < 4U; ++index) {
+            if (obd2_sensor_supported(flags, index))
+                (void)obd2_add_signal(decoded, concentration_labels[index],
+                    (double)obd2_u16(data + 1U + index * 2U) * 0.001526, "%");
+        }
+        for (index = 0U; index < 4U; ++index) {
+            if (obd2_sensor_supported(flags, index + 4U))
+                (void)obd2_add_signal(decoded, lambda_labels[index],
+                    (double)obd2_u16(data + 9U + index * 2U) * 0.000122, "ratio");
+        }
+        break;
+    }
+    case LINK_OBD2_FORMULA_PM_OUTPUT_TWO: {
+        const uint8_t flags = data[0];
+        if (obd2_sensor_supported(flags, 0U))
+            (void)obd2_add_signal(decoded, "PM bank 1 status", (double)(data[1] & UINT8_C(0x03)), "state");
+        if (obd2_sensor_supported(flags, 1U))
+            (void)obd2_add_signal(decoded, "PM bank 1 output", (double)obd2_u16(data + 2U) / 100.0, "%");
+        if (obd2_sensor_supported(flags, 2U))
+            (void)obd2_add_signal(decoded, "PM bank 2 status", (double)(data[4] & UINT8_C(0x03)), "state");
+        if (obd2_sensor_supported(flags, 3U))
+            (void)obd2_add_signal(decoded, "PM bank 2 output", (double)obd2_u16(data + 5U) / 100.0, "%");
+        break;
+    }
+    case LINK_OBD2_FORMULA_EGT_WIDE_FOUR: {
+        const uint8_t flags = data[0];
+        static const char *labels[4] = {
+            "EGT sensor 1", "EGT sensor 2", "EGT sensor 3", "EGT sensor 4"
+        };
+        unsigned int index;
+        for (index = 0U; index < 4U; ++index) {
+            if (obd2_sensor_supported(flags, index))
+                (void)obd2_add_signal(decoded, labels[index],
+                    (double)obd2_u16(data + 1U + index * 2U) / 10.0 - 40.0, "°C");
+        }
         break;
     }
     case LINK_OBD2_FORMULA_HEV_SYSTEM: {
