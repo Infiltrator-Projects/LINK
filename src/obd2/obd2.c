@@ -368,128 +368,62 @@ next_line:
     return LINK_OBD2_RESULT_UNEXPECTED_RESPONSE;
 }
 
-static LinkObd2Result obd2_decode_sample_data(
-    uint8_t pid, const uint8_t *data, size_t length, LinkObd2Sample *sample)
+static bool obd2_unit_from_catalogue(
+    const char *unit,
+    LinkObd2Unit *decoded_unit)
 {
-    LinkObd2Sample decoded = { .pid = pid, .value = 0.0, .unit = LINK_OBD2_UNIT_NONE };
+    if (unit == NULL || decoded_unit == NULL) return false;
+    if (strcmp(unit, "%") == 0) *decoded_unit = LINK_OBD2_UNIT_PERCENT;
+    else if (strcmp(unit, "°C") == 0) *decoded_unit = LINK_OBD2_UNIT_CELSIUS;
+    else if (strcmp(unit, "kPa") == 0) *decoded_unit = LINK_OBD2_UNIT_KPA;
+    else if (strcmp(unit, "rpm") == 0) *decoded_unit = LINK_OBD2_UNIT_RPM;
+    else if (strcmp(unit, "km/h") == 0) *decoded_unit = LINK_OBD2_UNIT_KMH;
+    else if (strcmp(unit, "g/s") == 0)
+        *decoded_unit = LINK_OBD2_UNIT_GRAMS_PER_SECOND;
+    else if (strcmp(unit, "V") == 0) *decoded_unit = LINK_OBD2_UNIT_VOLTS;
+    else if (strcmp(unit, "L/h") == 0)
+        *decoded_unit = LINK_OBD2_UNIT_LITRES_PER_HOUR;
+    else if (strcmp(unit, "s") == 0) *decoded_unit = LINK_OBD2_UNIT_SECONDS;
+    else if (strcmp(unit, "min") == 0) *decoded_unit = LINK_OBD2_UNIT_MINUTES;
+    else if (strcmp(unit, "km") == 0)
+        *decoded_unit = LINK_OBD2_UNIT_KILOMETRES;
+    else if (strcmp(unit, "count") == 0) *decoded_unit = LINK_OBD2_UNIT_COUNT;
+    else if (strcmp(unit, "ratio") == 0) *decoded_unit = LINK_OBD2_UNIT_RATIO;
+    else return false;
+    return true;
+}
 
-    if (data == NULL || sample == NULL) return LINK_OBD2_RESULT_INVALID_ARGUMENT;
-    switch (pid) {
-    case 0x04U:
-        if (length < 1U) return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
-        decoded.value = (double)data[0] * 100.0 / 255.0; decoded.unit = LINK_OBD2_UNIT_PERCENT; break;
-    case 0x05U:
-        if (length < 1U) return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
-        decoded.value = (double)data[0] - 40.0; decoded.unit = LINK_OBD2_UNIT_CELSIUS; break;
-    case 0x0bU:
-        if (length < 1U) return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
-        decoded.value = (double)data[0]; decoded.unit = LINK_OBD2_UNIT_KPA; break;
-    case 0x0cU:
-        if (length < 2U) return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
-        decoded.value = (double)(((unsigned int)data[0] << 8U) | data[1]) / 4.0;
-        decoded.unit = LINK_OBD2_UNIT_RPM; break;
-    case 0x0dU:
-        if (length < 1U) return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
-        decoded.value = (double)data[0]; decoded.unit = LINK_OBD2_UNIT_KMH; break;
-    case 0x0fU:
-        if (length < 1U) return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
-        decoded.value = (double)data[0] - 40.0; decoded.unit = LINK_OBD2_UNIT_CELSIUS; break;
-    case 0x10U:
-        if (length < 2U) return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
-        decoded.value = (double)(((unsigned int)data[0] << 8U) | data[1]) / 100.0;
-        decoded.unit = LINK_OBD2_UNIT_GRAMS_PER_SECOND; break;
-    case 0x1fU:
-        if (length < 2U) return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
-        decoded.value = (double)(((unsigned int)data[0] << 8U) | data[1]);
-        decoded.unit = LINK_OBD2_UNIT_SECONDS; break;
-    case 0x21U:
-        if (length < 2U) return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
-        decoded.value = (double)(((unsigned int)data[0] << 8U) | data[1]);
-        decoded.unit = LINK_OBD2_UNIT_KILOMETRES; break;
-    case 0x24U:
-        if (length < 4U) return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
-        decoded.value =
-            (double)(((unsigned int)data[0] << 8U) | data[1]) / 32768.0;
-        decoded.unit = LINK_OBD2_UNIT_RATIO; break;
-    case 0x11U:
-    case 0x45U:
-    case 0x47U:
-    case 0x48U:
-    case 0x49U:
-    case 0x4aU:
-    case 0x4bU:
-    case 0x4cU:
-        if (length < 1U) return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
-        decoded.value = (double)data[0] * 100.0 / 255.0;
-        decoded.unit = LINK_OBD2_UNIT_PERCENT; break;
-    case 0x23U:
-        if (length < 2U) return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
-        decoded.value = (double)(((unsigned int)data[0] << 8U) | data[1]) * 10.0;
-        decoded.unit = LINK_OBD2_UNIT_KPA; break;
-    case 0x2cU:
-        if (length < 1U) return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
-        decoded.value = (double)data[0] * 100.0 / 255.0; decoded.unit = LINK_OBD2_UNIT_PERCENT; break;
-    case 0x2fU:
-        if (length < 1U) return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
-        decoded.value = (double)data[0] * 100.0 / 255.0; decoded.unit = LINK_OBD2_UNIT_PERCENT; break;
-    case 0x30U:
-        if (length < 1U) return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
-        decoded.value = (double)data[0]; decoded.unit = LINK_OBD2_UNIT_COUNT; break;
-    case 0x31U:
-        if (length < 2U) return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
-        decoded.value = (double)(((unsigned int)data[0] << 8U) | data[1]);
-        decoded.unit = LINK_OBD2_UNIT_KILOMETRES; break;
-    case 0x2dU:
-        if (length < 1U) return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
-        decoded.value = ((double)(int)data[0] - 128.0) * 100.0 / 128.0;
-        decoded.unit = LINK_OBD2_UNIT_PERCENT; break;
-    case 0x33U:
-        if (length < 1U) return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
-        decoded.value = (double)data[0]; decoded.unit = LINK_OBD2_UNIT_KPA; break;
-    case 0x3cU:
-    case 0x3eU:
-        if (length < 2U) return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
-        decoded.value = (double)(((unsigned int)data[0] << 8U) | data[1]) / 10.0 - 40.0;
-        decoded.unit = LINK_OBD2_UNIT_CELSIUS; break;
-    case 0x42U:
-        if (length < 2U) return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
-        decoded.value = (double)(((unsigned int)data[0] << 8U) | data[1]) / 1000.0;
-        decoded.unit = LINK_OBD2_UNIT_VOLTS; break;
-    case 0x46U:
-    case 0x5cU:
-        if (length < 1U) return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
-        decoded.value = (double)data[0] - 40.0; decoded.unit = LINK_OBD2_UNIT_CELSIUS; break;
-    case 0x4dU:
-        if (length < 2U) return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
-        decoded.value = (double)(((unsigned int)data[0] << 8U) | data[1]);
-        decoded.unit = LINK_OBD2_UNIT_MINUTES; break;
-    case 0x5eU:
-        if (length < 2U) return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
-        decoded.value = (double)(((unsigned int)data[0] << 8U) | data[1]) / 20.0;
-        decoded.unit = LINK_OBD2_UNIT_LITRES_PER_HOUR; break;
-    case 0x78U:
-        if (length < 3U) return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
-        if ((data[0] & 0x01U) == 0U) return LINK_OBD2_RESULT_UNSUPPORTED_PID;
-        decoded.value = (double)(((unsigned int)data[1] << 8U) | data[2]) / 10.0 - 40.0;
-        decoded.unit = LINK_OBD2_UNIT_CELSIUS; break;
-    case 0x7aU:
-        if (length < 3U) return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
-        if ((data[0] & 0x01U) == 0U) return LINK_OBD2_RESULT_UNSUPPORTED_PID;
-        {
-            uint16_t raw = (uint16_t)(((uint16_t)data[1] << 8U) | data[2]);
-            int32_t signed_raw = raw >= 0x8000U ? (int32_t)raw - 0x10000 : (int32_t)raw;
-            decoded.value = (double)signed_raw / 100.0;
-        }
-        decoded.unit = LINK_OBD2_UNIT_KPA; break;
-    case 0x7cU:
-        if (length < 3U) return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
-        if ((data[0] & 0x01U) == 0U) return LINK_OBD2_RESULT_UNSUPPORTED_PID;
-        decoded.value = (double)(((unsigned int)data[1] << 8U) | data[2]) / 10.0 - 40.0;
-        decoded.unit = LINK_OBD2_UNIT_CELSIUS; break;
-    default:
+static LinkObd2Result obd2_decode_sample_data(
+    uint8_t pid,
+    const uint8_t *data,
+    size_t length,
+    LinkObd2Sample *sample)
+{
+    LinkObd2DecodedPid decoded;
+    LinkObd2Unit unit;
+    LinkObd2Result result;
+
+    if (data == NULL || sample == NULL)
+        return LINK_OBD2_RESULT_INVALID_ARGUMENT;
+
+    result = link_obd2_decode_pid_payload(
+        UINT8_C(0x01), pid, data, length, &decoded);
+    if (result != LINK_OBD2_RESULT_OK) return result;
+
+    /*
+     * The legacy LinkObd2Sample ABI intentionally remains one scalar per PID.
+     * For structured standard PIDs the complete decoder above retains every
+     * field; the legacy view exposes the first deterministic scalar so old
+     * products keep working while new products can use LinkObd2DecodedPid.
+     */
+    if (decoded.signal_count == 0U ||
+        !obd2_unit_from_catalogue(decoded.signals[0].unit, &unit)) {
         return LINK_OBD2_RESULT_UNSUPPORTED_PID;
     }
-    *sample = decoded;
+
+    sample->pid = pid;
+    sample->value = decoded.signals[0].value;
+    sample->unit = unit;
     return LINK_OBD2_RESULT_OK;
 }
 
