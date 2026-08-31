@@ -548,6 +548,24 @@ const char *link_obd2_pid_name(uint8_t pid)
     return definition != NULL ? definition->name : "Unknown PID";
 }
 
+LinkObd2Result link_obd2_build_standard_read_request(
+    uint8_t mode,
+    uint8_t identifier,
+    char *buffer,
+    size_t buffer_size)
+{
+    const LinkObd2ServiceDefinition *service =
+        link_obd2_service_definition(mode);
+    const uint8_t bytes[] = { mode, identifier };
+
+    if (service == NULL || !service->read_only || !service->parameterized ||
+        mode == UINT8_C(0x02)) {
+        if (buffer != NULL && buffer_size != 0U) buffer[0] = '\0';
+        return LINK_OBD2_RESULT_NOT_AUTHORIZED;
+    }
+    return obd2_write_command(bytes, sizeof(bytes), buffer, buffer_size);
+}
+
 LinkObd2Result link_obd2_build_live_pid_request(
     uint8_t pid, char *buffer, size_t buffer_size)
 {
@@ -628,6 +646,36 @@ static void obd2_apply_supported_mask(
             }
         }
     }
+}
+
+LinkObd2Result link_obd2_decode_support_bitmap_payload(
+    uint8_t base_identifier,
+    const uint8_t *data,
+    size_t data_length,
+    LinkObd2PidSet *set,
+    bool *has_more)
+{
+    LinkObd2PidSet updated;
+    uint32_t mask;
+
+    if (data == NULL || set == NULL || has_more == NULL ||
+        (base_identifier & UINT8_C(0x1f)) != 0U ||
+        base_identifier > UINT8_C(0xe0) ||
+        data_length < 4U) {
+        return LINK_OBD2_RESULT_INVALID_ARGUMENT;
+    }
+
+    updated = *set;
+    mask = ((uint32_t)data[0] << 24U) |
+           ((uint32_t)data[1] << 16U) |
+           ((uint32_t)data[2] << 8U) |
+           (uint32_t)data[3];
+    obd2_apply_supported_mask(&updated, base_identifier, mask);
+    *set = updated;
+    *has_more = base_identifier <= UINT8_C(0xc0) &&
+        link_obd2_pid_set_contains(
+            &updated, (uint8_t)(base_identifier + UINT8_C(0x20)));
+    return LINK_OBD2_RESULT_OK;
 }
 
 static LinkObd2ResponderPidSet *obd2_find_or_add_responder_pid_set(
