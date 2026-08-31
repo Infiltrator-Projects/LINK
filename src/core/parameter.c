@@ -69,8 +69,11 @@ static const LinkObd2ParameterEntry link_obd2_parameters[] = {
     { { OBD_KEY(0x84U), "obd2.pid.84", "PID 84", "Manifold surface temperature", " °C", 1U, false, -40, 215 }, LINK_OBD2_UNIT_CELSIUS },
     { { OBD_KEY(0x8dU), "obd2.pid.8d", "PID 8D", "Throttle position G", "%", 1U, true, 0, 100 }, LINK_OBD2_UNIT_PERCENT },
     { { OBD_KEY(0x8eU), "obd2.pid.8e", "PID 8E", "Engine friction percent torque", "%", 1U, false, -125, 130 }, LINK_OBD2_UNIT_PERCENT },
-    { { OBD_KEY(0x9eU), "obd2.pid.9e", "PID 9E", "Engine exhaust flow rate", " g/s", 2U, false, 0, 13107 }, LINK_OBD2_UNIT_GRAMS_PER_SECOND },
+    { { OBD_KEY(0x9eU), "obd2.pid.9e", "PID 9E", "Engine exhaust flow rate", " kg/h", 1U, false, 0, 13107 }, LINK_OBD2_UNIT_KILOGRAMS_PER_HOUR },
     { { OBD_KEY(0xa6U), "obd2.pid.a6", "PID A6", "Odometer", " km", 1U, false, 0, 429496729.5 }, LINK_OBD2_UNIT_KILOMETRES },
+    { { OBD_KEY(0xaaU), "obd2.vehicle.max_speed_limit", "SPEED LIM", "Maximum current vehicle speed limit", " km/h", 0U, false, 0, 255 }, LINK_OBD2_UNIT_KMH },
+    { { OBD_KEY(0xb2U), "obd2.battery.traction_soh", "BATT SOH", "Traction battery pack state of health", "%", 1U, true, 0, 100 }, LINK_OBD2_UNIT_PERCENT },
+    { { OBD_KEY(0xd3U), "obd2.engine.odometer", "ENG ODO", "Engine odometer", " km", 1U, false, 0, 429496729.5 }, LINK_OBD2_UNIT_KILOMETRES },
     { { OBD_KEY(0xc7U), "obd2.pid.c7", "PID C7", "Distance since reflash or module replacement", " km", 0U, false, 0, 65535 }, LINK_OBD2_UNIT_KILOMETRES },
 };
 
