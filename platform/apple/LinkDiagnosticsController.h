@@ -74,6 +74,13 @@ NS_ASSUME_NONNULL_BEGIN
                                     context:(void * _Nullable)context;
 - (void)disconnect;
 
+/**
+ * Pause an idle live OBD scheduler and enter a product-owned manufacturer
+ * extension.  No manufacturer command is sent by this call; the product can
+ * then issue one or more beginManufacturerCommand:timeout: operations and
+ * finish with completeManufacturerExtensionRestoringAdapter:.
+ */
+- (BOOL)beginLiveManufacturerExtension;
 - (BOOL)beginManufacturerCommand:(const char *)command
                          timeout:(uint64_t)timeoutMs;
 - (BOOL)completeManufacturerExtensionRestoringAdapter:(BOOL)restore;
