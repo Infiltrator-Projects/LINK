@@ -45,7 +45,8 @@ Use `Src-main.c` from this directory as the application-side replacement for the
 Add these LINK implementation files to the target:
 
 - `src/core/isotp.c`
-- `src/core/uds.c`
+- `src/uds/uds.c`
+- `src/uds/uds_services.c`
 - `platform/stm32/link-stm32-can.c`
 - `platform/stm32/link-stm32-uds.c`
 - `examples/stm32c092/link-stm32c092-hal.c`
