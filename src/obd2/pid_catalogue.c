@@ -225,6 +225,23 @@ const char *link_obd2_pid_catalogue_snapshot(void)
     return LINK_OBD2_CATALOGUE_SNAPSHOT "+link-standard-supplement-v2+link-corrections-v1";
 }
 
+size_t link_obd2_mode01_identifier_count(void) { return 256U; }
+size_t link_obd2_mode01_assigned_count(void)
+{
+    size_t i, count = 0U;
+    for (i = 0U; i < link_obd2_pid_definition_count(); ++i) {
+        const LinkObd2PidDefinition *d = link_obd2_pid_definition_at(i);
+        if (d != NULL && d->mode == UINT8_C(0x01)) ++count;
+    }
+    return count;
+}
+LinkObd2IdentifierStatus link_obd2_mode01_identifier_status(uint8_t pid)
+{
+    return link_obd2_pid_definition(UINT8_C(0x01), pid) != NULL
+        ? LINK_OBD2_IDENTIFIER_ASSIGNED : LINK_OBD2_IDENTIFIER_RESERVED;
+}
+const char *link_obd2_j1979_audit_revision(void) { return "J1979DA_202608"; }
+
 static const LinkObd2CatalogueEntry *obd2_catalogue_entry(
     uint8_t mode,
     uint8_t pid)

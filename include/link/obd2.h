@@ -122,6 +122,12 @@ typedef struct {
     bool parameterized;
 } LinkObd2ServiceDefinition;
 
+/** Classification of one byte-wide classic SAE J1979 Mode 01 identifier. */
+typedef enum {
+    LINK_OBD2_IDENTIFIER_RESERVED = 0,
+    LINK_OBD2_IDENTIFIER_ASSIGNED
+} LinkObd2IdentifierStatus;
+
 #define LINK_OBD2_MAX_RESPONDER_SAMPLES 8U
 #define LINK_OBD2_MAX_RESPONDER_PID_SETS 8U
 
@@ -229,6 +235,10 @@ size_t link_obd2_pid_definition_count(void);
 const LinkObd2PidDefinition *link_obd2_pid_definition_at(size_t index);
 const LinkObd2PidDefinition *link_obd2_pid_definition(uint8_t mode, uint8_t pid);
 const char *link_obd2_pid_catalogue_snapshot(void);
+size_t link_obd2_mode01_identifier_count(void);
+size_t link_obd2_mode01_assigned_count(void);
+LinkObd2IdentifierStatus link_obd2_mode01_identifier_status(uint8_t pid);
+const char *link_obd2_j1979_audit_revision(void);
 
 /**
  * Decode a PID payload without assuming that one PID equals one double.

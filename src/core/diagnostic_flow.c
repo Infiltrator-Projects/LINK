@@ -631,25 +631,31 @@ static LinkDiagnosticFlowResult flow_accept_live_sample(
 {
     LinkObd2Result result;
     LinkObd2ResponderSampleList responders;
-
+    LinkObd2ResponderDecodedPidList decoded_responders;
     flow->stage = LINK_DIAGNOSTIC_FLOW_LIVE;
     if (response->result == LINK_ELM327_RESULT_NO_DATA) {
         event->kind = LINK_DIAGNOSTIC_FLOW_EVENT_LIVE_NO_DATA;
         event->sample.pid = flow->active_pid;
         return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
     }
-
-    result = link_obd2_decode_live_pid_responders(
-        response, flow->active_pid, &responders);
+    result = link_obd2_decode_live_pid_payload_responders(
+        response, flow->active_pid, &decoded_responders);
     if (result == LINK_OBD2_RESULT_UNSUPPORTED_PID) {
         event->kind = LINK_DIAGNOSTIC_FLOW_EVENT_LIVE_UNSUPPORTED;
         event->sample.pid = flow->active_pid;
         return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
     }
-    if (result != LINK_OBD2_RESULT_OK) {
-        return flow_fail_obd2(flow, result);
+    if (result != LINK_OBD2_RESULT_OK || decoded_responders.count == 0U)
+        return flow_fail_obd2(flow, result != LINK_OBD2_RESULT_OK ? result : LINK_OBD2_RESULT_UNEXPECTED_RESPONSE);
+    event->responder_decoded = decoded_responders;
+    event->decoded = decoded_responders.entries[0].decoded;
+    event->sample.pid = flow->active_pid;
+    result = link_obd2_decode_live_pid_responders(response, flow->active_pid, &responders);
+    if (result == LINK_OBD2_RESULT_UNSUPPORTED_PID) {
+        event->kind = LINK_DIAGNOSTIC_FLOW_EVENT_LIVE_STRUCTURED;
+        return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
     }
-
+    if (result != LINK_OBD2_RESULT_OK) return flow_fail_obd2(flow, result);
     event->kind = LINK_DIAGNOSTIC_FLOW_EVENT_LIVE_SAMPLE;
     event->responder_samples = responders;
     event->sample = responders.samples[0].sample;

@@ -78,6 +78,7 @@ typedef enum {
     LINK_DIAGNOSTIC_FLOW_EVENT_FREEZE_FRAME_SAMPLE,
     LINK_DIAGNOSTIC_FLOW_EVENT_DIAGNOSTIC_CONTEXT_COMPLETE,
     LINK_DIAGNOSTIC_FLOW_EVENT_LIVE_SAMPLE,
+    LINK_DIAGNOSTIC_FLOW_EVENT_LIVE_STRUCTURED,
     LINK_DIAGNOSTIC_FLOW_EVENT_LIVE_NO_DATA,
     LINK_DIAGNOSTIC_FLOW_EVENT_LIVE_UNSUPPORTED
 } LinkDiagnosticFlowEventKind;
@@ -122,6 +123,8 @@ typedef struct {
     bool vin_available;
     LinkObd2Sample sample;
     LinkObd2ResponderSampleList responder_samples;
+    LinkObd2DecodedPid decoded;
+    LinkObd2ResponderDecodedPidList responder_decoded;
     bool became_ready;
     bool dtc_response_available;
     bool dtc_negative_response;

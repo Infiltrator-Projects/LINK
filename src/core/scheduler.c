@@ -130,29 +130,21 @@ LinkSchedulerResult link_scheduler_configure_standard_obd2_bits(LinkScheduler *s
 
     /*
      * The priority plan above is only a cadence override, never the standards
-     * catalogue. Every scalar Mode 01 definition that the vehicle advertises
-     * must be schedulable even if it was added after this file was written.
+     * catalogue. Every assigned Mode 01 definition that the vehicle advertises
+     * must be schedulable, including structured/raw definitions added later.
      * Polling preferences are applied by the platform controller afterwards,
      * so adding the item does not create unwanted bus traffic.
      */
-    for (index = 0U;
-         index < link_parameter_obd2_definition_count();
-         ++index) {
-        const LinkParameterDefinition *definition =
-            link_parameter_obd2_definition_at(index);
+    for (index = 0U; index < link_obd2_pid_definition_count(); ++index) {
+        const LinkObd2PidDefinition *definition = link_obd2_pid_definition_at(index);
         LinkSchedulerResult result;
         uint8_t pid;
-
-        if (definition == NULL ||
-            definition->key.identifier > UINT8_MAX) {
-            continue;
-        }
-        pid = (uint8_t)definition->key.identifier;
+        if (definition == NULL || definition->mode != UINT8_C(0x01)) continue;
+        pid = definition->pid;
+        if ((pid & UINT8_C(0x1f)) == 0U) continue;
         if (!bitset_contains(supported_bits, pid)) continue;
-
-        result = link_scheduler_add(
-            scheduler, pid, 3000U,
-            LINK_SCHEDULER_PRIORITY_LOW, first_due_ms);
+        result = link_scheduler_add(scheduler, pid, 3000U,
+                                    LINK_SCHEDULER_PRIORITY_LOW, first_due_ms);
         if (result == LINK_SCHEDULER_RESULT_DUPLICATE) continue;
         if (result != LINK_SCHEDULER_RESULT_OK) {
             link_scheduler_init(scheduler);

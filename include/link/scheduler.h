@@ -12,7 +12,7 @@
 extern "C" {
 #endif
 
-#define LINK_SCHEDULER_MAX_ITEMS 64U
+#define LINK_SCHEDULER_MAX_ITEMS 256U
 #define LINK_OBD2_PID_SET_BYTES 32U
 
 typedef enum {
