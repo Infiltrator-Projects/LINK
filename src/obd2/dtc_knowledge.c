@@ -29,20 +29,44 @@ static LinkDtcSystem system_from_code(char value)
     }
 }
 
-static LinkDtcOrigin origin_from_code(const char code[LINK_DTC_CODE_LENGTH])
+typedef enum {
+    LINK_DTC_RANGE_INVALID = 0,
+    LINK_DTC_RANGE_STANDARD_CONTROLLED,
+    LINK_DTC_RANGE_MANUFACTURER,
+    LINK_DTC_RANGE_DOCUMENT_RESERVED
+} LinkDtcRangeKind;
+
+static LinkDtcRangeKind range_kind_from_code(
+    const char code[LINK_DTC_CODE_LENGTH])
 {
-    if (code[0] == 'P') {
-        if (code[1] == '0' || code[1] == '2') return LINK_DTC_ORIGIN_STANDARD_GENERIC;
-        if (code[1] == '1') return LINK_DTC_ORIGIN_MANUFACTURER_SPECIFIC;
+    switch (code[0]) {
+    case 'B':
+    case 'C':
+        if (code[1] == '0') return LINK_DTC_RANGE_STANDARD_CONTROLLED;
+        if (code[1] == '1' || code[1] == '2')
+            return LINK_DTC_RANGE_MANUFACTURER;
+        if (code[1] == '3') return LINK_DTC_RANGE_DOCUMENT_RESERVED;
+        break;
+    case 'P':
+        if (code[1] == '0' || code[1] == '2')
+            return LINK_DTC_RANGE_STANDARD_CONTROLLED;
+        if (code[1] == '1') return LINK_DTC_RANGE_MANUFACTURER;
         if (code[1] == '3') {
-            return code[2] >= '4' ? LINK_DTC_ORIGIN_STANDARD_GENERIC
-                                  : LINK_DTC_ORIGIN_MANUFACTURER_SPECIFIC;
+            return code[2] >= '4'
+                ? LINK_DTC_RANGE_STANDARD_CONTROLLED
+                : LINK_DTC_RANGE_MANUFACTURER;
         }
-    } else {
-        if (code[1] == '0' || code[1] == '3') return LINK_DTC_ORIGIN_STANDARD_GENERIC;
-        if (code[1] == '1' || code[1] == '2') return LINK_DTC_ORIGIN_MANUFACTURER_SPECIFIC;
+        break;
+    case 'U':
+        if (code[1] == '0' || code[1] == '3')
+            return LINK_DTC_RANGE_STANDARD_CONTROLLED;
+        if (code[1] == '1' || code[1] == '2')
+            return LINK_DTC_RANGE_MANUFACTURER;
+        break;
+    default:
+        break;
     }
-    return LINK_DTC_ORIGIN_UNKNOWN;
+    return LINK_DTC_RANGE_INVALID;
 }
 
 static void copy_text(char *destination, size_t size, const char *source)
@@ -87,19 +111,34 @@ bool link_dtc_resolve(const char *code, LinkDtcKnowledge *knowledge)
     }
 
     resolved.system = system_from_code(resolved.code[0]);
-    resolved.origin = origin_from_code(resolved.code);
     resolved.source = LINK_DTC_SOURCE_UNKNOWN;
 
-    /* Never let the shared catalogue assign a generic meaning to a
-       manufacturer-specific range. Product faces own those definitions. */
-    if (resolved.origin != LINK_DTC_ORIGIN_STANDARD_GENERIC) {
+    /*
+     * Range ownership is distinct from catalogue membership. B3/C3 are
+     * document-reserved. A syntactically valid number inside an SAE/ISO-
+     * controlled range is not called a generic definition unless the pinned
+     * open catalogue actually contains it.
+     */
+    switch (range_kind_from_code(resolved.code)) {
+    case LINK_DTC_RANGE_MANUFACTURER:
+        resolved.origin = LINK_DTC_ORIGIN_MANUFACTURER_SPECIFIC;
         *knowledge = resolved;
         return true;
+    case LINK_DTC_RANGE_DOCUMENT_RESERVED:
+        resolved.origin = LINK_DTC_ORIGIN_DOCUMENT_RESERVED;
+        *knowledge = resolved;
+        return true;
+    case LINK_DTC_RANGE_STANDARD_CONTROLLED:
+        resolved.origin = LINK_DTC_ORIGIN_STANDARD_CONTROLLED;
+        break;
+    case LINK_DTC_RANGE_INVALID:
+        return false;
     }
 
     entry = catalogue_find(resolved.code);
     if (entry != NULL) {
         resolved.definition_known = true;
+        resolved.origin = LINK_DTC_ORIGIN_STANDARD_GENERIC;
         resolved.source = LINK_DTC_SOURCE_STANDARD_GENERIC;
         copy_text(resolved.title, sizeof(resolved.title), entry->title);
         copy_text(resolved.category, sizeof(resolved.category), entry->category);
@@ -114,9 +153,41 @@ size_t link_dtc_catalogue_definition_count(void)
     return sizeof(link_dtc_catalogue) / sizeof(link_dtc_catalogue[0]);
 }
 
+bool link_dtc_catalogue_definition_at(
+    size_t index,
+    LinkDtcKnowledge *knowledge)
+{
+    LinkDtcKnowledge resolved = {0};
+    const LinkDtcCatalogueEntry *entry;
+    if (knowledge == NULL ||
+        index >= sizeof(link_dtc_catalogue) / sizeof(link_dtc_catalogue[0])) {
+        return false;
+    }
+    entry = &link_dtc_catalogue[index];
+    copy_text(resolved.code, sizeof(resolved.code), entry->code);
+    resolved.definition_known = true;
+    resolved.system = system_from_code(entry->code[0]);
+    resolved.origin = LINK_DTC_ORIGIN_STANDARD_GENERIC;
+    resolved.source = LINK_DTC_SOURCE_STANDARD_GENERIC;
+    copy_text(resolved.title, sizeof(resolved.title), entry->title);
+    copy_text(resolved.category, sizeof(resolved.category), entry->category);
+    *knowledge = resolved;
+    return true;
+}
+
 const char *link_dtc_catalogue_snapshot(void)
 {
     return LINK_DTC_CATALOGUE_SNAPSHOT;
+}
+
+const char *link_dtc_range_model_revision(void)
+{
+    return "J2012_202509";
+}
+
+const char *link_dtc_catalogue_audit_revision(void)
+{
+    return "J2012DA_202607";
 }
 
 const char *link_dtc_system_name(LinkDtcSystem system)
@@ -136,6 +207,8 @@ const char *link_dtc_origin_name(LinkDtcOrigin origin)
     switch (origin) {
     case LINK_DTC_ORIGIN_STANDARD_GENERIC: return "Standard generic";
     case LINK_DTC_ORIGIN_MANUFACTURER_SPECIFIC: return "Manufacturer-specific";
+    case LINK_DTC_ORIGIN_STANDARD_CONTROLLED: return "Standard-controlled, definition unavailable";
+    case LINK_DTC_ORIGIN_DOCUMENT_RESERVED: return "Reserved by standard";
     case LINK_DTC_ORIGIN_UNKNOWN: return "Unknown";
     }
     return "Unknown";
