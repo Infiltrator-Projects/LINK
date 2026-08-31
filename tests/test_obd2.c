@@ -84,6 +84,63 @@ int main(void)
     LinkElm327Response response;
     uint8_t negative_response_code = 0U;
 
+    check(link_obd2_service_definition_count() == 10U,
+          "standard service catalogue contains modes 01 through 0A");
+    check(link_obd2_service_definition(0x01U) != NULL &&
+              link_obd2_service_definition(0x01U)->read_only,
+          "Mode 01 is catalogued read-only");
+    check(link_obd2_service_definition(0x04U) != NULL &&
+              !link_obd2_service_definition(0x04U)->read_only,
+          "Mode 04 clear operation is not misclassified read-only");
+    check(link_obd2_service_definition(0x08U) != NULL &&
+              !link_obd2_service_definition(0x08U)->read_only,
+          "Mode 08 control operation is not misclassified read-only");
+
+    check(link_obd2_pid_definition_count() == 132U,
+          "pinned OBDex catalogue contains 132 standard Mode 01/09 definitions");
+    check(strcmp(link_obd2_pid_catalogue_snapshot(),
+                 "bc58b0eb7273226a1aabae98e956b70b8362bda1") == 0,
+          "PID catalogue snapshot provenance");
+    {
+        const LinkObd2PidDefinition *odometer =
+            link_obd2_pid_definition(0x01U, 0xa6U);
+        LinkObd2DecodedPid decoded;
+        static const uint8_t odometer_payload[] = {0x00U, 0x01U, 0x86U, 0xa0U};
+        static const uint8_t o2_payload[] = {0x40U, 0x00U, 0x20U, 0x00U};
+        static const uint8_t vin_payload[] = {
+            'S','A','J','A','D','5','6','L','6','4','W','D','7','8','4','3','5'
+        };
+        static const uint8_t fuel_status[] = {0x02U, 0x00U};
+
+        check(odometer != NULL && odometer->bytes == 4U &&
+                  strcmp(odometer->name, "Odometer") == 0,
+              "catalogue exposes modern standard odometer PID");
+        check(link_obd2_decode_pid_payload(
+                  0x01U, 0xa6U, odometer_payload,
+                  sizeof(odometer_payload), &decoded) == LINK_OBD2_RESULT_OK &&
+                  decoded.signal_count == 1U &&
+                  decoded.signals[0].value == 10000.0,
+              "decode catalogue-backed 32-bit odometer");
+        check(link_obd2_decode_pid_payload(
+                  0x01U, 0x24U, o2_payload,
+                  sizeof(o2_payload), &decoded) == LINK_OBD2_RESULT_OK &&
+                  decoded.signal_count == 2U &&
+                  decoded.signals[0].value == 0.5 &&
+                  decoded.signals[1].value == 1.0,
+              "preserve both values from structured oxygen-sensor PID");
+        check(link_obd2_decode_pid_payload(
+                  0x09U, 0x02U, vin_payload,
+                  sizeof(vin_payload), &decoded) == LINK_OBD2_RESULT_OK &&
+                  decoded.text_available &&
+                  strcmp(decoded.text, "SAJAD56L64WD78435") == 0,
+              "decode catalogue-backed Mode 09 ASCII value");
+        check(link_obd2_decode_pid_payload(
+                  0x01U, 0x03U, fuel_status,
+                  sizeof(fuel_status), &decoded) == LINK_OBD2_RESULT_OK &&
+                  decoded.raw_length == 2U && decoded.signal_count == 0U,
+              "preserve encoded standard PID without inventing one scalar");
+    }
+
     check(link_obd2_build_live_pid_request(0x0cU, command, sizeof(command)) ==
               LINK_OBD2_RESULT_OK && strcmp(command, "010C") == 0,
           "build RPM request");
@@ -264,6 +321,19 @@ int main(void)
               LINK_OBD2_RESULT_OK && sample.unit == LINK_OBD2_UNIT_PERCENT &&
               sample.value > 50.19 && sample.value < 50.20,
           "decode SAE fuel tank level input");
+
+    response = parse_response("0106", "410680\r>");
+    check(link_obd2_decode_live_pid(&response, 0x06U, &sample) ==
+              LINK_OBD2_RESULT_OK && sample.unit == LINK_OBD2_UNIT_PERCENT &&
+              sample.value == 0.0,
+          "decode newly catalogued short-term fuel trim");
+
+    response = parse_response("01A6", "41A6000186A0\r>");
+    check(link_obd2_decode_live_pid(&response, 0xa6U, &sample) ==
+              LINK_OBD2_RESULT_OK &&
+              sample.unit == LINK_OBD2_UNIT_KILOMETRES &&
+              sample.value == 10000.0,
+          "decode modern standard odometer through legacy scalar ABI");
 
     check(strcmp(link_obd2_pid_name(0x11U),
                  "Absolute throttle valve position") == 0,
