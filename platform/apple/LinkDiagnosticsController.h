@@ -98,6 +98,10 @@ NS_ASSUME_NONNULL_BEGIN
 - (NSArray<NSNumber *> *)observedPIDsForResponderCANIdentifier:
     (uint32_t)responderCANIdentifier
                                                       extendedID:(BOOL)extendedID;
+/** Capability-advertised Mode 01 PIDs for one exact CAN responder. */
+- (NSArray<NSNumber *> *)supportedPIDsForResponderCANIdentifier:
+    (uint32_t)responderCANIdentifier
+                                                       extendedID:(BOOL)extendedID;
 - (BOOL)favouriteForPID:(uint8_t)pid;
 - (void)setFavourite:(BOOL)favourite forPID:(uint8_t)pid;
 
