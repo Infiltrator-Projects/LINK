@@ -42,7 +42,9 @@ typedef enum {
 typedef enum {
     LINK_DIAGNOSTIC_FLOW_IDLE = 0,
     LINK_DIAGNOSTIC_FLOW_INITIALIZING,
+    LINK_DIAGNOSTIC_FLOW_CONFIGURING_PID_DISCOVERY_HEADERS,
     LINK_DIAGNOSTIC_FLOW_DISCOVERING_PIDS,
+    LINK_DIAGNOSTIC_FLOW_RESTORING_PID_DISCOVERY_HEADERS,
     LINK_DIAGNOSTIC_FLOW_READING_STANDARD_VIN,
     LINK_DIAGNOSTIC_FLOW_MANUFACTURER_EXTENSION,
     LINK_DIAGNOSTIC_FLOW_RESTORING_AFTER_MANUFACTURER,
@@ -84,6 +86,7 @@ typedef struct {
     bool manufacturer_extension_after_pid_discovery;
     bool manufacturer_extension_after_standard_dtcs;
     bool restore_adapter_after_manufacturer_extension;
+    bool preserve_pid_discovery_response_headers;
     bool preserve_live_response_headers;
     uint64_t init_timeout_ms;
     uint64_t query_timeout_ms;
@@ -95,6 +98,7 @@ typedef struct {
         .manufacturer_extension_after_pid_discovery = false, \
         .manufacturer_extension_after_standard_dtcs = false, \
         .restore_adapter_after_manufacturer_extension = false, \
+        .preserve_pid_discovery_response_headers = false, \
         .preserve_live_response_headers = false, \
         .init_timeout_ms = LINK_DIAGNOSTIC_FLOW_DEFAULT_INIT_TIMEOUT_MS, \
         .query_timeout_ms = LINK_DIAGNOSTIC_FLOW_DEFAULT_QUERY_TIMEOUT_MS, \
@@ -135,6 +139,7 @@ typedef struct {
     LinkSchedulerResult scheduler_failure;
     LinkElm327InitState initialization;
     LinkObd2PidSet supported_pids;
+    LinkObd2ResponderPidSetList supported_pid_responders;
     char standard_vin[LINK_OBD2_VIN_LENGTH + 1U];
     bool standard_vin_attempted;
     bool standard_vin_available;
@@ -221,6 +226,10 @@ void link_diagnostic_flow_fail(
 
 const LinkObd2PidSet *link_diagnostic_flow_supported_pids(
     const LinkDiagnosticFlow *flow);
+const LinkObd2PidSet *link_diagnostic_flow_supported_pids_for_responder(
+    const LinkDiagnosticFlow *flow,
+    uint32_t responder_id,
+    bool extended_id);
 const LinkObd2DtcList *link_diagnostic_flow_dtcs(
     const LinkDiagnosticFlow *flow,
     LinkObd2DtcKind kind);
