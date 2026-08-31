@@ -16,6 +16,17 @@ static void check(bool condition, const char *message)
     }
 }
 
+static size_t pid_count(const LinkObd2PidSet *set)
+{
+    size_t count = 0U;
+    unsigned int pid;
+    if (set == NULL) return 0U;
+    for (pid = 1U; pid <= 0xffU; ++pid) {
+        if (link_obd2_pid_set_contains(set, (uint8_t)pid)) count++;
+    }
+    return count;
+}
+
 static LinkElm327Response parse_response(const char *command, const char *wire)
 {
     LinkElm327Parser parser;
@@ -116,6 +127,58 @@ int main(void)
                   !responders.samples[0].responder_id_available &&
                   responders.samples[0].sample.value == 92.0,
               "retain one headerless OBD value without inventing a module");
+    }
+
+    {
+        LinkObd2PidSet unionSet = {{0}};
+        LinkObd2ResponderPidSetList responderSets = {0};
+        const LinkObd2PidSet *engineSet;
+        const LinkObd2PidSet *secondarySet;
+        bool hasMore = false;
+
+        response = parse_response(
+            "0100",
+            "7E8 06 41 00 98 3B A0 13\r"
+            "7E9 06 41 00 98 18 00 01\r>");
+        check(link_obd2_accept_supported_pid_responders(
+                  &response, 0x00U, &unionSet, &responderSets, &hasMore) ==
+                  LINK_OBD2_RESULT_OK && hasMore,
+              "decode captured C207 0x00 capability block by responder");
+
+        response = parse_response(
+            "0120",
+            "7E8 06 41 20 B0 03 A0 05\r"
+            "7E9 06 41 20 80 01 80 01\r>");
+        check(link_obd2_accept_supported_pid_responders(
+                  &response, 0x20U, &unionSet, &responderSets, &hasMore) ==
+                  LINK_OBD2_RESULT_OK && hasMore,
+              "decode captured C207 0x20 capability block by responder");
+
+        response = parse_response(
+            "0140",
+            "7E8 06 41 40 4C D8 00 00\r"
+            "7E9 06 41 40 40 80 00 00\r>");
+        check(link_obd2_accept_supported_pid_responders(
+                  &response, 0x40U, &unionSet, &responderSets, &hasMore) ==
+                  LINK_OBD2_RESULT_OK && !hasMore,
+              "decode captured C207 0x40 capability block by responder");
+
+        engineSet = link_obd2_responder_pid_set_find(
+            &responderSets, 0x7e8U, false);
+        secondarySet = link_obd2_responder_pid_set_find(
+            &responderSets, 0x7e9U, false);
+        check(engineSet != NULL && pid_count(engineSet) == 27U,
+              "retain all 27 captured engine responder capabilities");
+        check(secondarySet != NULL && pid_count(secondarySet) == 10U,
+              "retain all 10 captured secondary responder capabilities");
+        check(link_obd2_pid_set_contains(engineSet, 0x2fU) &&
+                  link_obd2_pid_set_contains(engineSet, 0x46U) &&
+                  link_obd2_pid_set_contains(engineSet, 0x4dU),
+              "engine responder keeps later-block supported PIDs");
+        check(!link_obd2_pid_set_contains(secondarySet, 0x2fU) &&
+                  link_obd2_pid_set_contains(secondarySet, 0x42U) &&
+                  link_obd2_pid_set_contains(secondarySet, 0x49U),
+              "secondary responder capability set stays independent");
     }
 
     response = parse_response("010C", "7E804410C1AF8\r>");
