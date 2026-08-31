@@ -11,6 +11,14 @@ NS_ASSUME_NONNULL_BEGIN
 
 static const NSTimeInterval LinkScanTimeoutSeconds = 12.0;
 static const NSTimeInterval LinkConnectTimeoutSeconds = 8.0;
+/*
+ * A retrieved CoreBluetooth identifier is only a fast path.  The C207/Vgate
+ * evidence stream proves a cold adapter can ignore that direct reconnect while
+ * becoming discoverable shortly afterwards.  Do not spend the full ordinary
+ * connection timeout on the saved-object shortcut before falling back to the
+ * duplicate-enabled scan.
+ */
+static const NSTimeInterval LinkKnownPeripheralConnectTimeoutSeconds = 3.0;
 static const NSTimeInterval LinkDiscoveryTimeoutSeconds = 8.0;
 static const NSTimeInterval LinkProbeTimeoutSeconds = 5.0;
 static const NSTimeInterval LinkReconnectDelaySeconds = 0.75;
@@ -167,6 +175,7 @@ static BOOL LinkRemainingBytesAreWhitespace(const uint8_t *bytes,
     NSUInteger _scanAttempt;
     NSUInteger _recoveryAttempt;
     BOOL _knownPeripheralAttempted;
+    BOOL _connectingKnownPeripheral;
     NSUInteger _pendingServiceDiscoveries;
     NSArray<LinkBLECandidate *> *_Nullable _candidates;
     NSUInteger _candidateIndex;
@@ -403,12 +412,14 @@ static BOOL LinkRemainingBytesAreWhitespace(const uint8_t *bytes,
             if (known != nil) {
                 NSString *name = known.name.length != 0U
                     ? known.name : @"saved BLE OBD adapter";
+                _connectingKnownPeripheral = YES;
                 [self connectPeripheral:known name:name];
                 return;
             }
         }
     }
 
+    _connectingKnownPeripheral = NO;
     _scanAttempt++;
     NSUInteger generation = _operationGeneration;
     /*
@@ -450,10 +461,15 @@ static BOOL LinkRemainingBytesAreWhitespace(const uint8_t *bytes,
     [self setState:LinkBLETransportStateConnecting
             status:[NSString stringWithFormat:@"Connecting to %@", name]];
     [_central connectPeripheral:peripheral options:nil];
+    const BOOL knownFastPath = _connectingKnownPeripheral;
     [self scheduleStateTimeout:LinkBLETransportStateConnecting
                     generation:generation
-                         after:LinkConnectTimeoutSeconds
-                       message:@"BLE adapter connection timed out"
+                         after:knownFastPath
+                             ? LinkKnownPeripheralConnectTimeoutSeconds
+                             : LinkConnectTimeoutSeconds
+                       message:knownFastPath
+                             ? @"Saved BLE adapter did not answer yet; scanning"
+                             : @"BLE adapter connection timed out"
                        recover:YES];
 }
 
@@ -500,6 +516,7 @@ static BOOL LinkRemainingBytesAreWhitespace(const uint8_t *bytes,
   didConnectPeripheral:(CBPeripheral *)peripheral
 {
     if (peripheral != _peripheral || !_startRequested) return;
+    _connectingKnownPeripheral = NO;
     _operationGeneration++;
     NSUInteger generation = _operationGeneration;
     [self setState:LinkBLETransportStateDiscovering status:@"Discovering adapter services"];
