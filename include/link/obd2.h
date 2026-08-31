@@ -61,6 +61,66 @@ typedef struct {
     LinkObd2Unit unit;
 } LinkObd2Sample;
 
+/**
+ * Generic standard-data representation.
+ *
+ * SAE PID payloads are not all single scalar values. LINK therefore exposes
+ * the standards catalogue independently of the legacy one-double-per-PID
+ * convenience API. Product faces may enumerate every known standard item,
+ * preserve raw structured payloads, and consume decoded scalar fields where a
+ * deterministic public formula is available.
+ */
+typedef enum {
+    LINK_OBD2_VALUE_RAW = 0,
+    LINK_OBD2_VALUE_SCALAR,
+    LINK_OBD2_VALUE_MULTI_SCALAR,
+    LINK_OBD2_VALUE_BITMAP,
+    LINK_OBD2_VALUE_ENCODED,
+    LINK_OBD2_VALUE_DTC,
+    LINK_OBD2_VALUE_ASCII,
+    LINK_OBD2_VALUE_HEX
+} LinkObd2ValueKind;
+
+typedef struct {
+    uint8_t mode;
+    uint8_t pid;
+    uint8_t bytes;
+    LinkObd2ValueKind value_kind;
+    const char *name;
+    const char *unit;
+    const char *formula;
+    bool has_range;
+    double minimum;
+    double maximum;
+} LinkObd2PidDefinition;
+
+#define LINK_OBD2_MAX_PID_PAYLOAD 64U
+#define LINK_OBD2_MAX_DECODED_SIGNALS 5U
+#define LINK_OBD2_MAX_DECODED_TEXT 65U
+
+typedef struct {
+    const char *label;
+    double value;
+    const char *unit;
+} LinkObd2DecodedSignal;
+
+typedef struct {
+    const LinkObd2PidDefinition *definition;
+    uint8_t raw[LINK_OBD2_MAX_PID_PAYLOAD];
+    size_t raw_length;
+    LinkObd2DecodedSignal signals[LINK_OBD2_MAX_DECODED_SIGNALS];
+    size_t signal_count;
+    bool text_available;
+    char text[LINK_OBD2_MAX_DECODED_TEXT];
+} LinkObd2DecodedPid;
+
+typedef struct {
+    uint8_t mode;
+    const char *name;
+    bool read_only;
+    bool parameterized;
+} LinkObd2ServiceDefinition;
+
 #define LINK_OBD2_MAX_RESPONDER_SAMPLES 8U
 #define LINK_OBD2_MAX_RESPONDER_PID_SETS 8U
 
@@ -135,6 +195,35 @@ typedef struct {
 const char *link_obd2_result_name(LinkObd2Result result);
 const char *link_obd2_unit_name(LinkObd2Unit unit);
 const char *link_obd2_pid_name(uint8_t pid);
+
+/** Generic SAE service catalogue for modes 01 through 0A. */
+size_t link_obd2_service_definition_count(void);
+const LinkObd2ServiceDefinition *link_obd2_service_definition_at(size_t index);
+const LinkObd2ServiceDefinition *link_obd2_service_definition(uint8_t mode);
+
+/**
+ * Pinned generic PID/InfoType catalogue.
+ *
+ * The current snapshot contains the complete OBDex CC0 Mode 01 + Mode 09
+ * dataset (119 + 13 definitions). Definitions are transport-independent and
+ * shared by every LINK product.
+ */
+size_t link_obd2_pid_definition_count(void);
+const LinkObd2PidDefinition *link_obd2_pid_definition_at(size_t index);
+const LinkObd2PidDefinition *link_obd2_pid_definition(uint8_t mode, uint8_t pid);
+const char *link_obd2_pid_catalogue_snapshot(void);
+
+/**
+ * Decode a PID payload without assuming that one PID equals one double.
+ * Unknown/encoded/bitmap items remain available in raw[]; formula-backed
+ * scalar fields are returned in signals[]; ASCII items also populate text.
+ */
+LinkObd2Result link_obd2_decode_pid_payload(
+    uint8_t mode,
+    uint8_t pid,
+    const uint8_t *data,
+    size_t data_length,
+    LinkObd2DecodedPid *decoded);
 
 LinkObd2Result link_obd2_build_live_pid_request(
     uint8_t pid, char *buffer, size_t buffer_size);
