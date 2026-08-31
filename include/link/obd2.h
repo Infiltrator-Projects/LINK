@@ -95,7 +95,7 @@ typedef struct {
 } LinkObd2PidDefinition;
 
 #define LINK_OBD2_MAX_PID_PAYLOAD 64U
-#define LINK_OBD2_MAX_DECODED_SIGNALS 5U
+#define LINK_OBD2_MAX_DECODED_SIGNALS 16U
 #define LINK_OBD2_MAX_DECODED_TEXT 65U
 
 typedef struct {
@@ -138,6 +138,20 @@ typedef struct {
     size_t count;
     bool truncated;
 } LinkObd2ResponderSampleList;
+
+/** Full structured Mode 01 decode attributed to the ECU that returned it. */
+typedef struct {
+    bool responder_id_available;
+    bool extended_id;
+    uint32_t responder_id;
+    LinkObd2DecodedPid decoded;
+} LinkObd2ResponderDecodedPid;
+
+typedef struct {
+    LinkObd2ResponderDecodedPid entries[LINK_OBD2_MAX_RESPONDER_SAMPLES];
+    size_t count;
+    bool truncated;
+} LinkObd2ResponderDecodedPidList;
 
 typedef struct {
     uint8_t bits[LINK_OBD2_PID_SET_BYTES];
@@ -202,11 +216,13 @@ const LinkObd2ServiceDefinition *link_obd2_service_definition_at(size_t index);
 const LinkObd2ServiceDefinition *link_obd2_service_definition(uint8_t mode);
 
 /**
- * Pinned generic PID/InfoType catalogue.
+ * Pinned generic PID/InfoType catalogue plus LINK's independently curated
+ * standards supplement.
  *
- * The current snapshot contains the complete OBDex CC0 Mode 01 + Mode 09
- * dataset (119 + 13 definitions). Definitions are transport-independent and
- * shared by every LINK product.
+ * The OBDex CC0 snapshot contributes 119 Mode 01 + 13 Mode 09 definitions.
+ * LINK supplements later assigned classic Mode 01 identifiers without
+ * pretending that unknown public layouts are decoded: unverified layouts stay
+ * raw-preserving until their byte format is independently corroborated.
  */
 size_t link_obd2_pid_definition_count(void);
 const LinkObd2PidDefinition *link_obd2_pid_definition_at(size_t index);
@@ -236,6 +252,25 @@ LinkObd2Result link_obd2_decode_pid_payload(
 LinkObd2Result link_obd2_build_standard_read_request(
     uint8_t mode,
     uint8_t identifier,
+    char *buffer,
+    size_t buffer_size);
+
+/**
+ * Map a logical SAE J1979 parameter identifier to its J1979-2 OBDonUDS DID.
+ *
+ * Classic PIDs 0x000-0x0FF map to F400-F4FF. The next logical parameter page
+ * 0x100-0x1FF maps to F500-F5FF. This deliberately remains separate from the
+ * one-byte Mode 01 API so an extended identifier is never emitted as an
+ * invalid classic request.
+ */
+LinkObd2Result link_obd2_obdonuds_pid_to_did(
+    uint16_t pid,
+    uint16_t *did);
+LinkObd2Result link_obd2_obdonuds_did_to_pid(
+    uint16_t did,
+    uint16_t *pid);
+LinkObd2Result link_obd2_build_obdonuds_pid_request(
+    uint16_t pid,
     char *buffer,
     size_t buffer_size);
 
@@ -293,6 +328,21 @@ LinkObd2Result link_obd2_decode_live_pid(
     const LinkElm327Response *response,
     uint8_t pid,
     LinkObd2Sample *sample);
+/**
+ * Decode the complete standard payload for a current-data PID.
+ *
+ * Unlike LinkObd2Sample, this API retains every deterministic scalar field and
+ * the raw bytes for bitmap/encoded/unknown layouts. It also accepts ELM327
+ * indexed multi-line messages used by larger modern PID payloads.
+ */
+LinkObd2Result link_obd2_decode_live_pid_payload(
+    const LinkElm327Response *response,
+    uint8_t pid,
+    LinkObd2DecodedPid *decoded);
+LinkObd2Result link_obd2_decode_live_pid_payload_responders(
+    const LinkElm327Response *response,
+    uint8_t pid,
+    LinkObd2ResponderDecodedPidList *responders);
 /**
  * Decode every matching Mode 01 reply while retaining its 11/29-bit CAN
  * responder identifier. Headerless transports still yield one sample with
