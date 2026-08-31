@@ -386,6 +386,47 @@ static int test_manufacturer_extension_after_standard_dtcs(void)
     return 0;
 }
 
+static int test_live_manufacturer_extension(void)
+{
+    LinkDiagnosticFlow flow;
+    LinkDiagnosticFlowConfig config = LINK_DIAGNOSTIC_FLOW_CONFIG_INIT;
+    LinkDiagnosticFlowAction action;
+
+    config.restore_adapter_after_manufacturer_extension = true;
+    CHECK(link_diagnostic_flow_init(&flow, &config) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+
+    flow.standard_diagnostic_context_complete = true;
+    flow.stage = LINK_DIAGNOSTIC_FLOW_LIVE;
+    flow.awaiting_response = false;
+
+    CHECK(link_diagnostic_flow_begin_live_manufacturer_extension(&flow) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(flow.stage == LINK_DIAGNOSTIC_FLOW_MANUFACTURER_EXTENSION);
+
+    CHECK(link_diagnostic_flow_next_action(&flow, 1000U, &action) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(action.kind == LINK_DIAGNOSTIC_FLOW_ACTION_MANUFACTURER_EXTENSION);
+
+    CHECK(link_diagnostic_flow_begin_live_manufacturer_extension(&flow) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_INVALID_STATE);
+
+    CHECK(link_diagnostic_flow_resume_after_manufacturer(&flow) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(flow.stage == LINK_DIAGNOSTIC_FLOW_RESTORING_AFTER_MANUFACTURER);
+
+    flow.stage = LINK_DIAGNOSTIC_FLOW_LIVE;
+    flow.awaiting_response = true;
+    CHECK(link_diagnostic_flow_begin_live_manufacturer_extension(&flow) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_INVALID_STATE);
+
+    flow.awaiting_response = false;
+    flow.standard_diagnostic_context_complete = false;
+    CHECK(link_diagnostic_flow_begin_live_manufacturer_extension(&flow) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_INVALID_STATE);
+    return 0;
+}
+
 static int test_invalid_manufacturer_extension_configuration(void)
 {
     LinkDiagnosticFlow flow;
@@ -497,6 +538,7 @@ int main(void)
     if (test_readiness_and_freeze_context() != 0) return 1;
     if (test_manufacturer_extension_restore() != 0) return 1;
     if (test_manufacturer_extension_after_standard_dtcs() != 0) return 1;
+    if (test_live_manufacturer_extension() != 0) return 1;
     if (test_invalid_manufacturer_extension_configuration() != 0) return 1;
     if (test_default_cold_acquisition_timeout() != 0) return 1;
     if (test_invalid_response_order() != 0) return 1;
