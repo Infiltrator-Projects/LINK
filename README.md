@@ -32,8 +32,17 @@ LINK currently owns:
 - platform-neutral byte-stream transport ABI;
 - ELM327 framing, parsing, initialization and adapter/protocol probing;
 - ELM327-managed ISO 15765 CAN channels and transport-backed sessions;
-- standard OBD-II requests, PID/VIN/readiness/DTC decoding, including bounded
-  multi-responder Mode 01 decoding that retains each 11/29-bit CAN source;
+- a shared standard OBD-II/J1979 service model for modes `01` through `0A`,
+  including transport-neutral read helpers, explicit deny-by-default handling
+  for control/clear operations, responder-attributed capability discovery,
+  VIN/readiness/freeze-frame/DTC handling and bounded multi-responder decoding;
+- a pinned CC0 generic PID/InfoType catalogue generated from OBDex containing
+  **119 Mode 01 definitions + 13 Mode 09 definitions (132 total)**. The generic
+  decoder preserves bitmap/enum/encoded/DTC/ASCII/raw payloads and decodes
+  deterministic scalar or multi-scalar formulas without assuming one PID is
+  one `double`. The legacy scalar parameter facade now exposes 57 decoded
+  Mode 01 values while the full structured catalogue remains available to all
+  products and transports;
 - a complete pinned generic OBD-II DTC catalogue containing 9,533 definitions across the seven standardized generic families (`P0`, `P2`, standardized `P3`, `B0`, `C0`, `U0`, `U3`), with normalized classification, independently authored CC0 titles/categories, explicit unknown handling and ISO 14229 status translation;
 - ISO 14229 UDS request/response, DID and client-state handling;
 - a compiled 27-service ISO 14229 service catalogue and bounded request/response codecs;
@@ -106,6 +115,8 @@ See `docs/DISCOVER.md` and `docs/PRODUCT_FACES.md` for the repository/applicatio
 Portable diagnostic behaviour is C11. C++ is used only where it materially improves a design. Platform-required languages remain narrow presentation or interop edges and must not become alternate protocol implementations.
 
 Shared protocol state machines, diagnostic sequencing, safety policy, generic diagnostic knowledge and transport-independent decisions belong in LINK rather than Swift, Objective-C, GTK callbacks or Win32 message handlers.
+
+Standard OBD knowledge follows the same rule. Product repositories must not grow private SAE PID tables. LINK's generated OBD catalogue is the single source of truth for standard Mode 01/09 metadata and formulas; structured values that do not fit the compatibility scalar facade remain available through `LinkObd2DecodedPid`. Manufacturer UDS/KWP definitions are layered above that shared standards engine.
 
 Compatibility aliases/wrappers preserve product-prefixed public APIs while the underlying ELM327, OBD-II, UDS, DTC knowledge and diagnostic-flow algorithms remain single-source in LINK.
 
