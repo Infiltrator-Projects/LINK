@@ -83,7 +83,7 @@ int main(void)
             LINK_ADAPTER_KIND_STM32_LINK));
     }
 
-    CHECK(link_parameter_obd2_definition_count() == 59U);
+    CHECK(link_parameter_obd2_definition_count() == 62U);
     CHECK(link_parameter_from_obd2_scalar(0x0cU, LINK_OBD2_UNIT_RPM, 1234.5, 10U, &parameter));
     CHECK(strcmp(parameter.definition->stable_key, "obd2.engine.rpm") == 0);
     CHECK(strcmp(link_parameter_obd2_definition(0x11U)->name,
@@ -110,6 +110,20 @@ int main(void)
     CHECK(link_parameter_obd2_definition(0xc7U) != NULL);
     CHECK(strcmp(link_parameter_obd2_definition(0xc7U)->name,
                  "Distance since reflash or module replacement") == 0);
+    CHECK(link_parameter_obd2_definition(0xaaU) != NULL);
+    CHECK(strcmp(link_parameter_obd2_definition(0xaaU)->stable_key,
+                 "obd2.vehicle.max_speed_limit") == 0);
+    CHECK(link_parameter_obd2_definition(0xb2U) != NULL);
+    CHECK(strcmp(link_parameter_obd2_definition(0xb2U)->stable_key,
+                 "obd2.battery.traction_soh") == 0);
+    CHECK(link_parameter_obd2_definition(0xd3U) != NULL);
+    CHECK(strcmp(link_parameter_obd2_definition(0xd3U)->stable_key,
+                 "obd2.engine.odometer") == 0);
+    {
+        LinkObd2UnitCode exhaust_unit = LINK_OBD2_UNIT_NONE;
+        CHECK(link_parameter_obd2_expected_unit(0x9eU, &exhaust_unit));
+        CHECK(exhaust_unit == LINK_OBD2_UNIT_KILOGRAMS_PER_HOUR);
+    }
     CHECK(link_parameter_obd2_definition(0x7aU) == NULL);
     CHECK(link_parameter_obd2_definition(0x7cU) == NULL);
     CHECK(link_parameter_format_value(
