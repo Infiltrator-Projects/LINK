@@ -870,6 +870,22 @@ LinkDiagnosticFlowResult link_diagnostic_flow_recover_live_timeout(
     return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
 }
 
+LinkDiagnosticFlowResult link_diagnostic_flow_begin_live_manufacturer_extension(
+    LinkDiagnosticFlow *flow)
+{
+    if (flow == NULL) {
+        return LINK_DIAGNOSTIC_FLOW_RESULT_INVALID_ARGUMENT;
+    }
+    if (flow->stage != LINK_DIAGNOSTIC_FLOW_LIVE ||
+        flow->awaiting_response ||
+        !flow->standard_diagnostic_context_complete) {
+        return LINK_DIAGNOSTIC_FLOW_RESULT_INVALID_STATE;
+    }
+
+    flow->stage = LINK_DIAGNOSTIC_FLOW_MANUFACTURER_EXTENSION;
+    return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
+}
+
 LinkDiagnosticFlowResult link_diagnostic_flow_resume_after_manufacturer(
     LinkDiagnosticFlow *flow)
 {
