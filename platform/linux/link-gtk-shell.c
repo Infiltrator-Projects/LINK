@@ -1116,8 +1116,12 @@ static const char *diagnostic_stage_message(const LinkGtkShell *shell)
         return "Linked · diagnostic session idle";
     case LINK_DIAGNOSTIC_FLOW_INITIALIZING:
         return "Linked · initialising ELM327 adapter";
+    case LINK_DIAGNOSTIC_FLOW_CONFIGURING_PID_DISCOVERY_HEADERS:
+        return "Linked · enabling CAN headers for OBD capability discovery";
     case LINK_DIAGNOSTIC_FLOW_DISCOVERING_PIDS:
-        return "Linked · discovering supported OBD-II PIDs";
+        return "Linked · discovering supported OBD-II PIDs by responder";
+    case LINK_DIAGNOSTIC_FLOW_RESTORING_PID_DISCOVERY_HEADERS:
+        return "Linked · restoring standard OBD-II response format";
     case LINK_DIAGNOSTIC_FLOW_READING_STANDARD_VIN:
         return "Linked · reading standard vehicle VIN";
     case LINK_DIAGNOSTIC_FLOW_MANUFACTURER_EXTENSION:
