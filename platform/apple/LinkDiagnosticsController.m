@@ -1471,6 +1471,28 @@ static void LinkAppleAppendReadinessMonitor(
     return [pids copy];
 }
 
+- (NSArray<NSNumber *> *)supportedPIDsForResponderCANIdentifier:
+    (uint32_t)responderCANIdentifier
+                                                       extendedID:(BOOL)extendedID
+{
+    const uint32_t maximumIdentifier = extendedID
+        ? UINT32_C(0x1fffffff) : UINT32_C(0x7ff);
+    if (responderCANIdentifier > maximumIdentifier) return @[];
+
+    const LinkObd2PidSet *set =
+        link_diagnostic_flow_supported_pids_for_responder(
+            &_flow, responderCANIdentifier, extendedID);
+    if (set == NULL) return @[];
+
+    NSMutableArray<NSNumber *> *pids = [[NSMutableArray alloc] init];
+    for (NSUInteger pid = 1U; pid < 256U; ++pid) {
+        if (link_obd2_pid_set_contains(set, (uint8_t)pid)) {
+            [pids addObject:@(pid)];
+        }
+    }
+    return [pids copy];
+}
+
 - (NSArray<NSNumber *> *)recentValuesForPID:(uint8_t)pid
                      responderCANIdentifier:(uint32_t)responderCANIdentifier
                                   extendedID:(BOOL)extendedID
