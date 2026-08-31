@@ -192,6 +192,19 @@ LinkDiagnosticFlowResult link_diagnostic_flow_resume_after_manufacturer(
     LinkDiagnosticFlow *flow);
 
 /**
+ * Enter the manufacturer extension from an already-live diagnostic session.
+ *
+ * Product faces use this for read-only manufacturer data acquisition after the
+ * normal startup census has completed.  The transition is only accepted from
+ * the idle LIVE scheduler state with no response in flight.  Existing OBD-II
+ * capability, DTC, readiness and scheduler state is retained, and
+ * link_diagnostic_flow_resume_after_manufacturer() returns to live acquisition
+ * (optionally through adapter restoration) when the product extension ends.
+ */
+LinkDiagnosticFlowResult link_diagnostic_flow_begin_live_manufacturer_extension(
+    LinkDiagnosticFlow *flow);
+
+/**
  * Abandon one timed-out live request after the transport has been
  * resynchronised. Discovery, DTC inventory and the scheduler are preserved.
  * The timed-out PID is deferred by one full interval so recovery cannot
