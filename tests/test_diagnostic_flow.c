@@ -308,6 +308,94 @@ static int test_manufacturer_extension_restore(void)
     return 0;
 }
 
+static int test_pid_capabilities_per_responder(void)
+{
+    LinkDiagnosticFlow flow;
+    LinkDiagnosticFlowConfig config = LINK_DIAGNOSTIC_FLOW_CONFIG_INIT;
+    LinkDiagnosticFlowAction action;
+    LinkDiagnosticFlowEvent event;
+    LinkElm327Response response;
+    const LinkObd2PidSet *engine;
+    const LinkObd2PidSet *secondary;
+
+    config.preserve_pid_discovery_response_headers = true;
+    CHECK(link_diagnostic_flow_init(&flow, &config) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(link_diagnostic_flow_start(&flow) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(complete_initialization(&flow) == 0);
+    CHECK(flow.stage ==
+          LINK_DIAGNOSTIC_FLOW_CONFIGURING_PID_DISCOVERY_HEADERS);
+
+    CHECK(link_diagnostic_flow_next_action(&flow, 100U, &action) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(strcmp(action.command, "ATH1") == 0);
+    response = response_ok(NULL, true);
+    CHECK(link_diagnostic_flow_accept_response(
+              &flow, &response, 100U, &event) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(flow.stage == LINK_DIAGNOSTIC_FLOW_DISCOVERING_PIDS);
+
+    CHECK(link_diagnostic_flow_next_action(&flow, 110U, &action) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(strcmp(action.command, "0100") == 0);
+    response = response_ok(
+        "7E8 06 41 00 98 3B A0 13\n"
+        "7E9 06 41 00 98 18 00 01", false);
+    CHECK(link_diagnostic_flow_accept_response(
+              &flow, &response, 110U, &event) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(flow.supported_pid_base == UINT8_C(0x20));
+
+    CHECK(link_diagnostic_flow_next_action(&flow, 120U, &action) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(strcmp(action.command, "0120") == 0);
+    response = response_ok(
+        "7E8 06 41 20 B0 03 A0 05\n"
+        "7E9 06 41 20 80 01 80 01", false);
+    CHECK(link_diagnostic_flow_accept_response(
+              &flow, &response, 120U, &event) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(flow.supported_pid_base == UINT8_C(0x40));
+
+    CHECK(link_diagnostic_flow_next_action(&flow, 130U, &action) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(strcmp(action.command, "0140") == 0);
+    response = response_ok(
+        "7E8 06 41 40 4C D8 00 00\n"
+        "7E9 06 41 40 40 80 00 00", false);
+    CHECK(link_diagnostic_flow_accept_response(
+              &flow, &response, 130U, &event) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(event.kind ==
+          LINK_DIAGNOSTIC_FLOW_EVENT_PID_DISCOVERY_COMPLETE);
+    CHECK(flow.stage ==
+          LINK_DIAGNOSTIC_FLOW_RESTORING_PID_DISCOVERY_HEADERS);
+
+    engine = link_diagnostic_flow_supported_pids_for_responder(
+        &flow, UINT32_C(0x7e8), false);
+    secondary = link_diagnostic_flow_supported_pids_for_responder(
+        &flow, UINT32_C(0x7e9), false);
+    CHECK(engine != NULL);
+    CHECK(secondary != NULL);
+    CHECK(link_obd2_pid_set_contains(engine, UINT8_C(0x2f)));
+    CHECK(link_obd2_pid_set_contains(engine, UINT8_C(0x46)));
+    CHECK(link_obd2_pid_set_contains(engine, UINT8_C(0x4d)));
+    CHECK(!link_obd2_pid_set_contains(secondary, UINT8_C(0x2f)));
+    CHECK(link_obd2_pid_set_contains(secondary, UINT8_C(0x42)));
+    CHECK(link_obd2_pid_set_contains(secondary, UINT8_C(0x49)));
+
+    CHECK(link_diagnostic_flow_next_action(&flow, 140U, &action) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(strcmp(action.command, "ATH0") == 0);
+    response = response_ok(NULL, true);
+    CHECK(link_diagnostic_flow_accept_response(
+              &flow, &response, 140U, &event) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(flow.stage == LINK_DIAGNOSTIC_FLOW_READING_STANDARD_VIN);
+    return 0;
+}
+
 static int test_manufacturer_extension_after_standard_dtcs(void)
 {
     LinkDiagnosticFlow flow;
@@ -537,6 +625,7 @@ int main(void)
     if (test_live_timeout_recovery() != 0) return 1;
     if (test_readiness_and_freeze_context() != 0) return 1;
     if (test_manufacturer_extension_restore() != 0) return 1;
+    if (test_pid_capabilities_per_responder() != 0) return 1;
     if (test_manufacturer_extension_after_standard_dtcs() != 0) return 1;
     if (test_live_manufacturer_extension() != 0) return 1;
     if (test_invalid_manufacturer_extension_configuration() != 0) return 1;
