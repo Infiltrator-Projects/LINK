@@ -106,10 +106,10 @@ int main(void)
                  "Odometer") == 0);
     CHECK(link_parameter_obd2_definition(0x8dU) != NULL);
     CHECK(strcmp(link_parameter_obd2_definition(0x8dU)->name,
-                 "Absolute throttle position G") == 0);
+                 "Throttle position G") == 0);
     CHECK(link_parameter_obd2_definition(0xc7U) != NULL);
     CHECK(strcmp(link_parameter_obd2_definition(0xc7U)->name,
-                 "Distance travelled since reflash") == 0);
+                 "Distance since reflash or module replacement") == 0);
     CHECK(link_parameter_obd2_definition(0x7aU) == NULL);
     CHECK(link_parameter_obd2_definition(0x7cU) == NULL);
     CHECK(link_parameter_format_value(
