@@ -38,7 +38,11 @@ typedef enum {
 typedef enum {
     LINK_DTC_ORIGIN_UNKNOWN = 0,
     LINK_DTC_ORIGIN_STANDARD_GENERIC,
-    LINK_DTC_ORIGIN_MANUFACTURER_SPECIFIC
+    LINK_DTC_ORIGIN_MANUFACTURER_SPECIFIC,
+    /** SAE/ISO-controlled range, but LINK has no public-domain definition. */
+    LINK_DTC_ORIGIN_STANDARD_CONTROLLED,
+    /** Range reserved by the standards document rather than by an OEM. */
+    LINK_DTC_ORIGIN_DOCUMENT_RESERVED
 } LinkDtcOrigin;
 
 typedef enum {
@@ -69,8 +73,29 @@ bool link_dtc_resolve(const char *code, LinkDtcKnowledge *knowledge);
 /** Number of generic definitions compiled into the current LINK catalogue. */
 size_t link_dtc_catalogue_definition_count(void);
 
+/**
+ * Enumerate one compiled generic definition in deterministic code order.
+ *
+ * This exists so qualification tooling can verify every definition, not just
+ * spot-check a handful of familiar codes. Returns false for an out-of-range
+ * index or NULL output.
+ */
+bool link_dtc_catalogue_definition_at(
+    size_t index,
+    LinkDtcKnowledge *knowledge);
+
 /** Upstream OBDex commit used to generate the compiled catalogue. */
 const char *link_dtc_catalogue_snapshot(void);
+
+/**
+ * Standards metadata used for the current range/provenance audit.
+ *
+ * These strings identify the revisions against which LINK's range model and
+ * open catalogue were last checked. They do not imply that copyrighted SAE
+ * text is embedded in LINK.
+ */
+const char *link_dtc_range_model_revision(void);
+const char *link_dtc_catalogue_audit_revision(void);
 
 const char *link_dtc_system_name(LinkDtcSystem system);
 const char *link_dtc_origin_name(LinkDtcOrigin origin);
