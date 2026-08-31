@@ -41,7 +41,17 @@ typedef enum LinkObd2FormulaKind {
     LINK_OBD2_FORMULA_FUEL_RATE_TWO,
     LINK_OBD2_FORMULA_U16_DIV5,
     LINK_OBD2_FORMULA_U16_DIV32,
-    LINK_OBD2_FORMULA_ODOMETER
+    LINK_OBD2_FORMULA_ODOMETER,
+    LINK_OBD2_FORMULA_EGR_SIX,
+    LINK_OBD2_FORMULA_EGR_TEMP_FOUR,
+    LINK_OBD2_FORMULA_THROTTLE_FOUR,
+    LINK_OBD2_FORMULA_FUEL_PRESSURE_CONTROL,
+    LINK_OBD2_FORMULA_BOOST_FOUR,
+    LINK_OBD2_FORMULA_WASTEGATE_FOUR,
+    LINK_OBD2_FORMULA_RUNTIME_THREE,
+    LINK_OBD2_FORMULA_HEV_SYSTEM,
+    LINK_OBD2_FORMULA_FUEL_USE_EIGHT,
+    LINK_OBD2_FORMULA_CERTIFIED_ENERGY_RANGE
 } LinkObd2FormulaKind;
 
 typedef struct LinkObd2CatalogueEntry {
@@ -51,6 +61,17 @@ typedef struct LinkObd2CatalogueEntry {
 
 #include "pid_catalogue.inc"
 #include "pid_standard_supplement.inc"
+
+/*
+ * Corrections are kept outside the immutable pinned OBDex snapshot.  They
+ * replace metadata/decoding for the matching base definition without adding a
+ * duplicate public catalogue entry.
+ */
+static const LinkObd2CatalogueEntry link_obd2_standard_corrections[] = {
+    {{UINT8_C(0x01), UINT8_C(0x9E), UINT8_C(2), LINK_OBD2_VALUE_SCALAR,
+      "Engine exhaust flow rate", "kg/h", "(256*A + B) / 5",
+      true, 0, 13107}, LINK_OBD2_FORMULA_U16_DIV5}
+};
 
 static const LinkObd2ServiceDefinition link_obd2_services[] = {
     { UINT8_C(0x01), "Current diagnostic data", true, true },
@@ -76,6 +97,26 @@ static size_t obd2_supplement_count(void)
            sizeof(link_obd2_standard_supplement[0]);
 }
 
+static size_t obd2_correction_count(void)
+{
+    return sizeof(link_obd2_standard_corrections) /
+           sizeof(link_obd2_standard_corrections[0]);
+}
+
+static const LinkObd2CatalogueEntry *obd2_correction_entry(
+    uint8_t mode,
+    uint8_t pid)
+{
+    size_t index;
+    for (index = 0U; index < obd2_correction_count(); ++index) {
+        if (link_obd2_standard_corrections[index].definition.mode == mode &&
+            link_obd2_standard_corrections[index].definition.pid == pid) {
+            return &link_obd2_standard_corrections[index];
+        }
+    }
+    return NULL;
+}
+
 static uint16_t obd2_u16(const uint8_t *data)
 {
     return (uint16_t)(((uint16_t)data[0] << 8U) | (uint16_t)data[1]);
@@ -87,6 +128,14 @@ static uint32_t obd2_u32(const uint8_t *data)
            ((uint32_t)data[1] << 16U) |
            ((uint32_t)data[2] << 8U) |
            (uint32_t)data[3];
+}
+
+static int32_t obd2_i16(const uint8_t *data)
+{
+    const uint16_t raw = obd2_u16(data);
+    return (raw & UINT16_C(0x8000)) != 0U
+        ? (int32_t)raw - INT32_C(65536)
+        : (int32_t)raw;
 }
 
 static bool obd2_add_signal(
@@ -143,10 +192,18 @@ size_t link_obd2_pid_definition_count(void)
 const LinkObd2PidDefinition *link_obd2_pid_definition_at(size_t index)
 {
     const size_t base_count = obd2_base_count();
-    if (index < base_count) return &link_obd2_catalogue[index].definition;
-    index -= base_count;
-    return index < obd2_supplement_count()
-        ? &link_obd2_standard_supplement[index].definition : NULL;
+    const LinkObd2PidDefinition *definition;
+    const LinkObd2CatalogueEntry *correction;
+
+    if (index < base_count) {
+        definition = &link_obd2_catalogue[index].definition;
+    } else {
+        index -= base_count;
+        if (index >= obd2_supplement_count()) return NULL;
+        definition = &link_obd2_standard_supplement[index].definition;
+    }
+    correction = obd2_correction_entry(definition->mode, definition->pid);
+    return correction != NULL ? &correction->definition : definition;
 }
 
 const LinkObd2PidDefinition *link_obd2_pid_definition(uint8_t mode, uint8_t pid)
@@ -165,7 +222,7 @@ const LinkObd2PidDefinition *link_obd2_pid_definition(uint8_t mode, uint8_t pid)
 
 const char *link_obd2_pid_catalogue_snapshot(void)
 {
-    return LINK_OBD2_CATALOGUE_SNAPSHOT "+link-standard-supplement-v1";
+    return LINK_OBD2_CATALOGUE_SNAPSHOT "+link-standard-supplement-v2+link-corrections-v1";
 }
 
 static const LinkObd2CatalogueEntry *obd2_catalogue_entry(
@@ -173,6 +230,9 @@ static const LinkObd2CatalogueEntry *obd2_catalogue_entry(
     uint8_t pid)
 {
     size_t index;
+    const LinkObd2CatalogueEntry *correction =
+        obd2_correction_entry(mode, pid);
+    if (correction != NULL) return correction;
     for (index = 0U; index < obd2_base_count(); ++index) {
         if (link_obd2_catalogue[index].definition.mode == mode &&
             link_obd2_catalogue[index].definition.pid == pid) {
@@ -365,6 +425,130 @@ static LinkObd2Result obd2_decode_formula(
         break;
     case LINK_OBD2_FORMULA_ODOMETER:
         (void)obd2_add_signal(decoded, "value", (double)obd2_u32(data) / 10.0, unit);
+        break;
+    case LINK_OBD2_FORMULA_EGR_SIX: {
+        const uint8_t flags = data[0];
+        if ((flags & UINT8_C(0x80)) != 0U)
+            (void)obd2_add_signal(decoded, "commanded EGR A", (double)data[1] * 100.0 / 255.0, "%");
+        if ((flags & UINT8_C(0x40)) != 0U)
+            (void)obd2_add_signal(decoded, "actual EGR A", (double)data[2] * 100.0 / 255.0, "%");
+        if ((flags & UINT8_C(0x20)) != 0U)
+            (void)obd2_add_signal(decoded, "EGR A error", (double)data[3] * 100.0 / 128.0 - 100.0, "%");
+        if ((flags & UINT8_C(0x10)) != 0U)
+            (void)obd2_add_signal(decoded, "commanded EGR B", (double)data[4] * 100.0 / 255.0, "%");
+        if ((flags & UINT8_C(0x08)) != 0U)
+            (void)obd2_add_signal(decoded, "actual EGR B", (double)data[5] * 100.0 / 255.0, "%");
+        if ((flags & UINT8_C(0x04)) != 0U)
+            (void)obd2_add_signal(decoded, "EGR B error", (double)data[6] * 100.0 / 128.0 - 100.0, "%");
+        break;
+    }
+    case LINK_OBD2_FORMULA_EGR_TEMP_FOUR: {
+        const uint8_t flags = data[0];
+        if ((flags & UINT8_C(0x80)) != 0U)
+            (void)obd2_add_signal(decoded, "EGR temperature A", (double)data[1] - 40.0, "°C");
+        if ((flags & UINT8_C(0x40)) != 0U)
+            (void)obd2_add_signal(decoded, "EGR temperature C", (double)data[2] - 40.0, "°C");
+        if ((flags & UINT8_C(0x20)) != 0U)
+            (void)obd2_add_signal(decoded, "EGR temperature B", (double)data[3] - 40.0, "°C");
+        if ((flags & UINT8_C(0x10)) != 0U)
+            (void)obd2_add_signal(decoded, "EGR temperature D", (double)data[4] - 40.0, "°C");
+        break;
+    }
+    case LINK_OBD2_FORMULA_THROTTLE_FOUR: {
+        const uint8_t flags = data[0];
+        static const char *labels[4] = {
+            "commanded throttle A", "relative throttle A",
+            "commanded throttle B", "relative throttle B"
+        };
+        unsigned int index;
+        for (index = 0U; index < 4U; ++index) {
+            if ((flags & (uint8_t)(UINT8_C(0x80) >> index)) != 0U)
+                (void)obd2_add_signal(decoded, labels[index],
+                    (double)data[index + 1U] * 100.0 / 255.0, "%");
+        }
+        break;
+    }
+    case LINK_OBD2_FORMULA_FUEL_PRESSURE_CONTROL: {
+        const uint8_t flags = data[0];
+        if ((flags & UINT8_C(0x80)) != 0U)
+            (void)obd2_add_signal(decoded, "commanded rail pressure A", (double)obd2_u16(data + 1U) * 10.0, "kPa");
+        if ((flags & UINT8_C(0x40)) != 0U)
+            (void)obd2_add_signal(decoded, "rail pressure A", (double)obd2_u16(data + 3U) * 10.0, "kPa");
+        if ((flags & UINT8_C(0x20)) != 0U)
+            (void)obd2_add_signal(decoded, "fuel temperature A", (double)data[5] - 40.0, "°C");
+        if ((flags & UINT8_C(0x10)) != 0U)
+            (void)obd2_add_signal(decoded, "commanded rail pressure B", (double)obd2_u16(data + 6U) * 10.0, "kPa");
+        if ((flags & UINT8_C(0x08)) != 0U)
+            (void)obd2_add_signal(decoded, "rail pressure B", (double)obd2_u16(data + 8U) * 10.0, "kPa");
+        if ((flags & UINT8_C(0x04)) != 0U)
+            (void)obd2_add_signal(decoded, "fuel temperature B", (double)data[10] - 40.0, "°C");
+        break;
+    }
+    case LINK_OBD2_FORMULA_BOOST_FOUR: {
+        const uint8_t flags = data[0];
+        if ((flags & UINT8_C(0x80)) != 0U)
+            (void)obd2_add_signal(decoded, "commanded boost A", (double)obd2_u16(data + 1U) / 32.0, "kPa");
+        if ((flags & UINT8_C(0x40)) != 0U)
+            (void)obd2_add_signal(decoded, "actual boost A", (double)obd2_u16(data + 3U) / 32.0, "kPa");
+        if ((flags & UINT8_C(0x10)) != 0U)
+            (void)obd2_add_signal(decoded, "commanded boost B", (double)obd2_u16(data + 5U) / 32.0, "kPa");
+        if ((flags & UINT8_C(0x08)) != 0U)
+            (void)obd2_add_signal(decoded, "actual boost B", (double)obd2_u16(data + 7U) / 32.0, "kPa");
+        break;
+    }
+    case LINK_OBD2_FORMULA_WASTEGATE_FOUR: {
+        const uint8_t flags = data[0];
+        static const char *labels[4] = {
+            "commanded wastegate A", "actual wastegate A",
+            "commanded wastegate B", "actual wastegate B"
+        };
+        unsigned int index;
+        for (index = 0U; index < 4U; ++index) {
+            if ((flags & (uint8_t)(UINT8_C(0x80) >> index)) != 0U)
+                (void)obd2_add_signal(decoded, labels[index],
+                    (double)data[index + 1U] * 100.0 / 255.0, "%");
+        }
+        break;
+    }
+    case LINK_OBD2_FORMULA_RUNTIME_THREE: {
+        const uint8_t flags = data[0];
+        if ((flags & UINT8_C(0x80)) != 0U)
+            (void)obd2_add_signal(decoded, "engine run time", (double)obd2_u32(data + 1U), "s");
+        if ((flags & UINT8_C(0x40)) != 0U)
+            (void)obd2_add_signal(decoded, "idle run time", (double)obd2_u32(data + 5U), "s");
+        if ((flags & UINT8_C(0x20)) != 0U)
+            (void)obd2_add_signal(decoded, "PTO run time", (double)obd2_u32(data + 9U), "s");
+        break;
+    }
+    case LINK_OBD2_FORMULA_HEV_SYSTEM: {
+        const uint8_t flags = data[0];
+        if ((flags & UINT8_C(0x40)) != 0U)
+            (void)obd2_add_signal(decoded, "battery voltage", (double)obd2_u16(data + 2U) / 64.0, "V");
+        if ((flags & UINT8_C(0x20)) != 0U)
+            (void)obd2_add_signal(decoded, "battery current", (double)obd2_i16(data + 4U) / 10.0, "A");
+        break;
+    }
+    case LINK_OBD2_FORMULA_FUEL_USE_EIGHT: {
+        const uint8_t flags = data[0];
+        static const char *labels[8] = {
+            "fuel system A bank 1", "fuel system B bank 1",
+            "fuel system A bank 2", "fuel system B bank 2",
+            "fuel system A bank 3", "fuel system B bank 3",
+            "fuel system A bank 4", "fuel system B bank 4"
+        };
+        unsigned int index;
+        for (index = 0U; index < 8U; ++index) {
+            if ((flags & (uint8_t)(UINT8_C(0x80) >> index)) != 0U)
+                (void)obd2_add_signal(decoded, labels[index],
+                    (double)data[index + 1U] * 100.0 / 255.0, "%");
+        }
+        break;
+    }
+    case LINK_OBD2_FORMULA_CERTIFIED_ENERGY_RANGE:
+        if ((data[0] & UINT8_C(0x80)) != 0U)
+            (void)obd2_add_signal(decoded, "certified energy", (double)data[1] * 100.0 / 255.0, "%");
+        if ((data[0] & UINT8_C(0x40)) != 0U)
+            (void)obd2_add_signal(decoded, "certified range", (double)data[2] * 100.0 / 255.0, "%");
         break;
     }
     return LINK_OBD2_RESULT_OK;
