@@ -132,6 +132,20 @@ int main(void)
     CHECK(scheduler.count == 1U && scheduler.items[0].pid == 0x0cU);
     CHECK(scheduler.items[0].interval_ms == 500U);
 
+    memset(bits, 0, sizeof(bits));
+    bits[0x06U / 8U] |= (uint8_t)(1U << (0x06U % 8U));
+    bits[0xa6U / 8U] |= (uint8_t)(1U << (0xa6U % 8U));
+    bits[0x7aU / 8U] |= (uint8_t)(1U << (0x7aU % 8U));
+    CHECK(link_scheduler_configure_standard_obd2_bits(
+              &scheduler, bits, 0U) == LINK_SCHEDULER_RESULT_OK);
+    CHECK(scheduler.count == 2U);
+    CHECK(link_scheduler_set_enabled(&scheduler, 0x06U, false) ==
+          LINK_SCHEDULER_RESULT_OK);
+    CHECK(link_scheduler_set_enabled(&scheduler, 0xa6U, false) ==
+          LINK_SCHEDULER_RESULT_OK);
+    CHECK(link_scheduler_set_enabled(&scheduler, 0x7aU, false) ==
+          LINK_SCHEDULER_RESULT_NOT_FOUND);
+
     link_telemetry_store_init(&telemetry);
     CHECK(link_telemetry_store_record(&telemetry, 20U, &measurement));
     CHECK(link_telemetry_store_latest(&telemetry, 0x0cU, &sample));
