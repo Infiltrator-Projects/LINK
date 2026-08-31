@@ -602,44 +602,9 @@ const char *link_obd2_unit_name(LinkObd2Unit unit)
 
 const char *link_obd2_pid_name(uint8_t pid)
 {
-    switch (pid) {
-    case 0x04U: return "Calculated engine load";
-    case 0x05U: return "Engine coolant temperature";
-    case 0x0bU: return "Intake manifold absolute pressure";
-    case 0x0cU: return "Engine speed";
-    case 0x0dU: return "Vehicle speed";
-    case 0x0fU: return "Intake air temperature";
-    case 0x10U: return "Mass air flow rate";
-    case 0x11U: return "Absolute throttle valve position";
-    case 0x1fU: return "Engine run time since start";
-    case 0x21U: return "Distance travelled with MIL on";
-    case 0x24U: return "Oxygen sensor 1 equivalence ratio";
-    case 0x23U: return "Fuel rail gauge pressure";
-    case 0x2cU: return "Commanded EGR";
-    case 0x2fU: return "Fuel tank level input";
-    case 0x30U: return "Warm-ups since codes cleared";
-    case 0x31U: return "Distance since codes cleared";
-    case 0x2dU: return "EGR error";
-    case 0x33U: return "Barometric pressure";
-    case 0x3cU: return "Catalyst temperature bank 1 sensor 1";
-    case 0x3eU: return "Catalyst temperature bank 1 sensor 2";
-    case 0x42U: return "Control module voltage";
-    case 0x45U: return "Relative throttle position";
-    case 0x46U: return "Ambient air temperature";
-    case 0x47U: return "Absolute throttle position B";
-    case 0x48U: return "Absolute throttle position C";
-    case 0x49U: return "Accelerator pedal position D";
-    case 0x4aU: return "Accelerator pedal position E";
-    case 0x4bU: return "Accelerator pedal position F";
-    case 0x4cU: return "Commanded throttle actuator";
-    case 0x4dU: return "Time run with MIL on";
-    case 0x5cU: return "Engine oil temperature";
-    case 0x5eU: return "Engine fuel rate";
-    case 0x78U: return "Exhaust gas temperature bank 1 sensor 1";
-    case 0x7aU: return "DPF bank 1 differential pressure";
-    case 0x7cU: return "DPF bank 1 inlet temperature";
-    default: return "Unknown PID";
-    }
+    const LinkObd2PidDefinition *definition =
+        link_obd2_pid_definition(UINT8_C(0x01), pid);
+    return definition != NULL ? definition->name : "Unknown PID";
 }
 
 LinkObd2Result link_obd2_build_live_pid_request(
