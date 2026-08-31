@@ -50,6 +50,7 @@ typedef struct LinkObd2CatalogueEntry {
 } LinkObd2CatalogueEntry;
 
 #include "pid_catalogue.inc"
+#include "pid_standard_supplement.inc"
 
 static const LinkObd2ServiceDefinition link_obd2_services[] = {
     { UINT8_C(0x01), "Current diagnostic data", true, true },
@@ -63,6 +64,17 @@ static const LinkObd2ServiceDefinition link_obd2_services[] = {
     { UINT8_C(0x09), "Vehicle information", true, true },
     { UINT8_C(0x0A), "Permanent emissions DTCs", true, false }
 };
+
+static size_t obd2_base_count(void)
+{
+    return sizeof(link_obd2_catalogue) / sizeof(link_obd2_catalogue[0]);
+}
+
+static size_t obd2_supplement_count(void)
+{
+    return sizeof(link_obd2_standard_supplement) /
+           sizeof(link_obd2_standard_supplement[0]);
+}
 
 static uint16_t obd2_u16(const uint8_t *data)
 {
@@ -125,13 +137,16 @@ const LinkObd2ServiceDefinition *link_obd2_service_definition(uint8_t mode)
 
 size_t link_obd2_pid_definition_count(void)
 {
-    return sizeof(link_obd2_catalogue) / sizeof(link_obd2_catalogue[0]);
+    return obd2_base_count() + obd2_supplement_count();
 }
 
 const LinkObd2PidDefinition *link_obd2_pid_definition_at(size_t index)
 {
-    return index < link_obd2_pid_definition_count()
-        ? &link_obd2_catalogue[index].definition : NULL;
+    const size_t base_count = obd2_base_count();
+    if (index < base_count) return &link_obd2_catalogue[index].definition;
+    index -= base_count;
+    return index < obd2_supplement_count()
+        ? &link_obd2_standard_supplement[index].definition : NULL;
 }
 
 const LinkObd2PidDefinition *link_obd2_pid_definition(uint8_t mode, uint8_t pid)
@@ -139,8 +154,9 @@ const LinkObd2PidDefinition *link_obd2_pid_definition(uint8_t mode, uint8_t pid)
     size_t index;
     for (index = 0U; index < link_obd2_pid_definition_count(); ++index) {
         const LinkObd2PidDefinition *definition =
-            &link_obd2_catalogue[index].definition;
-        if (definition->mode == mode && definition->pid == pid) {
+            link_obd2_pid_definition_at(index);
+        if (definition != NULL && definition->mode == mode &&
+            definition->pid == pid) {
             return definition;
         }
     }
@@ -149,7 +165,7 @@ const LinkObd2PidDefinition *link_obd2_pid_definition(uint8_t mode, uint8_t pid)
 
 const char *link_obd2_pid_catalogue_snapshot(void)
 {
-    return LINK_OBD2_CATALOGUE_SNAPSHOT;
+    return LINK_OBD2_CATALOGUE_SNAPSHOT "+link-standard-supplement-v1";
 }
 
 static const LinkObd2CatalogueEntry *obd2_catalogue_entry(
@@ -157,10 +173,16 @@ static const LinkObd2CatalogueEntry *obd2_catalogue_entry(
     uint8_t pid)
 {
     size_t index;
-    for (index = 0U; index < link_obd2_pid_definition_count(); ++index) {
+    for (index = 0U; index < obd2_base_count(); ++index) {
         if (link_obd2_catalogue[index].definition.mode == mode &&
             link_obd2_catalogue[index].definition.pid == pid) {
             return &link_obd2_catalogue[index];
+        }
+    }
+    for (index = 0U; index < obd2_supplement_count(); ++index) {
+        if (link_obd2_standard_supplement[index].definition.mode == mode &&
+            link_obd2_standard_supplement[index].definition.pid == pid) {
+            return &link_obd2_standard_supplement[index];
         }
     }
     return NULL;
@@ -249,47 +271,36 @@ static LinkObd2Result obd2_decode_formula(
         (void)obd2_add_signal(decoded, "value", (double)obd2_u16(data) * 10.0, unit);
         break;
     case LINK_OBD2_FORMULA_LAMBDA_VOLTAGE:
-        (void)obd2_add_signal(
-            decoded, "lambda", ((a * 256.0) + b) * 2.0 / 65536.0, "ratio");
-        (void)obd2_add_signal(
-            decoded, "voltage", ((c * 256.0) + d) * 8.0 / 65536.0, "V");
+        (void)obd2_add_signal(decoded, "lambda", ((a * 256.0) + b) * 2.0 / 65536.0, "ratio");
+        (void)obd2_add_signal(decoded, "voltage", ((c * 256.0) + d) * 8.0 / 65536.0, "V");
         break;
     case LINK_OBD2_FORMULA_EVAP_SIGNED_QUARTER:
-        (void)obd2_add_signal(
-            decoded, "value", (double)obd2_u16(data) / 4.0 - 8192.0, unit);
+        (void)obd2_add_signal(decoded, "value", (double)obd2_u16(data) / 4.0 - 8192.0, unit);
         break;
     case LINK_OBD2_FORMULA_LAMBDA_CURRENT:
-        (void)obd2_add_signal(
-            decoded, "lambda", ((a * 256.0) + b) * 2.0 / 65536.0, "ratio");
-        (void)obd2_add_signal(
-            decoded, "current", ((c * 256.0) + d) / 256.0 - 128.0, "mA");
+        (void)obd2_add_signal(decoded, "lambda", ((a * 256.0) + b) * 2.0 / 65536.0, "ratio");
+        (void)obd2_add_signal(decoded, "current", ((c * 256.0) + d) / 256.0 - 128.0, "mA");
         break;
     case LINK_OBD2_FORMULA_U16_DIV10_MINUS40:
-        (void)obd2_add_signal(
-            decoded, "value", (double)obd2_u16(data) / 10.0 - 40.0, unit);
+        (void)obd2_add_signal(decoded, "value", (double)obd2_u16(data) / 10.0 - 40.0, unit);
         break;
     case LINK_OBD2_FORMULA_U16_DIV1000:
-        (void)obd2_add_signal(
-            decoded, "value", (double)obd2_u16(data) / 1000.0, unit);
+        (void)obd2_add_signal(decoded, "value", (double)obd2_u16(data) / 1000.0, unit);
         break;
     case LINK_OBD2_FORMULA_U16_PERCENT:
-        (void)obd2_add_signal(
-            decoded, "value", (double)obd2_u16(data) * 100.0 / 255.0, unit);
+        (void)obd2_add_signal(decoded, "value", (double)obd2_u16(data) * 100.0 / 255.0, unit);
         break;
     case LINK_OBD2_FORMULA_U16_LAMBDA:
-        (void)obd2_add_signal(
-            decoded, "value", (double)obd2_u16(data) * 2.0 / 65536.0, unit);
+        (void)obd2_add_signal(decoded, "value", (double)obd2_u16(data) * 2.0 / 65536.0, unit);
         break;
     case LINK_OBD2_FORMULA_A_X10:
         (void)obd2_add_signal(decoded, "value", a * 10.0, unit);
         break;
     case LINK_OBD2_FORMULA_U16_DIV200:
-        (void)obd2_add_signal(
-            decoded, "value", (double)obd2_u16(data) / 200.0, unit);
+        (void)obd2_add_signal(decoded, "value", (double)obd2_u16(data) / 200.0, unit);
         break;
     case LINK_OBD2_FORMULA_U16_MINUS32767:
-        (void)obd2_add_signal(
-            decoded, "value", (double)obd2_u16(data) - 32767.0, unit);
+        (void)obd2_add_signal(decoded, "value", (double)obd2_u16(data) - 32767.0, unit);
         break;
     case LINK_OBD2_FORMULA_TWO_TRIMS_13:
         (void)obd2_add_signal(decoded, "bank 1", a * 100.0 / 128.0 - 100.0, "%");
@@ -300,12 +311,10 @@ static LinkObd2Result obd2_decode_formula(
         (void)obd2_add_signal(decoded, "bank 4", b * 100.0 / 128.0 - 100.0, "%");
         break;
     case LINK_OBD2_FORMULA_INJECTION_TIMING:
-        (void)obd2_add_signal(
-            decoded, "value", ((double)obd2_u16(data) - 26880.0) / 128.0, unit);
+        (void)obd2_add_signal(decoded, "value", ((double)obd2_u16(data) - 26880.0) / 128.0, unit);
         break;
     case LINK_OBD2_FORMULA_U16_DIV20:
-        (void)obd2_add_signal(
-            decoded, "value", (double)obd2_u16(data) / 20.0, unit);
+        (void)obd2_add_signal(decoded, "value", (double)obd2_u16(data) / 20.0, unit);
         break;
     case LINK_OBD2_FORMULA_A_MINUS125:
         (void)obd2_add_signal(decoded, "value", a - 125.0, unit);
@@ -319,11 +328,9 @@ static LinkObd2Result obd2_decode_formula(
         break;
     case LINK_OBD2_FORMULA_MAF_TWO:
         if (obd2_sensor_supported(data[0], 0U))
-            (void)obd2_add_signal(
-                decoded, "sensor A", ((b * 256.0) + c) / 32.0, "g/s");
+            (void)obd2_add_signal(decoded, "sensor A", ((b * 256.0) + c) / 32.0, "g/s");
         if (obd2_sensor_supported(data[0], 1U))
-            (void)obd2_add_signal(
-                decoded, "sensor B", ((d * 256.0) + e) / 32.0, "g/s");
+            (void)obd2_add_signal(decoded, "sensor B", ((d * 256.0) + e) / 32.0, "g/s");
         break;
     case LINK_OBD2_FORMULA_TEMP_TWO:
         if (obd2_sensor_supported(data[0], 0U))
@@ -338,34 +345,26 @@ static LinkObd2Result obd2_decode_formula(
             ((f * 256.0) + g) / 10.0 - 40.0,
             ((h * 256.0) + i) / 10.0 - 40.0
         };
-        static const char *labels[4] = {
-            "sensor 1", "sensor 2", "sensor 3", "sensor 4"
-        };
+        static const char *labels[4] = {"sensor 1", "sensor 2", "sensor 3", "sensor 4"};
         unsigned int index;
         for (index = 0U; index < 4U; ++index) {
             if (obd2_sensor_supported(data[0], index))
-                (void)obd2_add_signal(
-                    decoded, labels[index], values[index], "°C");
+                (void)obd2_add_signal(decoded, labels[index], values[index], "°C");
         }
         break;
     }
     case LINK_OBD2_FORMULA_FUEL_RATE_TWO:
-        (void)obd2_add_signal(
-            decoded, "engine fuel rate", ((a * 256.0) + b) / 50.0, "g/s");
-        (void)obd2_add_signal(
-            decoded, "vehicle fuel rate", ((c * 256.0) + d) / 50.0, "g/s");
+        (void)obd2_add_signal(decoded, "engine fuel rate", ((a * 256.0) + b) / 50.0, "g/s");
+        (void)obd2_add_signal(decoded, "vehicle fuel rate", ((c * 256.0) + d) / 50.0, "g/s");
         break;
     case LINK_OBD2_FORMULA_U16_DIV5:
-        (void)obd2_add_signal(
-            decoded, "value", (double)obd2_u16(data) / 5.0, unit);
+        (void)obd2_add_signal(decoded, "value", (double)obd2_u16(data) / 5.0, unit);
         break;
     case LINK_OBD2_FORMULA_U16_DIV32:
-        (void)obd2_add_signal(
-            decoded, "value", (double)obd2_u16(data) / 32.0, unit);
+        (void)obd2_add_signal(decoded, "value", (double)obd2_u16(data) / 32.0, unit);
         break;
     case LINK_OBD2_FORMULA_ODOMETER:
-        (void)obd2_add_signal(
-            decoded, "value", (double)obd2_u32(data) / 10.0, unit);
+        (void)obd2_add_signal(decoded, "value", (double)obd2_u32(data) / 10.0, unit);
         break;
     }
     return LINK_OBD2_RESULT_OK;
