@@ -737,9 +737,9 @@ bool link_telemetry_recorder_record_structured_pid_named(
             !emit_quoted(recorder->sink, recorder->context, address) ||
             !emit(recorder->sink, recorder->context,
                   sample->responder_id_available
-                      ? (sample->extended_id ? ",1,"","","
-                                             : ",0,"","",")
-                      : ","","","",") ||
+                      ? (sample->extended_id ? ",1,\"\",\"\","
+                                             : ",0,\"\",\"\",")
+                      : ",\"\",\"\",\"\",") ||
             !emit_quoted(recorder->sink, recorder->context, raw) ||
             !emit(recorder->sink, recorder->context, "\n"))
             return latch_failure(recorder);
@@ -778,9 +778,9 @@ bool link_telemetry_recorder_record_structured_pid_named(
             !emit_quoted(recorder->sink, recorder->context, address) ||
             !emit(recorder->sink, recorder->context,
                   sample->responder_id_available
-                      ? (sample->extended_id ? ",1,"","","
-                                             : ",0,"","",")
-                      : ","","","",") ||
+                      ? (sample->extended_id ? ",1,\"\",\"\","
+                                             : ",0,\"\",\"\",")
+                      : ",\"\",\"\",\"\",") ||
             !emit_quoted(recorder->sink, recorder->context, raw) ||
             !emit(recorder->sink, recorder->context, "\n"))
             return latch_failure(recorder);
