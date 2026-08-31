@@ -254,17 +254,23 @@ static LinkElm327CanResult elm327_can_decode_indexed(
     }
 
     if (*found) {
-        if (written == 0U ||
-            (declared_length_seen && written < declared_length)) {
+        if (written == 0U) {
             return LINK_ELM327_CAN_RESULT_MALFORMED_RESPONSE;
         }
         /*
-         * ELM327-family adapters may pad the last indexed line (commonly
-         * with 0xFF) beyond the declared ISO-TP payload length.  The length
-         * preamble is authoritative; retain the payload and discard only
-         * adapter-added trailing padding.
+         * ELM327-family adapters may prepend a three-hex-digit value before
+         * indexed output.  In the normal ISO-TP presentation that value is a
+         * useful declared payload length and lets us trim trailing adapter
+         * padding.  Vehicle captures also prove that some Vgate firmware emits
+         * values such as "011" before a complete six-byte positive UDS reply.
+         * In that case treating the preamble as an authoritative byte length
+         * discards a real ECU response.  Indexed payload bytes are therefore
+         * authoritative when the preamble exceeds the bytes actually emitted;
+         * a sane shorter/equal declaration still trims trailing padding.
          */
-        *decoded_length = declared_length_seen ? declared_length : written;
+        *decoded_length =
+            declared_length_seen && declared_length <= written
+                ? declared_length : written;
     }
     return LINK_ELM327_CAN_RESULT_OK;
 }
