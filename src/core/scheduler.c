@@ -86,8 +86,6 @@ LinkSchedulerResult link_scheduler_configure_standard_obd2_bits(LinkScheduler *s
         { 0x49U, 1000U, LINK_SCHEDULER_PRIORITY_HIGH },
         { 0x4aU, 1000U, LINK_SCHEDULER_PRIORITY_HIGH },
         { 0x4cU, 1000U, LINK_SCHEDULER_PRIORITY_HIGH },
-        { 0x7aU, 1500U, LINK_SCHEDULER_PRIORITY_HIGH },
-        { 0x7cU, 2000U, LINK_SCHEDULER_PRIORITY_HIGH },
         { 0x11U, 1000U, LINK_SCHEDULER_PRIORITY_HIGH },
         { 0x04U, 1500U, LINK_SCHEDULER_PRIORITY_NORMAL },
         { 0x10U, 1500U, LINK_SCHEDULER_PRIORITY_NORMAL },
@@ -120,8 +118,46 @@ LinkSchedulerResult link_scheduler_configure_standard_obd2_bits(LinkScheduler *s
     for (index = 0U; index < INFILTRATR_ARRAY_LENGTH(plan); ++index) {
         LinkSchedulerResult result;
         if (!bitset_contains(supported_bits, plan[index].pid)) continue;
-        result = link_scheduler_add(scheduler, plan[index].pid, plan[index].interval_ms, plan[index].priority, first_due_ms);
-        if (result != LINK_SCHEDULER_RESULT_OK) { link_scheduler_init(scheduler); return result; }
+        if (link_parameter_obd2_definition(plan[index].pid) == NULL) continue;
+        result = link_scheduler_add(
+            scheduler, plan[index].pid, plan[index].interval_ms,
+            plan[index].priority, first_due_ms);
+        if (result != LINK_SCHEDULER_RESULT_OK) {
+            link_scheduler_init(scheduler);
+            return result;
+        }
+    }
+
+    /*
+     * The priority plan above is only a cadence override, never the standards
+     * catalogue. Every scalar Mode 01 definition that the vehicle advertises
+     * must be schedulable even if it was added after this file was written.
+     * Polling preferences are applied by the platform controller afterwards,
+     * so adding the item does not create unwanted bus traffic.
+     */
+    for (index = 0U;
+         index < link_parameter_obd2_definition_count();
+         ++index) {
+        const LinkParameterDefinition *definition =
+            link_parameter_obd2_definition_at(index);
+        LinkSchedulerResult result;
+        uint8_t pid;
+
+        if (definition == NULL ||
+            definition->key.identifier > UINT8_MAX) {
+            continue;
+        }
+        pid = (uint8_t)definition->key.identifier;
+        if (!bitset_contains(supported_bits, pid)) continue;
+
+        result = link_scheduler_add(
+            scheduler, pid, 3000U,
+            LINK_SCHEDULER_PRIORITY_LOW, first_due_ms);
+        if (result == LINK_SCHEDULER_RESULT_DUPLICATE) continue;
+        if (result != LINK_SCHEDULER_RESULT_OK) {
+            link_scheduler_init(scheduler);
+            return result;
+        }
     }
     return LINK_SCHEDULER_RESULT_OK;
 }
