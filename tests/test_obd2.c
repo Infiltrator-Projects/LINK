@@ -141,6 +141,51 @@ int main(void)
               "preserve encoded standard PID without inventing one scalar");
     }
 
+    check(link_obd2_build_standard_read_request(
+              0x01U, 0x0cU, command, sizeof(command)) ==
+              LINK_OBD2_RESULT_OK && strcmp(command, "010C") == 0,
+          "generic Mode 01 read request");
+    check(link_obd2_build_standard_read_request(
+              0x05U, 0x01U, command, sizeof(command)) ==
+              LINK_OBD2_RESULT_OK && strcmp(command, "0501") == 0,
+          "generic Mode 05 read request");
+    check(link_obd2_build_standard_read_request(
+              0x06U, 0x00U, command, sizeof(command)) ==
+              LINK_OBD2_RESULT_OK && strcmp(command, "0600") == 0,
+          "generic Mode 06 read request");
+    check(link_obd2_build_standard_read_request(
+              0x09U, 0x02U, command, sizeof(command)) ==
+              LINK_OBD2_RESULT_OK && strcmp(command, "0902") == 0,
+          "generic Mode 09 read request");
+    check(link_obd2_build_standard_read_request(
+              0x04U, 0x00U, command, sizeof(command)) ==
+              LINK_OBD2_RESULT_NOT_AUTHORIZED && command[0] == '\0',
+          "generic read path denies Mode 04 clear operation");
+    check(link_obd2_build_standard_read_request(
+              0x08U, 0x01U, command, sizeof(command)) ==
+              LINK_OBD2_RESULT_NOT_AUTHORIZED && command[0] == '\0',
+          "generic read path denies Mode 08 control operation");
+    check(link_obd2_build_standard_read_request(
+              0x02U, 0x0cU, command, sizeof(command)) ==
+              LINK_OBD2_RESULT_INVALID_ARGUMENT && command[0] == '\0',
+          "Mode 02 uses explicit freeze-frame request with frame number");
+
+    {
+        LinkObd2PidSet genericSupport = {{0}};
+        bool more = false;
+        static const uint8_t supportPayload[] = {
+            0x98U, 0x3bU, 0xa0U, 0x13U
+        };
+        check(link_obd2_decode_support_bitmap_payload(
+                  0x00U, supportPayload, sizeof(supportPayload),
+                  &genericSupport, &more) == LINK_OBD2_RESULT_OK && more,
+              "generic support bitmap decoder");
+        check(link_obd2_pid_set_contains(&genericSupport, 0x04U) &&
+                  link_obd2_pid_set_contains(&genericSupport, 0x0cU) &&
+                  link_obd2_pid_set_contains(&genericSupport, 0x20U),
+              "generic support bitmap retains advertised identifiers");
+    }
+
     check(link_obd2_build_live_pid_request(0x0cU, command, sizeof(command)) ==
               LINK_OBD2_RESULT_OK && strcmp(command, "010C") == 0,
           "build RPM request");
