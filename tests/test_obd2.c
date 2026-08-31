@@ -167,10 +167,10 @@ int main(void)
             &responderSets, 0x7e8U, false);
         secondarySet = link_obd2_responder_pid_set_find(
             &responderSets, 0x7e9U, false);
-        check(engineSet != NULL && pid_count(engineSet) == 27U,
-              "retain all 27 captured engine responder capabilities");
-        check(secondarySet != NULL && pid_count(secondarySet) == 10U,
-              "retain all 10 captured secondary responder capabilities");
+        check(engineSet != NULL && pid_count(engineSet) == 29U,
+              "retain all 29 captured engine responder capability bits");
+        check(secondarySet != NULL && pid_count(secondarySet) == 12U,
+              "retain all 12 captured secondary responder capability bits");
         check(link_obd2_pid_set_contains(engineSet, 0x2fU) &&
                   link_obd2_pid_set_contains(engineSet, 0x46U) &&
                   link_obd2_pid_set_contains(engineSet, 0x4dU),
