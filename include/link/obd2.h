@@ -225,6 +225,32 @@ LinkObd2Result link_obd2_decode_pid_payload(
     size_t data_length,
     LinkObd2DecodedPid *decoded);
 
+/**
+ * Build one generic read-only two-byte standard OBD request.
+ *
+ * Modes 01, 05, 06 and 09 are accepted here. Mode 02 carries a freeze-frame
+ * number and therefore uses link_obd2_build_freeze_pid_request(). DTC modes
+ * use link_obd2_build_dtc_request(). Write/control modes 04 and 08 are
+ * deliberately rejected by this read-only API.
+ */
+LinkObd2Result link_obd2_build_standard_read_request(
+    uint8_t mode,
+    uint8_t identifier,
+    char *buffer,
+    size_t buffer_size);
+
+/**
+ * Decode a standard 32-bit support page (00/20/40/... style) into a PID set.
+ * This helper is service-agnostic so Mode 01 PIDs, Mode 06 monitor IDs and
+ * Mode 09 information types can share the same portable bitmap logic.
+ */
+LinkObd2Result link_obd2_decode_support_bitmap_payload(
+    uint8_t base_identifier,
+    const uint8_t *data,
+    size_t data_length,
+    LinkObd2PidSet *set,
+    bool *has_more);
+
 LinkObd2Result link_obd2_build_live_pid_request(
     uint8_t pid, char *buffer, size_t buffer_size);
 LinkObd2Result link_obd2_build_freeze_pid_request(
