@@ -760,6 +760,30 @@ static void LinkAppleAppendReadinessMonitor(
     return YES;
 }
 
+- (BOOL)beginLiveManufacturerExtension
+{
+    if (!_sessionInitialized || !self.active ||
+        _manufacturerExtensionActive || _manufacturerRecoveryActive ||
+        _flow.awaiting_response) {
+        return NO;
+    }
+
+    LinkDiagnosticFlowResult result =
+        link_diagnostic_flow_begin_live_manufacturer_extension(&_flow);
+    if (result != LINK_DIAGNOSTIC_FLOW_RESULT_OK) {
+        return NO;
+    }
+
+    /*
+     * Invalidate any delayed scheduler callback that was queued before the
+     * product requested this pause.  The portable scheduler state itself is
+     * retained and will resume after the manufacturer extension.
+     */
+    ++_pollGeneration;
+    _manufacturerExtensionActive = YES;
+    return YES;
+}
+
 - (BOOL)beginManufacturerCommand:(const char *)command
                          timeout:(uint64_t)timeoutMs
 {
