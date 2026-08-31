@@ -83,7 +83,7 @@ int main(void)
             LINK_ADAPTER_KIND_STM32_LINK));
     }
 
-    CHECK(link_parameter_obd2_definition_count() == 35U);
+    CHECK(link_parameter_obd2_definition_count() == 57U);
     CHECK(link_parameter_from_obd2_scalar(0x0cU, LINK_OBD2_UNIT_RPM, 1234.5, 10U, &parameter));
     CHECK(strcmp(parameter.definition->stable_key, "obd2.engine.rpm") == 0);
     CHECK(strcmp(link_parameter_obd2_definition(0x11U)->name,
@@ -98,6 +98,14 @@ int main(void)
                  "obd2.maintenance.distance_since_clear") == 0);
     CHECK(strcmp(link_parameter_obd2_definition(0x4dU)->stable_key,
                  "obd2.emissions.mil_runtime") == 0);
+    CHECK(link_parameter_obd2_definition(0x06U) != NULL);
+    CHECK(strcmp(link_parameter_obd2_definition(0x06U)->name,
+                 "Short term fuel trim - Bank 1") == 0);
+    CHECK(link_parameter_obd2_definition(0xa6U) != NULL);
+    CHECK(strcmp(link_parameter_obd2_definition(0xa6U)->name,
+                 "Odometer") == 0);
+    CHECK(link_parameter_obd2_definition(0x7aU) == NULL);
+    CHECK(link_parameter_obd2_definition(0x7cU) == NULL);
     CHECK(link_parameter_format_value(
               link_parameter_obd2_definition(0x23U),
               true, 123400.0, formatted, sizeof(formatted)));
