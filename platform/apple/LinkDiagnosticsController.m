@@ -1221,6 +1221,13 @@ static void LinkAppleAppendReadinessMonitor(
         break;
     }
 
+    case LINK_DIAGNOSTIC_FLOW_EVENT_LIVE_STRUCTURED:
+        _consecutiveLiveTimeouts = 0U;
+        self.ready = YES;
+        self.statusText = _simulated
+            ? _simulatedLiveStatusText : _liveStatusText;
+        break;
+
     case LINK_DIAGNOSTIC_FLOW_EVENT_LIVE_NO_DATA:
         self.statusText =
             @"Live OBD-II data; one PID returned no data";
