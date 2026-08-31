@@ -74,6 +74,39 @@ int main(void)
     REQUIRE(link_elm327_can_decode_pdu(&response, pdu, sizeof(pdu), &pdu_length) == LINK_ELM327_CAN_RESULT_OK);
     REQUIRE(pdu_length == 4U && pdu[0] == 0x62U && pdu[1] == 0xf1U);
 
+    /*
+     * C207/Vgate evidence: some indexed replies carry a three-hex-digit
+     * preamble larger than the actual emitted payload.  The positive indexed
+     * ECU payload must survive rather than being rejected as malformed.
+     */
+    memset(&response, 0, sizeof(response));
+    response.result = LINK_ELM327_RESULT_OK;
+    memcpy(response.text, "011\n0:622001061A06",
+           sizeof("011\n0:622001061A06"));
+    response.length = strlen(response.text);
+    response.line_count = 2U;
+    REQUIRE(link_elm327_can_decode_pdu(
+                &response, pdu, sizeof(pdu), &pdu_length) ==
+            LINK_ELM327_CAN_RESULT_OK);
+    REQUIRE(pdu_length == 6U &&
+            pdu[0] == 0x62U && pdu[1] == 0x20U &&
+            pdu[2] == 0x01U && pdu[3] == 0x06U &&
+            pdu[4] == 0x1aU && pdu[5] == 0x06U);
+
+    memset(&response, 0, sizeof(response));
+    response.result = LINK_ELM327_RESULT_OK;
+    memcpy(response.text, "012\n0:610110102210",
+           sizeof("012\n0:610110102210"));
+    response.length = strlen(response.text);
+    response.line_count = 2U;
+    REQUIRE(link_elm327_can_decode_pdu(
+                &response, pdu, sizeof(pdu), &pdu_length) ==
+            LINK_ELM327_CAN_RESULT_OK);
+    REQUIRE(pdu_length == 6U &&
+            pdu[0] == 0x61U && pdu[1] == 0x01U &&
+            pdu[2] == 0x10U && pdu[3] == 0x10U &&
+            pdu[4] == 0x22U && pdu[5] == 0x10U);
+
     memset(&response, 0, sizeof(response));
     response.result = LINK_ELM327_RESULT_OK;
     memcpy(response.text, "7F1978\n5902FF", sizeof("7F1978\n5902FF"));
