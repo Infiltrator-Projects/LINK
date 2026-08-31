@@ -558,10 +558,17 @@ LinkObd2Result link_obd2_build_standard_read_request(
         link_obd2_service_definition(mode);
     const uint8_t bytes[] = { mode, identifier };
 
-    if (service == NULL || !service->read_only || !service->parameterized ||
-        mode == UINT8_C(0x02)) {
+    if (service == NULL) {
+        if (buffer != NULL && buffer_size != 0U) buffer[0] = '\0';
+        return LINK_OBD2_RESULT_INVALID_ARGUMENT;
+    }
+    if (!service->read_only) {
         if (buffer != NULL && buffer_size != 0U) buffer[0] = '\0';
         return LINK_OBD2_RESULT_NOT_AUTHORIZED;
+    }
+    if (!service->parameterized || mode == UINT8_C(0x02)) {
+        if (buffer != NULL && buffer_size != 0U) buffer[0] = '\0';
+        return LINK_OBD2_RESULT_INVALID_ARGUMENT;
     }
     return obd2_write_command(bytes, sizeof(bytes), buffer, buffer_size);
 }
