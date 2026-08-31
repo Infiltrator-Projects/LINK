@@ -461,8 +461,28 @@ static LinkDiagnosticFlowResult flow_accept_initialization(
                 : LINK_DIAGNOSTIC_FLOW_SCANNING_STORED_DTCS);
     } else {
         flow->supported_pid_base = 0x00U;
-        flow->stage = LINK_DIAGNOSTIC_FLOW_DISCOVERING_PIDS;
+        flow->stage = flow->config.preserve_pid_discovery_response_headers
+            ? LINK_DIAGNOSTIC_FLOW_CONFIGURING_PID_DISCOVERY_HEADERS
+            : LINK_DIAGNOSTIC_FLOW_DISCOVERING_PIDS;
     }
+    return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
+}
+
+static LinkDiagnosticFlowResult flow_accept_pid_discovery_header_configuration(
+    LinkDiagnosticFlow *flow,
+    const LinkElm327Response *response,
+    bool enabling)
+{
+    if (response->result != LINK_ELM327_RESULT_OK || !response->ok_seen) {
+        return flow_fail_elm(
+            flow,
+            response->result != LINK_ELM327_RESULT_OK
+                ? response->result
+                : LINK_ELM327_RESULT_MALFORMED_RESPONSE);
+    }
+    flow->stage = enabling
+        ? LINK_DIAGNOSTIC_FLOW_DISCOVERING_PIDS
+        : LINK_DIAGNOSTIC_FLOW_READING_STANDARD_VIN;
     return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
 }
 
@@ -487,11 +507,13 @@ static LinkDiagnosticFlowResult flow_accept_pid_discovery(
     LinkDiagnosticFlowEvent *event)
 {
     bool has_more = false;
-    const LinkObd2Result result = link_obd2_accept_supported_pids(
-        response,
-        flow->supported_pid_base,
-        &flow->supported_pids,
-        &has_more);
+    const LinkObd2Result result =
+        link_obd2_accept_supported_pid_responders(
+            response,
+            flow->supported_pid_base,
+            &flow->supported_pids,
+            &flow->supported_pid_responders,
+            &has_more);
 
     if (result != LINK_OBD2_RESULT_OK) {
         return flow_fail_obd2(flow, result);
@@ -499,7 +521,9 @@ static LinkDiagnosticFlowResult flow_accept_pid_discovery(
     if (has_more && flow->supported_pid_base <= 0xc0U) {
         flow->supported_pid_base = (uint8_t)(flow->supported_pid_base + 0x20U);
     } else {
-        flow->stage = LINK_DIAGNOSTIC_FLOW_READING_STANDARD_VIN;
+        flow->stage = flow->config.preserve_pid_discovery_response_headers
+            ? LINK_DIAGNOSTIC_FLOW_RESTORING_PID_DISCOVERY_HEADERS
+            : LINK_DIAGNOSTIC_FLOW_READING_STANDARD_VIN;
         event->kind = LINK_DIAGNOSTIC_FLOW_EVENT_PID_DISCOVERY_COMPLETE;
     }
     return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
@@ -650,7 +674,11 @@ const char *link_diagnostic_flow_stage_name(LinkDiagnosticFlowStage stage)
     switch (stage) {
     case LINK_DIAGNOSTIC_FLOW_IDLE: return "idle";
     case LINK_DIAGNOSTIC_FLOW_INITIALIZING: return "initializing";
+    case LINK_DIAGNOSTIC_FLOW_CONFIGURING_PID_DISCOVERY_HEADERS:
+        return "configuring-pid-discovery-headers";
     case LINK_DIAGNOSTIC_FLOW_DISCOVERING_PIDS: return "discovering-pids";
+    case LINK_DIAGNOSTIC_FLOW_RESTORING_PID_DISCOVERY_HEADERS:
+        return "restoring-pid-discovery-headers";
     case LINK_DIAGNOSTIC_FLOW_READING_STANDARD_VIN: return "reading-standard-vin";
     case LINK_DIAGNOSTIC_FLOW_MANUFACTURER_EXTENSION: return "manufacturer-extension";
     case LINK_DIAGNOSTIC_FLOW_RESTORING_AFTER_MANUFACTURER: return "restoring-after-manufacturer";
@@ -745,8 +773,16 @@ LinkDiagnosticFlowResult link_diagnostic_flow_next_action(
     case LINK_DIAGNOSTIC_FLOW_RESTORING_AFTER_MANUFACTURER:
         return flow_next_initialization_action(flow, action);
 
+    case LINK_DIAGNOSTIC_FLOW_CONFIGURING_PID_DISCOVERY_HEADERS:
+        return flow_emit_command(
+            flow, action, "ATH1", flow->config.init_timeout_ms);
+
     case LINK_DIAGNOSTIC_FLOW_DISCOVERING_PIDS:
         return flow_next_pid_discovery_action(flow, action);
+
+    case LINK_DIAGNOSTIC_FLOW_RESTORING_PID_DISCOVERY_HEADERS:
+        return flow_emit_command(
+            flow, action, "ATH0", flow->config.init_timeout_ms);
 
     case LINK_DIAGNOSTIC_FLOW_READING_STANDARD_VIN:
         return flow_next_vin_action(flow, action);
@@ -811,6 +847,12 @@ LinkDiagnosticFlowResult link_diagnostic_flow_accept_response(
     case LINK_DIAGNOSTIC_FLOW_INITIALIZING:
     case LINK_DIAGNOSTIC_FLOW_RESTORING_AFTER_MANUFACTURER:
         return flow_accept_initialization(flow, response, stage, event);
+    case LINK_DIAGNOSTIC_FLOW_CONFIGURING_PID_DISCOVERY_HEADERS:
+        return flow_accept_pid_discovery_header_configuration(
+            flow, response, true);
+    case LINK_DIAGNOSTIC_FLOW_RESTORING_PID_DISCOVERY_HEADERS:
+        return flow_accept_pid_discovery_header_configuration(
+            flow, response, false);
     case LINK_DIAGNOSTIC_FLOW_CONFIGURING_LIVE_HEADERS:
         return flow_accept_live_header_configuration(flow, response);
     case LINK_DIAGNOSTIC_FLOW_DISCOVERING_PIDS:
@@ -932,6 +974,15 @@ const LinkObd2PidSet *link_diagnostic_flow_supported_pids(
     const LinkDiagnosticFlow *flow)
 {
     return flow == NULL ? NULL : &flow->supported_pids;
+}
+
+const LinkObd2PidSet *link_diagnostic_flow_supported_pids_for_responder(
+    const LinkDiagnosticFlow *flow,
+    uint32_t responder_id,
+    bool extended_id)
+{
+    return flow == NULL ? NULL : link_obd2_responder_pid_set_find(
+        &flow->supported_pid_responders, responder_id, extended_id);
 }
 
 const LinkObd2DtcList *link_diagnostic_flow_dtcs(
