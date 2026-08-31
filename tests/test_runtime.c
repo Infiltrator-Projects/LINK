@@ -83,7 +83,7 @@ int main(void)
             LINK_ADAPTER_KIND_STM32_LINK));
     }
 
-    CHECK(link_parameter_obd2_definition_count() == 57U);
+    CHECK(link_parameter_obd2_definition_count() == 59U);
     CHECK(link_parameter_from_obd2_scalar(0x0cU, LINK_OBD2_UNIT_RPM, 1234.5, 10U, &parameter));
     CHECK(strcmp(parameter.definition->stable_key, "obd2.engine.rpm") == 0);
     CHECK(strcmp(link_parameter_obd2_definition(0x11U)->name,
@@ -104,6 +104,12 @@ int main(void)
     CHECK(link_parameter_obd2_definition(0xa6U) != NULL);
     CHECK(strcmp(link_parameter_obd2_definition(0xa6U)->name,
                  "Odometer") == 0);
+    CHECK(link_parameter_obd2_definition(0x8dU) != NULL);
+    CHECK(strcmp(link_parameter_obd2_definition(0x8dU)->name,
+                 "Absolute throttle position G") == 0);
+    CHECK(link_parameter_obd2_definition(0xc7U) != NULL);
+    CHECK(strcmp(link_parameter_obd2_definition(0xc7U)->name,
+                 "Distance travelled since reflash") == 0);
     CHECK(link_parameter_obd2_definition(0x7aU) == NULL);
     CHECK(link_parameter_obd2_definition(0x7cU) == NULL);
     CHECK(link_parameter_format_value(
