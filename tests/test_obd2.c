@@ -56,15 +56,82 @@ static void test_catalogue(void)
     static const uint8_t throttle_g[] = {0x80U};
     static const uint8_t reflash_distance[] = {0x01U, 0xf4U};
     static const uint8_t egr_payload[] = {
-        0xfcU, 0x80U, 0x40U, 0x80U, 0xffU, 0x00U, 0x40U
+        0x3fU, 0x80U, 0x40U, 0x80U, 0xffU, 0x00U, 0x40U
+    };
+    static const uint8_t intake_payload[] = {
+        0x0fU, 0x00U, 0x80U, 0xffU, 0x40U
     };
     static const uint8_t rail_payload[] = {
-        0xfcU, 0x00U, 0x64U, 0x01U, 0x00U, 0x50U,
+        0x3fU, 0x00U, 0x64U, 0x01U, 0x00U, 0x50U,
         0x00U, 0x32U, 0x00U, 0x10U, 0x28U
     };
+    static const uint8_t injection_payload[] = {
+        0x0fU, 0x00U, 0x64U, 0x00U, 0xc8U,
+        0x01U, 0x2cU, 0x01U, 0x90U
+    };
+    static const uint8_t inlet_pressure_payload[] = {
+        0x0cU, 0x0aU, 0x14U
+    };
     static const uint8_t boost_payload[] = {
-        0xd8U, 0x04U, 0x00U, 0x08U, 0x00U,
+        0x1bU, 0x04U, 0x00U, 0x08U, 0x00U,
         0x10U, 0x00U, 0x20U, 0x00U, 0x00U
+    };
+    static const uint8_t vgt_payload[] = {
+        0x3fU, 0x40U, 0x80U, 0xc0U, 0xffU, 0x09U
+    };
+    static const uint8_t exhaust_pressure_payload[] = {
+        0x03U, 0x00U, 0x64U, 0x00U, 0xc8U
+    };
+    static const uint8_t turbo_rpm_payload[] = {
+        0x03U, 0x00U, 0x64U, 0x00U, 0xc8U
+    };
+    static const uint8_t turbo_temp_payload[] = {
+        0x0fU, 0x28U, 0x50U, 0x03U, 0x20U, 0x04U, 0xb0U
+    };
+    static const uint8_t charge_temp_payload[] = {
+        0x0fU, 0x28U, 0x32U, 0x3cU, 0x46U
+    };
+    static const uint8_t dpf_pressure_payload[] = {
+        0x07U, 0xffU, 0x9cU, 0x00U, 0x64U, 0x00U, 0xc8U
+    };
+    static const uint8_t dpf_temp_payload[] = {
+        0x0fU, 0x03U, 0x20U, 0x04U, 0xb0U,
+        0x06U, 0x40U, 0x07U, 0xd0U
+    };
+    static const uint8_t runtime_payload[] = {
+        0x07U,
+        0x00U, 0x00U, 0x00U, 0x64U,
+        0x00U, 0x00U, 0x00U, 0x32U,
+        0x00U, 0x00U, 0x00U, 0x19U
+    };
+    static const uint8_t nox_payload[] = {
+        0x0fU, 0x00U, 0x64U, 0x00U, 0xc8U,
+        0x01U, 0x2cU, 0x01U, 0x90U
+    };
+    static const uint8_t nox_reagent_payload[] = {
+        0x0fU, 0x00U, 0xc8U, 0x01U, 0x90U, 0x80U,
+        0x00U, 0x00U, 0x00U, 0x64U
+    };
+    static const uint8_t pm_payload[] = {
+        0x03U, 0x00U, 0x50U, 0x00U, 0xa0U
+    };
+    static const uint8_t map_payload[] = {
+        0x03U, 0x00U, 0x20U, 0x00U, 0x40U
+    };
+    static const uint8_t aftertreatment_payload[] = {
+        0x7fU, 0x0fU, 0x80U, 0x00U, 0x0aU, 0x00U, 0x14U
+    };
+    static const uint8_t wide_o2_payload[] = {
+        0xffU,
+        0x00U,0x64U, 0x00U,0xc8U, 0x01U,0x2cU, 0x01U,0x90U,
+        0x10U,0x00U, 0x20U,0x00U, 0x30U,0x00U, 0x40U,0x00U
+    };
+    static const uint8_t pm_output_payload[] = {
+        0x0fU, 0x03U, 0x00U, 0x64U, 0x01U, 0x00U, 0xc8U
+    };
+    static const uint8_t egt_wide_payload[] = {
+        0x0fU, 0x03U,0x20U, 0x04U,0xb0U,
+        0x06U,0x40U, 0x07U,0xd0U
     };
     static const uint8_t hev_payload[] = {
         0x60U, 0x00U, 0x19U, 0x00U, 0xf8U, 0x30U
@@ -93,15 +160,24 @@ static void test_catalogue(void)
     check(link_obd2_pid_definition_count() == 234U,
           "shared standards catalogue contains 234 Mode 01/09 definitions");
     check(strcmp(link_obd2_pid_catalogue_snapshot(),
-                 "bc58b0eb7273226a1aabae98e956b70b8362bda1+link-standard-supplement-v2+link-corrections-v1") == 0,
+                 "bc58b0eb7273226a1aabae98e956b70b8362bda1+link-standard-supplement-v3+link-corrections-v2") == 0,
           "catalogue provenance includes base snapshot and supplement");
 
     definition = link_obd2_pid_definition(0x01U, 0x69U);
     check(definition != NULL && definition->bytes == 7U,
           "modern EGR standard PID is catalogued");
     definition = link_obd2_pid_definition(0x01U, 0x7aU);
-    check(definition != NULL && definition->bytes == 7U,
-          "DPF bank 1 pressure standard PID is catalogued");
+    check(definition != NULL && definition->bytes == 7U &&
+              definition->value_kind == LINK_OBD2_VALUE_MULTI_SCALAR,
+          "DPF bank 1 pressure standard PID is decoded");
+    definition = link_obd2_pid_definition(0x01U, 0x7cU);
+    check(definition != NULL && definition->bytes == 9U &&
+              definition->value_kind == LINK_OBD2_VALUE_MULTI_SCALAR,
+          "DPF temperature pinned metadata is corrected and decoded");
+    definition = link_obd2_pid_definition(0x01U, 0x83U);
+    check(definition != NULL && definition->bytes == 9U &&
+              definition->value_kind == LINK_OBD2_VALUE_MULTI_SCALAR,
+          "NOx sensor pinned metadata is corrected and decoded");
     definition = link_obd2_pid_definition(0x01U, 0xc8U);
     check(definition != NULL && definition->bytes == 1U,
           "late standard warning-lamp PID is catalogued");
@@ -147,6 +223,41 @@ static void test_catalogue(void)
                           left_definition->pid != right_definition->pid,
                       "catalogue contains no duplicate mode/PID assignments");
             }
+        }
+    }
+
+    /*
+     * Full-catalogue contract: every assigned definition in the shared SAE
+     * table must be consumable by the generic decoder. A definition whose
+     * public layout is not independently corroborated still succeeds and
+     * preserves its complete raw payload rather than becoming "unsupported".
+     */
+    {
+        uint8_t payload[64] = {0};
+        size_t definition_index;
+        for (definition_index = 0U;
+             definition_index < link_obd2_pid_definition_count();
+             ++definition_index) {
+            const LinkObd2PidDefinition *catalogue_definition =
+                link_obd2_pid_definition_at(definition_index);
+            LinkObd2DecodedPid catalogue_decoded;
+            check(catalogue_definition != NULL,
+                  "every SAE catalogue slot resolves");
+            if (catalogue_definition == NULL) continue;
+            check(catalogue_definition->bytes <= sizeof(payload),
+                  "SAE payload fits generic decoder raw buffer");
+            if (catalogue_definition->bytes > sizeof(payload)) continue;
+            check(link_obd2_decode_pid_payload(
+                      catalogue_definition->mode,
+                      catalogue_definition->pid,
+                      payload,
+                      catalogue_definition->bytes,
+                      &catalogue_decoded) == LINK_OBD2_RESULT_OK,
+                  "every assigned SAE PID is generically decodable/raw-preserving");
+            check(catalogue_decoded.definition != NULL,
+                  "every assigned SAE PID retains definition metadata");
+            check(catalogue_decoded.raw_length == catalogue_definition->bytes,
+                  "every assigned SAE PID preserves its complete payload");
         }
     }
 
@@ -197,6 +308,13 @@ static void test_catalogue(void)
               decoded.signals[5].value == -50.0,
           "decode all six corroborated EGR fields");
     check(link_obd2_decode_pid_payload(
+              0x01U, 0x6aU, intake_payload,
+              sizeof(intake_payload), &decoded) == LINK_OBD2_RESULT_OK &&
+              decoded.signal_count == 4U &&
+              decoded.signals[2].value == 100.0,
+          "decode diesel intake-air control fields");
+
+    check(link_obd2_decode_pid_payload(
               0x01U, 0x6dU, rail_payload,
               sizeof(rail_payload), &decoded) == LINK_OBD2_RESULT_OK &&
               decoded.signal_count == 6U &&
@@ -212,6 +330,134 @@ static void test_catalogue(void)
               decoded.signals[0].value == 32.0 &&
               decoded.signals[3].value == 256.0,
           "decode boost values beyond legacy 255 kPa MAP range");
+    check(link_obd2_decode_pid_payload(
+              0x01U, 0x6eU, injection_payload,
+              sizeof(injection_payload), &decoded) == LINK_OBD2_RESULT_OK &&
+              decoded.signal_count == 4U &&
+              decoded.signals[0].value == 1000.0 &&
+              decoded.signals[3].value == 4000.0,
+          "decode injection pressure control");
+    check(link_obd2_decode_pid_payload(
+              0x01U, 0x6fU, inlet_pressure_payload,
+              sizeof(inlet_pressure_payload), &decoded) == LINK_OBD2_RESULT_OK &&
+              decoded.signal_count == 2U &&
+              decoded.signals[0].value == 80.0 &&
+              decoded.signals[1].value == 160.0,
+          "decode wide-range turbo compressor inlet pressure");
+    check(link_obd2_decode_pid_payload(
+              0x01U, 0x71U, vgt_payload,
+              sizeof(vgt_payload), &decoded) == LINK_OBD2_RESULT_OK &&
+              decoded.signal_count == 6U &&
+              decoded.signals[2].value == 1.0 &&
+              decoded.signals[5].value == 2.0,
+          "decode variable-geometry turbo command, actual and status");
+    check(link_obd2_decode_pid_payload(
+              0x01U, 0x73U, exhaust_pressure_payload,
+              sizeof(exhaust_pressure_payload), &decoded) == LINK_OBD2_RESULT_OK &&
+              decoded.signal_count == 2U &&
+              decoded.signals[0].value == 1.0 &&
+              decoded.signals[1].value == 2.0,
+          "decode dual exhaust pressure");
+    check(link_obd2_decode_pid_payload(
+              0x01U, 0x74U, turbo_rpm_payload,
+              sizeof(turbo_rpm_payload), &decoded) == LINK_OBD2_RESULT_OK &&
+              decoded.signal_count == 2U &&
+              decoded.signals[0].value == 1000.0 &&
+              decoded.signals[1].value == 2000.0,
+          "decode dual turbocharger speed");
+    check(link_obd2_decode_pid_payload(
+              0x01U, 0x75U, turbo_temp_payload,
+              sizeof(turbo_temp_payload), &decoded) == LINK_OBD2_RESULT_OK &&
+              decoded.signal_count == 4U &&
+              decoded.signals[0].value == 0.0 &&
+              decoded.signals[3].value == 80.0,
+          "decode turbocharger temperatures");
+    check(link_obd2_decode_pid_payload(
+              0x01U, 0x77U, charge_temp_payload,
+              sizeof(charge_temp_payload), &decoded) == LINK_OBD2_RESULT_OK &&
+              decoded.signal_count == 4U &&
+              decoded.signals[3].value == 30.0,
+          "decode charge-air cooler temperatures");
+    check(link_obd2_decode_pid_payload(
+              0x01U, 0x7aU, dpf_pressure_payload,
+              sizeof(dpf_pressure_payload), &decoded) == LINK_OBD2_RESULT_OK &&
+              decoded.signal_count == 3U &&
+              decoded.signals[0].value == -1.0 &&
+              decoded.signals[2].value == 2.0,
+          "decode signed DPF differential and absolute pressures");
+    check(link_obd2_decode_pid_payload(
+              0x01U, 0x7cU, dpf_temp_payload,
+              sizeof(dpf_temp_payload), &decoded) == LINK_OBD2_RESULT_OK &&
+              decoded.signal_count == 4U &&
+              decoded.signals[0].value == 40.0 &&
+              decoded.signals[3].value == 160.0,
+          "decode corrected DPF temperature payload");
+    check(link_obd2_decode_pid_payload(
+              0x01U, 0x7fU, runtime_payload,
+              sizeof(runtime_payload), &decoded) == LINK_OBD2_RESULT_OK &&
+              decoded.signal_count == 3U &&
+              decoded.signals[0].value == 100.0 &&
+              decoded.signals[2].value == 25.0,
+          "decode engine, idle and PTO runtime with low support bits");
+    check(link_obd2_decode_pid_payload(
+              0x01U, 0x83U, nox_payload,
+              sizeof(nox_payload), &decoded) == LINK_OBD2_RESULT_OK &&
+              decoded.signal_count == 4U &&
+              decoded.signals[0].value == 100.0 &&
+              decoded.signals[3].value == 400.0,
+          "decode four NOx concentration channels");
+    check(link_obd2_decode_pid_payload(
+              0x01U, 0x85U, nox_reagent_payload,
+              sizeof(nox_reagent_payload), &decoded) == LINK_OBD2_RESULT_OK &&
+              decoded.signal_count == 4U &&
+              decoded.signals[0].value == 1.0 &&
+              decoded.signals[1].value == 2.0 &&
+              decoded.signals[3].value == 100.0,
+          "decode NOx reagent consumption, level and warning runtime");
+    check(link_obd2_decode_pid_payload(
+              0x01U, 0x86U, pm_payload,
+              sizeof(pm_payload), &decoded) == LINK_OBD2_RESULT_OK &&
+              decoded.signal_count == 2U &&
+              decoded.signals[0].value == 1.0 &&
+              decoded.signals[1].value == 2.0,
+          "decode particulate-matter concentration");
+    check(link_obd2_decode_pid_payload(
+              0x01U, 0x87U, map_payload,
+              sizeof(map_payload), &decoded) == LINK_OBD2_RESULT_OK &&
+              decoded.signal_count == 2U &&
+              decoded.signals[0].value == 1.0 &&
+              decoded.signals[1].value == 2.0,
+          "decode dual intake manifold absolute pressure");
+    check(link_obd2_decode_pid_payload(
+              0x01U, 0x8bU, aftertreatment_payload,
+              sizeof(aftertreatment_payload), &decoded) == LINK_OBD2_RESULT_OK &&
+              decoded.signal_count == 7U &&
+              decoded.signals[4].value > 50.19 &&
+              decoded.signals[4].value < 50.20 &&
+              decoded.signals[6].value == 20.0,
+          "decode diesel aftertreatment status and regeneration metrics");
+    check(link_obd2_decode_pid_payload(
+              0x01U, 0x8cU, wide_o2_payload,
+              sizeof(wide_o2_payload), &decoded) == LINK_OBD2_RESULT_OK &&
+              decoded.signal_count == 8U &&
+              decoded.signals[0].value > 0.1525 &&
+              decoded.signals[4].value > 0.499 &&
+              decoded.signals[4].value < 0.501,
+          "decode all eight wide-range oxygen-sensor channels");
+    check(link_obd2_decode_pid_payload(
+              0x01U, 0x8fU, pm_output_payload,
+              sizeof(pm_output_payload), &decoded) == LINK_OBD2_RESULT_OK &&
+              decoded.signal_count == 4U &&
+              decoded.signals[1].value == 1.0 &&
+              decoded.signals[3].value == 2.0,
+          "decode particulate-matter sensor status and output");
+    check(link_obd2_decode_pid_payload(
+              0x01U, 0x98U, egt_wide_payload,
+              sizeof(egt_wide_payload), &decoded) == LINK_OBD2_RESULT_OK &&
+              decoded.signal_count == 4U &&
+              decoded.signals[0].value == 40.0 &&
+              decoded.signals[3].value == 160.0,
+          "decode wide exhaust-gas temperature channels");
     check(link_obd2_decode_pid_payload(
               0x01U, 0x9aU, hev_payload,
               sizeof(hev_payload), &decoded) == LINK_OBD2_RESULT_OK &&
@@ -379,7 +625,7 @@ static void test_live_and_capabilities(void)
         response = parse_response(
             "0169",
             "009\r"
-            "0: 41 69 FC 80 40 80\r"
+            "0: 41 69 3F 80 40 80\r"
             "1: FF 00 40\r>");
         check(link_obd2_decode_live_pid_payload(
                   &response, 0x69U, &decoded) == LINK_OBD2_RESULT_OK &&
