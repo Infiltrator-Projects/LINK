@@ -146,6 +146,23 @@ int main(void)
     CHECK(link_scheduler_set_enabled(&scheduler, 0x7aU, false) ==
           LINK_SCHEDULER_RESULT_NOT_FOUND);
 
+    memset(bits, 0, sizeof(bits));
+    for (size_t definition_index = 0U;
+         definition_index < link_parameter_obd2_definition_count();
+         ++definition_index) {
+        const LinkParameterDefinition *definition =
+            link_parameter_obd2_definition_at(definition_index);
+        CHECK(definition != NULL);
+        CHECK(definition->key.identifier <= UINT8_MAX);
+        {
+            const uint8_t pid = (uint8_t)definition->key.identifier;
+            bits[pid / 8U] |= (uint8_t)(1U << (pid % 8U));
+        }
+    }
+    CHECK(link_scheduler_configure_standard_obd2_bits(
+              &scheduler, bits, 0U) == LINK_SCHEDULER_RESULT_OK);
+    CHECK(scheduler.count == link_parameter_obd2_definition_count());
+
     link_telemetry_store_init(&telemetry);
     CHECK(link_telemetry_store_record(&telemetry, 20U, &measurement));
     CHECK(link_telemetry_store_latest(&telemetry, 0x0cU, &sample));
