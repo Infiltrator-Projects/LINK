@@ -536,8 +536,15 @@ const char *link_obd2_unit_name(LinkObd2Unit unit)
 
 const char *link_obd2_pid_name(uint8_t pid)
 {
-    const LinkObd2PidDefinition *definition =
-        link_obd2_pid_definition(UINT8_C(0x01), pid);
+    const LinkObd2PidDefinition *definition;
+    /*
+     * Keep the established UI clarification for PID 0x11. The standards
+     * catalogue retains its generic name, while this compatibility helper
+     * distinguishes the throttle valve from accelerator-pedal PIDs.
+     */
+    if (pid == UINT8_C(0x11))
+        return "Absolute throttle valve position";
+    definition = link_obd2_pid_definition(UINT8_C(0x01), pid);
     return definition != NULL ? definition->name : "Unknown PID";
 }
 
