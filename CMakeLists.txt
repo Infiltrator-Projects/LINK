@@ -129,6 +129,7 @@ add_library(link-core STATIC
     src/elm327/probe.c
     src/elm327/session.c
     src/obd2/obd2.c
+    src/obd2/pid_catalogue.c
     src/obd2/dtc_knowledge.c
     src/kwp2000/kwp2000.c
     src/uds/uds.c
