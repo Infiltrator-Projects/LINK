@@ -705,14 +705,77 @@ bool link_obd2_pid_set_contains(const LinkObd2PidSet *set, uint8_t pid)
     return (set->bits[pid >> 3U] & mask) != 0U;
 }
 
-LinkObd2Result link_obd2_accept_supported_pids(
+static void obd2_apply_supported_mask(
+    LinkObd2PidSet *set,
+    uint8_t base_pid,
+    uint32_t mask)
+{
+    unsigned int bit;
+    if (set == NULL) return;
+    for (bit = 0U; bit < 32U; ++bit) {
+        if ((mask & (UINT32_C(1) << (31U - bit))) != 0U) {
+            const unsigned int supported_pid =
+                (unsigned int)base_pid + bit + 1U;
+            if (supported_pid <= 0xffU) {
+                set->bits[supported_pid >> 3U] |=
+                    (uint8_t)(1U << (supported_pid & 7U));
+            }
+        }
+    }
+}
+
+static LinkObd2ResponderPidSet *obd2_find_or_add_responder_pid_set(
+    LinkObd2ResponderPidSetList *sets,
+    uint32_t responder_id,
+    bool extended_id)
+{
+    size_t index;
+    if (sets == NULL) return NULL;
+    for (index = 0U; index < sets->count; ++index) {
+        if (sets->entries[index].responder_id == responder_id &&
+            sets->entries[index].extended_id == extended_id) {
+            return &sets->entries[index];
+        }
+    }
+    if (sets->count >= LINK_OBD2_MAX_RESPONDER_PID_SETS) {
+        sets->truncated = true;
+        return NULL;
+    }
+    LinkObd2ResponderPidSet *entry = &sets->entries[sets->count++];
+    memset(entry, 0, sizeof(*entry));
+    entry->responder_id = responder_id;
+    entry->extended_id = extended_id;
+    return entry;
+}
+
+const LinkObd2PidSet *link_obd2_responder_pid_set_find(
+    const LinkObd2ResponderPidSetList *responder_sets,
+    uint32_t responder_id,
+    bool extended_id)
+{
+    size_t index;
+    if (responder_sets == NULL) return NULL;
+    for (index = 0U; index < responder_sets->count; ++index) {
+        const LinkObd2ResponderPidSet *entry =
+            &responder_sets->entries[index];
+        if (entry->responder_id == responder_id &&
+            entry->extended_id == extended_id) {
+            return &entry->supported_pids;
+        }
+    }
+    return NULL;
+}
+
+LinkObd2Result link_obd2_accept_supported_pid_responders(
     const LinkElm327Response *response,
     uint8_t base_pid,
     LinkObd2PidSet *set,
+    LinkObd2ResponderPidSetList *responder_sets,
     bool *has_more)
 {
     const char *cursor;
     LinkObd2PidSet updated;
+    LinkObd2ResponderPidSetList responder_updated = {0};
     bool matched = false;
     bool continuation = false;
     LinkObd2Result result;
@@ -721,35 +784,44 @@ LinkObd2Result link_obd2_accept_supported_pids(
         base_pid > 0xe0U) return LINK_OBD2_RESULT_INVALID_ARGUMENT;
     *has_more = false;
     updated = *set;
+    if (responder_sets != NULL) responder_updated = *responder_sets;
     result = obd2_response_ready(response);
     if (result != LINK_OBD2_RESULT_OK) return result;
 
     cursor = response->text;
     while (*cursor != '\0') {
         const char *end = strchr(cursor, '\n');
-        size_t line_length = end == NULL ? strlen(cursor) : (size_t)(end - cursor);
+        const size_t line_length =
+            end == NULL ? strlen(cursor) : (size_t)(end - cursor);
         uint8_t bytes[OBD2_MAX_LINE_BYTES];
         size_t byte_count = 0U;
+        bool responder_available = false;
+        bool extended_id = false;
+        uint32_t responder_id = 0U;
         uint32_t mask;
-        unsigned int bit;
 
-        if (memchr(cursor, ':', line_length) != NULL) goto next_supported_line;
-        result = obd2_parse_hex_line(cursor, line_length, bytes,
-                                     sizeof(bytes), &byte_count);
+        if (memchr(cursor, ':', line_length) != NULL)
+            goto next_supported_line;
+        result = obd2_parse_data_line_with_responder(
+            cursor, line_length, bytes, sizeof(bytes), &byte_count,
+            &responder_available, &responder_id, &extended_id);
         if (result != LINK_OBD2_RESULT_OK) return result;
-        if (byte_count >= 6U && bytes[0] == 0x41U && bytes[1] == base_pid) {
+        if (byte_count >= 6U &&
+            bytes[0] == UINT8_C(0x41) &&
+            bytes[1] == base_pid) {
             matched = true;
             mask = ((uint32_t)bytes[2] << 24U) |
                    ((uint32_t)bytes[3] << 16U) |
                    ((uint32_t)bytes[4] << 8U) |
                    (uint32_t)bytes[5];
-            for (bit = 0U; bit < 32U; ++bit) {
-                if ((mask & (UINT32_C(1) << (31U - bit))) != 0U) {
-                    unsigned int supported_pid = (unsigned int)base_pid + bit + 1U;
-                    if (supported_pid <= 0xffU) {
-                        updated.bits[supported_pid >> 3U] |=
-                            (uint8_t)(1U << (supported_pid & 7U));
-                    }
+            obd2_apply_supported_mask(&updated, base_pid, mask);
+            if (responder_sets != NULL && responder_available) {
+                LinkObd2ResponderPidSet *entry =
+                    obd2_find_or_add_responder_pid_set(
+                        &responder_updated, responder_id, extended_id);
+                if (entry != NULL) {
+                    obd2_apply_supported_mask(
+                        &entry->supported_pids, base_pid, mask);
                 }
             }
         }
@@ -757,14 +829,26 @@ next_supported_line:
         if (end == NULL) break;
         cursor = end + 1;
     }
+
     if (!matched) return LINK_OBD2_RESULT_UNEXPECTED_RESPONSE;
     if (base_pid <= 0xc0U) {
-        continuation = link_obd2_pid_set_contains(&updated,
-                                                   (uint8_t)(base_pid + 0x20U));
+        continuation = link_obd2_pid_set_contains(
+            &updated, (uint8_t)(base_pid + 0x20U));
     }
     *set = updated;
+    if (responder_sets != NULL) *responder_sets = responder_updated;
     *has_more = continuation;
     return LINK_OBD2_RESULT_OK;
+}
+
+LinkObd2Result link_obd2_accept_supported_pids(
+    const LinkElm327Response *response,
+    uint8_t base_pid,
+    LinkObd2PidSet *set,
+    bool *has_more)
+{
+    return link_obd2_accept_supported_pid_responders(
+        response, base_pid, set, NULL, has_more);
 }
 
 LinkObd2Result link_obd2_decode_live_pid(
