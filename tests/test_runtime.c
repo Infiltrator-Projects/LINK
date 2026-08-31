@@ -39,6 +39,7 @@ int main(void)
     LinkSchedulerDispatch dispatch;
     uint8_t bits[LINK_OBD2_PID_SET_BYTES] = {0};
     LinkTelemetryStore telemetry;
+    LinkStructuredTelemetryStore structured_telemetry;
     LinkTelemetryMeasurement measurement = { 0x0cU, 1234.5, LINK_OBD2_UNIT_RPM };
     LinkTelemetrySample sample;
     LinkTelemetrySessionMetadata metadata;
@@ -242,6 +243,47 @@ int main(void)
         CHECK(!link_responder_telemetry_store_record(
             &responders, 23U, 0x800U, false, &measurement));
     }
+
+    {
+        static const uint8_t dpf_pressure_payload[] = {
+            UINT8_C(0x07), UINT8_C(0xff), UINT8_C(0x9c),
+            UINT8_C(0x00), UINT8_C(0x64), UINT8_C(0x00), UINT8_C(0xc8)
+        };
+        LinkObd2DecodedPid decoded;
+        LinkStructuredTelemetrySample structured_sample;
+
+        CHECK(link_obd2_decode_pid_payload(
+            UINT8_C(0x01), UINT8_C(0x7a),
+            dpf_pressure_payload, sizeof(dpf_pressure_payload),
+            &decoded) == LINK_OBD2_RESULT_OK);
+        CHECK(decoded.signal_count == 3U);
+        link_structured_telemetry_store_init(&structured_telemetry);
+        CHECK(link_structured_telemetry_store_record(
+            &structured_telemetry, 23U, true, UINT32_C(0x7e8),
+            false, &decoded));
+        CHECK(link_structured_telemetry_store_history_count(
+            &structured_telemetry) == 1U);
+        CHECK(link_structured_telemetry_store_total_sample_count(
+            &structured_telemetry) == 1U);
+        CHECK(link_structured_telemetry_store_history_at(
+            &structured_telemetry, 0U, &structured_sample));
+        CHECK(structured_sample.responder_id_available);
+        CHECK(structured_sample.responder_id == UINT32_C(0x7e8));
+        CHECK(!structured_sample.extended_id);
+        CHECK(structured_sample.decoded.definition != NULL);
+        CHECK(structured_sample.decoded.definition->pid == UINT8_C(0x7a));
+        CHECK(structured_sample.decoded.raw_length ==
+              sizeof(dpf_pressure_payload));
+        CHECK(memcmp(
+            structured_sample.decoded.raw, dpf_pressure_payload,
+            sizeof(dpf_pressure_payload)) == 0);
+        link_structured_telemetry_store_clear(&structured_telemetry);
+        CHECK(link_structured_telemetry_store_history_count(
+            &structured_telemetry) == 0U);
+        CHECK(!link_structured_telemetry_store_record(
+            &structured_telemetry, 24U, true, UINT32_C(0x800),
+            false, &decoded));
+    }
     link_telemetry_session_metadata_init(&metadata, 1U, "adapter", "vehicle");
     link_telemetry_session_metadata_finish(&metadata, 2U);
     CHECK(link_telemetry_export_csv_named(&telemetry, &metadata, "link", pid_name, unit_name, result_name, sink, &output));
@@ -270,10 +312,35 @@ int main(void)
         CHECK(link_telemetry_recorder_record_responder_sample_named(
             &recorder, &responder_sample, true, "Engine speed", "rpm"));
     }
+
+    {
+        static const uint8_t dpf_pressure_payload[] = {
+            UINT8_C(0x07), UINT8_C(0xff), UINT8_C(0x9c),
+            UINT8_C(0x00), UINT8_C(0x64), UINT8_C(0x00), UINT8_C(0xc8)
+        };
+        LinkObd2DecodedPid decoded;
+        LinkStructuredTelemetrySample structured_sample = {
+            .sequence = 3U,
+            .timestamp_ms = 23U,
+            .responder_id_available = true,
+            .responder_id = UINT32_C(0x7e8),
+            .extended_id = false
+        };
+        CHECK(link_obd2_decode_pid_payload(
+            UINT8_C(0x01), UINT8_C(0x7a),
+            dpf_pressure_payload, sizeof(dpf_pressure_payload),
+            &decoded) == LINK_OBD2_RESULT_OK);
+        structured_sample.decoded = decoded;
+        CHECK(link_telemetry_recorder_record_structured_pid_named(
+            &recorder, &structured_sample, false, "DPF pressure"));
+    }
     CHECK(link_telemetry_recorder_record_response_named(&recorder, 30U, "010C", "ok", "41 0C 13 4A"));
     CHECK(link_telemetry_recorder_finish(&recorder, 3U));
     CHECK(strstr(output.data, "# link_session_stream_version,2\n") != NULL);
     CHECK(strstr(output.data, ",0x7E9,0,\"\",\"\",\"\"\n") != NULL);
+    CHECK(strstr(output.data, "structured,3,23,0x7A,") != NULL);
+    CHECK(strstr(output.data, "\"DPF pressure · differential pressure\"") != NULL);
+    CHECK(strstr(output.data, "\"RAW 07 FF 9C 00 64 00 C8\"") != NULL);
     link_telemetry_recorder_init(&recorder);
     link_telemetry_session_metadata_init(&metadata, 4U, "adapter", "vehicle");
     CHECK(link_telemetry_recorder_continue(&recorder, &metadata, "link", sink, &output));

@@ -248,6 +248,93 @@ bool link_responder_telemetry_store_history_at(
     return true;
 }
 
+
+void link_structured_telemetry_store_init(LinkStructuredTelemetryStore *store)
+{
+    if (store != NULL) memset(store, 0, sizeof(*store));
+}
+
+void link_structured_telemetry_store_clear(LinkStructuredTelemetryStore *store)
+{
+    if (store != NULL) memset(store, 0, sizeof(*store));
+}
+
+bool link_structured_telemetry_store_record(
+    LinkStructuredTelemetryStore *store,
+    uint64_t timestamp_ms,
+    bool responder_id_available,
+    uint32_t responder_id,
+    bool extended_id,
+    const LinkObd2DecodedPid *decoded)
+{
+    LinkStructuredTelemetrySample sample;
+    const uint32_t maximum_id = extended_id
+        ? UINT32_C(0x1fffffff) : UINT32_C(0x7ff);
+    size_t index;
+
+    if (store == NULL || decoded == NULL || decoded->definition == NULL ||
+        decoded->raw_length > LINK_OBD2_MAX_PID_PAYLOAD ||
+        decoded->signal_count > LINK_OBD2_MAX_DECODED_SIGNALS ||
+        (responder_id_available && responder_id > maximum_id)) {
+        return false;
+    }
+    for (index = 0U; index < decoded->signal_count; ++index) {
+        if (!isfinite(decoded->signals[index].value)) return false;
+    }
+
+    memset(&sample, 0, sizeof(sample));
+    sample.sequence = store->next_sequence;
+    sample.timestamp_ms = timestamp_ms;
+    sample.responder_id_available = responder_id_available;
+    sample.responder_id = responder_id;
+    sample.extended_id = extended_id;
+    sample.decoded = *decoded;
+
+    if (store->next_sequence != UINT64_MAX) store->next_sequence++;
+    store->total_sample_count = infiltratr_u64_add_saturating(
+        store->total_sample_count, 1U);
+    store->history[store->history_head] = sample;
+    store->history_head =
+        (store->history_head + 1U) %
+        LINK_STRUCTURED_TELEMETRY_HISTORY_CAPACITY;
+    if (store->history_count < LINK_STRUCTURED_TELEMETRY_HISTORY_CAPACITY)
+        store->history_count++;
+    return true;
+}
+
+size_t link_structured_telemetry_store_history_count(
+    const LinkStructuredTelemetryStore *store)
+{
+    return store != NULL ? store->history_count : 0U;
+}
+
+uint64_t link_structured_telemetry_store_total_sample_count(
+    const LinkStructuredTelemetryStore *store)
+{
+    return store != NULL ? store->total_sample_count : 0U;
+}
+
+bool link_structured_telemetry_store_history_at(
+    const LinkStructuredTelemetryStore *store,
+    size_t chronological_index,
+    LinkStructuredTelemetrySample *sample)
+{
+    size_t oldest;
+    size_t storage_index;
+    if (store == NULL || sample == NULL ||
+        chronological_index >= store->history_count) {
+        return false;
+    }
+    oldest =
+        (store->history_head + LINK_STRUCTURED_TELEMETRY_HISTORY_CAPACITY -
+         store->history_count) % LINK_STRUCTURED_TELEMETRY_HISTORY_CAPACITY;
+    storage_index =
+        (oldest + chronological_index) %
+        LINK_STRUCTURED_TELEMETRY_HISTORY_CAPACITY;
+    *sample = store->history[storage_index];
+    return true;
+}
+
 void link_telemetry_session_metadata_init(
     LinkTelemetrySessionMetadata *metadata,
     uint64_t started_epoch_ms,
@@ -395,6 +482,40 @@ static bool format_value(double value, char *buffer, size_t size)
     while (end > buffer && end[-1] == '0') --end;
     if (end > buffer && end[-1] == '.') --end;
     *end = '\0';
+    return true;
+}
+
+
+static bool format_structured_raw(
+    const LinkObd2DecodedPid *decoded,
+    char *buffer,
+    size_t capacity)
+{
+    static const char digits[] = "0123456789ABCDEF";
+    size_t index;
+    size_t used = 0U;
+    if (decoded == NULL || buffer == NULL || capacity == 0U)
+        return false;
+    buffer[0] = '\0';
+    if (decoded->text_available && decoded->text[0] != '\0') {
+        const int written = snprintf(buffer, capacity, "%s", decoded->text);
+        return written >= 0 && (size_t)written < capacity;
+    }
+    if (decoded->raw_length == 0U) {
+        const int written = snprintf(buffer, capacity, "RAW");
+        return written >= 0 && (size_t)written < capacity;
+    }
+    if (capacity < 5U) return false;
+    memcpy(buffer, "RAW ", 4U);
+    used = 4U;
+    for (index = 0U; index < decoded->raw_length; ++index) {
+        if (used + (index == 0U ? 2U : 3U) + 1U > capacity)
+            return false;
+        if (index != 0U) buffer[used++] = ' ';
+        buffer[used++] = digits[(decoded->raw[index] >> 4U) & 0x0fU];
+        buffer[used++] = digits[decoded->raw[index] & 0x0fU];
+    }
+    buffer[used] = '\0';
     return true;
 }
 
@@ -560,6 +681,111 @@ bool link_telemetry_recorder_record_responder_sample_named(
         recorder, sample->sequence, sample->timestamp_ms,
         &sample->measurement, favourite, true, sample->responder_id,
         sample->extended_id, pid_name, unit_name);
+}
+
+
+bool link_telemetry_recorder_record_structured_pid_named(
+    LinkTelemetryRecorder *recorder,
+    const LinkStructuredTelemetrySample *sample,
+    bool favourite,
+    const char *pid_name)
+{
+    char prefix[96];
+    char address[32];
+    char name[192];
+    char value[64];
+    char raw[LINK_OBD2_MAX_PID_PAYLOAD * 3U + 5U];
+    size_t index;
+    int written;
+
+    if (recorder == NULL || !recorder->started || recorder->finished ||
+        recorder->failed || sample == NULL ||
+        sample->decoded.definition == NULL || pid_name == NULL ||
+        (sample->responder_id_available &&
+         sample->responder_id >
+             (sample->extended_id ? UINT32_C(0x1fffffff) : UINT32_C(0x7ff))) ||
+        !format_structured_raw(&sample->decoded, raw, sizeof(raw))) {
+        return false;
+    }
+
+    if (sample->responder_id_available) {
+        written = sample->extended_id
+            ? snprintf(address, sizeof(address), "0x%08X",
+                       (unsigned int)sample->responder_id)
+            : snprintf(address, sizeof(address), "0x%03X",
+                       (unsigned int)sample->responder_id);
+        if (written < 0 || (size_t)written >= sizeof(address)) return false;
+    } else {
+        address[0] = '\0';
+    }
+
+    if (sample->decoded.signal_count == 0U) {
+        written = snprintf(
+            prefix, sizeof(prefix), "structured_raw,%llu,%llu,0x%02X,",
+            (unsigned long long)sample->sequence,
+            (unsigned long long)sample->timestamp_ms,
+            (unsigned int)sample->decoded.definition->pid);
+        if (written < 0 || (size_t)written >= sizeof(prefix) ||
+            !emit(recorder->sink, recorder->context, prefix) ||
+            !emit_quoted(recorder->sink, recorder->context, pid_name) ||
+            !emit(recorder->sink, recorder->context, ",,,"))
+            return latch_failure(recorder);
+        written = snprintf(prefix, sizeof(prefix), "%u,",
+                           favourite ? 1U : 0U);
+        if (written < 0 || (size_t)written >= sizeof(prefix) ||
+            !emit(recorder->sink, recorder->context, prefix) ||
+            !emit_quoted(recorder->sink, recorder->context, address) ||
+            !emit(recorder->sink, recorder->context,
+                  sample->responder_id_available
+                      ? (sample->extended_id ? ",1,\"\",\"\","
+                                             : ",0,\"\",\"\",")
+                      : ",\"\",\"\",\"\",") ||
+            !emit_quoted(recorder->sink, recorder->context, raw) ||
+            !emit(recorder->sink, recorder->context, "\n"))
+            return latch_failure(recorder);
+        return true;
+    }
+
+    for (index = 0U; index < sample->decoded.signal_count; ++index) {
+        const LinkObd2DecodedSignal *signal = &sample->decoded.signals[index];
+        const char *label =
+            signal->label != NULL && signal->label[0] != '\0'
+                ? signal->label : "value";
+        const char *unit =
+            signal->unit != NULL ? signal->unit : "";
+        if (!isfinite(signal->value) ||
+            !format_value(signal->value, value, sizeof(value)))
+            return false;
+        written = snprintf(name, sizeof(name), "%s · %s", pid_name, label);
+        if (written < 0 || (size_t)written >= sizeof(name)) return false;
+        written = snprintf(
+            prefix, sizeof(prefix), "structured,%llu,%llu,0x%02X,",
+            (unsigned long long)sample->sequence,
+            (unsigned long long)sample->timestamp_ms,
+            (unsigned int)sample->decoded.definition->pid);
+        if (written < 0 || (size_t)written >= sizeof(prefix) ||
+            !emit(recorder->sink, recorder->context, prefix) ||
+            !emit_quoted(recorder->sink, recorder->context, name) ||
+            !emit(recorder->sink, recorder->context, ",") ||
+            !emit(recorder->sink, recorder->context, value) ||
+            !emit(recorder->sink, recorder->context, ",") ||
+            !emit_quoted(recorder->sink, recorder->context, unit))
+            return latch_failure(recorder);
+        written = snprintf(prefix, sizeof(prefix), ",%u,",
+                           favourite ? 1U : 0U);
+        if (written < 0 || (size_t)written >= sizeof(prefix) ||
+            !emit(recorder->sink, recorder->context, prefix) ||
+            !emit_quoted(recorder->sink, recorder->context, address) ||
+            !emit(recorder->sink, recorder->context,
+                  sample->responder_id_available
+                      ? (sample->extended_id ? ",1,\"\",\"\","
+                                             : ",0,\"\",\"\",")
+                      : ",\"\",\"\",\"\",") ||
+            !emit_quoted(recorder->sink, recorder->context, raw) ||
+            !emit(recorder->sink, recorder->context, "\n"))
+            return latch_failure(recorder);
+    }
+    return true;
 }
 
 bool link_telemetry_recorder_record_response_named(

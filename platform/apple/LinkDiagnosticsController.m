@@ -62,6 +62,7 @@
 
     LinkTelemetryStore _telemetry;
     LinkResponderTelemetryStore _responderTelemetry;
+    LinkStructuredTelemetryStore _structuredTelemetry;
     LinkTelemetryRecorder _recorder;
     LinkTelemetrySessionMetadata _sessionMetadata;
     LinkMercedesMeStreamParser _nativeStreamParser;
@@ -218,6 +219,7 @@ static void LinkAppleSessionEvent(
     (void)link_diagnostic_flow_init(&_flow, &_flowConfig);
     link_telemetry_store_init(&_telemetry);
     link_responder_telemetry_store_init(&_responderTelemetry);
+    link_structured_telemetry_store_init(&_structuredTelemetry);
     link_telemetry_recorder_init(&_recorder);
     link_mercedes_me_stream_parser_init(&_nativeStreamParser);
     _sessionCSV = [[NSMutableData alloc] init];
@@ -395,6 +397,7 @@ static void LinkAppleAppendReadinessMonitor(
     (void)link_diagnostic_flow_init(&_flow, &_flowConfig);
     link_telemetry_store_clear_samples(&_telemetry);
     link_responder_telemetry_store_clear(&_responderTelemetry);
+    link_structured_telemetry_store_clear(&_structuredTelemetry);
     link_telemetry_recorder_init(&_recorder);
     link_mercedes_me_stream_parser_init(&_nativeStreamParser);
     _sessionMonotonicStartMs = LinkAppleMonotonicMilliseconds();
@@ -1221,12 +1224,57 @@ static void LinkAppleAppendReadinessMonitor(
         break;
     }
 
-    case LINK_DIAGNOSTIC_FLOW_EVENT_LIVE_STRUCTURED:
+    case LINK_DIAGNOSTIC_FLOW_EVENT_LIVE_STRUCTURED: {
         _consecutiveLiveTimeouts = 0U;
+        const uint64_t elapsed =
+            LinkAppleElapsedMilliseconds(_sessionMonotonicStartMs);
+
+        for (size_t responderIndex = 0U;
+             responderIndex < event->responder_decoded.count;
+             ++responderIndex) {
+            const LinkObd2ResponderDecodedPid *responder =
+                &event->responder_decoded.entries[responderIndex];
+            if (responder->decoded.definition == NULL) continue;
+
+            if (!link_structured_telemetry_store_record(
+                    &_structuredTelemetry, elapsed,
+                    responder->responder_id_available,
+                    responder->responder_id, responder->extended_id,
+                    &responder->decoded)) {
+                [self failWithStatus:
+                    @"Could not record structured live telemetry sample"];
+                return NO;
+            }
+
+            const size_t historyCount =
+                link_structured_telemetry_store_history_count(
+                    &_structuredTelemetry);
+            LinkStructuredTelemetrySample recordedStructured;
+            if (_recorder.started && !_recorder.finished &&
+                (historyCount == 0U ||
+                 !link_structured_telemetry_store_history_at(
+                    &_structuredTelemetry, historyCount - 1U,
+                    &recordedStructured) ||
+                 !link_telemetry_recorder_record_structured_pid_named(
+                    &_recorder, &recordedStructured,
+                    link_telemetry_store_is_favourite(
+                        &_telemetry,
+                        responder->decoded.definition->pid),
+                    responder->decoded.definition->name != NULL
+                        ? responder->decoded.definition->name
+                        : link_obd2_pid_name(
+                            responder->decoded.definition->pid)))) {
+                [self failWithStatus:
+                    @"Could not append structured SAE session recording"];
+                return NO;
+            }
+        }
+
         self.ready = YES;
         self.statusText = _simulated
             ? _simulatedLiveStatusText : _liveStatusText;
         break;
+    }
 
     case LINK_DIAGNOSTIC_FLOW_EVENT_LIVE_NO_DATA:
         self.statusText =
@@ -1421,6 +1469,11 @@ static void LinkAppleAppendReadinessMonitor(
 {
     uint64_t total =
         link_telemetry_store_total_sample_count(&_telemetry);
+    const uint64_t structured =
+        link_structured_telemetry_store_total_sample_count(
+            &_structuredTelemetry);
+    total = UINT64_MAX - total < structured
+        ? UINT64_MAX : total + structured;
     return total > (uint64_t)NSUIntegerMax
         ? NSUIntegerMax : (NSUInteger)total;
 }
@@ -1469,6 +1522,21 @@ static void LinkAppleAppendReadinessMonitor(
             continue;
         }
         observed[sample.measurement.pid] = true;
+    }
+
+    const size_t structuredCount =
+        link_structured_telemetry_store_history_count(&_structuredTelemetry);
+    for (size_t index = 0U; index < structuredCount; ++index) {
+        LinkStructuredTelemetrySample sample;
+        if (!link_structured_telemetry_store_history_at(
+                &_structuredTelemetry, index, &sample) ||
+            !sample.responder_id_available ||
+            sample.responder_id != responderCANIdentifier ||
+            sample.extended_id != extendedID ||
+            sample.decoded.definition == NULL) {
+            continue;
+        }
+        observed[sample.decoded.definition->pid] = true;
     }
 
     NSMutableArray<NSNumber *> *pids = [[NSMutableArray alloc] init];
