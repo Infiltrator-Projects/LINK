@@ -161,7 +161,7 @@ int main(void)
     bits[0x7aU / 8U] |= (uint8_t)(1U << (0x7aU % 8U));
     CHECK(link_scheduler_configure_standard_obd2_bits(
               &scheduler, bits, 0U) == LINK_SCHEDULER_RESULT_OK);
-    CHECK(scheduler.count == 2U);
+    CHECK(scheduler.count == 3U);
     CHECK(link_scheduler_set_enabled(&scheduler, 0x06U, false) ==
           LINK_SCHEDULER_RESULT_OK);
     CHECK(link_scheduler_set_enabled(&scheduler, 0xa6U, false) ==
