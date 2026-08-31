@@ -498,10 +498,13 @@ static bool format_structured_raw(
         return false;
     buffer[0] = '\0';
     if (decoded->text_available && decoded->text[0] != '\0') {
-        return infiltratr_copy_string(buffer, capacity, decoded->text);
+        const int written = snprintf(buffer, capacity, "%s", decoded->text);
+        return written >= 0 && (size_t)written < capacity;
     }
-    if (decoded->raw_length == 0U)
-        return infiltratr_copy_string(buffer, capacity, "RAW");
+    if (decoded->raw_length == 0U) {
+        const int written = snprintf(buffer, capacity, "RAW");
+        return written >= 0 && (size_t)written < capacity;
+    }
     if (capacity < 5U) return false;
     memcpy(buffer, "RAW ", 4U);
     used = 4U;
