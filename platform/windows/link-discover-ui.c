@@ -11,8 +11,10 @@
  * MBLINK and JAGLINK from drifting into subtly different diagnostic tools.
  *
  * The shell intentionally uses native Win32 controls with Common Controls v6,
- * Segoe UI typography, DPI-aware layout, a real menu bar and a Task Dialog
- * About experience. The executable is expected to be self-contained when built
+ * product-selectable typography, DPI-aware layout, a real menu bar and a Task
+ * Dialog About experience. Product faces may embed private font resources so
+ * their typography remains self-contained without machine-wide installation.
+ * The executable is expected to be self-contained when built
  * with MSVC; CMake therefore selects the static MSVC runtime for product faces.
  */
 
@@ -104,6 +106,15 @@ static BOOL set_window_text_utf8(HWND window, const char *text)
 #ifndef LINK_PRODUCT_WEBSITE
 #define LINK_PRODUCT_WEBSITE "https://github.com/Infiltrator-Projects/LINK"
 #endif
+#ifndef LINK_PRODUCT_FONT_UI
+#define LINK_PRODUCT_FONT_UI "Segoe UI"
+#endif
+#ifndef LINK_PRODUCT_FONT_DISPLAY
+#define LINK_PRODUCT_FONT_DISPLAY LINK_PRODUCT_FONT_UI
+#endif
+#ifndef LINK_PRODUCT_FONT_LOG
+#define LINK_PRODUCT_FONT_LOG "Consolas"
+#endif
 
 #define IDM_FILE_EXPORT 41001
 #define IDM_FILE_EXIT 41002
@@ -134,6 +145,9 @@ static HFONT g_status_font;
 static HFONT g_log_font;
 static HICON g_product_icon;
 static BOOL g_product_icon_owned;
+static HANDLE g_product_font_regular;
+static HANDLE g_product_font_bold;
+static HANDLE g_product_font_condensed;
 
 static int window_dpi(HWND window)
 {
@@ -172,7 +186,64 @@ static HFONT make_named_font(HWND window, int point_size, int weight,
 
 static HFONT make_font(HWND window, int point_size, int weight)
 {
-    return make_named_font(window, point_size, weight, "Segoe UI");
+    return make_named_font(window, point_size, weight, LINK_PRODUCT_FONT_UI);
+}
+
+/** Register one executable RCDATA font privately for this process. */
+static HANDLE load_product_font_resource(HINSTANCE instance, int resource_id)
+{
+    HRSRC resource;
+    HGLOBAL loaded;
+    const void *data;
+    DWORD size;
+    DWORD count = 0U;
+
+    resource = FindResourceA(instance, MAKEINTRESOURCEA(resource_id), RT_RCDATA);
+    if (resource == NULL) {
+        return NULL;
+    }
+    loaded = LoadResource(instance, resource);
+    if (loaded == NULL) {
+        return NULL;
+    }
+    data = LockResource(loaded);
+    size = SizeofResource(instance, resource);
+    if (data == NULL || size == 0U) {
+        return NULL;
+    }
+    return AddFontMemResourceEx((void *)data, size, NULL, &count);
+}
+
+static void load_product_fonts(HINSTANCE instance)
+{
+#ifdef LINK_PRODUCT_FONT_RESOURCE_REGULAR
+    g_product_font_regular =
+        load_product_font_resource(instance, LINK_PRODUCT_FONT_RESOURCE_REGULAR);
+#endif
+#ifdef LINK_PRODUCT_FONT_RESOURCE_BOLD
+    g_product_font_bold =
+        load_product_font_resource(instance, LINK_PRODUCT_FONT_RESOURCE_BOLD);
+#endif
+#ifdef LINK_PRODUCT_FONT_RESOURCE_CONDENSED
+    g_product_font_condensed =
+        load_product_font_resource(instance, LINK_PRODUCT_FONT_RESOURCE_CONDENSED);
+#endif
+}
+
+static void unload_product_fonts(void)
+{
+    if (g_product_font_regular != NULL) {
+        (void)RemoveFontMemResourceEx(g_product_font_regular);
+        g_product_font_regular = NULL;
+    }
+    if (g_product_font_bold != NULL) {
+        (void)RemoveFontMemResourceEx(g_product_font_bold);
+        g_product_font_bold = NULL;
+    }
+    if (g_product_font_condensed != NULL) {
+        (void)RemoveFontMemResourceEx(g_product_font_condensed);
+        g_product_font_condensed = NULL;
+    }
 }
 
 static void apply_font(HWND control, HFONT font)
@@ -482,11 +553,14 @@ static void create_controls(HWND window)
     char subtitle[256];
     HINSTANCE instance = (HINSTANCE)GetWindowLongPtrA(window, GWLP_HINSTANCE);
 
+    load_product_fonts(instance);
     g_ui_font = make_font(window, 10, FW_NORMAL);
-    g_title_font = make_font(window, 24, FW_SEMIBOLD);
+    g_title_font = make_named_font(
+        window, 24, FW_NORMAL, LINK_PRODUCT_FONT_DISPLAY);
     g_subtitle_font = make_font(window, 10, FW_NORMAL);
-    g_status_font = make_font(window, 9, FW_SEMIBOLD);
-    g_log_font = make_named_font(window, 9, FW_NORMAL, "Consolas");
+    g_status_font = make_font(window, 9, FW_BOLD);
+    g_log_font = make_named_font(
+        window, 9, FW_NORMAL, LINK_PRODUCT_FONT_LOG);
 
     g_brand_icon = CreateWindowA("STATIC", "",
                                  WS_CHILD | WS_VISIBLE | SS_ICON,
@@ -637,6 +711,7 @@ static void destroy_ui_resources(void)
         DestroyIcon(g_product_icon);
     }
     g_product_icon = NULL;
+    unload_product_fonts();
 }
 
 static LRESULT CALLBACK window_proc(HWND window, UINT message,
