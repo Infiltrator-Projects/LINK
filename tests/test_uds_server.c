@@ -336,16 +336,18 @@ static int test_dtc_all_subfunctions(void)
               response, sizeof(response), &length) ==
           LINK_UDS_SERVER_RESULT_POSITIVE);
     CHECK(length == 7U);
-    CHECK(response[2] == 0x12U && response[3] == 0x34U &&
-          response[4] == 0x56U);
+    CHECK(response[2] == LINK_UDS_DTC_STATUS_MASK_ALL);
+    CHECK(response[3] == 0x12U && response[4] == 0x34U &&
+          response[5] == 0x56U);
 
     CHECK(link_uds_server_handle(
               &server, r0e, sizeof(r0e),
               response, sizeof(response), &length) ==
           LINK_UDS_SERVER_RESULT_POSITIVE);
     CHECK(length == 7U);
-    CHECK(response[2] == 0xabU && response[3] == 0xcdU &&
-          response[4] == 0xefU);
+    CHECK(response[2] == LINK_UDS_DTC_STATUS_MASK_ALL);
+    CHECK(response[3] == 0xabU && response[4] == 0xcdU &&
+          response[5] == 0xefU);
     return 0;
 }
 
