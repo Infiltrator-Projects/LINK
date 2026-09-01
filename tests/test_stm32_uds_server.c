@@ -175,7 +175,7 @@ int main(void)
 
     /* The real example has two DTCs, so 19 02 FF is multi-frame. */
     CHECK(link_stm32_uds_server_poll(&transport) ==
-          LINK_STM32_UDS_SERVER_RESULT_OK);
+          LINK_STM32_UDS_SERVER_RESULT_WAITING);
     CHECK(mock.tx_count == 2U);
     CHECK(mock.tx[1].can_id == 0x7e8U);
     CHECK(mock.tx[1].length == sizeof(expected_dtc_ff));
@@ -184,7 +184,7 @@ int main(void)
 
     /* Confirm the FF left the controller, then provide tester FlowControl. */
     CHECK(link_stm32_uds_server_poll(&transport) ==
-          LINK_STM32_UDS_SERVER_RESULT_OK);
+          LINK_STM32_UDS_SERVER_RESULT_WAITING);
     memset(&request, 0xcc, sizeof(request));
     request.can_id = 0x7e0U;
     request.length = 8U;
