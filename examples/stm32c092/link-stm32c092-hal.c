@@ -200,19 +200,27 @@ void link_stm32c092_hal_tx_event_irq(
         adapter->tx_event_lost = true;
     }
 
-    while (HAL_FDCAN_GetTxEventFifoFillLevel(adapter->hfdcan) != 0U) {
-        memset(&event, 0, sizeof(event));
-        if (HAL_FDCAN_GetTxEvent(adapter->hfdcan, &event) != HAL_OK) {
-            adapter->tx_event_lost = true;
-            return;
-        }
-        if (adapter->pending_marker != 0U &&
-            event.MessageMarker == adapter->pending_marker &&
-            (event.EventType == FDCAN_TX_EVENT ||
-             event.EventType == FDCAN_TX_IN_SPITE_OF_ABORT)) {
-            adapter->completed_tick_ms = HAL_GetTick();
-            adapter->completed_marker = (uint8_t)event.MessageMarker;
-        }
+    if ((tx_event_fifo_its & FDCAN_IT_TX_EVT_FIFO_NEW_DATA) == 0U) {
+        return;
+    }
+
+    /*
+     * STM32C0 HAL provides HAL_FDCAN_GetTxEvent(), but does not provide
+     * HAL_FDCAN_GetTxEventFifoFillLevel(). LINK deliberately permits only
+     * one hardware TX to be outstanding, so one NEW_DATA interrupt can
+     * correspond to at most the single completion event we need to consume.
+     */
+    memset(&event, 0, sizeof(event));
+    if (HAL_FDCAN_GetTxEvent(adapter->hfdcan, &event) != HAL_OK) {
+        adapter->tx_event_lost = true;
+        return;
+    }
+    if (adapter->pending_marker != 0U &&
+        event.MessageMarker == adapter->pending_marker &&
+        (event.EventType == FDCAN_TX_EVENT ||
+         event.EventType == FDCAN_TX_IN_SPITE_OF_ABORT)) {
+        adapter->completed_tick_ms = HAL_GetTick();
+        adapter->completed_marker = (uint8_t)event.MessageMarker;
     }
 }
 
