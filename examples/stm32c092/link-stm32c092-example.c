@@ -21,6 +21,7 @@ static uint8_t example_rx_storage[256U];
 static uint8_t example_tx_storage[64U];
 static char example_vin[LINK_STM32C092_VIN_LENGTH + 1U];
 static LinkUdsDtcInformationResponse example_dtc_response;
+static LinkUdsDtcList example_dtc_list;
 static uint8_t example_dtc_subfunction;
 static LinkUdsResult example_dtc_decode_result = LINK_UDS_RESULT_OK;
 static uint8_t example_nrc;
@@ -56,6 +57,7 @@ bool link_stm32c092_example_init(FDCAN_HandleTypeDef *hfdcan)
 
     memset(example_vin, 0, sizeof(example_vin));
     memset(&example_dtc_response, 0, sizeof(example_dtc_response));
+    memset(&example_dtc_list, 0, sizeof(example_dtc_list));
     example_dtc_subfunction = 0U;
     example_dtc_decode_result = LINK_UDS_RESULT_OK;
     example_nrc = 0U;
@@ -116,6 +118,7 @@ bool link_stm32c092_example_start_dtc_report(
     }
 
     memset(&example_dtc_response, 0, sizeof(example_dtc_response));
+    memset(&example_dtc_list, 0, sizeof(example_dtc_list));
     example_dtc_subfunction = request->subfunction;
     example_nrc = 0U;
 
@@ -195,6 +198,18 @@ void link_stm32c092_example_process(void)
         return;
     }
 
+    if (example_dtc_subfunction == LINK_UDS_DTC_REPORT_BY_STATUS_MASK) {
+        example_dtc_decode_result =
+            link_uds_decode_report_dtcs_by_status_mask_response(
+                example_rx_storage,
+                response->data_length + 1U,
+                &example_dtc_list);
+        if (example_dtc_decode_result != LINK_UDS_RESULT_OK) {
+            example_state = LINK_STM32C092_EXAMPLE_FAILED;
+            return;
+        }
+    }
+
     example_state = LINK_STM32C092_EXAMPLE_DTC_READY;
 }
 
@@ -230,6 +245,13 @@ link_stm32c092_example_dtc_response(void)
 {
     return example_state == LINK_STM32C092_EXAMPLE_DTC_READY
         ? &example_dtc_response : NULL;
+}
+
+const LinkUdsDtcList *link_stm32c092_example_dtc_list(void)
+{
+    return example_state == LINK_STM32C092_EXAMPLE_DTC_READY &&
+           example_dtc_subfunction == LINK_UDS_DTC_REPORT_BY_STATUS_MASK
+        ? &example_dtc_list : NULL;
 }
 
 LinkUdsResult link_stm32c092_example_dtc_decode_result(void)
