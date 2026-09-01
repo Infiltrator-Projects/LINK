@@ -23,6 +23,7 @@ static uint8_t fake_rx_data[64U];
 static FDCAN_TxHeaderTypeDef fake_tx_header;
 static uint8_t fake_tx_data[64U];
 static bool fake_tx_event_available;
+static uint32_t fake_tx_event_get_calls;
 static FDCAN_TxEventFifoTypeDef fake_tx_event;
 
 static void reset_fake_hal(void)
@@ -36,6 +37,7 @@ static void reset_fake_hal(void)
     memset(&fake_tx_header, 0, sizeof(fake_tx_header));
     memset(fake_tx_data, 0, sizeof(fake_tx_data));
     fake_tx_event_available = false;
+    fake_tx_event_get_calls = 0U;
     memset(&fake_tx_event, 0, sizeof(fake_tx_event));
 }
 
@@ -78,17 +80,12 @@ HAL_StatusTypeDef HAL_FDCAN_AddMessageToTxFifoQ(
     return HAL_OK;
 }
 
-uint32_t HAL_FDCAN_GetTxEventFifoFillLevel(FDCAN_HandleTypeDef *hfdcan)
-{
-    (void)hfdcan;
-    return fake_tx_event_available ? 1U : 0U;
-}
-
 HAL_StatusTypeDef HAL_FDCAN_GetTxEvent(
     FDCAN_HandleTypeDef *hfdcan,
     FDCAN_TxEventFifoTypeDef *event)
 {
     (void)hfdcan;
+    ++fake_tx_event_get_calls;
     if (!fake_tx_event_available || event == NULL) return HAL_ERROR;
     *event = fake_tx_event;
     fake_tx_event_available = false;
@@ -168,6 +165,7 @@ static int test_classic_tx_and_completion(void)
     fake_tx_event_available = true;
     link_stm32c092_hal_tx_event_irq(
         &adapter, FDCAN_IT_TX_EVT_FIFO_NEW_DATA);
+    REQUIRE(fake_tx_event_get_calls == 1U);
     fake_tick = 11U;
     REQUIRE(link_stm32_can_poll_tx_status(
         &channel, &completion_us) == LINK_STM32_CAN_TX_COMPLETE);
@@ -242,6 +240,7 @@ static int test_rx_mapping_and_event_loss(void)
     REQUIRE(link_stm32_can_send(&channel, &frame));
     link_stm32c092_hal_tx_event_irq(
         &adapter, FDCAN_IT_TX_EVT_FIFO_ELT_LOST);
+    REQUIRE(fake_tx_event_get_calls == 0U);
     REQUIRE(link_stm32_can_poll_tx_status(
         &channel, &arrival_us) == LINK_STM32_CAN_TX_FAILED);
     return 0;
