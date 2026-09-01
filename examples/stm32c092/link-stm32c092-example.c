@@ -9,8 +9,6 @@
 #include <stddef.h>
 #include <string.h>
 
-#define LINK_STM32C092_REQUEST_ID 0x7e0U
-#define LINK_STM32C092_RESPONSE_ID 0x7e8U
 #define LINK_STM32C092_VIN_DID 0xf190U
 #define LINK_STM32C092_VIN_LENGTH 17U
 
@@ -41,19 +39,35 @@ static bool link_stm32c092_begin_vin(void)
         &example_uds, request, request_length) == LINK_STM32_UDS_RESULT_OK;
 }
 
-static bool link_stm32c092_dtc_start_state_valid(void)
+static bool link_stm32c092_request_start_state_valid(void)
 {
-    return example_state == LINK_STM32C092_EXAMPLE_VIN_READY ||
+    return example_state == LINK_STM32C092_EXAMPLE_READY ||
+           example_state == LINK_STM32C092_EXAMPLE_VIN_READY ||
            example_state == LINK_STM32C092_EXAMPLE_DTC_READY ||
            example_state == LINK_STM32C092_EXAMPLE_NEGATIVE_RESPONSE;
 }
 
-bool link_stm32c092_example_init(FDCAN_HandleTypeDef *hfdcan)
+void link_stm32c092_example_default_tester_config(
+    LinkStm32C092TesterConfig *config)
+{
+    const LinkStm32C092TesterConfig defaults =
+        LINK_STM32C092_TESTER_CONFIG_INIT;
+    if (config != NULL) *config = defaults;
+}
+
+bool link_stm32c092_example_init_tester(
+    FDCAN_HandleTypeDef *hfdcan,
+    const LinkStm32C092TesterConfig *tester_config)
 {
     LinkStm32CanOps ops;
     LinkStm32UdsConfig config;
 
-    if (hfdcan == NULL) return false;
+    if (hfdcan == NULL || tester_config == NULL ||
+        tester_config->request_can_id > UINT32_C(0x7ff) ||
+        tester_config->response_can_id > UINT32_C(0x7ff) ||
+        tester_config->request_can_id == tester_config->response_can_id) {
+        return false;
+    }
 
     memset(example_vin, 0, sizeof(example_vin));
     memset(&example_dtc_response, 0, sizeof(example_dtc_response));
@@ -67,14 +81,14 @@ bool link_stm32c092_example_init(FDCAN_HandleTypeDef *hfdcan)
     ops = link_stm32c092_hal_ops(&example_hal);
     if (!link_stm32_can_init(&example_can, &ops) ||
         !link_stm32c092_hal_start_standard(
-            &example_hal, LINK_STM32C092_RESPONSE_ID)) {
+            &example_hal, tester_config->response_can_id)) {
         example_state = LINK_STM32C092_EXAMPLE_FAILED;
         return false;
     }
 
     memset(&config, 0, sizeof(config));
-    config.address.tx_can_id = LINK_STM32C092_REQUEST_ID;
-    config.address.rx_can_id = LINK_STM32C092_RESPONSE_ID;
+    config.address.tx_can_id = tester_config->request_can_id;
+    config.address.rx_can_id = tester_config->response_can_id;
     config.address.addressing_mode = LINK_ISOTP_ADDRESSING_NORMAL;
     config.address.target_type = LINK_ISOTP_TARGET_PHYSICAL;
     config.consecutive_timeout_us = UINT64_C(1000000);
@@ -88,12 +102,40 @@ bool link_stm32c092_example_init(FDCAN_HandleTypeDef *hfdcan)
     if (!link_stm32_uds_init(
             &example_uds, &example_can, &config,
             example_rx_storage, sizeof(example_rx_storage),
-            example_tx_storage, sizeof(example_tx_storage)) ||
-        !link_stm32c092_begin_vin()) {
+            example_tx_storage, sizeof(example_tx_storage))) {
         example_state = LINK_STM32C092_EXAMPLE_FAILED;
         return false;
     }
 
+    if (!tester_config->read_vin_on_init) {
+        example_state = LINK_STM32C092_EXAMPLE_READY;
+        return true;
+    }
+    if (!link_stm32c092_begin_vin()) {
+        example_state = LINK_STM32C092_EXAMPLE_FAILED;
+        return false;
+    }
+    example_state = LINK_STM32C092_EXAMPLE_READING_VIN;
+    return true;
+}
+
+bool link_stm32c092_example_init(FDCAN_HandleTypeDef *hfdcan)
+{
+    LinkStm32C092TesterConfig config =
+        LINK_STM32C092_TESTER_CONFIG_INIT;
+    return link_stm32c092_example_init_tester(hfdcan, &config);
+}
+
+bool link_stm32c092_example_start_vin(void)
+{
+    if (!link_stm32c092_request_start_state_valid()) return false;
+
+    memset(example_vin, 0, sizeof(example_vin));
+    example_nrc = 0U;
+    if (!link_stm32c092_begin_vin()) {
+        example_state = LINK_STM32C092_EXAMPLE_FAILED;
+        return false;
+    }
     example_state = LINK_STM32C092_EXAMPLE_READING_VIN;
     return true;
 }
@@ -106,7 +148,7 @@ bool link_stm32c092_example_start_dtc_report(
     LinkUdsResult uds_result;
 
     if (request == NULL || request->suppress_positive_response ||
-        !link_stm32c092_dtc_start_state_valid()) {
+        !link_stm32c092_request_start_state_valid()) {
         return false;
     }
 
