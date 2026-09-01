@@ -520,7 +520,7 @@ static void test_complete_mode01_namespace(void)
     size_t assigned = 0U, reserved = 0U;
     unsigned int raw;
     check(link_obd2_mode01_identifier_count() == 256U, "all Mode 01 slots exposed");
-    check(strcmp(link_obd2_j1979_audit_revision(), "J1979DA_202607") == 0,
+    check(strcmp(link_obd2_j1979_audit_revision(), "J1979DA_201110+verified-public-updates") == 0,
           "J1979 audit revision");
     for (raw = 0U; raw <= 0xffU; ++raw) {
         const uint8_t pid = (uint8_t)raw;

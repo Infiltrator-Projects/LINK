@@ -39,8 +39,8 @@ LINK currently owns:
   including transport-neutral read helpers, explicit deny-by-default handling
   for control/clear operations, responder-attributed capability discovery,
   VIN/readiness/freeze-frame/DTC handling and bounded multi-responder decoding;
-- raw-preserving generic Mode 05/06/09 identifier decoding so every ECU-advertised standard test/monitor/info identifier remains accessible even when LINK lacks a verified semantic layout;
-- the complete classic SAE J1979 Mode 01 identifier namespace: all **256** byte-wide slots are represented, with **220 assigned definitions** and **36** explicitly reserved/unassigned under the `J1979DA_202608` audit. Every advertised assigned data PID is schedulable, including structured/encoded/raw-preserving values rather than only the scalar compatibility subset; Mode 09 vehicle information and J1979-2 OBDonUDS mapping remain shared in LINK;
+- correct first-generation Service 05 TID + O2-sensor framing and scaling, structured CAN Service 06 OBDMID/TID/UASID decoding, and raw-preserving handling wherever a current licensed-annex semantic row is not compiled;
+- the complete classic SAE J1979 Mode 01 identifier namespace: all **256** byte-wide slots are represented, with **220 assigned definitions** and **36** explicitly reserved/unassigned under the `J1979DA_201110+verified-public-updates` audit. Every advertised assigned data PID is schedulable, including structured/encoded/raw-preserving values rather than only the scalar compatibility subset; Mode 09 vehicle information and J1979-2 OBDonUDS mapping remain shared in LINK;
 - the complete **65,536-value** SAE/ISO DTC numeric namespace, with every value classified as standardized generic/controlled, manufacturer-specific or document-reserved, plus a pinned **9,533-definition** open generic catalogue audited against J2012/J2012DA;
 - ISO 14229 UDS request/response, DID and client-state handling;
 - transport-neutral ISO 13400 DoIP framing for routing activation, alive-check and UDS diagnostic messages;
@@ -115,7 +115,7 @@ Portable diagnostic behaviour is C11. C++ is used only where it materially impro
 
 Shared protocol state machines, diagnostic sequencing, safety policy, generic diagnostic knowledge and transport-independent decisions belong in LINK rather than Swift, Objective-C, GTK callbacks or Win32 message handlers.
 
-Standard OBD knowledge follows the same rule. Product repositories must not grow private SAE PID tables. LINK's generated OBD catalogue is the single source of truth for standard Mode 01/09 metadata and formulas; structured values that do not fit the compatibility scalar facade remain available through `LinkObd2DecodedPid`. Manufacturer UDS/KWP definitions are layered above that shared standards engine.
+Standard OBD knowledge follows the same rule. Product repositories must not grow private SAE PID tables. LINK's generated Mode 01/09 catalogue and `link/j1979da.h` are the shared source of truth for compiled public metadata and formulas. LINK separately records the current targets J1979_202505, J1979DA_202607, J1978-1_202604 and J1979-2_202604. Because the current J1979 Digital Annex is licensed and is not redistributed here, the compiled semantic baseline is labelled `J1979DA_201110+verified-public-updates`; unverified current rows remain raw rather than being guessed. Manufacturer UDS/KWP definitions are layered above that shared standards engine.
 
 Compatibility aliases/wrappers preserve product-prefixed public APIs while the underlying ELM327, OBD-II, UDS, DTC knowledge and diagnostic-flow algorithms remain single-source in LINK.
 

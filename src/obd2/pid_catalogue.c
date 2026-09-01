@@ -268,7 +268,7 @@ LinkObd2IdentifierStatus link_obd2_mode01_identifier_status(uint8_t pid)
     return link_obd2_pid_definition(UINT8_C(0x01), pid) != NULL
         ? LINK_OBD2_IDENTIFIER_ASSIGNED : LINK_OBD2_IDENTIFIER_RESERVED;
 }
-const char *link_obd2_j1979_audit_revision(void) { return "J1979DA_202607"; }
+const char *link_obd2_j1979_audit_revision(void) { return "J1979DA_201110+verified-public-updates"; }
 
 static const LinkObd2CatalogueEntry *obd2_catalogue_entry(
     uint8_t mode,
