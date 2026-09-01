@@ -88,6 +88,7 @@ jobs:
           grep -Fq '"BLE", stateName.UTF8String' platform/apple/LinkDiagnosticsController.m
           grep -Fq 'LinkBLETransportStateFailed' platform/apple/LinkDiagnosticsController.m
           grep -Fq 'case LINK_DIAGNOSTIC_FLOW_EVENT_LIVE_STRUCTURED:' platform/apple/LinkDiagnosticsController.m
+          grep -Fq 'event.kind == LINK_DIAGNOSTIC_FLOW_EVENT_LIVE_STRUCTURED' platform/linux/link-gtk-shell.c
           grep -Fq 'LINK_ADAPTER_KIND_MERCEDES_ME_NATIVE' include/link/transport.h
           grep -Fq 'link_adapter_kind_from_bluetooth_name' src/core/transport.c
           grep -Fq 'LINK_MERCEDES_ME_NUS_SERVICE_UUID' include/link/mercedes_me_adapter.h
