@@ -184,3 +184,27 @@ The example remains intentionally read-only. LINK's wider UDS catalogue is not a
 The supplied project exposes `HAL_GetTick()` at 1 ms resolution. LINK extends the wrapping 32-bit clock to monotonic 64-bit microseconds and preserves the ISR tick for RX and TX-completion events. Sub-millisecond STmin values are therefore handled conservatively; they are never transmitted early.
 
 The HAL mapper understands canonical CAN-FD DLC sizes through 64 bytes, but the supplied project/example remains Classical CAN with bit-rate switching disabled. Enabling CAN FD requires a matching Cube FDCAN configuration change.
+
+
+## ECU/server role (MBLINK issue #38)
+
+The original reference above remains a diagnostic tester/client. MBLINK issue
+#38 subsequently confirmed a second, distinct requirement: use the STM32C092
+as the UDS ECU/server so an external tester sends requests to `0x7E0` and the
+STM32 answers from `0x7E8`.
+
+LINK now provides that role separately rather than swapping IDs inside the
+client:
+
+- shared dispatcher: `include/link/uds_server.h` / `src/uds/uds_server.c`;
+- STM32 ISO-TP server transport:
+  `platform/stm32/link-stm32-uds-server.[ch]`;
+- C092 server example:
+  `examples/stm32c092/link-stm32c092-server-example.[ch]`;
+- KEIL/Cube integration and hardware test vectors:
+  `examples/stm32c092/issue-38-server/`.
+
+In server mode the hardware filter accepts `0x7E0`. A tester request
+`02 10 01` on `0x7E0` produces `06 50 01 00 32 01 F4` on `0x7E8`.
+The server also binds the complete LINK `0x19 ReadDTCInformation` report
+catalogue and exposes callback registration for all 27 standard service IDs.

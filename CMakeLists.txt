@@ -136,6 +136,7 @@ add_library(link-core STATIC
     src/kwp2000/kwp2000.c
     src/uds/uds.c
     src/uds/uds_services.c
+    src/uds/uds_server.c
     src/discover/safety.c
     src/discover/sweep.c
     src/discover/evidence.c
@@ -438,6 +439,24 @@ if(BUILD_TESTING AND PROJECT_IS_TOP_LEVEL)
     endif()
     add_test(NAME link-stm32 COMMAND link-test-stm32)
 
+    add_executable(link-test-stm32-uds-server
+        tests/test_stm32_uds_server.c
+        platform/stm32/link-stm32-can.c
+        platform/stm32/link-stm32-uds-server.c)
+    target_include_directories(link-test-stm32-uds-server PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/platform/stm32")
+    target_link_libraries(link-test-stm32-uds-server PRIVATE LINK::Core)
+    if(MSVC)
+        target_compile_options(link-test-stm32-uds-server PRIVATE /W4 /WX /utf-8)
+    else()
+        target_compile_options(link-test-stm32-uds-server PRIVATE ${LINK_WARNING_FLAGS})
+    endif()
+    if(LINK_ENABLE_SANITIZERS)
+        target_compile_options(link-test-stm32-uds-server PRIVATE ${LINK_SANITIZER_FLAGS})
+        target_link_options(link-test-stm32-uds-server PRIVATE -fsanitize=address,undefined)
+    endif()
+    add_test(NAME link-stm32-uds-server COMMAND link-test-stm32-uds-server)
+
     add_executable(link-test-stm32c092-hal
         tests/test_stm32c092_hal.c
         platform/stm32/link-stm32-can.c
@@ -468,6 +487,7 @@ if(BUILD_TESTING AND PROJECT_IS_TOP_LEVEL)
     link_add_test(link-test-dtc-knowledge tests/test_dtc_knowledge.c link-dtc-knowledge)
     link_add_test(link-test-uds tests/test_uds.c link-uds)
     link_add_test(link-test-uds-dtc tests/test_uds_dtc.c link-uds-dtc)
+    link_add_test(link-test-uds-server tests/test_uds_server.c link-uds-server)
     link_add_test(link-test-discover-safety tests/test_discover_safety.c link-discover-safety)
     link_add_test(link-test-discover-sweep tests/test_discover_sweep.c link-discover-sweep)
     link_add_test(link-test-evidence tests/test_evidence.c link-evidence)
