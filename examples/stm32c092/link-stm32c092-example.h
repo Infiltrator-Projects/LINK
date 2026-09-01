@@ -34,6 +34,7 @@ LinkStm32C092ExampleState link_stm32c092_example_state(void);
 const char *link_stm32c092_example_vin(void);
 const LinkUdsDtcInformationResponse *
 link_stm32c092_example_dtc_response(void);
+const LinkUdsDtcList *link_stm32c092_example_dtc_list(void);
 LinkUdsResult link_stm32c092_example_dtc_decode_result(void);
 uint8_t link_stm32c092_example_negative_response_code(void);
 uint32_t link_stm32c092_example_dropped_frames(void);
