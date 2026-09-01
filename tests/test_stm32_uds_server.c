@@ -185,7 +185,8 @@ int main(void)
     /* Confirm the FF left the controller, then provide tester FlowControl. */
     CHECK(link_stm32_uds_server_poll(&transport) ==
           LINK_STM32_UDS_SERVER_RESULT_WAITING);
-    memset(&request, 0xcc, sizeof(request));
+    memset(&request, 0, sizeof(request));
+    memset(request.data, 0xcc, sizeof(request.data));
     request.can_id = 0x7e0U;
     request.length = 8U;
     request.data[0] = 0x30U;
