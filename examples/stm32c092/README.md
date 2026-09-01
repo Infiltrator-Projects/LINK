@@ -104,6 +104,53 @@ if (link_stm32c092_example_state() == LINK_STM32C092_EXAMPLE_VIN_READY) {
 
 Negative responses are retained through `link_stm32c092_example_negative_response_code()`, and RX overflow is visible through `link_stm32c092_example_dropped_frames()`.
 
+### ReadDTCInformation hardware testing
+
+After the initial VIN transaction reaches `LINK_STM32C092_EXAMPLE_VIN_READY` (or returns a normal UDS negative response), the same example can issue any of LINK's 27 supported `ReadDTCInformation (0x19)` report types. The caller supplies the parameters required by that report type; the example uses `link_uds_build_read_dtc_information_request()`, sends the request through the existing STM32 ISO-TP/UDS client, and validates a positive response with `link_uds_decode_read_dtc_information_response()`.
+
+For example, `reportDTCByStatusMask (0x02)`:
+
+```c
+LinkUdsDtcInformationRequest request =
+    LINK_UDS_DTC_INFORMATION_REQUEST_INIT;
+
+request.subfunction = LINK_UDS_DTC_REPORT_BY_STATUS_MASK;
+request.status_mask = LINK_UDS_DTC_STATUS_MASK_ALL;
+
+if (!link_stm32c092_example_start_dtc_report(&request)) {
+    Error_Handler();
+}
+
+while (link_stm32c092_example_state() ==
+       LINK_STM32C092_EXAMPLE_READING_DTC) {
+    link_stm32c092_example_process();
+}
+
+if (link_stm32c092_example_state() ==
+    LINK_STM32C092_EXAMPLE_DTC_READY) {
+    const LinkUdsDtcInformationResponse *dtc =
+        link_stm32c092_example_dtc_response();
+    /* Inspect dtc->record_format, metadata and records/records_length. */
+}
+```
+
+The single entry point covers the complete catalogue: `0x01..0x19`, `0x42` and `0x55`. Populate the request fields according to the catalogue's request shape:
+
+- status mask: `0x01`, `0x02`, `0x0F`, `0x11`, `0x12`, `0x13`;
+- no extra parameters: `0x03`, `0x0A..0x0E`, `0x14`, `0x15`;
+- DTC plus record number: `0x04`, `0x06`, `0x10`;
+- record number: `0x05`, `0x16`;
+- severity mask plus status mask: `0x07`, `0x08`;
+- DTC: `0x09`;
+- status mask plus memory selection: `0x17`;
+- DTC plus record number plus memory selection: `0x18`, `0x19`;
+- functional-group identifier plus status and severity masks: `0x42`;
+- functional-group identifier: `0x55`.
+
+Use ECU-appropriate DTC, record, memory-selection and functional-group values when a report type requires them. A standards-compliant negative response such as “subfunction not supported” or “request out of range” is a valid hardware observation and does not by itself mean the LINK integration failed. The legacy mirror/emissions report types retained for older ECUs are still available even though several were withdrawn from ISO 14229-1:2020.
+
+The test entry point intentionally requires a positive response (the suppress-positive-response bit must be clear) so that the returned PDU can be decoded and inspected.
+
 The example remains intentionally read-only. LINK's wider UDS catalogue is not automatically authorised by this firmware.
 
 ## Timing resolution and CAN FD
