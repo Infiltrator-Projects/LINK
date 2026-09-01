@@ -113,6 +113,9 @@ jobs:
           grep -Fq 'transport.isNativeAdapter' platform/apple/LinkDiagnosticsController.m
           grep -Fq 'NATIVE_RX' platform/apple/LinkDiagnosticsController.m
           grep -Fq 'link-test-uds-dtc tests/test_uds_dtc.c link-uds-dtc' CMakeLists.txt
+          grep -Fq 'link-test-uds-server tests/test_uds_server.c link-uds-server' CMakeLists.txt
+          grep -Fq 'link-test-stm32-uds-server' CMakeLists.txt
+          grep -Fq 'request_can_id = 0x7e0U' examples/stm32c092/issue-38-server/Src-main.c
           if grep -REn '\?[[:space:]]*:' platform/apple; then
             echo 'Apple platform code must not use the GNU omitted-middle ?: extension.' >&2
             exit 1
@@ -209,11 +212,14 @@ jobs:
             src/core/isotp.c
             src/uds/uds.c
             src/uds/uds_services.c
+            src/uds/uds_server.c
             src/infiltratr-common/src/core.c
             platform/stm32/link-stm32-can.c
             platform/stm32/link-stm32-uds.c
+            platform/stm32/link-stm32-uds-server.c
             examples/stm32c092/link-stm32c092-hal.c
             examples/stm32c092/link-stm32c092-example.c
+            examples/stm32c092/link-stm32c092-server-example.c
           )
           for source in "${sources[@]}"; do
             object="build-stm32-arm/$(printf '%s' "$source" | tr '/.' '__').o"
