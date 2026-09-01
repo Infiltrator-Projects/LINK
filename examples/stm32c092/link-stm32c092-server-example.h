@@ -29,6 +29,8 @@ bool link_stm32c092_server_example_init(
     FDCAN_HandleTypeDef *hfdcan,
     const LinkStm32C092ServerConfig *config);
 void link_stm32c092_server_example_process(void);
+/* Main-loop fallback for targets where the RX FIFO interrupt is not delivered. */
+void link_stm32c092_server_example_poll_rx(FDCAN_HandleTypeDef *hfdcan);
 void link_stm32c092_server_example_rx_fifo0_irq(FDCAN_HandleTypeDef *hfdcan);
 void link_stm32c092_server_example_tx_event_irq(
     FDCAN_HandleTypeDef *hfdcan,

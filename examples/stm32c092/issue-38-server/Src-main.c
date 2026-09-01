@@ -33,6 +33,12 @@ int main(void)
     }
 
     for (;;) {
+        /*
+         * Fallback for the exact issue reported in #38: if FDCAN has queued a
+         * frame but Cube/NVIC did not invoke the RX callback, drain FIFO0 here.
+         * The normal interrupt path remains enabled and uses the same queue.
+         */
+        link_stm32c092_server_example_poll_rx(&hfdcan1);
         link_stm32c092_server_example_process();
     }
 }

@@ -101,6 +101,9 @@ LINK responds from CAN ID `0x7E8` with:
 06 50 01 00 32 01 F4
 ```
 
+When Classical CAN padding is enabled in the submitted KEIL project the full
+8-byte frame is `06 50 01 00 32 01 F4 CC`.
+
 The UDS response is `50 01 00 32 01 F4`: default session, P2=50 ms,
 P2*=500 x 10 ms = 5000 ms.
 
@@ -109,7 +112,14 @@ below UDS/ISO-TP (physical bus, transceiver, bitrate/clock, FDCAN instance,
 NVIC or Cube pin configuration), because this server build's filter accepts
 `0x7E0` explicitly.
 
-## `0x19` zero-DTC bench test
+## `0x19` bench test
+
+The server example now contains two bounded demonstration DTC records so the
+actual `ReadDTCInformation` data path is exercised rather than returning an
+empty list:
+
+- DTC `0x123456`, status `0x09`;
+- DTC `0xABCDEF`, status `0x08`.
 
 Send on `0x7E0`:
 
@@ -117,15 +127,68 @@ Send on `0x7E0`:
 03 19 02 FF
 ```
 
-The empty demonstration DTC store replies on `0x7E8`:
+The UDS positive response begins:
 
 ```text
-03 59 02 FF
+59 02 FF 12 34 56 09 AB CD EF 08
 ```
 
-Replace the demonstration store with application DTC records to obtain real
-DTC lists. The same handler dispatches all 27 LINK ReadDTCInformation report
-types.
+That is 11 UDS bytes, so on Classical CAN it is a multi-frame ISO-TP response.
+The tester must return a Flow Control frame on `0x7E0` after the First Frame,
+for example `30 00 00`.
+
+The same handler dispatches all 27 LINK ReadDTCInformation report types.
+Replace the demonstration store with the ECU application's real DTC provider
+for production use.
+
+## Submitted KEIL project findings and validation
+
+The reporter's supplied project was also tested independently of LINK's own
+example. The final repair made these additional changes in the submitted
+project structure:
+
+- keeps STM32 as the ECU/server: physical request `0x7E0`, functional request
+  `0x7DF`, response `0x7E8`;
+- adds a main-loop FIFO0 drain fallback, so a frame that reaches FDCAN can
+  still be processed when the RX callback is not delivered;
+- explicitly assigns RX FIFO0 to interrupt line 0;
+- fixes the submitted `uds_dtc.c` request-length table to the ISO 14229-1
+  parameter shapes for all `0x01..0x19`, `0x42`, and `0x55`;
+- installs a real bounded DTC/DID demonstration backend instead of calling the
+  submitted project's empty `uds_c092_app_init_default()`, which otherwise
+  returned `7F 19 11` for ReadDTCInformation;
+- expands FDCAN DLC conversion and transport handling through 64-byte CAN FD.
+
+One earlier diagnosis was corrected during this work: in the STM32C0 HAL used
+by the submitted project, `FDCAN_DLC_BYTES_8` is already the literal value
+8. Therefore the old direct cast did **not** explain the reporter's Classical
+CAN `10 01` interrupt symptom. Explicit DLC conversion is still required for
+CAN FD DLCs 12 through 64.
+
+The repaired submitted-project sources were exercised with:
+
+- strict C11 host builds;
+- Cortex-M0+ syntax checking against the submitted STM32C0 HAL/CMSIS headers;
+- `10 01 -> 50 01 00 32 01 F4`;
+- all 27 standards-shaped `0x19` requests returning positive `0x59`
+  responses from the demonstration backend;
+- `22 F190` VIN response;
+- the submitted `uds_app_fdcan + endpoint + isotp + can_transport_fdcan`
+  path with a mocked FDCAN HAL, including multi-frame DTC response and Flow
+  Control;
+- CAN FD 64-byte Single Frames and a 5000-byte extended ISO-TP First Frame
+  `10 00 00 00 13 88`.
+
+A physical board/transceiver test remains the final proof of the electrical
+CAN path.
+
+### RX interrupt fallback
+
+The issue-38 `Src-main.c` now calls
+`link_stm32c092_server_example_poll_rx()` before processing the server.
+The normal `HAL_FDCAN_RxFifo0Callback()` path remains active. If the board
+receives into FIFO0 but the IRQ is not delivered, the main loop therefore
+still drains and processes the frame.
 
 ## F190 VIN test
 
