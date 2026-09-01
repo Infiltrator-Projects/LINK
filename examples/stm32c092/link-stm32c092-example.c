@@ -4,6 +4,7 @@
 #include "link-stm32c092-hal.h"
 #include "link-stm32-uds.h"
 #include "link/uds.h"
+#include "link/uds_dtc.h"
 
 #include <stddef.h>
 #include <string.h>
@@ -19,6 +20,9 @@ static LinkStm32UdsClient example_uds;
 static uint8_t example_rx_storage[256U];
 static uint8_t example_tx_storage[64U];
 static char example_vin[LINK_STM32C092_VIN_LENGTH + 1U];
+static LinkUdsDtcInformationResponse example_dtc_response;
+static uint8_t example_dtc_subfunction;
+static LinkUdsResult example_dtc_decode_result = LINK_UDS_RESULT_OK;
 static uint8_t example_nrc;
 static LinkStm32C092ExampleState example_state = LINK_STM32C092_EXAMPLE_IDLE;
 
@@ -36,6 +40,13 @@ static bool link_stm32c092_begin_vin(void)
         &example_uds, request, request_length) == LINK_STM32_UDS_RESULT_OK;
 }
 
+static bool link_stm32c092_dtc_start_state_valid(void)
+{
+    return example_state == LINK_STM32C092_EXAMPLE_VIN_READY ||
+           example_state == LINK_STM32C092_EXAMPLE_DTC_READY ||
+           example_state == LINK_STM32C092_EXAMPLE_NEGATIVE_RESPONSE;
+}
+
 bool link_stm32c092_example_init(FDCAN_HandleTypeDef *hfdcan)
 {
     LinkStm32CanOps ops;
@@ -44,6 +55,9 @@ bool link_stm32c092_example_init(FDCAN_HandleTypeDef *hfdcan)
     if (hfdcan == NULL) return false;
 
     memset(example_vin, 0, sizeof(example_vin));
+    memset(&example_dtc_response, 0, sizeof(example_dtc_response));
+    example_dtc_subfunction = 0U;
+    example_dtc_decode_result = LINK_UDS_RESULT_OK;
     example_nrc = 0U;
     example_state = LINK_STM32C092_EXAMPLE_IDLE;
 
@@ -82,12 +96,50 @@ bool link_stm32c092_example_init(FDCAN_HandleTypeDef *hfdcan)
     return true;
 }
 
+bool link_stm32c092_example_start_dtc_report(
+    const LinkUdsDtcInformationRequest *request)
+{
+    uint8_t pdu[7U];
+    size_t pdu_length = 0U;
+    LinkUdsResult uds_result;
+
+    if (request == NULL || request->suppress_positive_response ||
+        !link_stm32c092_dtc_start_state_valid()) {
+        return false;
+    }
+
+    uds_result = link_uds_build_read_dtc_information_request(
+        request, pdu, sizeof(pdu), &pdu_length);
+    example_dtc_decode_result = uds_result;
+    if (uds_result != LINK_UDS_RESULT_OK) {
+        return false;
+    }
+
+    memset(&example_dtc_response, 0, sizeof(example_dtc_response));
+    example_dtc_subfunction = request->subfunction;
+    example_nrc = 0U;
+
+    if (link_stm32_uds_start(
+            &example_uds, pdu, pdu_length) != LINK_STM32_UDS_RESULT_OK) {
+        example_state = LINK_STM32C092_EXAMPLE_FAILED;
+        return false;
+    }
+
+    example_state = LINK_STM32C092_EXAMPLE_READING_DTC;
+    return true;
+}
+
 void link_stm32c092_example_process(void)
 {
     LinkStm32UdsResult result;
     const LinkUdsResponse *response;
+    bool reading_vin;
 
-    if (example_state != LINK_STM32C092_EXAMPLE_READING_VIN) return;
+    reading_vin = example_state == LINK_STM32C092_EXAMPLE_READING_VIN;
+    if (!reading_vin &&
+        example_state != LINK_STM32C092_EXAMPLE_READING_DTC) {
+        return;
+    }
 
     result = link_stm32_uds_poll(&example_uds);
     if (result == LINK_STM32_UDS_RESULT_WAITING ||
@@ -106,17 +158,44 @@ void link_stm32c092_example_process(void)
     }
 
     response = link_stm32_uds_response(&example_uds);
-    if (response == NULL || response->kind != LINK_UDS_RESPONSE_POSITIVE ||
-        response->request_service != 0x22U ||
-        response->data_length != LINK_STM32C092_VIN_LENGTH + 2U ||
-        response->data[0] != 0xf1U || response->data[1] != 0x90U) {
+    if (response == NULL || response->kind != LINK_UDS_RESPONSE_POSITIVE) {
         example_state = LINK_STM32C092_EXAMPLE_FAILED;
         return;
     }
 
-    memcpy(example_vin, &response->data[2], LINK_STM32C092_VIN_LENGTH);
-    example_vin[LINK_STM32C092_VIN_LENGTH] = '\0';
-    example_state = LINK_STM32C092_EXAMPLE_VIN_READY;
+    if (reading_vin) {
+        if (response->request_service != LINK_UDS_SERVICE_READ_DATA_BY_IDENTIFIER ||
+            response->data_length != LINK_STM32C092_VIN_LENGTH + 2U ||
+            response->data[0] != 0xf1U || response->data[1] != 0x90U) {
+            example_state = LINK_STM32C092_EXAMPLE_FAILED;
+            return;
+        }
+
+        memcpy(example_vin, &response->data[2], LINK_STM32C092_VIN_LENGTH);
+        example_vin[LINK_STM32C092_VIN_LENGTH] = '\0';
+        example_state = LINK_STM32C092_EXAMPLE_VIN_READY;
+        return;
+    }
+
+    if (response->request_service != LINK_UDS_SERVICE_READ_DTC_INFORMATION ||
+        response->data_length == 0U) {
+        example_dtc_decode_result = LINK_UDS_RESULT_UNEXPECTED_RESPONSE;
+        example_state = LINK_STM32C092_EXAMPLE_FAILED;
+        return;
+    }
+
+    example_dtc_decode_result =
+        link_uds_decode_read_dtc_information_response(
+            example_dtc_subfunction,
+            example_rx_storage,
+            response->data_length + 1U,
+            &example_dtc_response);
+    if (example_dtc_decode_result != LINK_UDS_RESULT_OK) {
+        example_state = LINK_STM32C092_EXAMPLE_FAILED;
+        return;
+    }
+
+    example_state = LINK_STM32C092_EXAMPLE_DTC_READY;
 }
 
 void link_stm32c092_example_rx_fifo0_irq(FDCAN_HandleTypeDef *hfdcan)
@@ -144,6 +223,18 @@ const char *link_stm32c092_example_vin(void)
 {
     return example_state == LINK_STM32C092_EXAMPLE_VIN_READY
         ? example_vin : NULL;
+}
+
+const LinkUdsDtcInformationResponse *
+link_stm32c092_example_dtc_response(void)
+{
+    return example_state == LINK_STM32C092_EXAMPLE_DTC_READY
+        ? &example_dtc_response : NULL;
+}
+
+LinkUdsResult link_stm32c092_example_dtc_decode_result(void)
+{
+    return example_dtc_decode_result;
 }
 
 uint8_t link_stm32c092_example_negative_response_code(void)
