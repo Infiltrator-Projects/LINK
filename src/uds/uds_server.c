@@ -439,16 +439,6 @@ static size_t uds_dtc_count_status(
     return count;
 }
 
-static const LinkUdsDtcRecord *uds_dtc_find_code(
-    const LinkUdsServerDtcStore *store, uint32_t code)
-{
-    size_t index;
-    for (index = 0U; index < store->record_count; ++index) {
-        if (store->records[index].code == code) return &store->records[index];
-    }
-    return NULL;
-}
-
 static LinkUdsServerHandlerResult uds_dtc_too_long(void)
 {
     return link_uds_server_handler_negative(LINK_UDS_NRC_RESPONSE_TOO_LONG);
@@ -628,11 +618,6 @@ LinkUdsServerHandlerResult link_uds_server_dtc_handler(
     case LINK_UDS_DTC_REPORT_FAULT_DETECTION_COUNTER:
     case LINK_UDS_DTC_REPORT_WITH_PERMANENT_STATUS:
         if (request->pdu_length != 2U) return uds_dtc_bad_length();
-        return link_uds_server_handler_negative(
-            LINK_UDS_NRC_REQUEST_OUT_OF_RANGE);
-
-    case LINK_UDS_DTC_REPORT_EXT_DATA_BY_RECORD_NUMBER:
-        if (request->pdu_length != 3U) return uds_dtc_bad_length();
         return link_uds_server_handler_negative(
             LINK_UDS_NRC_REQUEST_OUT_OF_RANGE);
 
