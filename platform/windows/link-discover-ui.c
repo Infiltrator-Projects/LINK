@@ -216,6 +216,7 @@ static HANDLE load_product_font_resource(HINSTANCE instance, int resource_id)
 
 static void load_product_fonts(HINSTANCE instance)
 {
+    (void)instance;
 #ifdef LINK_PRODUCT_FONT_RESOURCE_REGULAR
     g_product_font_regular =
         load_product_font_resource(instance, LINK_PRODUCT_FONT_RESOURCE_REGULAR);
