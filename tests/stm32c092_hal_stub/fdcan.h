@@ -111,7 +111,6 @@ HAL_StatusTypeDef HAL_FDCAN_AddMessageToTxFifoQ(
     FDCAN_HandleTypeDef *hfdcan,
     const FDCAN_TxHeaderTypeDef *header,
     const uint8_t *data);
-uint32_t HAL_FDCAN_GetTxEventFifoFillLevel(FDCAN_HandleTypeDef *hfdcan);
 HAL_StatusTypeDef HAL_FDCAN_GetTxEvent(
     FDCAN_HandleTypeDef *hfdcan,
     FDCAN_TxEventFifoTypeDef *event);
