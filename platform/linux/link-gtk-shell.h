@@ -108,6 +108,12 @@ typedef struct LinkGtkShellDescriptor {
     const LinkGtkManufacturerExtension *manufacturer_extension;
     const LinkGtkTransportProvider *transport_provider;
     void *transport_provider_context;
+    /*
+     * Optional GTK client-side title bar. Products that need typography or
+     * branding consistency beyond the desktop window-manager decoration can
+     * opt in and style .link-titlebar / .link-titlebar-label in product CSS.
+     */
+    bool use_client_side_titlebar;
     bool auto_connect;
     void *context;
 } LinkGtkShellDescriptor;

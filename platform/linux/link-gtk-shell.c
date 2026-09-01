@@ -22,6 +22,7 @@ typedef struct LinkGtkShell {
     size_t navigation_stress_step;
     size_t navigation_stress_target;
     GtkWidget *title;
+    GtkWidget *titlebar_label;
     GtkWidget *summary;
     GtkWidget *nav_list;
     GtkWidget *brand_subtitle;
@@ -88,7 +89,10 @@ static const char link_gtk_base_css[] =
     ".link-settings-title { font-weight: 800; }"
     ".link-settings-description { opacity: 0.68; font-size: 11px; }"
     ".link-settings-dropdown { min-width: 230px; }"
+    ".link-titlebar { min-height: 38px; }"
+    ".link-titlebar-label { font-weight: 700; }"
     ".link-connection-bar { padding: 12px 14px; border-radius: 14px; }"
+    ".link-device-row { min-height: 38px; }"
     ".link-toolbar-label { opacity: 0.78; font-size: 12px; font-weight: 700; }"
     ".link-adapter-combo { min-width: 220px; }"
     ".link-toolbar-button { min-height: 34px; padding: 5px 12px; font-weight: 700; }"
@@ -1161,6 +1165,9 @@ static void refresh_visible_language(LinkGtkShell *shell)
     if (shell->window != NULL)
         gtk_window_set_title(shell->window,
             link_gtk_i18n_translate_text(shell->descriptor->window_title));
+    if (shell->titlebar_label != NULL)
+        gtk_label_set_text(GTK_LABEL(shell->titlebar_label),
+            link_gtk_i18n_translate_text(shell->descriptor->window_title));
     if (shell->brand_subtitle != NULL)
         gtk_label_set_text(GTK_LABEL(shell->brand_subtitle), shell->descriptor->brand_subtitle);
     if (shell->language_label != NULL)
@@ -1901,6 +1908,7 @@ static GtkWidget *build_connection_bar(LinkGtkShell *shell)
     shell->link_button = gtk_button_new_with_label("LINK UP");
 
     gtk_widget_add_css_class(bar, "link-connection-bar");
+    gtk_widget_add_css_class(device_row, "link-device-row");
     gtk_widget_add_css_class(shell->adapter_label, "link-toolbar-label");
     gtk_widget_add_css_class(shell->device_combo, "link-adapter-combo");
     gtk_widget_add_css_class(shell->refresh_button, "link-toolbar-button");
@@ -1975,6 +1983,17 @@ static void activate(GtkApplication *application, gpointer user_data)
     }
     load_css(link_gtk_base_css);
     load_css(d->css);
+    if (d->use_client_side_titlebar) {
+        GtkWidget *titlebar = gtk_header_bar_new();
+        shell->titlebar_label = gtk_label_new(
+            link_gtk_i18n_translate_text(d->window_title));
+        gtk_widget_add_css_class(titlebar, "link-titlebar");
+        gtk_widget_add_css_class(shell->titlebar_label, "link-titlebar-label");
+        gtk_header_bar_set_title_widget(
+            GTK_HEADER_BAR(titlebar), shell->titlebar_label);
+        gtk_header_bar_set_show_title_buttons(GTK_HEADER_BAR(titlebar), TRUE);
+        gtk_window_set_titlebar(shell->window, titlebar);
+    }
     gtk_widget_add_css_class(root, "link-root");
     gtk_widget_add_css_class(sidebar, "link-sidebar");
     gtk_widget_add_css_class(brand, "link-brand-header");
