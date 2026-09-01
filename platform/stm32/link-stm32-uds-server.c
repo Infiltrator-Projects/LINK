@@ -32,6 +32,7 @@ static LinkStm32UdsServerResult link_stm32_uds_server_fail(
         transport->pending_tx_tracks_transmitter = false;
         transport->in_flight_tracks_transmitter = false;
         transport->response_active = false;
+        transport->deferred_rx_valid = false;
         transport->tx_completion_deadline_us = 0U;
     }
     return failure;
@@ -107,6 +108,9 @@ static LinkStm32UdsServerResult link_stm32_uds_server_finish_response(
     LinkStm32UdsServer *transport)
 {
     transport->response_active = false;
+    transport->deferred_rx_valid = false;
+    transport->deferred_rx_arrival_us = 0U;
+    transport->deferred_rx_dropped = 0U;
     transport->tx_completion_deadline_us = 0U;
     link_isotp_tx_reset(&transport->transmitter);
     link_isotp_rx_reset(&transport->receiver);
@@ -252,6 +256,20 @@ static LinkStm32UdsServerResult link_stm32_uds_server_accept_rx(
             transport, LINK_STM32_UDS_SERVER_RESULT_ISOTP_ERROR);
     }
     if (transport->response_active) {
+        /*
+         * A tester should not start a new diagnostic request until the current
+         * response is complete, but real tools can race the final CAN TX
+         * completion. Do not silently consume that request. Retain one frame
+         * and replay it after the current response completes; FlowControl
+         * remains processable while a multi-frame response is active.
+         */
+        if (!transport->deferred_rx_valid) {
+            transport->deferred_rx = *frame;
+            transport->deferred_rx_arrival_us = arrival_us;
+            transport->deferred_rx_valid = true;
+        } else {
+            transport->deferred_rx_dropped++;
+        }
         return LINK_STM32_UDS_SERVER_RESULT_WAITING;
     }
 
@@ -373,6 +391,19 @@ LinkStm32UdsServerResult link_stm32_uds_server_poll(
     result = link_stm32_uds_server_send_pending(transport);
     if (transport->state == LINK_STM32_UDS_SERVER_FAILED) return result;
 
+    if (!transport->response_active && transport->deferred_rx_valid) {
+        frame = transport->deferred_rx;
+        arrival_us = transport->deferred_rx_arrival_us;
+        transport->deferred_rx_valid = false;
+        transport->deferred_rx_arrival_us = 0U;
+        result = link_stm32_uds_server_accept_rx(
+            transport, &frame, arrival_us);
+        if (transport->state == LINK_STM32_UDS_SERVER_FAILED ||
+            result == LINK_STM32_UDS_SERVER_RESULT_REQUEST_COMPLETE) {
+            return result;
+        }
+    }
+
     while (link_stm32_can_pop_timed(
                transport->channel, &frame, &arrival_us)) {
         result = link_stm32_uds_server_accept_rx(
@@ -440,4 +471,10 @@ uint32_t link_stm32_uds_server_completed_requests(
     const LinkStm32UdsServer *transport)
 {
     return transport == NULL ? 0U : transport->completed_request_count;
+}
+
+uint32_t link_stm32_uds_server_deferred_rx_dropped(
+    const LinkStm32UdsServer *transport)
+{
+    return transport == NULL ? 0U : transport->deferred_rx_dropped;
 }

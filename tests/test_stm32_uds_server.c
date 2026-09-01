@@ -114,6 +114,9 @@ int main(void)
     const uint8_t expected_dtc_cf[] = {
         0x21U, 0x09U, 0xabU, 0xcdU, 0xefU, 0x08U, 0xccU, 0xccU
     };
+    const uint8_t expected_tester_present[] = {
+        0x02U, 0x7eU, 0x00U, 0xccU, 0xccU, 0xccU, 0xccU, 0xccU
+    };
 
     memset(&mock, 0, sizeof(mock));
     memset(&ops, 0, sizeof(ops));
@@ -185,6 +188,18 @@ int main(void)
     /* Confirm the FF left the controller, then provide tester FlowControl. */
     CHECK(link_stm32_uds_server_poll(&transport) ==
           LINK_STM32_UDS_SERVER_RESULT_WAITING);
+    /*
+     * Reproduce the reporter's intermittent PCAN symptom: a new request races
+     * the still-active multi-frame response. It must be deferred, not lost.
+     */
+    memset(&request, 0, sizeof(request));
+    request.can_id = 0x7e0U;
+    request.length = 3U;
+    request.data[0] = 0x02U;
+    request.data[1] = 0x3eU;
+    request.data[2] = 0x00U;
+    mock_push(&mock, &request);
+
     memset(&request, 0, sizeof(request));
     memset(request.data, 0xcc, sizeof(request.data));
     request.can_id = 0x7e0U;
@@ -201,6 +216,16 @@ int main(void)
     CHECK(mock.tx[2].length == sizeof(expected_dtc_cf));
     CHECK(memcmp(
         mock.tx[2].data, expected_dtc_cf, sizeof(expected_dtc_cf)) == 0);
+    CHECK(link_stm32_uds_server_deferred_rx_dropped(&transport) == 0U);
+
+    /* The raced TesterPresent request is replayed after the DTC response. */
+    CHECK(poll_until_complete(&transport, &mock) == 0);
+    CHECK(mock.tx_count == 4U);
+    CHECK(mock.tx[3].can_id == 0x7e8U);
+    CHECK(mock.tx[3].length == sizeof(expected_tester_present));
+    CHECK(memcmp(
+        mock.tx[3].data, expected_tester_present,
+        sizeof(expected_tester_present)) == 0);
 
     memset(&request, 0, sizeof(request));
     request.can_id = 0x7e8U;
@@ -213,7 +238,7 @@ int main(void)
 
     CHECK(link_stm32_uds_server_poll(&transport) ==
           LINK_STM32_UDS_SERVER_RESULT_WAITING);
-    CHECK(mock.tx_count == 3U);
+    CHECK(mock.tx_count == 4U);
 
     puts("stm32 uds server tests passed");
     return EXIT_SUCCESS;

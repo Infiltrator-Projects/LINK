@@ -62,6 +62,10 @@ typedef struct {
     bool pending_tx_tracks_transmitter;
     bool in_flight_tracks_transmitter;
     bool response_active;
+    LinkIsoTpCanFrame deferred_rx;
+    uint64_t deferred_rx_arrival_us;
+    bool deferred_rx_valid;
+    uint32_t deferred_rx_dropped;
     uint64_t tx_completion_deadline_us;
     LinkIsoTpResult isotp_result;
     LinkUdsServerResult uds_result;
@@ -85,6 +89,8 @@ LinkStm32UdsServerResult link_stm32_uds_server_poll(
 LinkStm32UdsServerState link_stm32_uds_server_state(
     const LinkStm32UdsServer *transport);
 uint32_t link_stm32_uds_server_completed_requests(
+    const LinkStm32UdsServer *transport);
+uint32_t link_stm32_uds_server_deferred_rx_dropped(
     const LinkStm32UdsServer *transport);
 
 #ifdef __cplusplus
