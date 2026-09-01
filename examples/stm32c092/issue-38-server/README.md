@@ -5,6 +5,19 @@ This directory is the concrete server-role integration requested by
 `chenyurong22` in MBLINK issue #38. It is intentionally the opposite CAN
 role from LINK's original STM32 diagnostic-tester example.
 
+## Ownership boundary
+
+This directory is the **generic LINK half** of that work: STM32 FDCAN,
+ISO-TP, UDS server dispatch and protocol-level test behaviour. Mercedes-Benz
+vehicle identity, profile/endpoint selection, DID policy and target DTC state
+belong to MBLINK and are implemented in:
+
+`MBLINK/embedded/stm32c092-mercedes-server/`
+
+MBLINK pins a tested LINK gitlink, so the Mercedes application consumes this
+transport rather than copying or forking it. The reporter subsequently
+confirmed the generic server on physical STM32C092 hardware in LINK issue #18.
+
 The STM32C092 is the ECU/server:
 
 ```text
