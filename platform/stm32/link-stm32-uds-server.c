@@ -108,9 +108,6 @@ static LinkStm32UdsServerResult link_stm32_uds_server_finish_response(
     LinkStm32UdsServer *transport)
 {
     transport->response_active = false;
-    transport->deferred_rx_valid = false;
-    transport->deferred_rx_arrival_us = 0U;
-    transport->deferred_rx_dropped = 0U;
     transport->tx_completion_deadline_us = 0U;
     link_isotp_tx_reset(&transport->transmitter);
     link_isotp_rx_reset(&transport->receiver);
@@ -359,6 +356,9 @@ void link_stm32_uds_server_reset(LinkStm32UdsServer *transport)
     transport->pending_tx_tracks_transmitter = false;
     transport->in_flight_tracks_transmitter = false;
     transport->response_active = false;
+    transport->deferred_rx_valid = false;
+    transport->deferred_rx_arrival_us = 0U;
+    transport->deferred_rx_dropped = 0U;
     transport->tx_completion_deadline_us = 0U;
     transport->isotp_result = LINK_ISOTP_RESULT_OK;
     transport->uds_result = LINK_UDS_SERVER_RESULT_POSITIVE;
