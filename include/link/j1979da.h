@@ -26,7 +26,8 @@ typedef enum LinkJ1979IdentifierClass {
     LINK_J1979_IDENTIFIER_RESERVED = 0,
     LINK_J1979_IDENTIFIER_SUPPORT_BITMAP,
     LINK_J1979_IDENTIFIER_STANDARD,
-    LINK_J1979_IDENTIFIER_MANUFACTURER_DEFINED
+    LINK_J1979_IDENTIFIER_MANUFACTURER_DEFINED,
+    LINK_J1979_IDENTIFIER_UNVERIFIED
 } LinkJ1979IdentifierClass;
 
 typedef struct LinkJ1979Mode05TidDefinition {
@@ -119,7 +120,9 @@ const LinkJ1979Mode06MonitorDefinition *link_j1979_mode06_monitor_definition(
     uint8_t mid);
 LinkJ1979IdentifierClass link_j1979_mode06_tid_classification(uint8_t tid);
 const LinkJ1979Mode06TidDefinition *link_j1979_mode06_tid_definition(uint8_t tid);
+LinkJ1979IdentifierClass link_j1979_mode06_uasid_classification(uint8_t uasid);
 const LinkJ1979UnitScaling *link_j1979_mode06_uasid_definition(uint8_t uasid);
+LinkJ1979IdentifierClass link_j1979_mode09_infotype_classification(uint8_t info_type);
 double link_j1979_mode06_apply_scaling(
     const LinkJ1979UnitScaling *scaling,
     uint16_t raw);

@@ -42,10 +42,21 @@ int main(void)
     mid=link_j1979_mode06_monitor_definition(0xB2U);
     CHECK(mid!=NULL && strstr(mid->name,"filter")!=NULL);
     CHECK(link_j1979_mode06_mid_classification(0xE1U)==LINK_J1979_IDENTIFIER_MANUFACTURER_DEFINED);
-    CHECK(link_j1979_mode06_mid_classification(0xC1U)==LINK_J1979_IDENTIFIER_RESERVED);
+    CHECK(link_j1979_mode06_mid_classification(0x11U)==LINK_J1979_IDENTIFIER_STANDARD);
+    CHECK(link_j1979_mode06_monitor_definition(0x11U)==NULL);
+    CHECK(link_j1979_mode06_mid_classification(0x51U)==LINK_J1979_IDENTIFIER_STANDARD);
+    CHECK(link_j1979_mode06_mid_classification(0xC1U)==LINK_J1979_IDENTIFIER_UNVERIFIED);
+    CHECK(link_j1979_mode06_tid_classification(0x20U)==LINK_J1979_IDENTIFIER_UNVERIFIED);
+    CHECK(link_j1979_mode06_tid_classification(0xFFU)==LINK_J1979_IDENTIFIER_RESERVED);
 
     scale=link_j1979_mode06_uasid_definition(0x0AU);
     CHECK(scale!=NULL && fabs(scale->scale-0.122)<0.0000001);
+    CHECK(link_j1979_mode06_uasid_classification(0x45U)==LINK_J1979_IDENTIFIER_STANDARD);
+    CHECK(link_j1979_mode06_uasid_definition(0x45U)==NULL);
+    CHECK(link_j1979_mode06_uasid_classification(0x42U)==LINK_J1979_IDENTIFIER_UNVERIFIED);
+    CHECK(link_j1979_mode09_infotype_classification(0x12U)==LINK_J1979_IDENTIFIER_STANDARD);
+    CHECK(link_j1979_mode09_infotype_classification(0x79U)==LINK_J1979_IDENTIFIER_STANDARD);
+    CHECK(link_j1979_mode09_infotype_classification(0x30U)==LINK_J1979_IDENTIFIER_UNVERIFIED);
     scale=link_j1979_mode06_uasid_definition(0x8CU);
     CHECK(scale!=NULL && scale->signed_value);
     CHECK(fabs(link_j1979_mode06_apply_scaling(scale,UINT16_C(0xFFFF))+0.01)<0.0000001);

@@ -288,16 +288,33 @@ const LinkJ1979Mode06MonitorDefinition *link_j1979_mode06_monitor_definition(uin
 LinkJ1979IdentifierClass link_j1979_mode06_mid_classification(uint8_t mid)
 {
     if ((mid & 0x1FU)==0U) return LINK_J1979_IDENTIFIER_SUPPORT_BITMAP;
+    if (link_j1979_mode06_monitor_definition(mid)!=NULL)
+        return LINK_J1979_IDENTIFIER_STANDARD;
+
+    /*
+     * Public change histories confirm that 0x11-0x14 and 0x51-0x54 were
+     * assigned after the 2011 public table.  Their current licensed-annex
+     * semantics are intentionally not invented here.
+     */
+    if ((mid>=0x11U && mid<=0x14U) || (mid>=0x51U && mid<=0x54U))
+        return LINK_J1979_IDENTIFIER_STANDARD;
+
     if (mid>=0xE1U) return LINK_J1979_IDENTIFIER_MANUFACTURER_DEFINED;
-    if (link_j1979_mode06_monitor_definition(mid)!=NULL) return LINK_J1979_IDENTIFIER_STANDARD;
-    return LINK_J1979_IDENTIFIER_RESERVED;
+
+    /*
+     * Do not call a 2011-era hole "reserved" in the current 202607 registry.
+     * Later DA revisions may have assigned it; without the licensed row the
+     * only truthful classification is unverified.
+     */
+    return LINK_J1979_IDENTIFIER_UNVERIFIED;
 }
 
 LinkJ1979IdentifierClass link_j1979_mode06_tid_classification(uint8_t tid)
 {
     if (tid>=0x01U && tid<=0x0CU) return LINK_J1979_IDENTIFIER_STANDARD;
     if (tid>=0x80U && tid<=0xFEU) return LINK_J1979_IDENTIFIER_MANUFACTURER_DEFINED;
-    return LINK_J1979_IDENTIFIER_RESERVED;
+    if (tid==0xFFU) return LINK_J1979_IDENTIFIER_RESERVED;
+    return LINK_J1979_IDENTIFIER_UNVERIFIED;
 }
 
 const LinkJ1979Mode06TidDefinition *link_j1979_mode06_tid_definition(uint8_t tid)
@@ -307,11 +324,39 @@ const LinkJ1979Mode06TidDefinition *link_j1979_mode06_tid_definition(uint8_t tid
     return NULL;
 }
 
+LinkJ1979IdentifierClass link_j1979_mode06_uasid_classification(uint8_t uasid)
+{
+    if (link_j1979_mode06_uasid_definition(uasid)!=NULL)
+        return LINK_J1979_IDENTIFIER_STANDARD;
+
+    /* Confirmed later-DA assignments whose exact scaling is not redistributed. */
+    if (uasid==0x45U || uasid==0x46U || uasid==0xABU ||
+        uasid==0xB2U || uasid==0xB3U)
+        return LINK_J1979_IDENTIFIER_STANDARD;
+
+    return LINK_J1979_IDENTIFIER_UNVERIFIED;
+}
+
 const LinkJ1979UnitScaling *link_j1979_mode06_uasid_definition(uint8_t uasid)
 {
     size_t i;
     for (i=0U;i<countuas();++i) if (mode06_uasids[i].uasid==uasid) return &mode06_uasids[i];
     return NULL;
+}
+
+LinkJ1979IdentifierClass link_j1979_mode09_infotype_classification(uint8_t info_type)
+{
+    /*
+     * These ranges are confirmed assigned by public J1979DA change histories.
+     * A STANDARD result is only an assignment classification; callers must
+     * still require link_obd2_pid_definition(0x09, info_type) for semantics.
+     */
+    if (info_type<=0x0EU ||
+        (info_type>=0x12U && info_type<=0x29U) ||
+        info_type==0x79U)
+        return LINK_J1979_IDENTIFIER_STANDARD;
+
+    return LINK_J1979_IDENTIFIER_UNVERIFIED;
 }
 
 double link_j1979_mode06_apply_scaling(const LinkJ1979UnitScaling *scaling,uint16_t raw)
