@@ -23,8 +23,24 @@ static LinkUdsServer example_server;
 static LinkStm32UdsServer example_transport;
 static uint8_t example_rx_storage[512U];
 static uint8_t example_tx_storage[512U];
-static const LinkUdsServerDtcStore example_dtc_store =
-    LINK_UDS_SERVER_DTC_STORE_INIT;
+static const LinkUdsDtcRecord example_dtc_records[] = {
+    {
+        UINT32_C(0x123456),
+        LINK_UDS_DTC_STATUS_TEST_FAILED |
+            LINK_UDS_DTC_STATUS_CONFIRMED_DTC
+    },
+    {
+        UINT32_C(0xabcdef),
+        LINK_UDS_DTC_STATUS_CONFIRMED_DTC
+    }
+};
+static const LinkUdsServerDtcStore example_dtc_store = {
+    example_dtc_records,
+    sizeof(example_dtc_records) / sizeof(example_dtc_records[0]),
+    LINK_UDS_DTC_STATUS_MASK_ALL,
+    UINT8_C(0xff),
+    UINT8_C(0x01)
+};
 
 static LinkUdsServerHandlerResult link_stm32c092_server_read_did(
     void *context,
@@ -109,6 +125,18 @@ bool link_stm32c092_server_example_init(
 void link_stm32c092_server_example_process(void)
 {
     (void)link_stm32_uds_server_poll(&example_transport);
+}
+
+void link_stm32c092_server_example_poll_rx(FDCAN_HandleTypeDef *hfdcan)
+{
+    if (hfdcan != NULL && hfdcan == example_hal.hfdcan) {
+        /*
+         * This deliberately uses the same bounded queue path as the ISR.
+         * link_stm32_can_rx_isr() drains HAL FIFO0 through the adapter ops,
+         * and is safe to call from the main loop when no interrupt arrived.
+         */
+        link_stm32_can_rx_isr(&example_can);
+    }
 }
 
 void link_stm32c092_server_example_rx_fifo0_irq(FDCAN_HandleTypeDef *hfdcan)
