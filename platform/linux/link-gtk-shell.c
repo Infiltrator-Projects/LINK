@@ -1921,7 +1921,15 @@ static GtkWidget *build_connection_bar(LinkGtkShell *shell)
         gtk_widget_add_css_class(shell->diagnostic_restart_button, "link-toolbar-button");
     }
 
-    gtk_widget_set_hexpand(shell->device_combo, TRUE);
+    if (shell->descriptor->adapter_combo_width > 0) {
+        gtk_widget_set_hexpand(shell->device_combo, FALSE);
+        gtk_widget_set_size_request(
+            shell->device_combo,
+            shell->descriptor->adapter_combo_width,
+            -1);
+    } else {
+        gtk_widget_set_hexpand(shell->device_combo, TRUE);
+    }
     gtk_widget_set_hexpand(shell->status, TRUE);
     gtk_widget_set_halign(shell->status, GTK_ALIGN_FILL);
 

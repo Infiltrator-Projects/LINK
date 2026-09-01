@@ -114,6 +114,11 @@ typedef struct LinkGtkShellDescriptor {
      * opt in and style .link-titlebar / .link-titlebar-label in product CSS.
      */
     bool use_client_side_titlebar;
+    /*
+     * Optional product presentation width for the adapter selector in pixels.
+     * Values <= 0 preserve LINK's default expanding selector behaviour.
+     */
+    int adapter_combo_width;
     bool auto_connect;
     void *context;
 } LinkGtkShellDescriptor;
