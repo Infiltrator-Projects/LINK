@@ -1,0 +1,503 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+#if canImport(SwiftUI)
+import SwiftUI
+
+/*
+ * LINK-owned SwiftUI presentation primitives.
+ *
+ * Product faces provide colours, typography and brand content. LINK owns the
+ * geometry, spacing and diagnostic information architecture so MBLINK,
+ * JAGLINK and future product faces cannot silently drift apart.
+ */
+struct LinkDiagnosticTypography {
+    let display: Font
+    let body: Font
+    let bodyBold: Font
+    let subheadline: Font
+    let subheadlineBold: Font
+    let headline: Font
+    let caption: Font
+    let captionBold: Font
+    let caption2: Font
+    let caption2Bold: Font
+    let title3: Font
+    let title2: Font
+}
+
+struct LinkDiagnosticTheme {
+    let backgroundTop: Color
+    let backgroundMiddle: Color
+    let backgroundBottom: Color
+    let panel: Color
+    let panelRaised: Color
+    let primaryText: Color
+    let secondaryText: Color
+    let mutedText: Color
+    let border: Color
+    let accent: Color
+    let success: Color
+    let warning: Color
+    let fault: Color
+    let typography: LinkDiagnosticTypography
+
+    static let neutral = LinkDiagnosticTheme(
+        backgroundTop: Color(red: 0.02, green: 0.02, blue: 0.025),
+        backgroundMiddle: Color(red: 0.035, green: 0.035, blue: 0.045),
+        backgroundBottom: Color(red: 0.055, green: 0.055, blue: 0.065),
+        panel: Color(red: 0.075, green: 0.075, blue: 0.085),
+        panelRaised: Color(red: 0.10, green: 0.10, blue: 0.115),
+        primaryText: Color.white,
+        secondaryText: Color.white.opacity(0.78),
+        mutedText: Color.white.opacity(0.55),
+        border: Color.white.opacity(0.18),
+        accent: Color.white,
+        success: Color.green,
+        warning: Color.orange,
+        fault: Color.red,
+        typography: LinkDiagnosticTypography(
+            display: .system(size: 29, weight: .semibold),
+            body: .body,
+            bodyBold: .body.bold(),
+            subheadline: .subheadline,
+            subheadlineBold: .subheadline.bold(),
+            headline: .headline,
+            caption: .caption,
+            captionBold: .caption.bold(),
+            caption2: .caption2,
+            caption2Bold: .caption2.bold(),
+            title3: .title3,
+            title2: .title2.bold()))
+}
+
+private struct LinkDiagnosticThemeKey: EnvironmentKey {
+    static let defaultValue = LinkDiagnosticTheme.neutral
+}
+
+extension EnvironmentValues {
+    var linkDiagnosticTheme: LinkDiagnosticTheme {
+        get { self[LinkDiagnosticThemeKey.self] }
+        set { self[LinkDiagnosticThemeKey.self] = newValue }
+    }
+}
+
+extension View {
+    func linkDiagnosticTheme(_ theme: LinkDiagnosticTheme) -> some View {
+        environment(\.linkDiagnosticTheme, theme)
+    }
+
+    func linkDiagnosticScreen(_ title: String) -> some View {
+        modifier(LinkDiagnosticScreenModifier(title: title))
+    }
+}
+
+enum LinkDiagnosticLayout {
+    static let screenHorizontalPadding: CGFloat = 20
+    static let screenTopPadding: CGFloat = 18
+    static let screenBottomPadding: CGFloat = 30
+    static let sectionSpacing: CGFloat = 18
+    static let gridSpacing: CGFloat = 14
+    static let panelPadding: CGFloat = 16
+    static let panelCornerRadius: CGFloat = 18
+    static let tilePadding: CGFloat = 16
+    static let tileCornerRadius: CGFloat = 19
+    static let tileMinimumHeight: CGFloat = 118
+    static let compactRowVerticalPadding: CGFloat = 6
+    static let headerSpacing: CGFloat = 14
+
+    static var dashboardColumns: [GridItem] {
+        [
+            GridItem(.flexible(), spacing: gridSpacing),
+            GridItem(.flexible(), spacing: gridSpacing)
+        ]
+    }
+}
+
+struct LinkDiagnosticBackground: View {
+    @Environment(\.linkDiagnosticTheme) private var theme
+
+    var body: some View {
+        LinearGradient(
+            stops: [
+                .init(color: theme.backgroundTop, location: 0.0),
+                .init(color: theme.backgroundMiddle, location: 0.55),
+                .init(color: theme.backgroundBottom, location: 1.0)
+            ],
+            startPoint: .top,
+            endPoint: .bottomTrailing)
+            .ignoresSafeArea()
+    }
+}
+
+struct LinkStatusPill: View {
+    @Environment(\.linkDiagnosticTheme) private var theme
+
+    let text: String
+    let active: Bool
+
+    var body: some View {
+        HStack(spacing: 7) {
+            Circle()
+                .fill(active ? theme.success : theme.mutedText)
+                .frame(width: 7, height: 7)
+            Text(LocalizedStringKey(text))
+                .textCase(.uppercase)
+                .font(theme.typography.caption2Bold)
+                .tracking(0.8)
+                .lineLimit(1)
+        }
+        .foregroundStyle(theme.primaryText)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(Capsule().fill(theme.panelRaised))
+        .overlay(Capsule().stroke(theme.border, lineWidth: 1))
+    }
+}
+
+struct LinkPanel<Content: View>: View {
+    @Environment(\.linkDiagnosticTheme) private var theme
+    let content: Content
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+
+    var body: some View {
+        content
+            .padding(LinkDiagnosticLayout.panelPadding)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(
+                    cornerRadius: LinkDiagnosticLayout.panelCornerRadius,
+                    style: .continuous)
+                    .fill(theme.panel))
+            .overlay(
+                RoundedRectangle(
+                    cornerRadius: LinkDiagnosticLayout.panelCornerRadius,
+                    style: .continuous)
+                    .stroke(theme.border, lineWidth: 1))
+    }
+}
+
+struct LinkLabeledPanel<Content: View>: View {
+    @Environment(\.linkDiagnosticTheme) private var theme
+
+    let title: String
+    let systemImage: String
+    let content: Content
+
+    init(
+        title: String,
+        systemImage: String,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.title = title
+        self.systemImage = systemImage
+        self.content = content()
+    }
+
+    var body: some View {
+        LinkPanel {
+            VStack(alignment: .leading, spacing: 14) {
+                Label(LocalizedStringKey(title), systemImage: systemImage)
+                    .font(theme.typography.headline)
+                    .foregroundStyle(theme.primaryText)
+                content
+            }
+        }
+    }
+}
+
+struct LinkSectionHeader: View {
+    @Environment(\.linkDiagnosticTheme) private var theme
+
+    let title: String
+    var kicker: String? = nil
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            if let kicker {
+                Text(LocalizedStringKey(kicker))
+                    .textCase(.uppercase)
+                    .font(theme.typography.caption2Bold)
+                    .tracking(1.4)
+                    .foregroundStyle(theme.mutedText)
+            }
+            Text(LocalizedStringKey(title))
+                .font(theme.typography.title3)
+                .foregroundStyle(theme.primaryText)
+        }
+    }
+}
+
+struct LinkBrandHeader<Brand: View, Status: View>: View {
+    let brand: Brand
+    let status: Status
+
+    init(
+        @ViewBuilder brand: () -> Brand,
+        @ViewBuilder status: () -> Status
+    ) {
+        self.brand = brand()
+        self.status = status()
+    }
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .center, spacing: LinkDiagnosticLayout.headerSpacing) {
+                brand
+                Spacer(minLength: 8)
+                status
+            }
+            VStack(alignment: .leading, spacing: 11) {
+                brand
+                status
+            }
+        }
+    }
+}
+
+struct LinkDiagnosticGrid<Content: View>: View {
+    let content: Content
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+
+    var body: some View {
+        LazyVGrid(
+            columns: LinkDiagnosticLayout.dashboardColumns,
+            spacing: LinkDiagnosticLayout.gridSpacing) {
+                content
+            }
+    }
+}
+
+struct LinkHomeTile<Destination: View>: View {
+    let title: String
+    let subtitle: String
+    let symbol: String
+    let destination: () -> Destination
+
+    init(
+        _ title: String,
+        _ subtitle: String,
+        _ symbol: String,
+        @ViewBuilder destination: @escaping () -> Destination
+    ) {
+        self.title = title
+        self.subtitle = subtitle
+        self.symbol = symbol
+        self.destination = destination
+    }
+
+    var body: some View {
+        NavigationLink {
+            destination()
+        } label: {
+            LinkTileFace(title: title, subtitle: subtitle, symbol: symbol)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+struct LinkActionTile: View {
+    let title: String
+    let subtitle: String
+    let symbol: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            LinkTileFace(title: title, subtitle: subtitle, symbol: symbol)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+struct LinkTileFace: View {
+    @Environment(\.linkDiagnosticTheme) private var theme
+
+    let title: String
+    let subtitle: String
+    let symbol: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Image(systemName: symbol)
+                .font(theme.typography.title2)
+                .foregroundStyle(theme.accent)
+                .frame(width: 30, height: 30, alignment: .leading)
+
+            Text(LocalizedStringKey(title))
+                .font(theme.typography.headline)
+                .foregroundStyle(theme.primaryText)
+                .lineLimit(1)
+
+            Text(LocalizedStringKey(subtitle))
+                .font(theme.typography.caption)
+                .foregroundStyle(theme.mutedText)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Spacer(minLength: 0)
+
+            HStack {
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(theme.typography.captionBold)
+                    .foregroundStyle(theme.secondaryText.opacity(0.72))
+            }
+        }
+        .frame(
+            maxWidth: .infinity,
+            minHeight: LinkDiagnosticLayout.tileMinimumHeight,
+            alignment: .leading)
+        .padding(LinkDiagnosticLayout.tilePadding)
+        .background(
+            RoundedRectangle(
+                cornerRadius: LinkDiagnosticLayout.tileCornerRadius,
+                style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [theme.panelRaised, theme.panel],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing)))
+        .overlay(
+            RoundedRectangle(
+                cornerRadius: LinkDiagnosticLayout.tileCornerRadius,
+                style: .continuous)
+                .stroke(theme.border, lineWidth: 1))
+    }
+}
+
+struct LinkCompactLink<Destination: View>: View {
+    @Environment(\.linkDiagnosticTheme) private var theme
+
+    let title: String
+    let subtitle: String
+    let symbol: String
+    let destination: () -> Destination
+
+    init(
+        _ title: String,
+        _ subtitle: String,
+        _ symbol: String,
+        @ViewBuilder destination: @escaping () -> Destination
+    ) {
+        self.title = title
+        self.subtitle = subtitle
+        self.symbol = symbol
+        self.destination = destination
+    }
+
+    var body: some View {
+        NavigationLink {
+            destination()
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: symbol)
+                    .font(theme.typography.title3)
+                    .foregroundStyle(theme.accent)
+                    .frame(width: 28)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(LocalizedStringKey(title))
+                        .font(theme.typography.subheadlineBold)
+                        .foregroundStyle(theme.primaryText)
+                    Text(LocalizedStringKey(subtitle))
+                        .font(theme.typography.caption)
+                        .foregroundStyle(theme.mutedText)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 10)
+                Image(systemName: "chevron.right")
+                    .font(theme.typography.captionBold)
+                    .foregroundStyle(theme.mutedText)
+            }
+            .contentShape(Rectangle())
+            .padding(.vertical, LinkDiagnosticLayout.compactRowVerticalPadding)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+struct LinkCommandCentreShell<
+    Header: View,
+    Progress: View,
+    Connection: View,
+    Primary: View,
+    Tools: View
+>: View {
+    @Environment(\.linkDiagnosticTheme) private var theme
+
+    let showProgress: Bool
+    let diagnosticsTitle: String
+    let diagnosticsKicker: String?
+    let header: Header
+    let progress: Progress
+    let connection: Connection
+    let primary: Primary
+    let tools: Tools
+
+    init(
+        showProgress: Bool,
+        diagnosticsTitle: String = "Diagnostics",
+        diagnosticsKicker: String? = "Vehicle",
+        @ViewBuilder header: () -> Header,
+        @ViewBuilder progress: () -> Progress,
+        @ViewBuilder connection: () -> Connection,
+        @ViewBuilder primary: () -> Primary,
+        @ViewBuilder tools: () -> Tools
+    ) {
+        self.showProgress = showProgress
+        self.diagnosticsTitle = diagnosticsTitle
+        self.diagnosticsKicker = diagnosticsKicker
+        self.header = header()
+        self.progress = progress()
+        self.connection = connection()
+        self.primary = primary()
+        self.tools = tools()
+    }
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                LinkDiagnosticBackground()
+                ScrollView {
+                    VStack(alignment: .leading, spacing: LinkDiagnosticLayout.sectionSpacing) {
+                        header
+                        if showProgress {
+                            progress
+                        }
+                        connection
+                        LinkSectionHeader(
+                            title: diagnosticsTitle,
+                            kicker: diagnosticsKicker)
+                        primary
+                        tools
+                    }
+                    .padding(.horizontal, LinkDiagnosticLayout.screenHorizontalPadding)
+                    .padding(.top, LinkDiagnosticLayout.screenTopPadding)
+                    .padding(.bottom, LinkDiagnosticLayout.screenBottomPadding)
+                }
+            }
+            .toolbar(.hidden, for: .navigationBar)
+            .tint(theme.accent)
+        }
+    }
+}
+
+private struct LinkDiagnosticScreenModifier: ViewModifier {
+    @Environment(\.linkDiagnosticTheme) private var theme
+    let title: String
+
+    func body(content: Content) -> some View {
+        content
+            .background(theme.backgroundMiddle.ignoresSafeArea())
+            .navigationTitle(LocalizedStringKey(title))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(theme.backgroundTop, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .toolbarColorScheme(.dark, for: .navigationBar)
+    }
+}
+#endif

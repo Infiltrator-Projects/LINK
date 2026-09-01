@@ -111,3 +111,22 @@ When reviewing a change, ask:
 5. Is this merely another application target for the same manufacturer product? If yes, keep it in the existing product repository rather than creating another repo.
 
 Any reintroduction of duplicated generic application source into MBLINK and JAGLINK, or creation of parallel Reader repos that merely duplicate Discover, should be treated as an architectural regression.
+
+
+## Apple/iPhone face contract
+
+The Apple/iPhone product face is a LINK-owned presentation contract, not a
+manufacturer-owned copy. `platform/apple/LinkDiagnosticUI.swift` owns the
+shared screen geometry and information architecture: command-centre shell,
+header behaviour, connection/progress placement, primary diagnostic grid,
+secondary tools, panel/tile shapes, corner radii, padding and spacing.
+
+Manufacturer products inject a `LinkDiagnosticTheme` plus their logo,
+wording and manufacturer-specific content. They may add Mercedes-only or
+Jaguar-only diagnostic screens and fields, but they must not fork the shared
+layout primitives merely to change colours, fonts or branding.
+
+An iPhone layout change intended for every vehicle product must therefore be
+made in LINK first and consumed by each pinned product face. This makes visual
+and structural drift between MBLINK, JAGLINK and future LINK products an
+explicit architectural regression rather than normal parallel development.
