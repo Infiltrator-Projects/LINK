@@ -106,6 +106,7 @@ static const LinkObd2CatalogueEntry link_obd2_standard_supplement[] = {
     {{UINT8_C(0x01), UINT8_C(0xD9), UINT8_C(0),  LINK_OBD2_VALUE_RAW, "Calculated energy storage system energy", "", "", false, 0, 0}, LINK_OBD2_FORMULA_NONE},
     {{UINT8_C(0x01), UINT8_C(0xDA), UINT8_C(0),  LINK_OBD2_VALUE_RAW, "High-voltage battery cumulative current per second", "", "", false, 0, 0}, LINK_OBD2_FORMULA_NONE},
     {{UINT8_C(0x01), UINT8_C(0xE0), UINT8_C(4),  LINK_OBD2_VALUE_BITMAP, "PIDs supported [E1-FF]", "bitmap", "", false, 0, 0}, LINK_OBD2_FORMULA_NONE},
-    {{UINT8_C(0x09), UINT8_C(0x09), UINT8_C(1),  LINK_OBD2_VALUE_SCALAR,  "ECU name message count", "count", "A", true, 0, 255}, LINK_OBD2_FORMULA_A}
+    {{UINT8_C(0x09), UINT8_C(0x09), UINT8_C(1),  LINK_OBD2_VALUE_SCALAR,  "ECU name message count", "count", "A", true, 0, 255}, LINK_OBD2_FORMULA_A},
+    {{UINT8_C(0x09), UINT8_C(0x0C), UINT8_C(1),  LINK_OBD2_VALUE_SCALAR,  "Engine serial number message count", "count", "A", true, 0, 255}, LINK_OBD2_FORMULA_A}
 };
-#define LINK_OBD2_STANDARD_SUPPLEMENT_COUNT 102U
+#define LINK_OBD2_STANDARD_SUPPLEMENT_COUNT 103U

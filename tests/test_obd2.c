@@ -164,7 +164,7 @@ static void test_catalogue(void)
               !link_obd2_service_definition(0x08U)->read_only,
           "Mode 08 remains write/control");
 
-    check(link_obd2_pid_definition_count() == 234U,
+    check(link_obd2_pid_definition_count() == 235U,
           "shared standards catalogue contains 234 Mode 01/09 definitions");
     check(strcmp(link_obd2_pid_catalogue_snapshot(),
                  "bc58b0eb7273226a1aabae98e956b70b8362bda1+link-standard-supplement-v3+link-corrections-v2") == 0,
@@ -520,7 +520,7 @@ static void test_complete_mode01_namespace(void)
     size_t assigned = 0U, reserved = 0U;
     unsigned int raw;
     check(link_obd2_mode01_identifier_count() == 256U, "all Mode 01 slots exposed");
-    check(strcmp(link_obd2_j1979_audit_revision(), "J1979DA_202608") == 0,
+    check(strcmp(link_obd2_j1979_audit_revision(), "J1979DA_202607") == 0,
           "J1979 audit revision");
     for (raw = 0U; raw <= 0xffU; ++raw) {
         const uint8_t pid = (uint8_t)raw;
@@ -548,8 +548,8 @@ static void test_requests(void)
           "generic Mode 01 request");
     check(link_obd2_build_standard_read_request(
               0x05U, 0x01U, command, sizeof(command)) ==
-              LINK_OBD2_RESULT_OK && strcmp(command, "0501") == 0,
-          "generic Mode 05 request");
+              LINK_OBD2_RESULT_INVALID_ARGUMENT && command[0] == '\0',
+          "Mode 05 rejects invalid two-byte shortcut");
     check(link_obd2_build_standard_read_request(
               0x06U, 0x00U, command, sizeof(command)) ==
               LINK_OBD2_RESULT_OK && strcmp(command, "0600") == 0,
@@ -567,17 +567,7 @@ static void test_requests(void)
               raw_decoded.raw[3] == 0x78U,
               "Mode 06 unverified monitor payload is preserved losslessly");
     }
-    {
-        LinkElm327Response raw_response =
-            parse_response("0501", "0501\r4501AABBCC\r>");
-        LinkObd2DecodedPid raw_decoded;
-        check(link_obd2_decode_standard_identifier_payload(
-                  &raw_response, 0x05U, 0x01U, &raw_decoded) ==
-                  LINK_OBD2_RESULT_OK &&
-              raw_decoded.definition == NULL &&
-              raw_decoded.raw_length == 3U,
-              "Mode 05 unverified test payload is preserved losslessly");
-    }
+
     check(link_obd2_build_standard_read_request(
               0x09U, 0x02U, command, sizeof(command)) ==
               LINK_OBD2_RESULT_OK && strcmp(command, "0902") == 0,

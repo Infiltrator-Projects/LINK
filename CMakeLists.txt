@@ -130,6 +130,7 @@ add_library(link-core STATIC
     src/elm327/session.c
     src/obd2/obd2.c
     src/obd2/pid_catalogue.c
+    src/obd2/j1979da.c
     src/obd2/dtc_knowledge.c
     src/core/doip.c
     src/kwp2000/kwp2000.c
@@ -461,6 +462,7 @@ if(BUILD_TESTING AND PROJECT_IS_TOP_LEVEL)
     link_add_test(link-test-elm327 tests/test_elm327.c link-elm327)
     link_add_test(link-test-elm327-session tests/test_elm327_session.c link-elm327-session)
     link_add_test(link-test-obd2 tests/test_obd2.c link-obd2)
+    link_add_test(link-test-j1979da tests/test_j1979da.c link-j1979da)
     link_add_test(link-test-doip tests/test_doip.c link-doip)
     link_add_test(link-test-kwp2000 tests/test_kwp2000.c link-kwp2000)
     link_add_test(link-test-dtc-knowledge tests/test_dtc_knowledge.c link-dtc-knowledge)

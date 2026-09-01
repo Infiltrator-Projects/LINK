@@ -255,8 +255,10 @@ LinkObd2Result link_obd2_decode_pid_payload(
 /**
  * Build one generic read-only two-byte standard OBD request.
  *
- * Modes 01, 05, 06 and 09 are accepted here. Mode 02 carries a freeze-frame
- * number and therefore uses link_obd2_build_freeze_pid_request(). DTC modes
+ * Modes 01, 06 and 09 are accepted here. Mode 02 carries a freeze-frame
+ * number and therefore uses link_obd2_build_freeze_pid_request(). Service 05
+ * carries both a TID and O2-sensor number and therefore uses the dedicated
+ * API in link/j1979da.h. DTC modes
  * use link_obd2_build_dtc_request(). Write/control modes 04 and 08 are
  * deliberately rejected by this read-only API.
  */
@@ -272,7 +274,8 @@ bool link_obd2_parameter_identifier_metadata_known(
     uint8_t identifier);
 
 /**
- * Decode one generic parameterized read response (Modes 01, 05, 06 or 09).
+ * Decode one generic two-byte parameterized read response (Modes 01, 06 or 09).
+ * Service 05 has a distinct TID+sensor response and uses link/j1979da.h.
  * Unknown semantic layouts are preserved in decoded->raw with a NULL
  * definition instead of being discarded.
  */

@@ -95,7 +95,10 @@ static const LinkObd2CatalogueEntry link_obd2_standard_corrections[] = {
       LINK_OBD2_FORMULA_NOX_FOUR},
     {{UINT8_C(0x01), UINT8_C(0x9E), UINT8_C(2), LINK_OBD2_VALUE_SCALAR,
       "Engine exhaust flow rate", "kg/h", "(256*A + B) / 5",
-      true, 0, 13107}, LINK_OBD2_FORMULA_U16_DIV5}
+      true, 0, 13107}, LINK_OBD2_FORMULA_U16_DIV5},
+    {{UINT8_C(0x09), UINT8_C(0x0D), UINT8_C(17), LINK_OBD2_VALUE_ASCII,
+      "Engine serial number (ESN)", "ascii", "", false, 0, 0},
+      LINK_OBD2_FORMULA_NONE}
 };
 
 static const LinkObd2ServiceDefinition link_obd2_services[] = {
@@ -265,7 +268,7 @@ LinkObd2IdentifierStatus link_obd2_mode01_identifier_status(uint8_t pid)
     return link_obd2_pid_definition(UINT8_C(0x01), pid) != NULL
         ? LINK_OBD2_IDENTIFIER_ASSIGNED : LINK_OBD2_IDENTIFIER_RESERVED;
 }
-const char *link_obd2_j1979_audit_revision(void) { return "J1979DA_202608"; }
+const char *link_obd2_j1979_audit_revision(void) { return "J1979DA_202607"; }
 
 static const LinkObd2CatalogueEntry *obd2_catalogue_entry(
     uint8_t mode,

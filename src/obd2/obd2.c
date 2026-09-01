@@ -569,7 +569,8 @@ LinkObd2Result link_obd2_build_standard_read_request(
         if (buffer != NULL && buffer_size != 0U) buffer[0] = '\0';
         return LINK_OBD2_RESULT_NOT_AUTHORIZED;
     }
-    if (!service->parameterized || mode == UINT8_C(0x02)) {
+    if (!service->parameterized || mode == UINT8_C(0x02) ||
+        mode == UINT8_C(0x05)) {
         if (buffer != NULL && buffer_size != 0U) buffer[0] = '\0';
         return LINK_OBD2_RESULT_INVALID_ARGUMENT;
     }
@@ -613,7 +614,8 @@ LinkObd2Result link_obd2_decode_standard_identifier_payload(
         return LINK_OBD2_RESULT_INVALID_ARGUMENT;
     if (!service->read_only)
         return LINK_OBD2_RESULT_NOT_AUTHORIZED;
-    if (!service->parameterized || mode == UINT8_C(0x02))
+    if (!service->parameterized || mode == UINT8_C(0x02) ||
+        mode == UINT8_C(0x05))
         return LINK_OBD2_RESULT_INVALID_ARGUMENT;
 
     result = obd2_collect_indexed_message(
