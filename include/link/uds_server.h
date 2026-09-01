@@ -74,14 +74,20 @@ typedef struct {
     void *context;
 } LinkUdsServerHandlerSlot;
 
+typedef uint32_t (*LinkUdsServerClockMsFn)(void *context);
+
 typedef struct {
     uint16_t p2_server_max_ms;
     uint16_t p2_star_server_max_10ms;
     bool include_session_timing;
+    bool enforce_session_sequence;
+    uint32_t s3_server_timeout_ms;
+    LinkUdsServerClockMsFn clock_ms;
+    void *clock_context;
 } LinkUdsServerConfig;
 
 #define LINK_UDS_SERVER_CONFIG_INIT \
-    { UINT16_C(50), UINT16_C(500), true }
+    { UINT16_C(50), UINT16_C(500), true, false, 0U, NULL, NULL }
 
 typedef enum {
     LINK_UDS_SERVER_RESULT_POSITIVE = 0,
@@ -99,6 +105,9 @@ typedef struct {
     uint8_t active_session;
     uint8_t last_service;
     uint8_t last_negative_response_code;
+    uint8_t pending_ecu_reset_type;
+    uint32_t last_activity_ms;
+    bool activity_started;
     uint32_t request_count;
     uint32_t positive_response_count;
     uint32_t negative_response_count;
@@ -135,6 +144,11 @@ LinkUdsServerResult link_uds_server_handle(
     size_t *response_length);
 uint8_t link_uds_server_active_session(const LinkUdsServer *server);
 uint8_t link_uds_server_last_negative_response_code(const LinkUdsServer *server);
+void link_uds_server_tick(LinkUdsServer *server);
+void link_uds_server_reset_session(LinkUdsServer *server);
+bool link_uds_server_take_pending_ecu_reset(
+    LinkUdsServer *server,
+    uint8_t *reset_type);
 
 LinkUdsServerHandlerResult link_uds_server_dtc_handler(
     void *context,

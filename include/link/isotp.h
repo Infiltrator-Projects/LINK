@@ -101,6 +101,8 @@ typedef struct {
     uint64_t consecutive_timeout_us;
     bool can_fd;
     uint8_t data_length;
+    bool pad_short_frames;
+    uint8_t padding_byte;
 } LinkIsoTpRxConfig;
 
 typedef struct {
@@ -122,6 +124,8 @@ typedef struct {
     uint8_t max_wait_frames;
     bool can_fd;
     uint8_t data_length;
+    bool pad_short_frames;
+    uint8_t padding_byte;
 } LinkIsoTpTxConfig;
 
 typedef struct {

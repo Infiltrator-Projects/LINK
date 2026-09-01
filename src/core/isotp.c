@@ -222,6 +222,25 @@ static void link_isotp_prepare_transmit_frame(
     }
 }
 
+static void link_isotp_pad_short_transmit_frame(
+    bool enabled,
+    uint8_t padding_byte,
+    LinkIsoTpCanFrame *frame)
+{
+    size_t index;
+
+    if (!enabled || frame == NULL ||
+        frame->length >= LINK_ISOTP_CLASSIC_CAN_DATA_LENGTH) {
+        return;
+    }
+    for (index = frame->length;
+         index < LINK_ISOTP_CLASSIC_CAN_DATA_LENGTH;
+         ++index) {
+        frame->data[index] = padding_byte;
+    }
+    frame->length = LINK_ISOTP_CLASSIC_CAN_DATA_LENGTH;
+}
+
 static uint64_t link_isotp_deadline(uint64_t now_us, uint64_t timeout_us)
 {
     return infiltratr_u64_add_saturating(now_us, timeout_us);
@@ -251,6 +270,8 @@ static LinkIsoTpResult link_isotp_build_flow_control(
     frame->data[offset + 1U] = block_size;
     frame->data[offset + 2U] = stmin;
     frame->length = (uint8_t)(offset + 3U);
+    link_isotp_pad_short_transmit_frame(
+        config->pad_short_frames, config->padding_byte, frame);
     return LINK_ISOTP_RESULT_OK;
 }
 
@@ -835,6 +856,10 @@ LinkIsoTpResult link_isotp_tx_start(
                 transmitter, LINK_ISOTP_RESULT_INVALID_ARGUMENT);
         }
         frame->length = (uint8_t)frame_length;
+        link_isotp_pad_short_transmit_frame(
+            transmitter->config.pad_short_frames,
+            transmitter->config.padding_byte,
+            frame);
         transmitter->offset = transmitter->payload_length;
         transmitter->state = LINK_ISOTP_TX_COMPLETE;
         return LINK_ISOTP_RESULT_COMPLETE;
@@ -856,6 +881,10 @@ LinkIsoTpResult link_isotp_tx_start(
                 transmitter, LINK_ISOTP_RESULT_INVALID_ARGUMENT);
         }
         frame->length = (uint8_t)frame_length;
+        link_isotp_pad_short_transmit_frame(
+            transmitter->config.pad_short_frames,
+            transmitter->config.padding_byte,
+            frame);
         transmitter->offset = transmitter->payload_length;
         transmitter->state = LINK_ISOTP_TX_COMPLETE;
         return LINK_ISOTP_RESULT_COMPLETE;
@@ -1064,6 +1093,10 @@ LinkIsoTpResult link_isotp_tx_next(
             transmitter, LINK_ISOTP_RESULT_INVALID_ARGUMENT);
     }
     frame->length = (uint8_t)frame_length;
+        link_isotp_pad_short_transmit_frame(
+            transmitter->config.pad_short_frames,
+            transmitter->config.padding_byte,
+            frame);
 
     transmitter->offset += copy_length;
     transmitter->next_sequence =

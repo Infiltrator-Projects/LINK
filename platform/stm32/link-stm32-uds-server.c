@@ -180,6 +180,8 @@ static LinkStm32UdsServerResult link_stm32_uds_server_begin_response(
     tx_config.max_wait_frames = transport->config.max_wait_frames;
     tx_config.can_fd = transport->config.can_fd;
     tx_config.data_length = transport->config.data_length;
+    tx_config.pad_short_frames = transport->config.pad_short_frames;
+    tx_config.padding_byte = transport->config.padding_byte;
 
     transport->isotp_result = link_isotp_tx_init(
         &transport->transmitter, &tx_config,
@@ -321,6 +323,8 @@ bool link_stm32_uds_server_init(
     rx_config.consecutive_timeout_us = config->consecutive_timeout_us;
     rx_config.can_fd = config->can_fd;
     rx_config.data_length = config->data_length;
+    rx_config.pad_short_frames = config->pad_short_frames;
+    rx_config.padding_byte = config->padding_byte;
     transport->isotp_result = link_isotp_rx_init(
         &transport->receiver, &rx_config, rx_storage, rx_capacity);
     if (transport->isotp_result != LINK_ISOTP_RESULT_OK) return false;

@@ -7,7 +7,8 @@
 static bool uds_server_config_valid(const LinkUdsServerConfig *config)
 {
     return config != NULL && config->p2_server_max_ms != 0U &&
-           config->p2_star_server_max_10ms != 0U;
+           config->p2_star_server_max_10ms != 0U &&
+           (config->s3_server_timeout_ms == 0U || config->clock_ms != NULL);
 }
 
 static bool uds_server_nrc_valid(uint8_t nrc)
@@ -48,6 +49,71 @@ bool link_uds_server_init(LinkUdsServer *server, const LinkUdsServerConfig *conf
     memset(server, 0, sizeof(*server));
     server->config = *config;
     server->active_session = LINK_UDS_SESSION_DEFAULT;
+    if (config->clock_ms != NULL) {
+        server->last_activity_ms = config->clock_ms(config->clock_context);
+        server->activity_started = true;
+    }
+    return true;
+}
+
+static bool uds_server_session_transition_allowed(
+    const LinkUdsServer *server,
+    uint8_t requested_session)
+{
+    if (server == NULL || !server->config.enforce_session_sequence) {
+        return true;
+    }
+    if (server->active_session == LINK_UDS_SESSION_DEFAULT &&
+        requested_session == LINK_UDS_SESSION_PROGRAMMING) {
+        return false;
+    }
+    if (server->active_session == LINK_UDS_SESSION_PROGRAMMING &&
+        requested_session != LINK_UDS_SESSION_DEFAULT &&
+        requested_session != LINK_UDS_SESSION_PROGRAMMING) {
+        return false;
+    }
+    return true;
+}
+
+void link_uds_server_reset_session(LinkUdsServer *server)
+{
+    if (server == NULL) return;
+    server->active_session = LINK_UDS_SESSION_DEFAULT;
+    if (server->config.clock_ms != NULL) {
+        server->last_activity_ms =
+            server->config.clock_ms(server->config.clock_context);
+        server->activity_started = true;
+    }
+}
+
+void link_uds_server_tick(LinkUdsServer *server)
+{
+    uint32_t now;
+
+    if (server == NULL || server->config.clock_ms == NULL ||
+        server->config.s3_server_timeout_ms == 0U ||
+        !server->activity_started) {
+        return;
+    }
+    now = server->config.clock_ms(server->config.clock_context);
+    if (server->active_session != LINK_UDS_SESSION_DEFAULT &&
+        (uint32_t)(now - server->last_activity_ms) >=
+            server->config.s3_server_timeout_ms) {
+        server->active_session = LINK_UDS_SESSION_DEFAULT;
+        server->last_activity_ms = now;
+    }
+}
+
+bool link_uds_server_take_pending_ecu_reset(
+    LinkUdsServer *server,
+    uint8_t *reset_type)
+{
+    if (server == NULL || reset_type == NULL ||
+        server->pending_ecu_reset_type == 0U) {
+        return false;
+    }
+    *reset_type = server->pending_ecu_reset_type;
+    server->pending_ecu_reset_type = 0U;
     return true;
 }
 
@@ -139,6 +205,11 @@ static LinkUdsServerHandlerResult uds_server_builtin_session(
             LINK_UDS_NRC_SUBFUNCTION_NOT_SUPPORTED);
     }
 
+    if (!uds_server_session_transition_allowed(server, session)) {
+        return link_uds_server_handler_negative(
+            LINK_UDS_NRC_SUBFUNCTION_NOT_SUPPORTED_IN_ACTIVE_SESSION);
+    }
+
     required = server->config.include_session_timing ? 5U : 1U;
     if (capacity < required) {
         return link_uds_server_handler_negative(LINK_UDS_NRC_RESPONSE_TOO_LONG);
@@ -152,6 +223,34 @@ static LinkUdsServerHandlerResult uds_server_builtin_session(
     }
     server->active_session = session;
     return link_uds_server_handler_positive(required);
+}
+
+static LinkUdsServerHandlerResult uds_server_builtin_ecu_reset(
+    LinkUdsServer *server,
+    const LinkUdsServerRequest *request,
+    uint8_t *data,
+    size_t capacity)
+{
+    uint8_t reset_type;
+
+    if (request->pdu_length != 2U) {
+        return link_uds_server_handler_negative(
+            LINK_UDS_NRC_INCORRECT_MESSAGE_LENGTH_OR_INVALID_FORMAT);
+    }
+    reset_type = request->subfunction;
+    if (reset_type < LINK_UDS_ECU_RESET_HARD ||
+        reset_type > LINK_UDS_ECU_RESET_DISABLE_RAPID_POWER_SHUTDOWN) {
+        return link_uds_server_handler_negative(
+            LINK_UDS_NRC_SUBFUNCTION_NOT_SUPPORTED);
+    }
+    if (capacity < 1U) {
+        return link_uds_server_handler_negative(LINK_UDS_NRC_RESPONSE_TOO_LONG);
+    }
+
+    data[0] = reset_type;
+    server->pending_ecu_reset_type = reset_type;
+    server->active_session = LINK_UDS_SESSION_DEFAULT;
+    return link_uds_server_handler_positive(1U);
 }
 
 static LinkUdsServerHandlerResult uds_server_builtin_tester_present(
@@ -194,6 +293,13 @@ LinkUdsServerResult link_uds_server_handle(
         return LINK_UDS_SERVER_RESULT_INVALID_ARGUMENT;
     }
 
+    link_uds_server_tick(server);
+    if (server->config.clock_ms != NULL) {
+        server->last_activity_ms =
+            server->config.clock_ms(server->config.clock_context);
+        server->activity_started = true;
+    }
+
     service = request_pdu[0];
     server->request_count++;
     server->last_service = service;
@@ -234,6 +340,11 @@ LinkUdsServerResult link_uds_server_handle(
             response_capacity > 1U ? response_capacity - 1U : 0U);
     } else if (service == LINK_UDS_SERVICE_DIAGNOSTIC_SESSION_CONTROL) {
         handler_result = uds_server_builtin_session(
+            server, &request,
+            response_capacity > 1U ? response_pdu + 1U : response_pdu,
+            response_capacity > 1U ? response_capacity - 1U : 0U);
+    } else if (service == LINK_UDS_SERVICE_ECU_RESET) {
+        handler_result = uds_server_builtin_ecu_reset(
             server, &request,
             response_capacity > 1U ? response_pdu + 1U : response_pdu,
             response_capacity > 1U ? response_capacity - 1U : 0U);
