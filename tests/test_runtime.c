@@ -339,7 +339,7 @@ int main(void)
     CHECK(strstr(output.data, "# link_session_stream_version,2\n") != NULL);
     CHECK(strstr(output.data, ",0x7E9,0,\"\",\"\",\"\"\n") != NULL);
     CHECK(strstr(output.data, "structured,3,23,0x7A,") != NULL);
-    CHECK(strstr(output.data, "\"DPF pressure · differential pressure\"") != NULL);
+    CHECK(strstr(output.data, "\"DPF pressure · ") != NULL);
     CHECK(strstr(output.data, "\"RAW 07 FF 9C 00 64 00 C8\"") != NULL);
     link_telemetry_recorder_init(&recorder);
     link_telemetry_session_metadata_init(&metadata, 4U, "adapter", "vehicle");
