@@ -246,6 +246,21 @@ int main(void)
     REQUIRE(frame.data[0] == 3U);
     REQUIRE(memcmp(&frame.data[1], classic_payload, sizeof(classic_payload)) == 0);
 
+    /* Optional ISO-TP padding expands short CAN frames to 8 bytes using 0xCC. */
+    tx_config.pad_short_frames = true;
+    tx_config.padding_byte = 0xccU;
+    REQUIRE(link_isotp_tx_init(&tx, &tx_config, classic_payload,
+                               sizeof(classic_payload)) == LINK_ISOTP_RESULT_OK);
+    REQUIRE(link_isotp_tx_start(&tx, 0U, &frame) == LINK_ISOTP_RESULT_COMPLETE);
+    REQUIRE(frame.length == 8U);
+    REQUIRE(frame.data[0] == 3U);
+    REQUIRE(memcmp(&frame.data[1], classic_payload, sizeof(classic_payload)) == 0);
+    REQUIRE(frame.data[4] == 0xccU);
+    REQUIRE(frame.data[5] == 0xccU);
+    REQUIRE(frame.data[6] == 0xccU);
+    REQUIRE(frame.data[7] == 0xccU);
+    tx_config.pad_short_frames = false;
+
     for (index = 0U; index < sizeof(fd_eight); ++index) {
         fd_eight[index] = (uint8_t)(0x80U + index);
     }

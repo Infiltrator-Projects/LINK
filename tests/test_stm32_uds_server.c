@@ -90,17 +90,29 @@ int main(void)
     LinkStm32CanOps ops;
     LinkUdsServer uds;
     LinkUdsServerConfig uds_config = LINK_UDS_SERVER_CONFIG_INIT;
-    LinkUdsServerDtcStore dtc_store = LINK_UDS_SERVER_DTC_STORE_INIT;
+    static const LinkUdsDtcRecord dtc_records[] = {
+        { UINT32_C(0x123456),
+          LINK_UDS_DTC_STATUS_TEST_FAILED |
+              LINK_UDS_DTC_STATUS_CONFIRMED_DTC },
+        { UINT32_C(0xabcdef),
+          LINK_UDS_DTC_STATUS_CONFIRMED_DTC }
+    };
+    LinkUdsServerDtcStore dtc_store = {
+        dtc_records, 2U, LINK_UDS_DTC_STATUS_MASK_ALL, 0xffU, 0x01U
+    };
     LinkStm32UdsServer transport;
     LinkStm32UdsServerConfig transport_config;
     uint8_t rx_storage[256U];
     uint8_t tx_storage[256U];
     LinkIsoTpCanFrame request;
     const uint8_t expected_session[] = {
-        0x06U, 0x50U, 0x01U, 0x00U, 0x32U, 0x01U, 0xf4U
+        0x06U, 0x50U, 0x01U, 0x00U, 0x32U, 0x01U, 0xf4U, 0xccU
     };
-    const uint8_t expected_dtc[] = {
-        0x03U, 0x59U, 0x02U, 0xffU
+    const uint8_t expected_dtc_ff[] = {
+        0x10U, 0x0bU, 0x59U, 0x02U, 0xffU, 0x12U, 0x34U, 0x56U
+    };
+    const uint8_t expected_dtc_cf[] = {
+        0x21U, 0x09U, 0xabU, 0xcdU, 0xefU, 0x08U, 0xccU, 0xccU
     };
 
     memset(&mock, 0, sizeof(mock));
@@ -127,6 +139,8 @@ int main(void)
     transport_config.max_wait_frames = 3U;
     transport_config.can_fd = false;
     transport_config.data_length = 8U;
+    transport_config.pad_short_frames = true;
+    transport_config.padding_byte = 0xccU;
 
     CHECK(link_stm32_uds_server_init(
         &transport, &channel, &uds, &transport_config,
@@ -159,12 +173,33 @@ int main(void)
     mock_push(&mock, &request);
     link_stm32_can_rx_isr(&channel);
 
-    CHECK(poll_until_complete(&transport, &mock) == 0);
+    /* The real example has two DTCs, so 19 02 FF is multi-frame. */
+    CHECK(link_stm32_uds_server_poll(&transport) ==
+          LINK_STM32_UDS_SERVER_RESULT_OK);
     CHECK(mock.tx_count == 2U);
     CHECK(mock.tx[1].can_id == 0x7e8U);
-    CHECK(mock.tx[1].length == sizeof(expected_dtc));
+    CHECK(mock.tx[1].length == sizeof(expected_dtc_ff));
     CHECK(memcmp(
-        mock.tx[1].data, expected_dtc, sizeof(expected_dtc)) == 0);
+        mock.tx[1].data, expected_dtc_ff, sizeof(expected_dtc_ff)) == 0);
+
+    /* Confirm the FF left the controller, then provide tester FlowControl. */
+    CHECK(link_stm32_uds_server_poll(&transport) ==
+          LINK_STM32_UDS_SERVER_RESULT_OK);
+    memset(&request, 0xcc, sizeof(request));
+    request.can_id = 0x7e0U;
+    request.length = 8U;
+    request.data[0] = 0x30U;
+    request.data[1] = 0x00U;
+    request.data[2] = 0x00U;
+    mock_push(&mock, &request);
+    link_stm32_can_rx_isr(&channel);
+
+    CHECK(poll_until_complete(&transport, &mock) == 0);
+    CHECK(mock.tx_count == 3U);
+    CHECK(mock.tx[2].can_id == 0x7e8U);
+    CHECK(mock.tx[2].length == sizeof(expected_dtc_cf));
+    CHECK(memcmp(
+        mock.tx[2].data, expected_dtc_cf, sizeof(expected_dtc_cf)) == 0);
 
     memset(&request, 0, sizeof(request));
     request.can_id = 0x7e8U;
@@ -177,7 +212,7 @@ int main(void)
 
     CHECK(link_stm32_uds_server_poll(&transport) ==
           LINK_STM32_UDS_SERVER_RESULT_WAITING);
-    CHECK(mock.tx_count == 2U);
+    CHECK(mock.tx_count == 3U);
 
     puts("stm32 uds server tests passed");
     return EXIT_SUCCESS;

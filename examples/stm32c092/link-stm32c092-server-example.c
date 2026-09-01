@@ -21,6 +21,9 @@ static LinkStm32C092Hal example_hal;
 static LinkStm32Can example_can;
 static LinkUdsServer example_server;
 static LinkStm32UdsServer example_transport;
+static bool example_reset_pending;
+static uint32_t example_reset_requested_ms;
+static uint8_t example_reset_type;
 static uint8_t example_rx_storage[512U];
 static uint8_t example_tx_storage[512U];
 static const LinkUdsDtcRecord example_dtc_records[] = {
@@ -41,6 +44,12 @@ static const LinkUdsServerDtcStore example_dtc_store = {
     UINT8_C(0xff),
     UINT8_C(0x01)
 };
+
+static uint32_t link_stm32c092_server_clock_ms(void *context)
+{
+    (void)context;
+    return HAL_GetTick();
+}
 
 static LinkUdsServerHandlerResult link_stm32c092_server_read_did(
     void *context,
@@ -87,6 +96,15 @@ bool link_stm32c092_server_example_init(
         return false;
     }
 
+    uds_config.enforce_session_sequence = true;
+    uds_config.s3_server_timeout_ms = UINT32_C(5000);
+    uds_config.clock_ms = link_stm32c092_server_clock_ms;
+    uds_config.clock_context = NULL;
+
+    example_reset_pending = false;
+    example_reset_requested_ms = 0U;
+    example_reset_type = 0U;
+
     link_stm32c092_hal_init(&example_hal, hfdcan, server_config->can_fd);
     ops = link_stm32c092_hal_ops(&example_hal);
     if (!link_stm32_can_init(&example_can, &ops) ||
@@ -114,6 +132,8 @@ bool link_stm32c092_server_example_init(
     transport_config.max_wait_frames = 3U;
     transport_config.can_fd = server_config->can_fd;
     transport_config.data_length = server_config->data_length;
+    transport_config.pad_short_frames = true;
+    transport_config.padding_byte = UINT8_C(0xcc);
 
     return link_stm32_uds_server_init(
         &example_transport, &example_can, &example_server,
@@ -124,7 +144,32 @@ bool link_stm32c092_server_example_init(
 
 void link_stm32c092_server_example_process(void)
 {
-    (void)link_stm32_uds_server_poll(&example_transport);
+    LinkStm32UdsServerResult result;
+    uint8_t reset_type = 0U;
+
+    link_uds_server_tick(&example_server);
+    result = link_stm32_uds_server_poll(&example_transport);
+
+    if (result == LINK_STM32_UDS_SERVER_RESULT_REQUEST_COMPLETE &&
+        link_uds_server_take_pending_ecu_reset(
+            &example_server, &reset_type)) {
+        /*
+         * Demonstration policy: all accepted 0x11 reset types map to the MCU
+         * reset after the positive response has completed on CAN. Products
+         * needing different power-management semantics can override 0x11.
+         */
+        example_reset_type = reset_type;
+        example_reset_requested_ms = HAL_GetTick();
+        example_reset_pending = true;
+    }
+
+    if (example_reset_pending &&
+        (uint32_t)(HAL_GetTick() - example_reset_requested_ms) >=
+            UINT32_C(50)) {
+        (void)example_reset_type;
+        example_reset_pending = false;
+        NVIC_SystemReset();
+    }
 }
 
 void link_stm32c092_server_example_poll_rx(FDCAN_HandleTypeDef *hfdcan)

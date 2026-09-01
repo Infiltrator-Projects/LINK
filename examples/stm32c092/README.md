@@ -208,3 +208,17 @@ In server mode the hardware filter accepts `0x7E0`. A tester request
 `02 10 01` on `0x7E0` produces `06 50 01 00 32 01 F4` on `0x7E8`.
 The server also binds the complete LINK `0x19 ReadDTCInformation` report
 catalogue and exposes callback registration for all 27 standard service IDs.
+
+
+### Reporter-driven server compliance
+
+The STM32C092 ECU/server example now enables short-frame ISO-TP padding with
+the ISO 15765-2 default pad value `0xCC`, enforces the demonstrated
+Default -> Extended -> Programming session sequence, returns to Default on
+the configured 5-second S3 timeout, and implements `0x11 ECUReset` as a
+portable deferred reset request. The C092 example executes
+`NVIC_SystemReset()` 50 ms after the positive `0x51` response has completed.
+
+The STM32 transport regression also exercises the real two-DTC
+`19 02 FF` multi-frame response, including tester FlowControl and the final
+padded ConsecutiveFrame.

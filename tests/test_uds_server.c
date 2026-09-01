@@ -7,6 +7,15 @@
 
 #define CHECK(c) do {     if (!(c)) {         fprintf(stderr, "CHECK failed %s:%d: %s\n", __FILE__, __LINE__, #c);         return 1;     } } while (0)
 
+typedef struct {
+    uint32_t now_ms;
+} TestClock;
+
+static uint32_t test_clock_ms(void *context)
+{
+    return ((TestClock *)context)->now_ms;
+}
+
 static LinkUdsServerHandlerResult read_did_handler(
     void *context,
     const LinkUdsServerRequest *request,
@@ -90,6 +99,93 @@ static int test_session_and_tester_present(void)
           LINK_UDS_SERVER_RESULT_POSITIVE);
     CHECK(length == 2U);
     CHECK(response[0] == 0x7eU && response[1] == 0x00U);
+    return 0;
+}
+
+static int test_session_state_machine_and_ecu_reset(void)
+{
+    LinkUdsServer server;
+    LinkUdsServerConfig config = LINK_UDS_SERVER_CONFIG_INIT;
+    TestClock clock = {0U};
+    uint8_t response[16U];
+    uint8_t reset_type = 0U;
+    size_t length = 0U;
+    const uint8_t programming[] = {0x10U, 0x02U};
+    const uint8_t extended[] = {0x10U, 0x03U};
+    const uint8_t default_session[] = {0x10U, 0x01U};
+    const uint8_t reset[] = {0x11U, LINK_UDS_ECU_RESET_HARD};
+    const uint8_t invalid_reset[] = {0x11U, 0x06U};
+
+    config.enforce_session_sequence = true;
+    config.s3_server_timeout_ms = 5000U;
+    config.clock_ms = test_clock_ms;
+    config.clock_context = &clock;
+
+    CHECK(link_uds_server_init(&server, &config));
+    CHECK(link_uds_server_active_session(&server) == LINK_UDS_SESSION_DEFAULT);
+
+    /* Programming cannot be entered directly from Default. */
+    CHECK(link_uds_server_handle(
+              &server, programming, sizeof(programming),
+              response, sizeof(response), &length) ==
+          LINK_UDS_SERVER_RESULT_NEGATIVE);
+    CHECK(response[0] == 0x7fU && response[1] == 0x10U &&
+          response[2] ==
+              LINK_UDS_NRC_SUBFUNCTION_NOT_SUPPORTED_IN_ACTIVE_SESSION);
+    CHECK(link_uds_server_active_session(&server) == LINK_UDS_SESSION_DEFAULT);
+
+    /* Default -> Extended -> Programming is permitted. */
+    CHECK(link_uds_server_handle(
+              &server, extended, sizeof(extended),
+              response, sizeof(response), &length) ==
+          LINK_UDS_SERVER_RESULT_POSITIVE);
+    CHECK(link_uds_server_active_session(&server) == LINK_UDS_SESSION_EXTENDED);
+    CHECK(link_uds_server_handle(
+              &server, programming, sizeof(programming),
+              response, sizeof(response), &length) ==
+          LINK_UDS_SERVER_RESULT_POSITIVE);
+    CHECK(link_uds_server_active_session(&server) ==
+          LINK_UDS_SESSION_PROGRAMMING);
+
+    /* Programming can leave only through Default. */
+    CHECK(link_uds_server_handle(
+              &server, extended, sizeof(extended),
+              response, sizeof(response), &length) ==
+          LINK_UDS_SERVER_RESULT_NEGATIVE);
+    CHECK(link_uds_server_active_session(&server) ==
+          LINK_UDS_SESSION_PROGRAMMING);
+    CHECK(link_uds_server_handle(
+              &server, default_session, sizeof(default_session),
+              response, sizeof(response), &length) ==
+          LINK_UDS_SERVER_RESULT_POSITIVE);
+    CHECK(link_uds_server_active_session(&server) == LINK_UDS_SESSION_DEFAULT);
+
+    /* S3 timeout restores Default session. */
+    CHECK(link_uds_server_handle(
+              &server, extended, sizeof(extended),
+              response, sizeof(response), &length) ==
+          LINK_UDS_SERVER_RESULT_POSITIVE);
+    clock.now_ms = 5001U;
+    link_uds_server_tick(&server);
+    CHECK(link_uds_server_active_session(&server) == LINK_UDS_SESSION_DEFAULT);
+
+    /* ECUReset returns 0x51, resets the session and defers platform action. */
+    CHECK(link_uds_server_handle(
+              &server, reset, sizeof(reset),
+              response, sizeof(response), &length) ==
+          LINK_UDS_SERVER_RESULT_POSITIVE);
+    CHECK(length == 2U);
+    CHECK(response[0] == 0x51U && response[1] == LINK_UDS_ECU_RESET_HARD);
+    CHECK(link_uds_server_active_session(&server) == LINK_UDS_SESSION_DEFAULT);
+    CHECK(link_uds_server_take_pending_ecu_reset(&server, &reset_type));
+    CHECK(reset_type == LINK_UDS_ECU_RESET_HARD);
+    CHECK(!link_uds_server_take_pending_ecu_reset(&server, &reset_type));
+
+    CHECK(link_uds_server_handle(
+              &server, invalid_reset, sizeof(invalid_reset),
+              response, sizeof(response), &length) ==
+          LINK_UDS_SERVER_RESULT_NEGATIVE);
+    CHECK(response[2] == LINK_UDS_NRC_SUBFUNCTION_NOT_SUPPORTED);
     return 0;
 }
 
@@ -263,6 +359,7 @@ static int test_negative_paths(void)
 int main(void)
 {
     if (test_session_and_tester_present() != 0) return EXIT_FAILURE;
+    if (test_session_state_machine_and_ecu_reset() != 0) return EXIT_FAILURE;
     if (test_custom_handlers() != 0) return EXIT_FAILURE;
     if (test_dtc_all_subfunctions() != 0) return EXIT_FAILURE;
     if (test_negative_paths() != 0) return EXIT_FAILURE;
