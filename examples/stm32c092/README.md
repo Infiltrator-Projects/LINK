@@ -130,11 +130,13 @@ if (link_stm32c092_example_state() ==
     LINK_STM32C092_EXAMPLE_DTC_READY) {
     const LinkUdsDtcInformationResponse *dtc =
         link_stm32c092_example_dtc_response();
-    /* Inspect dtc->record_format, metadata and records/records_length. */
+    const LinkUdsDtcList *list =
+        link_stm32c092_example_dtc_list();
+    /* Inspect dtc metadata/raw records; for 0x02, list has parsed DTCs. */
 }
 ```
 
-The single entry point covers the complete catalogue: `0x01..0x19`, `0x42` and `0x55`. Populate the request fields according to the catalogue's request shape:
+The single entry point covers the complete catalogue: `0x01..0x19`, `0x42` and `0x55`. The `0x02` path also explicitly exercises `link_uds_decode_report_dtcs_by_status_mask_response()`, matching the decoder used by LINK's ECU-probe path, and exposes its parsed list through `link_stm32c092_example_dtc_list()`. Populate the request fields according to the catalogue's request shape:
 
 - status mask: `0x01`, `0x02`, `0x0F`, `0x11`, `0x12`, `0x13`;
 - no extra parameters: `0x03`, `0x0A..0x0E`, `0x14`, `0x15`;
