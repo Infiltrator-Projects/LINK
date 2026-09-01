@@ -163,13 +163,20 @@ void link_stm32c092_server_example_process(void)
         example_reset_pending = true;
     }
 
-    if (example_reset_pending &&
-        (uint32_t)(HAL_GetTick() - example_reset_requested_ms) >=
+}
+
+bool link_stm32c092_server_example_take_reset(uint8_t *reset_type)
+{
+    if (reset_type == NULL || !example_reset_pending ||
+        (uint32_t)(HAL_GetTick() - example_reset_requested_ms) <
             UINT32_C(50)) {
-        (void)example_reset_type;
-        example_reset_pending = false;
-        NVIC_SystemReset();
+        return false;
     }
+
+    *reset_type = example_reset_type;
+    example_reset_pending = false;
+    example_reset_type = 0U;
+    return true;
 }
 
 void link_stm32c092_server_example_poll_rx(FDCAN_HandleTypeDef *hfdcan)

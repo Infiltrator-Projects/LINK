@@ -29,6 +29,12 @@ bool link_stm32c092_server_example_init(
     FDCAN_HandleTypeDef *hfdcan,
     const LinkStm32C092ServerConfig *config);
 void link_stm32c092_server_example_process(void);
+/*
+ * Returns a deferred ECU-reset request only after the positive 0x51 response
+ * has completed and the example's 50 ms response-drain interval has elapsed.
+ * The Cube/KEIL application owns the actual platform reset primitive.
+ */
+bool link_stm32c092_server_example_take_reset(uint8_t *reset_type);
 /* Main-loop fallback for targets where the RX FIFO interrupt is not delivered. */
 void link_stm32c092_server_example_poll_rx(FDCAN_HandleTypeDef *hfdcan);
 void link_stm32c092_server_example_rx_fifo0_irq(FDCAN_HandleTypeDef *hfdcan);

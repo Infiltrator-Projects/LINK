@@ -216,8 +216,10 @@ The STM32C092 ECU/server example now enables short-frame ISO-TP padding with
 the ISO 15765-2 default pad value `0xCC`, enforces the demonstrated
 Default -> Extended -> Programming session sequence, returns to Default on
 the configured 5-second S3 timeout, and implements `0x11 ECUReset` as a
-portable deferred reset request. The C092 example executes
-`NVIC_SystemReset()` 50 ms after the positive `0x51` response has completed.
+portable deferred reset request. The reusable server exposes the reset only
+after the positive `0x51` response has completed and 50 ms has elapsed; the
+Cube/KEIL `issue-38-server/Src-main.c` layer then executes
+`NVIC_SystemReset()`, keeping CMSIS hardware control out of portable LINK code.
 
 The STM32 transport regression also exercises the real two-DTC
 `19 02 FF` multi-frame response, including tester FlowControl and the final

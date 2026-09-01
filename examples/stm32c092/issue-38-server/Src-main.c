@@ -33,6 +33,8 @@ int main(void)
     }
 
     for (;;) {
+        uint8_t reset_type = 0U;
+
         /*
          * Fallback for the exact issue reported in #38: if FDCAN has queued a
          * frame but Cube/NVIC did not invoke the RX callback, drain FIFO0 here.
@@ -40,6 +42,15 @@ int main(void)
          */
         link_stm32c092_server_example_poll_rx(&hfdcan1);
         link_stm32c092_server_example_process();
+
+        /*
+         * LINK defers the platform action until the positive 0x51 response has
+         * completed and 50 ms has elapsed. This Cube layer owns CMSIS reset.
+         */
+        if (link_stm32c092_server_example_take_reset(&reset_type)) {
+            (void)reset_type;
+            NVIC_SystemReset();
+        }
     }
 }
 
