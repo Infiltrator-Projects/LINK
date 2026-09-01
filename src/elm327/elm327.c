@@ -9,6 +9,74 @@
 
 #include <string.h>
 
+
+static const LinkElm327ProtocolDefinition elm327_protocol_definitions[] = {
+    {0x00U, "Automatic protocol search", LINK_ELM327_PROTOCOL_FAMILY_AUTOMATIC, 0U, false, LINK_ELM327_PROTOCOL_INIT_NONE, false},
+    {0x01U, "SAE J1850 PWM (41.6 kbaud)", LINK_ELM327_PROTOCOL_FAMILY_SAE_J1850, 41600U, false, LINK_ELM327_PROTOCOL_INIT_NONE, true},
+    {0x02U, "SAE J1850 VPW (10.4 kbaud)", LINK_ELM327_PROTOCOL_FAMILY_SAE_J1850, 10400U, false, LINK_ELM327_PROTOCOL_INIT_NONE, true},
+    {0x03U, "ISO 9141-2 (5 baud init)", LINK_ELM327_PROTOCOL_FAMILY_ISO_9141_2, 10400U, false, LINK_ELM327_PROTOCOL_INIT_FIVE_BAUD, true},
+    {0x04U, "ISO 14230-4 KWP (5 baud init)", LINK_ELM327_PROTOCOL_FAMILY_ISO_14230_4, 10400U, false, LINK_ELM327_PROTOCOL_INIT_FIVE_BAUD, true},
+    {0x05U, "ISO 14230-4 KWP (fast init)", LINK_ELM327_PROTOCOL_FAMILY_ISO_14230_4, 10400U, false, LINK_ELM327_PROTOCOL_INIT_FAST, true},
+    {0x06U, "ISO 15765-4 CAN (11 bit ID, 500 kbaud)", LINK_ELM327_PROTOCOL_FAMILY_ISO_15765_4, 500000U, false, LINK_ELM327_PROTOCOL_INIT_NONE, true},
+    {0x07U, "ISO 15765-4 CAN (29 bit ID, 500 kbaud)", LINK_ELM327_PROTOCOL_FAMILY_ISO_15765_4, 500000U, true, LINK_ELM327_PROTOCOL_INIT_NONE, true},
+    {0x08U, "ISO 15765-4 CAN (11 bit ID, 250 kbaud)", LINK_ELM327_PROTOCOL_FAMILY_ISO_15765_4, 250000U, false, LINK_ELM327_PROTOCOL_INIT_NONE, true},
+    {0x09U, "ISO 15765-4 CAN (29 bit ID, 250 kbaud)", LINK_ELM327_PROTOCOL_FAMILY_ISO_15765_4, 250000U, true, LINK_ELM327_PROTOCOL_INIT_NONE, true},
+    {0x0AU, "SAE J1939 CAN (29 bit ID, 250 kbaud)", LINK_ELM327_PROTOCOL_FAMILY_SAE_J1939, 250000U, true, LINK_ELM327_PROTOCOL_INIT_NONE, false},
+    {0x0BU, "User1 CAN", LINK_ELM327_PROTOCOL_FAMILY_USER_DEFINED, 0U, false, LINK_ELM327_PROTOCOL_INIT_NONE, false},
+    {0x0CU, "User2 CAN", LINK_ELM327_PROTOCOL_FAMILY_USER_DEFINED, 0U, false, LINK_ELM327_PROTOCOL_INIT_NONE, false}
+};
+
+size_t link_elm327_protocol_definition_count(void)
+{
+    return sizeof(elm327_protocol_definitions) / sizeof(elm327_protocol_definitions[0]);
+}
+
+const LinkElm327ProtocolDefinition *link_elm327_protocol_definition_at(size_t index)
+{
+    if (index >= link_elm327_protocol_definition_count()) return NULL;
+    return &elm327_protocol_definitions[index];
+}
+
+const LinkElm327ProtocolDefinition *link_elm327_protocol_definition(uint8_t number)
+{
+    size_t index;
+    for (index = 0U; index < link_elm327_protocol_definition_count(); ++index)
+        if (elm327_protocol_definitions[index].number == number)
+            return &elm327_protocol_definitions[index];
+    return NULL;
+}
+
+const char *link_elm327_protocol_family_name(LinkElm327ProtocolFamily family)
+{
+    switch (family) {
+    case LINK_ELM327_PROTOCOL_FAMILY_AUTOMATIC: return "automatic";
+    case LINK_ELM327_PROTOCOL_FAMILY_SAE_J1850: return "SAE J1850";
+    case LINK_ELM327_PROTOCOL_FAMILY_ISO_9141_2: return "ISO 9141-2";
+    case LINK_ELM327_PROTOCOL_FAMILY_ISO_14230_4: return "ISO 14230-4";
+    case LINK_ELM327_PROTOCOL_FAMILY_ISO_15765_4: return "ISO 15765-4";
+    case LINK_ELM327_PROTOCOL_FAMILY_SAE_J1939: return "SAE J1939";
+    case LINK_ELM327_PROTOCOL_FAMILY_USER_DEFINED: return "user-defined";
+    }
+    return "unknown";
+}
+
+LinkElm327Result link_elm327_build_set_protocol_command(
+    uint8_t protocol_number, char *buffer, size_t buffer_size)
+{
+    static const char digits[] = "0123456789ABC";
+    if (buffer == NULL || buffer_size == 0U)
+        return LINK_ELM327_RESULT_INVALID_ARGUMENT;
+    buffer[0] = '\0';
+    if (protocol_number > 0x0CU)
+        return LINK_ELM327_RESULT_INVALID_ARGUMENT;
+    if (buffer_size < 6U)
+        return LINK_ELM327_RESULT_COMMAND_TOO_LONG;
+    memcpy(buffer, "ATSP", 4U);
+    buffer[4] = digits[protocol_number];
+    buffer[5] = '\0';
+    return LINK_ELM327_RESULT_OK;
+}
+
 static bool elm327_ascii_space(unsigned char value)
 {
     return value == ' ' || value == '\t' || value == '\r' || value == '\n' ||

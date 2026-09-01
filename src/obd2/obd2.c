@@ -576,6 +576,86 @@ LinkObd2Result link_obd2_build_standard_read_request(
     return obd2_write_command(bytes, sizeof(bytes), buffer, buffer_size);
 }
 
+
+size_t link_obd2_parameter_identifier_namespace_count(uint8_t mode)
+{
+    const LinkObd2ServiceDefinition *service = link_obd2_service_definition(mode);
+    if (service == NULL || !service->read_only || !service->parameterized ||
+        mode == UINT8_C(0x02))
+        return 0U;
+    return 256U;
+}
+
+bool link_obd2_parameter_identifier_metadata_known(uint8_t mode, uint8_t identifier)
+{
+    return link_obd2_pid_definition(mode, identifier) != NULL;
+}
+
+LinkObd2Result link_obd2_decode_standard_identifier_payload(
+    const LinkElm327Response *response,
+    uint8_t mode,
+    uint8_t identifier,
+    LinkObd2DecodedPid *decoded)
+{
+    const LinkObd2ServiceDefinition *service;
+    const LinkObd2PidDefinition *definition;
+    uint8_t payload[LINK_OBD2_MAX_PID_PAYLOAD];
+    uint8_t indexed[LINK_OBD2_MAX_PID_PAYLOAD + 2U];
+    size_t payload_length = 0U;
+    size_t indexed_length = 0U;
+    bool indexed_found = false;
+    LinkObd2Result result;
+
+    if (response == NULL || decoded == NULL)
+        return LINK_OBD2_RESULT_INVALID_ARGUMENT;
+    service = link_obd2_service_definition(mode);
+    if (service == NULL)
+        return LINK_OBD2_RESULT_INVALID_ARGUMENT;
+    if (!service->read_only)
+        return LINK_OBD2_RESULT_NOT_AUTHORIZED;
+    if (!service->parameterized || mode == UINT8_C(0x02))
+        return LINK_OBD2_RESULT_INVALID_ARGUMENT;
+
+    result = obd2_collect_indexed_message(
+        response, indexed, sizeof(indexed), &indexed_length, &indexed_found);
+    if (result != LINK_OBD2_RESULT_OK)
+        return result;
+
+    if (indexed_found) {
+        if (indexed_length < 2U ||
+            indexed[0] != (uint8_t)(mode + UINT8_C(0x40)) ||
+            indexed[1] != identifier)
+            return LINK_OBD2_RESULT_UNEXPECTED_RESPONSE;
+        payload_length = indexed_length - 2U;
+        if (payload_length > sizeof(payload))
+            return LINK_OBD2_RESULT_BUFFER_TOO_SMALL;
+        if (payload_length != 0U)
+            memcpy(payload, indexed + 2U, payload_length);
+    } else {
+        result = obd2_find_pid_payload(
+            response, (uint8_t)(mode + UINT8_C(0x40)), identifier,
+            false, 0U, payload, sizeof(payload), &payload_length);
+        if (result != LINK_OBD2_RESULT_OK)
+            return result;
+    }
+
+    definition = link_obd2_pid_definition(mode, identifier);
+    if (definition != NULL)
+        return link_obd2_decode_pid_payload(
+            mode, identifier, payload, payload_length, decoded);
+
+    memset(decoded, 0, sizeof(*decoded));
+    if (payload_length != 0U)
+        memcpy(decoded->raw, payload, payload_length);
+    decoded->raw_length = payload_length;
+    return LINK_OBD2_RESULT_OK;
+}
+
+const char *link_obd2_obdonuds_revision(void)
+{
+    return "J1979-2_202604";
+}
+
 LinkObd2Result link_obd2_obdonuds_pid_to_did(
     uint16_t pid, uint16_t *did)
 {

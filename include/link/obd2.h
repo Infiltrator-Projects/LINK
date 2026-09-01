@@ -266,6 +266,24 @@ LinkObd2Result link_obd2_build_standard_read_request(
     char *buffer,
     size_t buffer_size);
 
+size_t link_obd2_parameter_identifier_namespace_count(uint8_t mode);
+bool link_obd2_parameter_identifier_metadata_known(
+    uint8_t mode,
+    uint8_t identifier);
+
+/**
+ * Decode one generic parameterized read response (Modes 01, 05, 06 or 09).
+ * Unknown semantic layouts are preserved in decoded->raw with a NULL
+ * definition instead of being discarded.
+ */
+LinkObd2Result link_obd2_decode_standard_identifier_payload(
+    const LinkElm327Response *response,
+    uint8_t mode,
+    uint8_t identifier,
+    LinkObd2DecodedPid *decoded);
+
+const char *link_obd2_obdonuds_revision(void);
+
 /**
  * Map a logical SAE J1979 parameter identifier to its J1979-2 OBDonUDS DID.
  *

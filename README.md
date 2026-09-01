@@ -27,18 +27,23 @@ Each manufacturer repository may build multiple branded application targets with
 
 ## Capabilities
 
+The standards-by-standards boundary is tracked in [docs/OBD-STANDARDS-COVERAGE.md](docs/OBD-STANDARDS-COVERAGE.md); transport support, semantic catalogue coverage and regulatory conformance are deliberately treated as separate claims.
+
 LINK currently owns:
 
 - platform-neutral byte-stream transport ABI;
 - ELM327 framing, parsing, initialization and adapter/protocol probing;
+- complete ELM327 first-generation OBD protocol selection/reporting for SAE J1850 PWM/VPW, ISO 9141-2, ISO 14230-4 KWP slow/fast initialisation, and all four ISO 15765-4 CAN variants;
 - ELM327-managed ISO 15765 CAN channels and transport-backed sessions;
 - a shared standard OBD-II/J1979 service model for modes `01` through `0A`,
   including transport-neutral read helpers, explicit deny-by-default handling
   for control/clear operations, responder-attributed capability discovery,
   VIN/readiness/freeze-frame/DTC handling and bounded multi-responder decoding;
+- raw-preserving generic Mode 05/06/09 identifier decoding so every ECU-advertised standard test/monitor/info identifier remains accessible even when LINK lacks a verified semantic layout;
 - the complete classic SAE J1979 Mode 01 identifier namespace: all **256** byte-wide slots are represented, with **220 assigned definitions** and **36** explicitly reserved/unassigned under the `J1979DA_202608` audit. Every advertised assigned data PID is schedulable, including structured/encoded/raw-preserving values rather than only the scalar compatibility subset; Mode 09 vehicle information and J1979-2 OBDonUDS mapping remain shared in LINK;
 - the complete **65,536-value** SAE/ISO DTC numeric namespace, with every value classified as standardized generic/controlled, manufacturer-specific or document-reserved, plus a pinned **9,533-definition** open generic catalogue audited against J2012/J2012DA;
 - ISO 14229 UDS request/response, DID and client-state handling;
+- transport-neutral ISO 13400 DoIP framing for routing activation, alive-check and UDS diagnostic messages;
 - a compiled 27-service ISO 14229 service catalogue and bounded request/response codecs;
 - read-only UDS `ReadDTCInformation` helpers;
 - ISO 14230-3 KWP2000 read-only response, TesterPresent, common-identifier, ECU-identification and DTC-by-status codecs;

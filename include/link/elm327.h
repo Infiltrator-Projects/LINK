@@ -40,6 +40,64 @@ typedef enum LinkElm327Result {
     LINK_ELM327_RESULT_MALFORMED_RESPONSE
 } LinkElm327Result;
 
+/**
+ * ELM327 protocol numbers used by first-generation OBD-II scan tools.
+ *
+ * Protocols 1..9 are the regulated J1979 transport choices exposed by the
+ * ELM327 command surface. A/B/C are retained for honest adapter reporting but
+ * are not classified as classic SAE J1979 OBD-II transports.
+ */
+typedef enum LinkElm327ProtocolNumber {
+    LINK_ELM327_PROTOCOL_AUTOMATIC = 0x00,
+    LINK_ELM327_PROTOCOL_SAE_J1850_PWM = 0x01,
+    LINK_ELM327_PROTOCOL_SAE_J1850_VPW = 0x02,
+    LINK_ELM327_PROTOCOL_ISO_9141_2 = 0x03,
+    LINK_ELM327_PROTOCOL_ISO_14230_4_SLOW = 0x04,
+    LINK_ELM327_PROTOCOL_ISO_14230_4_FAST = 0x05,
+    LINK_ELM327_PROTOCOL_ISO_15765_4_11_500 = 0x06,
+    LINK_ELM327_PROTOCOL_ISO_15765_4_29_500 = 0x07,
+    LINK_ELM327_PROTOCOL_ISO_15765_4_11_250 = 0x08,
+    LINK_ELM327_PROTOCOL_ISO_15765_4_29_250 = 0x09,
+    LINK_ELM327_PROTOCOL_SAE_J1939 = 0x0A,
+    LINK_ELM327_PROTOCOL_USER1_CAN = 0x0B,
+    LINK_ELM327_PROTOCOL_USER2_CAN = 0x0C
+} LinkElm327ProtocolNumber;
+
+typedef enum LinkElm327ProtocolFamily {
+    LINK_ELM327_PROTOCOL_FAMILY_AUTOMATIC = 0,
+    LINK_ELM327_PROTOCOL_FAMILY_SAE_J1850,
+    LINK_ELM327_PROTOCOL_FAMILY_ISO_9141_2,
+    LINK_ELM327_PROTOCOL_FAMILY_ISO_14230_4,
+    LINK_ELM327_PROTOCOL_FAMILY_ISO_15765_4,
+    LINK_ELM327_PROTOCOL_FAMILY_SAE_J1939,
+    LINK_ELM327_PROTOCOL_FAMILY_USER_DEFINED
+} LinkElm327ProtocolFamily;
+
+typedef enum LinkElm327ProtocolInit {
+    LINK_ELM327_PROTOCOL_INIT_NONE = 0,
+    LINK_ELM327_PROTOCOL_INIT_FIVE_BAUD,
+    LINK_ELM327_PROTOCOL_INIT_FAST
+} LinkElm327ProtocolInit;
+
+typedef struct LinkElm327ProtocolDefinition {
+    uint8_t number;
+    const char *name;
+    LinkElm327ProtocolFamily family;
+    uint32_t bit_rate;
+    bool extended_can_id;
+    LinkElm327ProtocolInit init;
+    bool classic_j1979_obd;
+} LinkElm327ProtocolDefinition;
+
+size_t link_elm327_protocol_definition_count(void);
+const LinkElm327ProtocolDefinition *link_elm327_protocol_definition_at(size_t index);
+const LinkElm327ProtocolDefinition *link_elm327_protocol_definition(uint8_t number);
+const char *link_elm327_protocol_family_name(LinkElm327ProtocolFamily family);
+LinkElm327Result link_elm327_build_set_protocol_command(
+    uint8_t protocol_number,
+    char *buffer,
+    size_t buffer_size);
+
 typedef struct LinkElm327Response {
     LinkElm327Result result;
     bool prompt_seen;

@@ -52,6 +52,8 @@ int main(void)
     LinkElm327CanChannelState can_state; char can_command[32];
     MockTransport mock = { 0 }; LinkTransport transport = LINK_TRANSPORT_INIT; LinkElm327Session session;
     const uint8_t response_bytes[] = "010C\r41 0C 1A F8\r>";
+    const LinkElm327ProtocolDefinition *protocol_definition;
+    char protocol_command[8U];
 
     REQUIRE(link_elm327_build_command(" 010C ", command, sizeof(command), &written) == LINK_ELM327_RESULT_OK);
     REQUIRE(written == 5U && memcmp(command, "010C\r", 5U) == 0);
@@ -59,6 +61,31 @@ int main(void)
     REQUIRE(link_elm327_parser_feed(&parser, response_bytes, sizeof(response_bytes) - 1U, &consumed) == LINK_ELM327_RESULT_OK);
     REQUIRE(link_elm327_parser_finish(&parser, &response) == LINK_ELM327_RESULT_OK);
     REQUIRE(response.echo_removed && strcmp(response.text, "41 0C 1A F8") == 0);
+
+    REQUIRE(link_elm327_protocol_definition_count() == 13U);
+    protocol_definition = link_elm327_protocol_definition(LINK_ELM327_PROTOCOL_SAE_J1850_PWM);
+    REQUIRE(protocol_definition != NULL &&
+            protocol_definition->family == LINK_ELM327_PROTOCOL_FAMILY_SAE_J1850 &&
+            protocol_definition->bit_rate == 41600U &&
+            protocol_definition->classic_j1979_obd);
+    protocol_definition = link_elm327_protocol_definition(LINK_ELM327_PROTOCOL_ISO_9141_2);
+    REQUIRE(protocol_definition != NULL &&
+            protocol_definition->init == LINK_ELM327_PROTOCOL_INIT_FIVE_BAUD);
+    protocol_definition = link_elm327_protocol_definition(LINK_ELM327_PROTOCOL_ISO_14230_4_FAST);
+    REQUIRE(protocol_definition != NULL &&
+            protocol_definition->init == LINK_ELM327_PROTOCOL_INIT_FAST);
+    protocol_definition = link_elm327_protocol_definition(LINK_ELM327_PROTOCOL_ISO_15765_4_29_250);
+    REQUIRE(protocol_definition != NULL &&
+            protocol_definition->extended_can_id &&
+            protocol_definition->bit_rate == 250000U);
+    REQUIRE(link_elm327_build_set_protocol_command(
+                LINK_ELM327_PROTOCOL_ISO_9141_2,
+                protocol_command, sizeof(protocol_command)) == LINK_ELM327_RESULT_OK);
+    REQUIRE(strcmp(protocol_command, "ATSP3") == 0);
+    REQUIRE(link_elm327_build_set_protocol_command(
+                LINK_ELM327_PROTOCOL_SAE_J1939,
+                protocol_command, sizeof(protocol_command)) == LINK_ELM327_RESULT_OK);
+    REQUIRE(strcmp(protocol_command, "ATSPA") == 0);
 
     link_elm327_probe_begin(&probe);
     REQUIRE(strcmp(link_elm327_probe_command(&probe), "AT@1") == 0);
