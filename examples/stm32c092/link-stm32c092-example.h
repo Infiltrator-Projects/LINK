@@ -12,6 +12,21 @@
 extern "C" {
 #endif
 
+#define LINK_STM32C092_TESTER_REQUEST_ID UINT32_C(0x7e0)
+#define LINK_STM32C092_TESTER_RESPONSE_ID UINT32_C(0x7e8)
+
+typedef struct {
+    uint32_t request_can_id;
+    uint32_t response_can_id;
+    bool read_vin_on_init;
+} LinkStm32C092TesterConfig;
+
+#define LINK_STM32C092_TESTER_CONFIG_INIT { \
+    LINK_STM32C092_TESTER_REQUEST_ID, \
+    LINK_STM32C092_TESTER_RESPONSE_ID, \
+    true \
+}
+
 typedef enum {
     LINK_STM32C092_EXAMPLE_IDLE = 0,
     LINK_STM32C092_EXAMPLE_READING_VIN,
@@ -19,10 +34,22 @@ typedef enum {
     LINK_STM32C092_EXAMPLE_READING_DTC,
     LINK_STM32C092_EXAMPLE_DTC_READY,
     LINK_STM32C092_EXAMPLE_NEGATIVE_RESPONSE,
-    LINK_STM32C092_EXAMPLE_FAILED
+    LINK_STM32C092_EXAMPLE_FAILED,
+    LINK_STM32C092_EXAMPLE_READY
 } LinkStm32C092ExampleState;
 
+/*
+ * This reference firmware is a UDS tester/client, not an ECU/server.
+ * request_can_id is transmitted by the STM32; response_can_id is the
+ * hardware-filtered CAN identifier expected back from the ECU/simulator.
+ */
+void link_stm32c092_example_default_tester_config(
+    LinkStm32C092TesterConfig *config);
+bool link_stm32c092_example_init_tester(
+    FDCAN_HandleTypeDef *hfdcan,
+    const LinkStm32C092TesterConfig *config);
 bool link_stm32c092_example_init(FDCAN_HandleTypeDef *hfdcan);
+bool link_stm32c092_example_start_vin(void);
 bool link_stm32c092_example_start_dtc_report(
     const LinkUdsDtcInformationRequest *request);
 void link_stm32c092_example_process(void);

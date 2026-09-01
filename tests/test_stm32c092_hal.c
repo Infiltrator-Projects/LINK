@@ -16,6 +16,8 @@
 
 static uint32_t fake_tick;
 static uint32_t fake_notifications;
+static bool fake_filter_configured;
+static FDCAN_FilterTypeDef fake_filter;
 static uint32_t fake_tx_free = 3U;
 static bool fake_rx_available;
 static FDCAN_RxHeaderTypeDef fake_rx_header;
@@ -30,6 +32,8 @@ static void reset_fake_hal(void)
 {
     fake_tick = 0U;
     fake_notifications = 0U;
+    fake_filter_configured = false;
+    memset(&fake_filter, 0, sizeof(fake_filter));
     fake_tx_free = 3U;
     fake_rx_available = false;
     memset(&fake_rx_header, 0, sizeof(fake_rx_header));
@@ -97,7 +101,10 @@ HAL_StatusTypeDef HAL_FDCAN_ConfigFilter(
     const FDCAN_FilterTypeDef *filter)
 {
     (void)hfdcan;
-    return filter == NULL ? HAL_ERROR : HAL_OK;
+    if (filter == NULL) return HAL_ERROR;
+    fake_filter = *filter;
+    fake_filter_configured = true;
+    return HAL_OK;
 }
 
 HAL_StatusTypeDef HAL_FDCAN_ConfigGlobalFilter(
@@ -141,6 +148,10 @@ static int test_classic_tx_and_completion(void)
     ops = link_stm32c092_hal_ops(&adapter);
     REQUIRE(link_stm32_can_init(&channel, &ops));
     REQUIRE(link_stm32c092_hal_start_standard(&adapter, 0x7e8U));
+    REQUIRE(fake_filter_configured);
+    REQUIRE(fake_filter.FilterType == FDCAN_FILTER_MASK);
+    REQUIRE(fake_filter.FilterID1 == 0x7e8U);
+    REQUIRE(fake_filter.FilterID2 == 0x7ffU);
     REQUIRE((fake_notifications & FDCAN_IT_RX_FIFO0_NEW_MESSAGE) != 0U);
     REQUIRE((fake_notifications & FDCAN_IT_TX_EVT_FIFO_NEW_DATA) != 0U);
     REQUIRE((fake_notifications & FDCAN_IT_TX_EVT_FIFO_ELT_LOST) != 0U);

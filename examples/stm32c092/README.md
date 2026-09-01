@@ -8,6 +8,10 @@ The supplied project establishes the target: STM32C092RCTx, 48 MHz system/FDCAN 
 
 The attachment itself demonstrates an ECU/server role: receive tester requests on `0x7E0/0x7DF` and reply on `0x7E8`. LINK's reference firmware deliberately implements the diagnostic-tester/client role needed to talk to a vehicle: transmit on `0x7E0`, receive the ECU response on `0x7E8`.
 
+That direction is not interchangeable. In particular, the KEIL project attached to MBLINK issue #38 still contains the old server-role macros `RX_ID = 0x7E0` and `TX_ID = 0x7E8`, but its `CAN_Init()` call is commented out. Once `link_stm32c092_example_init*()` is used, LINK owns the filter and the default tester configuration accepts **only ECU responses on 0x7E8**. Sending a tester request on `0x7E0` *to the STM32* will therefore be rejected by the FDCAN hardware filter and will not invoke `HAL_FDCAN_RxFifo0Callback()`. That is expected for tester/client firmware, not an RX-IRQ failure.
+
+If a PC/CAN tool is used to test this firmware, configure that tool as the ECU peer: observe the STM32 request on `0x7E0` and transmit the corresponding UDS response on `0x7E8`. If the STM32 itself must behave as an ECU/server, use a server firmware/stack; merely swapping the two CAN IDs in this client does not turn a UDS client into a UDS server.
+
 ## Hardware project and licensing
 
 Keep the Cube-generated `Drivers/`, `Inc/`, `Src/`, `.ioc`, startup file and Keil project. Do not import the attachment's `library/src`, `library/crypto` or old `stm32c092/uds_*` protocol implementation. Those files identify themselves with a separate `LicenseRef-STM32-UDS-Research-Education-Commercial-1.0` marker while the attachment does not contain that referenced licence text; LINK already provides the corresponding GPL-3.0-or-later protocol implementation.
@@ -59,6 +63,7 @@ After the Cube-generated GPIO/FDCAN/UART initialisation:
 ```c
 #include "link-stm32c092-example.h"
 
+/* Compatibility form: tester TX 0x7E0, ECU RX 0x7E8, read VIN at startup. */
 if (!link_stm32c092_example_init(&hfdcan1)) {
     Error_Handler();
 }
@@ -92,6 +97,25 @@ RX FIFO0 is drained into an eight-frame bounded queue and every frame keeps the 
 
 TX uses `FDCAN_STORE_TX_EVENTS` plus a unique message marker. LINK does not advance ISO-TP separation/flow-control timing or start the UDS P2 timer merely because `HAL_FDCAN_AddMessageToTxFifoQ()` accepted a frame; it waits for the matching Tx Event FIFO record. A lost Tx-event FIFO element becomes an explicit transport failure, and a hardware TX that never completes is bounded by the configured flow-control timeout.
 
+## Explicit tester configuration
+
+For bench testing, prefer the explicit initializer so the direction is visible in the application code. This also lets a DTC test start immediately without first requiring a VIN response:
+
+```c
+LinkStm32C092TesterConfig tester =
+    LINK_STM32C092_TESTER_CONFIG_INIT;
+
+tester.request_can_id = 0x7E0U;   /* STM32 -> ECU/simulator */
+tester.response_can_id = 0x7E8U;  /* ECU/simulator -> STM32 */
+tester.read_vin_on_init = false;
+
+if (!link_stm32c092_example_init_tester(&hfdcan1, &tester)) {
+    Error_Handler();
+}
+```
+
+With `read_vin_on_init = false`, the state becomes `LINK_STM32C092_EXAMPLE_READY`. Call `link_stm32c092_example_start_dtc_report()` immediately, or call `link_stm32c092_example_start_vin()` when a VIN transaction is wanted.
+
 ## Example operation
 
 At startup the example issues the read-only request `22 F1 90` for VIN. LINK performs ISO-TP reassembly and flow control. On success:
@@ -106,7 +130,7 @@ Negative responses are retained through `link_stm32c092_example_negative_respons
 
 ### ReadDTCInformation hardware testing
 
-After the initial VIN transaction reaches `LINK_STM32C092_EXAMPLE_VIN_READY` (or returns a normal UDS negative response), the same example can issue any of LINK's 27 supported `ReadDTCInformation (0x19)` report types. The caller supplies the parameters required by that report type; the example uses `link_uds_build_read_dtc_information_request()`, sends the request through the existing STM32 ISO-TP/UDS client, and validates a positive response with `link_uds_decode_read_dtc_information_response()`.
+After the initial VIN transaction reaches `LINK_STM32C092_EXAMPLE_VIN_READY` (or returns a normal UDS negative response), or immediately from `LINK_STM32C092_EXAMPLE_READY` when VIN-at-startup is disabled, the same example can issue any of LINK's 27 supported `ReadDTCInformation (0x19)` report types. The caller supplies the parameters required by that report type; the example uses `link_uds_build_read_dtc_information_request()`, sends the request through the existing STM32 ISO-TP/UDS client, and validates a positive response with `link_uds_decode_read_dtc_information_response()`.
 
 For example, `reportDTCByStatusMask (0x02)`:
 
