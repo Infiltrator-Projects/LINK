@@ -1481,6 +1481,7 @@ static void process_session_event(LinkGtkShell *shell)
             }
             if (event.became_ready ||
                 event.kind == LINK_DIAGNOSTIC_FLOW_EVENT_LIVE_SAMPLE ||
+                event.kind == LINK_DIAGNOSTIC_FLOW_EVENT_LIVE_STRUCTURED ||
                 event.kind == LINK_DIAGNOSTIC_FLOW_EVENT_LIVE_NO_DATA ||
                 event.kind == LINK_DIAGNOSTIC_FLOW_EVENT_LIVE_UNSUPPORTED) {
                 shell->diagnostics_ready = true;
