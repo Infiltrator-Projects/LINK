@@ -268,6 +268,7 @@ static inline LinkUdsResult link_uds_build_read_dtc_information_request(
     size_t *written)
 {
     const LinkUdsDtcReportDefinition *definition;
+    uint8_t encoded[7U] = {0U};
     size_t required = 2U;
 
     if (request == NULL || buffer == NULL || written == NULL) {
@@ -280,28 +281,55 @@ static inline LinkUdsResult link_uds_build_read_dtc_information_request(
             buffer, buffer_size, written, LINK_UDS_RESULT_INVALID_ARGUMENT);
     }
 
+    encoded[0] = LINK_UDS_SERVICE_READ_DTC_INFORMATION;
+    encoded[1] = request->subfunction;
+    if (request->suppress_positive_response) encoded[1] |= UINT8_C(0x80);
+
     switch (definition->request_shape) {
     case LINK_UDS_DTC_REQUEST_NONE:
         break;
     case LINK_UDS_DTC_REQUEST_STATUS_MASK:
+        required = 3U;
+        encoded[2] = request->status_mask;
+        break;
     case LINK_UDS_DTC_REQUEST_DTC_MASK:
-    case LINK_UDS_DTC_REQUEST_RECORD_NUMBER:
-    case LINK_UDS_DTC_REQUEST_FUNCTIONAL_GROUP:
-        required += definition->request_shape == LINK_UDS_DTC_REQUEST_DTC_MASK
-            ? 3U : 1U;
+        required = 5U;
+        link_uds_dtc_write_dtc(encoded, 2U, request->dtc);
         break;
     case LINK_UDS_DTC_REQUEST_DTC_AND_RECORD:
-        required += 4U;
+        required = 6U;
+        link_uds_dtc_write_dtc(encoded, 2U, request->dtc);
+        encoded[5] = request->record_number;
+        break;
+    case LINK_UDS_DTC_REQUEST_RECORD_NUMBER:
+        required = 3U;
+        encoded[2] = request->record_number;
         break;
     case LINK_UDS_DTC_REQUEST_SEVERITY_AND_STATUS_MASK:
+        required = 4U;
+        encoded[2] = request->severity_mask;
+        encoded[3] = request->status_mask;
+        break;
     case LINK_UDS_DTC_REQUEST_STATUS_MASK_AND_MEMORY:
-        required += 2U;
+        required = 4U;
+        encoded[2] = request->status_mask;
+        encoded[3] = request->memory_selection;
         break;
     case LINK_UDS_DTC_REQUEST_DTC_RECORD_AND_MEMORY:
-        required += 5U;
+        required = 7U;
+        link_uds_dtc_write_dtc(encoded, 2U, request->dtc);
+        encoded[5] = request->record_number;
+        encoded[6] = request->memory_selection;
         break;
     case LINK_UDS_DTC_REQUEST_WWH_MASK_RECORD:
-        required += 3U;
+        required = 5U;
+        encoded[2] = request->functional_group_identifier;
+        encoded[3] = request->status_mask;
+        encoded[4] = request->severity_mask;
+        break;
+    case LINK_UDS_DTC_REQUEST_FUNCTIONAL_GROUP:
+        required = 3U;
+        encoded[2] = request->functional_group_identifier;
         break;
     }
 
@@ -309,50 +337,7 @@ static inline LinkUdsResult link_uds_build_read_dtc_information_request(
         return link_uds_dtc_write_failure(
             buffer, buffer_size, written, LINK_UDS_RESULT_BUFFER_TOO_SMALL);
     }
-
-    buffer[0] = LINK_UDS_SERVICE_READ_DTC_INFORMATION;
-    buffer[1] = request->subfunction;
-    if (request->suppress_positive_response) buffer[1] |= UINT8_C(0x80);
-
-    switch (definition->request_shape) {
-    case LINK_UDS_DTC_REQUEST_NONE:
-        break;
-    case LINK_UDS_DTC_REQUEST_STATUS_MASK:
-        buffer[2] = request->status_mask;
-        break;
-    case LINK_UDS_DTC_REQUEST_DTC_MASK:
-        link_uds_dtc_write_dtc(buffer, 2U, request->dtc);
-        break;
-    case LINK_UDS_DTC_REQUEST_DTC_AND_RECORD:
-        link_uds_dtc_write_dtc(buffer, 2U, request->dtc);
-        buffer[5] = request->record_number;
-        break;
-    case LINK_UDS_DTC_REQUEST_RECORD_NUMBER:
-        buffer[2] = request->record_number;
-        break;
-    case LINK_UDS_DTC_REQUEST_SEVERITY_AND_STATUS_MASK:
-        buffer[2] = request->severity_mask;
-        buffer[3] = request->status_mask;
-        break;
-    case LINK_UDS_DTC_REQUEST_STATUS_MASK_AND_MEMORY:
-        buffer[2] = request->status_mask;
-        buffer[3] = request->memory_selection;
-        break;
-    case LINK_UDS_DTC_REQUEST_DTC_RECORD_AND_MEMORY:
-        link_uds_dtc_write_dtc(buffer, 2U, request->dtc);
-        buffer[5] = request->record_number;
-        buffer[6] = request->memory_selection;
-        break;
-    case LINK_UDS_DTC_REQUEST_WWH_MASK_RECORD:
-        buffer[2] = request->functional_group_identifier;
-        buffer[3] = request->status_mask;
-        buffer[4] = request->severity_mask;
-        break;
-    case LINK_UDS_DTC_REQUEST_FUNCTIONAL_GROUP:
-        buffer[2] = request->functional_group_identifier;
-        break;
-    }
-
+    memcpy(buffer, encoded, required);
     *written = required;
     return LINK_UDS_RESULT_OK;
 }
