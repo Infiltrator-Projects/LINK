@@ -5,9 +5,12 @@
  *
  * LINK's client codecs and this server dispatcher share the same 27-service
  * catalogue. Application-specific ECU behaviour is supplied through bounded
- * service handlers; DiagnosticSessionControl and TesterPresent have portable
- * built-in handlers, and ReadDTCInformation can use the supplied bounded DTC
- * store handler covering every LINK 0x19 report type.
+ * service handlers; DiagnosticSessionControl, ECUReset and TesterPresent have
+ * portable built-in handlers. ReadDTCInformation has codecs for all 27 LINK
+ * report types. The bounded DTC store handler answers only reports that can be
+ * derived truthfully from DTC number + status; reports requiring snapshots,
+ * extended data, severity, mirror/user/permanent memory or FDC metadata return
+ * RequestOutOfRange unless the application installs a richer 0x19 handler.
  */
 #ifndef LINK_UDS_SERVER_H
 #define LINK_UDS_SERVER_H

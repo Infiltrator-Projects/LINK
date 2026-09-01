@@ -449,13 +449,6 @@ static const LinkUdsDtcRecord *uds_dtc_find_code(
     return NULL;
 }
 
-static uint32_t uds_dtc_request_code(const uint8_t *pdu)
-{
-    return ((uint32_t)pdu[2] << 16U) |
-           ((uint32_t)pdu[3] << 8U) |
-           (uint32_t)pdu[4];
-}
-
 static LinkUdsServerHandlerResult uds_dtc_too_long(void)
 {
     return link_uds_server_handler_negative(LINK_UDS_NRC_RESPONSE_TOO_LONG);
@@ -488,6 +481,7 @@ static LinkUdsServerHandlerResult uds_dtc_status_list_response(
     uint8_t subfunction,
     uint8_t mask,
     bool one_only,
+    bool most_recent,
     uint8_t *data,
     size_t capacity)
 {
@@ -498,6 +492,21 @@ static LinkUdsServerHandlerResult uds_dtc_status_list_response(
                         store->status_availability_mask)) {
         return uds_dtc_too_long();
     }
+
+    if (one_only && most_recent) {
+        index = store->record_count;
+        while (index != 0U) {
+            --index;
+            if ((store->records[index].status & mask) == 0U) continue;
+            if (!uds_dtc_put_record(data, capacity, &offset,
+                                    &store->records[index])) {
+                return uds_dtc_too_long();
+            }
+            break;
+        }
+        return link_uds_server_handler_positive(offset);
+    }
+
     for (index = 0U; index < store->record_count; ++index) {
         if ((store->records[index].status & mask) == 0U) continue;
         if (!uds_dtc_put_record(data, capacity, &offset,
@@ -518,10 +527,7 @@ LinkUdsServerHandlerResult link_uds_server_dtc_handler(
     const LinkUdsServerDtcStore *store =
         (const LinkUdsServerDtcStore *)context;
     uint8_t subfunction;
-    size_t index;
-    size_t offset;
     size_t count;
-    const LinkUdsDtcRecord *record;
 
     if (!uds_dtc_store_valid(store) || request == NULL || data == NULL ||
         request->service != LINK_UDS_SERVICE_READ_DTC_INFORMATION ||
@@ -541,94 +547,71 @@ LinkUdsServerHandlerResult link_uds_server_dtc_handler(
     case LINK_UDS_DTC_REPORT_BY_STATUS_MASK:
         if (request->pdu_length != 3U) return uds_dtc_bad_length();
         return uds_dtc_status_list_response(
-            store, subfunction, request->pdu[2], false, data, capacity);
+            store, subfunction, request->pdu[2], false, false,
+            data, capacity);
 
     case LINK_UDS_DTC_REPORT_SNAPSHOT_IDENTIFICATION:
         if (request->pdu_length != 2U) return uds_dtc_bad_length();
-        if (capacity < 1U) return uds_dtc_too_long();
-        data[0] = subfunction;
-        return link_uds_server_handler_positive(1U);
+        return link_uds_server_handler_negative(
+            LINK_UDS_NRC_REQUEST_OUT_OF_RANGE);
 
     case LINK_UDS_DTC_REPORT_SNAPSHOT_BY_DTC_NUMBER:
     case LINK_UDS_DTC_REPORT_EXT_DATA_BY_DTC_NUMBER:
         if (request->pdu_length != 6U) return uds_dtc_bad_length();
-        record = uds_dtc_find_code(store, uds_dtc_request_code(request->pdu));
-        if (record == NULL) {
-            return link_uds_server_handler_negative(
-                LINK_UDS_NRC_REQUEST_OUT_OF_RANGE);
-        }
-        if (capacity < 6U) return uds_dtc_too_long();
-        data[0] = subfunction;
-        data[1] = (uint8_t)(record->code >> 16U);
-        data[2] = (uint8_t)(record->code >> 8U);
-        data[3] = (uint8_t)record->code;
-        data[4] = record->status;
-        data[5] = request->pdu[5];
-        return link_uds_server_handler_positive(6U);
+        return link_uds_server_handler_negative(
+            LINK_UDS_NRC_REQUEST_OUT_OF_RANGE);
 
     case LINK_UDS_DTC_REPORT_STORED_DATA_BY_RECORD_NUMBER:
     case LINK_UDS_DTC_REPORT_EXT_DATA_BY_RECORD_NUMBER:
         if (request->pdu_length != 3U) return uds_dtc_bad_length();
-        if (capacity < 2U) return uds_dtc_too_long();
-        data[0] = subfunction;
-        data[1] = request->pdu[2];
-        return link_uds_server_handler_positive(2U);
+        return link_uds_server_handler_negative(
+            LINK_UDS_NRC_REQUEST_OUT_OF_RANGE);
 
     case LINK_UDS_DTC_REPORT_NUMBER_BY_SEVERITY_MASK_RECORD:
-        if (request->pdu_length != 4U) return uds_dtc_bad_length();
-        return uds_dtc_count_response(store, subfunction, 0U, data, capacity);
-
     case LINK_UDS_DTC_REPORT_BY_SEVERITY_MASK_RECORD:
         if (request->pdu_length != 4U) return uds_dtc_bad_length();
-        if (capacity < 2U) return uds_dtc_too_long();
-        data[0] = subfunction;
-        data[1] = store->status_availability_mask;
-        return link_uds_server_handler_positive(2U);
+        return link_uds_server_handler_negative(
+            LINK_UDS_NRC_REQUEST_OUT_OF_RANGE);
 
     case LINK_UDS_DTC_REPORT_SEVERITY_INFORMATION_OF_DTC:
         if (request->pdu_length != 5U) return uds_dtc_bad_length();
-        record = uds_dtc_find_code(store, uds_dtc_request_code(request->pdu));
-        if (record == NULL) {
-            return link_uds_server_handler_negative(
-                LINK_UDS_NRC_REQUEST_OUT_OF_RANGE);
-        }
-        if (capacity < 8U) return uds_dtc_too_long();
-        data[0] = subfunction;
-        data[1] = store->status_availability_mask;
-        data[2] = 0U;
-        data[3] = 0U;
-        data[4] = (uint8_t)(record->code >> 16U);
-        data[5] = (uint8_t)(record->code >> 8U);
-        data[6] = (uint8_t)record->code;
-        data[7] = record->status;
-        return link_uds_server_handler_positive(8U);
+        return link_uds_server_handler_negative(
+            LINK_UDS_NRC_REQUEST_OUT_OF_RANGE);
 
     case LINK_UDS_DTC_REPORT_SUPPORTED_DTC:
         if (request->pdu_length != 2U) return uds_dtc_bad_length();
         return uds_dtc_status_list_response(
-            store, subfunction, UINT8_C(0xff), false, data, capacity);
+            store, subfunction, UINT8_C(0xff), false, false,
+            data, capacity);
 
     case LINK_UDS_DTC_REPORT_FIRST_TEST_FAILED_DTC:
+        if (request->pdu_length != 2U) return uds_dtc_bad_length();
+        return uds_dtc_status_list_response(
+            store, subfunction, LINK_UDS_DTC_STATUS_TEST_FAILED,
+            true, false, data, capacity);
+
     case LINK_UDS_DTC_REPORT_MOST_RECENT_TEST_FAILED_DTC:
         if (request->pdu_length != 2U) return uds_dtc_bad_length();
         return uds_dtc_status_list_response(
             store, subfunction, LINK_UDS_DTC_STATUS_TEST_FAILED,
-            true, data, capacity);
+            true, true, data, capacity);
 
     case LINK_UDS_DTC_REPORT_FIRST_CONFIRMED_DTC:
+        if (request->pdu_length != 2U) return uds_dtc_bad_length();
+        return uds_dtc_status_list_response(
+            store, subfunction, LINK_UDS_DTC_STATUS_CONFIRMED_DTC,
+            true, false, data, capacity);
+
     case LINK_UDS_DTC_REPORT_MOST_RECENT_CONFIRMED_DTC:
         if (request->pdu_length != 2U) return uds_dtc_bad_length();
         return uds_dtc_status_list_response(
             store, subfunction, LINK_UDS_DTC_STATUS_CONFIRMED_DTC,
-            true, data, capacity);
+            true, true, data, capacity);
 
     case LINK_UDS_DTC_REPORT_MIRROR_MEMORY_BY_STATUS_MASK:
-    case LINK_UDS_DTC_REPORT_EMISSIONS_OBD_BY_STATUS_MASK:
         if (request->pdu_length != 3U) return uds_dtc_bad_length();
-        if (capacity < 2U) return uds_dtc_too_long();
-        data[0] = subfunction;
-        data[1] = store->status_availability_mask;
-        return link_uds_server_handler_positive(2U);
+        return link_uds_server_handler_negative(
+            LINK_UDS_NRC_REQUEST_OUT_OF_RANGE);
 
     case LINK_UDS_DTC_REPORT_MIRROR_MEMORY_EXT_DATA_BY_DTC_NUMBER:
         if (request->pdu_length != 6U) return uds_dtc_bad_length();
@@ -637,96 +620,42 @@ LinkUdsServerHandlerResult link_uds_server_dtc_handler(
 
     case LINK_UDS_DTC_REPORT_NUMBER_OF_MIRROR_MEMORY_BY_STATUS_MASK:
     case LINK_UDS_DTC_REPORT_NUMBER_OF_EMISSIONS_OBD_BY_STATUS_MASK:
+    case LINK_UDS_DTC_REPORT_EMISSIONS_OBD_BY_STATUS_MASK:
         if (request->pdu_length != 3U) return uds_dtc_bad_length();
-        return uds_dtc_count_response(store, subfunction, 0U, data, capacity);
+        return link_uds_server_handler_negative(
+            LINK_UDS_NRC_REQUEST_OUT_OF_RANGE);
 
     case LINK_UDS_DTC_REPORT_FAULT_DETECTION_COUNTER:
-        if (request->pdu_length != 2U) return uds_dtc_bad_length();
-        offset = 0U;
-        if (!uds_dtc_put_u8(data, capacity, &offset, subfunction)) {
-            return uds_dtc_too_long();
-        }
-        for (index = 0U; index < store->record_count; ++index) {
-            if (capacity - offset < 4U) return uds_dtc_too_long();
-            data[offset++] = (uint8_t)(store->records[index].code >> 16U);
-            data[offset++] = (uint8_t)(store->records[index].code >> 8U);
-            data[offset++] = (uint8_t)store->records[index].code;
-            data[offset++] = 0U;
-        }
-        return link_uds_server_handler_positive(offset);
-
     case LINK_UDS_DTC_REPORT_WITH_PERMANENT_STATUS:
         if (request->pdu_length != 2U) return uds_dtc_bad_length();
-        return uds_dtc_status_list_response(
-            store, subfunction, LINK_UDS_DTC_STATUS_CONFIRMED_DTC,
-            false, data, capacity);
+        return link_uds_server_handler_negative(
+            LINK_UDS_NRC_REQUEST_OUT_OF_RANGE);
+
+    case LINK_UDS_DTC_REPORT_EXT_DATA_BY_RECORD_NUMBER:
+        if (request->pdu_length != 3U) return uds_dtc_bad_length();
+        return link_uds_server_handler_negative(
+            LINK_UDS_NRC_REQUEST_OUT_OF_RANGE);
 
     case LINK_UDS_DTC_REPORT_USER_MEMORY_BY_STATUS_MASK:
         if (request->pdu_length != 4U) return uds_dtc_bad_length();
-        offset = 0U;
-        if (!uds_dtc_put_u8(data, capacity, &offset, subfunction) ||
-            !uds_dtc_put_u8(data, capacity, &offset, request->pdu[3]) ||
-            !uds_dtc_put_u8(data, capacity, &offset,
-                            store->status_availability_mask)) {
-            return uds_dtc_too_long();
-        }
-        for (index = 0U; index < store->record_count; ++index) {
-            if ((store->records[index].status & request->pdu[2]) == 0U) continue;
-            if (!uds_dtc_put_record(data, capacity, &offset,
-                                    &store->records[index])) {
-                return uds_dtc_too_long();
-            }
-        }
-        return link_uds_server_handler_positive(offset);
+        return link_uds_server_handler_negative(
+            LINK_UDS_NRC_REQUEST_OUT_OF_RANGE);
 
     case LINK_UDS_DTC_REPORT_USER_MEMORY_SNAPSHOT_BY_DTC_NUMBER:
     case LINK_UDS_DTC_REPORT_USER_MEMORY_EXT_DATA_BY_DTC_NUMBER:
         if (request->pdu_length != 7U) return uds_dtc_bad_length();
-        record = uds_dtc_find_code(store, uds_dtc_request_code(request->pdu));
-        if (record == NULL) {
-            return link_uds_server_handler_negative(
-                LINK_UDS_NRC_REQUEST_OUT_OF_RANGE);
-        }
-        if (capacity < 7U) return uds_dtc_too_long();
-        data[0] = subfunction;
-        data[1] = request->pdu[6];
-        data[2] = (uint8_t)(record->code >> 16U);
-        data[3] = (uint8_t)(record->code >> 8U);
-        data[4] = (uint8_t)record->code;
-        data[5] = record->status;
-        data[6] = request->pdu[5];
-        return link_uds_server_handler_positive(7U);
+        return link_uds_server_handler_negative(
+            LINK_UDS_NRC_REQUEST_OUT_OF_RANGE);
 
     case LINK_UDS_DTC_REPORT_WWH_OBD_BY_MASK_RECORD:
         if (request->pdu_length != 5U) return uds_dtc_bad_length();
-        if (capacity < 5U) return uds_dtc_too_long();
-        data[0] = subfunction;
-        data[1] = request->pdu[2];
-        data[2] = store->status_availability_mask;
-        data[3] = store->severity_availability_mask;
-        data[4] = store->dtc_format_identifier;
-        return link_uds_server_handler_positive(5U);
+        return link_uds_server_handler_negative(
+            LINK_UDS_NRC_REQUEST_OUT_OF_RANGE);
 
     case LINK_UDS_DTC_REPORT_WWH_OBD_WITH_PERMANENT_STATUS:
         if (request->pdu_length != 3U) return uds_dtc_bad_length();
-        offset = 0U;
-        if (!uds_dtc_put_u8(data, capacity, &offset, subfunction) ||
-            !uds_dtc_put_u8(data, capacity, &offset, request->pdu[2]) ||
-            !uds_dtc_put_u8(data, capacity, &offset,
-                            store->status_availability_mask) ||
-            !uds_dtc_put_u8(data, capacity, &offset,
-                            store->dtc_format_identifier)) {
-            return uds_dtc_too_long();
-        }
-        for (index = 0U; index < store->record_count; ++index) {
-            if ((store->records[index].status &
-                 LINK_UDS_DTC_STATUS_CONFIRMED_DTC) == 0U) continue;
-            if (!uds_dtc_put_record(data, capacity, &offset,
-                                    &store->records[index])) {
-                return uds_dtc_too_long();
-            }
-        }
-        return link_uds_server_handler_positive(offset);
+        return link_uds_server_handler_negative(
+            LINK_UDS_NRC_REQUEST_OUT_OF_RANGE);
 
     default:
         return link_uds_server_handler_negative(

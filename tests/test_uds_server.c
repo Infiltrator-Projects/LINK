@@ -309,14 +309,18 @@ static int test_dtc_all_subfunctions(void)
         CHECK(result == LINK_UDS_SERVER_RESULT_POSITIVE ||
               result == LINK_UDS_SERVER_RESULT_NEGATIVE);
         if (result == LINK_UDS_SERVER_RESULT_POSITIVE) {
+            LinkUdsDtcInformationResponse decoded;
             CHECK(length >= 2U);
             CHECK(response[0] == 0x59U);
             CHECK((response[1] & 0x7fU) ==
                   (cases[index].pdu[1] & 0x7fU));
+            CHECK(link_uds_decode_read_dtc_information_response(
+                      (uint8_t)(cases[index].pdu[1] & 0x7fU),
+                      response, length, &decoded) == LINK_UDS_RESULT_OK);
         } else {
             CHECK(length == 3U);
             CHECK(response[0] == 0x7fU && response[1] == 0x19U);
-            CHECK(response[2] != LINK_UDS_NRC_SUBFUNCTION_NOT_SUPPORTED);
+            CHECK(response[2] == LINK_UDS_NRC_REQUEST_OUT_OF_RANGE);
         }
     }
 
@@ -326,6 +330,22 @@ static int test_dtc_all_subfunctions(void)
           LINK_UDS_SERVER_RESULT_POSITIVE);
     CHECK(length == sizeof(expected_02));
     CHECK(memcmp(response, expected_02, sizeof(expected_02)) == 0);
+
+    CHECK(link_uds_server_handle(
+              &server, r0c, sizeof(r0c),
+              response, sizeof(response), &length) ==
+          LINK_UDS_SERVER_RESULT_POSITIVE);
+    CHECK(length == 7U);
+    CHECK(response[2] == 0x12U && response[3] == 0x34U &&
+          response[4] == 0x56U);
+
+    CHECK(link_uds_server_handle(
+              &server, r0e, sizeof(r0e),
+              response, sizeof(response), &length) ==
+          LINK_UDS_SERVER_RESULT_POSITIVE);
+    CHECK(length == 7U);
+    CHECK(response[2] == 0xabU && response[3] == 0xcdU &&
+          response[4] == 0xefU);
     return 0;
 }
 
