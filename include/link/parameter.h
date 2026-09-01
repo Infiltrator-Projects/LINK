@@ -69,6 +69,48 @@ typedef struct LinkParameterSample {
 } LinkParameterSample;
 
 /**
+ * Quality state of a protocol-neutral diagnostic observation.
+ *
+ * These states deliberately distinguish a valid zero from "not received",
+ * "invalid" and "not available".  The model mirrors the distinctions used by
+ * first-party automotive data systems without coupling LINK to any OEM.
+ */
+typedef enum LinkParameterValueStatus {
+    LINK_PARAMETER_VALUE_STATUS_VALID = 0,
+    LINK_PARAMETER_VALUE_STATUS_NOT_RECEIVED,
+    LINK_PARAMETER_VALUE_STATUS_INVALID,
+    LINK_PARAMETER_VALUE_STATUS_NOT_AVAILABLE
+} LinkParameterValueStatus;
+
+/** Provenance of a diagnostic observation. */
+typedef enum LinkParameterProvenance {
+    LINK_PARAMETER_PROVENANCE_UNKNOWN = 0,
+    LINK_PARAMETER_PROVENANCE_LIVE_OBD2,
+    LINK_PARAMETER_PROVENANCE_LIVE_UDS,
+    LINK_PARAMETER_PROVENANCE_LIVE_KWP2000,
+    LINK_PARAMETER_PROVENANCE_ODX_DESCRIPTION,
+    LINK_PARAMETER_PROVENANCE_MANUFACTURER_BACKEND
+} LinkParameterProvenance;
+
+/**
+ * Rich diagnostic observation retaining quality and source attribution.
+ *
+ * The legacy LinkParameterSample remains unchanged for ABI/source
+ * compatibility.  New consumers can use this structure when the distinction
+ * between an invalid/missing/unsupported value matters.
+ */
+typedef struct LinkParameterObservation {
+    const LinkParameterDefinition *definition;
+    uint64_t timestamp_ms;
+    LinkParameterValueStatus status;
+    LinkParameterProvenance provenance;
+    bool responder_id_available;
+    uint32_t responder_id;
+    bool responder_extended_id;
+    double value;
+} LinkParameterObservation;
+
+/**
  * Compatibility name for the canonical OBD-II unit enum.
  *
  * OBD-II owns the unit identifiers. Parameter import reuses that type instead
@@ -93,6 +135,50 @@ bool link_parameter_definition_is_valid(
 
 /** Validates a sample and its borrowed definition. */
 bool link_parameter_sample_is_valid(const LinkParameterSample *sample);
+
+/** Returns a stable name for a value-quality state, or "unknown". */
+const char *link_parameter_value_status_name(LinkParameterValueStatus status);
+
+/** Returns a stable name for an observation provenance, or "unknown". */
+const char *link_parameter_provenance_name(LinkParameterProvenance provenance);
+
+/** True only when an observation carries a valid numeric value. */
+bool link_parameter_observation_has_value(
+    const LinkParameterObservation *observation);
+
+/** Validates definition, status, provenance and numeric-value invariants. */
+bool link_parameter_observation_is_valid(
+    const LinkParameterObservation *observation);
+
+/**
+ * Initialises a rich observation.  Non-VALID states may carry any numeric
+ * placeholder because the value is ignored by presentation/consumers.
+ */
+bool link_parameter_observation_init(
+    const LinkParameterDefinition *definition,
+    uint64_t timestamp_ms,
+    LinkParameterValueStatus status,
+    LinkParameterProvenance provenance,
+    bool responder_id_available,
+    uint32_t responder_id,
+    bool responder_extended_id,
+    double value,
+    LinkParameterObservation *observation);
+
+/** Converts the legacy available/unavailable sample model without data loss. */
+bool link_parameter_observation_from_sample(
+    const LinkParameterSample *sample,
+    LinkParameterProvenance provenance,
+    bool responder_id_available,
+    uint32_t responder_id,
+    bool responder_extended_id,
+    LinkParameterObservation *observation);
+
+/** Formats VALID values normally and other states as unavailable. */
+bool link_parameter_format_observation(
+    const LinkParameterObservation *observation,
+    char *buffer,
+    size_t buffer_size);
 
 /**
  * Formats a scalar according to `definition`.

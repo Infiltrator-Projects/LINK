@@ -109,6 +109,126 @@ bool link_parameter_sample_is_valid(const LinkParameterSample *sample)
     return sample != NULL && link_parameter_definition_is_valid(sample->definition) && (!sample->available || isfinite(sample->value));
 }
 
+static bool parameter_value_status_is_valid(LinkParameterValueStatus status)
+{
+    switch (status) {
+    case LINK_PARAMETER_VALUE_STATUS_VALID:
+    case LINK_PARAMETER_VALUE_STATUS_NOT_RECEIVED:
+    case LINK_PARAMETER_VALUE_STATUS_INVALID:
+    case LINK_PARAMETER_VALUE_STATUS_NOT_AVAILABLE:
+        return true;
+    }
+    return false;
+}
+
+static bool parameter_provenance_is_valid(LinkParameterProvenance provenance)
+{
+    switch (provenance) {
+    case LINK_PARAMETER_PROVENANCE_UNKNOWN:
+    case LINK_PARAMETER_PROVENANCE_LIVE_OBD2:
+    case LINK_PARAMETER_PROVENANCE_LIVE_UDS:
+    case LINK_PARAMETER_PROVENANCE_LIVE_KWP2000:
+    case LINK_PARAMETER_PROVENANCE_ODX_DESCRIPTION:
+    case LINK_PARAMETER_PROVENANCE_MANUFACTURER_BACKEND:
+        return true;
+    }
+    return false;
+}
+
+const char *link_parameter_value_status_name(LinkParameterValueStatus status)
+{
+    switch (status) {
+    case LINK_PARAMETER_VALUE_STATUS_VALID: return "valid";
+    case LINK_PARAMETER_VALUE_STATUS_NOT_RECEIVED: return "not-received";
+    case LINK_PARAMETER_VALUE_STATUS_INVALID: return "invalid";
+    case LINK_PARAMETER_VALUE_STATUS_NOT_AVAILABLE: return "not-available";
+    }
+    return "unknown";
+}
+
+const char *link_parameter_provenance_name(LinkParameterProvenance provenance)
+{
+    switch (provenance) {
+    case LINK_PARAMETER_PROVENANCE_UNKNOWN: return "unknown";
+    case LINK_PARAMETER_PROVENANCE_LIVE_OBD2: return "live-obd2";
+    case LINK_PARAMETER_PROVENANCE_LIVE_UDS: return "live-uds";
+    case LINK_PARAMETER_PROVENANCE_LIVE_KWP2000: return "live-kwp2000";
+    case LINK_PARAMETER_PROVENANCE_ODX_DESCRIPTION: return "odx-description";
+    case LINK_PARAMETER_PROVENANCE_MANUFACTURER_BACKEND:
+        return "manufacturer-backend";
+    }
+    return "unknown";
+}
+
+bool link_parameter_observation_has_value(
+    const LinkParameterObservation *observation)
+{
+    return observation != NULL &&
+           observation->status == LINK_PARAMETER_VALUE_STATUS_VALID;
+}
+
+bool link_parameter_observation_is_valid(
+    const LinkParameterObservation *observation)
+{
+    if (observation == NULL ||
+        !link_parameter_definition_is_valid(observation->definition) ||
+        !parameter_value_status_is_valid(observation->status) ||
+        !parameter_provenance_is_valid(observation->provenance))
+        return false;
+    return observation->status != LINK_PARAMETER_VALUE_STATUS_VALID ||
+           isfinite(observation->value);
+}
+
+bool link_parameter_observation_init(
+    const LinkParameterDefinition *definition,
+    uint64_t timestamp_ms,
+    LinkParameterValueStatus status,
+    LinkParameterProvenance provenance,
+    bool responder_id_available,
+    uint32_t responder_id,
+    bool responder_extended_id,
+    double value,
+    LinkParameterObservation *observation)
+{
+    LinkParameterObservation candidate;
+    if (observation == NULL) return false;
+    memset(&candidate, 0, sizeof(candidate));
+    candidate.definition = definition;
+    candidate.timestamp_ms = timestamp_ms;
+    candidate.status = status;
+    candidate.provenance = provenance;
+    candidate.responder_id_available = responder_id_available;
+    candidate.responder_id = responder_id;
+    candidate.responder_extended_id =
+        responder_id_available && responder_extended_id;
+    candidate.value = value;
+    if (!link_parameter_observation_is_valid(&candidate)) return false;
+    *observation = candidate;
+    return true;
+}
+
+bool link_parameter_observation_from_sample(
+    const LinkParameterSample *sample,
+    LinkParameterProvenance provenance,
+    bool responder_id_available,
+    uint32_t responder_id,
+    bool responder_extended_id,
+    LinkParameterObservation *observation)
+{
+    if (!link_parameter_sample_is_valid(sample)) return false;
+    return link_parameter_observation_init(
+        sample->definition,
+        sample->timestamp_ms,
+        sample->available ? LINK_PARAMETER_VALUE_STATUS_VALID
+                          : LINK_PARAMETER_VALUE_STATUS_NOT_AVAILABLE,
+        provenance,
+        responder_id_available,
+        responder_id,
+        responder_extended_id,
+        sample->value,
+        observation);
+}
+
 bool link_parameter_format_value(const LinkParameterDefinition *definition, bool available, double value, char *buffer, size_t buffer_size)
 {
     InfiltratrScalarFormatOptions options = INFILTRATR_SCALAR_FORMAT_OPTIONS_INIT;
@@ -140,6 +260,20 @@ bool link_parameter_format_value(const LinkParameterDefinition *definition, bool
 bool link_parameter_format_sample(const LinkParameterSample *sample, char *buffer, size_t buffer_size)
 {
     return sample != NULL && link_parameter_definition_is_valid(sample->definition) && link_parameter_format_value(sample->definition, sample->available, sample->value, buffer, buffer_size);
+}
+
+bool link_parameter_format_observation(
+    const LinkParameterObservation *observation,
+    char *buffer,
+    size_t buffer_size)
+{
+    if (!link_parameter_observation_is_valid(observation)) return false;
+    return link_parameter_format_value(
+        observation->definition,
+        observation->status == LINK_PARAMETER_VALUE_STATUS_VALID,
+        observation->value,
+        buffer,
+        buffer_size);
 }
 
 size_t link_parameter_obd2_definition_count(void) { return INFILTRATR_ARRAY_LENGTH(link_obd2_parameters); }
