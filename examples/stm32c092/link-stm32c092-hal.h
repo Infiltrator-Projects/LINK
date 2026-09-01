@@ -32,7 +32,7 @@ void link_stm32c092_hal_tx_event_irq(
     uint32_t tx_event_fifo_its);
 bool link_stm32c092_hal_start_standard(
     LinkStm32C092Hal *adapter,
-    uint32_t response_id);
+    uint32_t receive_id);
 
 #ifdef __cplusplus
 }
