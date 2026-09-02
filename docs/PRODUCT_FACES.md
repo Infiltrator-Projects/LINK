@@ -113,6 +113,26 @@ When reviewing a change, ask:
 Any reintroduction of duplicated generic application source into MBLINK and JAGLINK, or creation of parallel Reader repos that merely duplicate Discover, should be treated as an architectural regression.
 
 
+
+## Linux/GTK face contract
+
+The Linux connection shell follows the same rule as the Apple face: LINK owns
+geometry and product repositories own appearance and manufacturer content.
+
+`platform/linux/link-gtk-shell.c` owns the adapter row, selector expansion,
+toolbar/action sizing, status strip, shared card padding/radii, navigation
+spacing and other common shell dimensions. A product face may supply colours,
+fonts, logos and manufacturer-specific page content, but it must not override
+shared `.link-*` dimensions merely to make one brand wider, taller or more
+compact than another.
+
+In particular, adapter-selector width is deliberately not a
+`LinkGtkShellDescriptor` option. MBLINK, JAGLINK, FORDLINK, AUDILINK,
+BMWLINK and future LINK-family products consume the same expanding selector
+and the same common control geometry. If a shell-size change is appropriate
+for every product, make it in LINK. If it is only a colour/font/identity
+change, keep it in the product theme.
+
 ## Apple/iPhone face contract
 
 The Apple/iPhone product face is a LINK-owned presentation contract, not a

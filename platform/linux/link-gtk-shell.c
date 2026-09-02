@@ -91,13 +91,13 @@ static const char link_gtk_base_css[] =
     ".link-settings-dropdown { min-width: 230px; }"
     ".link-titlebar { min-height: 38px; }"
     ".link-titlebar-label { font-weight: 700; }"
-    ".link-connection-bar { padding: 12px 14px; border-radius: 14px; }"
+    ".link-connection-bar { padding: 12px 14px; border: 1px solid transparent; border-radius: 14px; }"
     ".link-device-row { min-height: 38px; }"
     ".link-toolbar-label { opacity: 0.78; font-size: 12px; font-weight: 700; }"
-    ".link-adapter-combo { min-width: 220px; }"
-    ".link-toolbar-button { min-height: 34px; padding: 5px 12px; font-weight: 700; }"
-    ".link-link-button { min-width: 92px; font-weight: 800; padding: 7px 18px; }"
-    ".link-save-session-button { font-weight: 700; padding: 7px 14px; }"
+    ".link-adapter-combo { min-width: 220px; font-size: 13px; }"
+    ".link-toolbar-button { min-height: 34px; padding: 5px 12px; font-size: 13px; font-weight: 700; }"
+    ".link-link-button { min-width: 92px; padding: 7px 18px; border-radius: 10px; font-size: 13px; font-weight: 800; }"
+    ".link-save-session-button { padding: 7px 14px; font-size: 13px; font-weight: 700; }"
     ".link-connection-status { font-weight: 700; padding: 6px 10px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.14); }"
     ".link-status-online { background: rgba(82,151,105,0.10); border-color: rgba(99,171,124,0.46); }"
     ".link-status-offline { background: rgba(209,158,71,0.08); border-color: rgba(209,158,71,0.34); }"
@@ -111,7 +111,11 @@ static const char link_gtk_base_css[] =
     ".link-content-title { font-size: 28px; font-weight: 900; }"
     ".link-content-summary { opacity: 0.76; font-size: 14px; }"
     ".link-detail-row { padding: 4px 0; }"
-    ".link-card-note { margin-top: 4px; }";
+    ".link-card { border: 1px solid transparent; border-radius: 18px; padding: 20px; }"
+    ".link-card-kicker { font-size: 10px; font-weight: 800; letter-spacing: 2px; }"
+    ".link-card-title { font-size: 20px; font-weight: 800; }"
+    ".link-status-chip { padding: 7px 11px; border-radius: 999px; border: 1px solid transparent; font-weight: 700; }"
+    ".link-card-note { margin-top: 4px; font-size: 12px; }";
 
 static uint64_t monotonic_ms(void)
 {
@@ -1921,15 +1925,12 @@ static GtkWidget *build_connection_bar(LinkGtkShell *shell)
         gtk_widget_add_css_class(shell->diagnostic_restart_button, "link-toolbar-button");
     }
 
-    if (shell->descriptor->adapter_combo_width > 0) {
-        gtk_widget_set_hexpand(shell->device_combo, FALSE);
-        gtk_widget_set_size_request(
-            shell->device_combo,
-            shell->descriptor->adapter_combo_width,
-            -1);
-    } else {
-        gtk_widget_set_hexpand(shell->device_combo, TRUE);
-    }
+    /*
+     * Connection-bar geometry is LINK-owned. Product faces may theme the
+     * selector, but they cannot choose a different width/expansion policy.
+     */
+    gtk_widget_set_hexpand(shell->device_combo, TRUE);
+    gtk_widget_set_halign(shell->device_combo, GTK_ALIGN_FILL);
     gtk_widget_set_hexpand(shell->status, TRUE);
     gtk_widget_set_halign(shell->status, GTK_ALIGN_FILL);
 

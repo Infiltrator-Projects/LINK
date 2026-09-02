@@ -110,10 +110,14 @@ jobs:
           grep -Fq 'docs/MERCEDES-ME-ADAPTER-INTEROP.md' README.md
           grep -Fq 'link_linux_serial_probe_adapter' platform/linux/link-gtk-shell.c
           grep -Fq 'bool use_client_side_titlebar;' platform/linux/link-gtk-shell.h
-          grep -Fq 'int adapter_combo_width;' platform/linux/link-gtk-shell.h
-          grep -Fq 'shell->descriptor->adapter_combo_width > 0' platform/linux/link-gtk-shell.c
-          grep -Fq 'gtk_widget_set_hexpand(shell->device_combo, FALSE);' platform/linux/link-gtk-shell.c
-          grep -Fq 'shell->descriptor->adapter_combo_width,' platform/linux/link-gtk-shell.c
+          if grep -Fq 'adapter_combo_width' platform/linux/link-gtk-shell.h; then
+            echo 'Adapter-selector geometry must be LINK-owned, not product-configurable.' >&2
+            exit 1
+          fi
+          grep -Fq 'gtk_widget_set_hexpand(shell->device_combo, TRUE);' platform/linux/link-gtk-shell.c
+          grep -Fq 'gtk_widget_set_halign(shell->device_combo, GTK_ALIGN_FILL);' platform/linux/link-gtk-shell.c
+          grep -Fq '.link-card { border: 1px solid transparent; border-radius: 18px; padding: 20px; }' platform/linux/link-gtk-shell.c
+          grep -Fq '.link-link-button { min-width: 92px; padding: 7px 18px; border-radius: 10px; font-size: 13px; font-weight: 800; }' platform/linux/link-gtk-shell.c
           grep -Fq 'gtk_window_set_titlebar(shell->window, titlebar);' platform/linux/link-gtk-shell.c
           grep -Fq 'gtk_header_bar_set_show_title_buttons(GTK_HEADER_BAR(titlebar), TRUE);' platform/linux/link-gtk-shell.c
           grep -Fq 'gtk_widget_add_css_class(device_row, "link-device-row");' platform/linux/link-gtk-shell.c
