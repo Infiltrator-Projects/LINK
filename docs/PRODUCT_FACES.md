@@ -29,13 +29,20 @@ Examples include protocol engines, transport/provider contracts, discovery state
 
 For Discover specifically, LINK owns the reusable scanner, OpenPort/J2534 integration, standard OBD inventory, generic ISO-TP/UDS read-only machinery, result/evidence model and deny-by-default safety policy.
 
-For the main diagnostic applications, LINK also owns the common **OBD**
-workspace and diagnostic-generation model. That workspace presents the same
-standards-backed VIN, responder, PID, readiness, freeze-frame and
-stored/pending/permanent fault inventory in every product face. Manufacturer
-repositories may contribute evidence that a legacy diagnostic protocol answered,
-but they must not replace the common OBD page with a copied product-specific
-implementation.
+For the main diagnostic applications, LINK owns the **operator-task information
+architecture** and the diagnostic-generation model. Protocols such as OBD-II,
+OBDonUDS, UDS and manufacturer legacy diagnostics are data sources underneath
+the interface; they are not top-level navigation destinations.
+
+The shared task model is Vehicle, Errors, Table, Dashboard, Graph, Tests,
+Services, Log and Settings. Standard and manufacturer-specific data are merged
+into the appropriate task screen and labelled by source where useful. Module
+inventory belongs under Vehicle; a manufacturer may offer a Scan Modules action
+there, but Modules is not a competing primary task.
+
+Manufacturer repositories may contribute evidence-backed legacy protocols,
+module scans, parameters, tests and service procedures, but must not fork the
+shared task structure.
 
 ## Product repositories own identity and vehicle specificity
 
