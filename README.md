@@ -54,7 +54,11 @@ LINK currently owns:
   separate responder-attributed history that leaves the legacy one-value-per-PID
   interface intact; streaming CSV schema v2 records the responder CAN ID and
   addressing width on every attributed sample;
-- diagnostic workspace model;
+- diagnostic workspace model, including a LINK-owned OBD workspace shared by
+  every manufacturer face;
+- evidence-based diagnostic-generation classification for legacy/OBD-I-era,
+  transitional/"OBD1.5" and standard OBD-II/EOBD surfaces, without inferring
+  capability from model year or connector shape;
 - portable diagnostic-flow controller state machine;
 - Discover safety classification and evidence writing;
 - common ECU/module discovery, identification and raw-response acquisition primitives; and
@@ -107,7 +111,9 @@ The current implementation provides passive CAN capture, bounded standard OBD in
 
 That evolution must not fork the generic scanner. Mercedes-specific module topology, identifiers and probes belong in MBLINK; Jaguar-specific equivalents belong in JAGLINK. The reusable state machine, transports, safety classifier, evidence model and platform shell stay here.
 
-See `docs/DISCOVER.md` and `docs/PRODUCT_FACES.md` for the repository/application boundary.
+See `docs/DISCOVER.md`, `docs/PRODUCT_FACES.md` and
+`docs/DIAGNOSTIC-GENERATIONS.md` for the repository/application and
+diagnostic-generation boundaries.
 
 ## Architecture
 
