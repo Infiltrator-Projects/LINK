@@ -2,7 +2,7 @@
 
 # LINK Product Face Contract
 
-MBLINK and JAGLINK are two branded vehicle products built from the same LINK application engine. Each manufacturer repository may expose more than one branded application target, but those targets remain part of the same manufacturer product family rather than becoming separate repositories by default.
+MBLINK, JAGLINK, BMWLINK, AUDILINK and FORDLINK are branded vehicle products built from the same LINK application engine. Each manufacturer repository may expose more than one branded application target, but those targets remain part of the same manufacturer product family rather than becoming separate repositories by default.
 
 The architectural target is:
 
@@ -10,20 +10,29 @@ The architectural target is:
 Infiltratr Common
         |
        LINK
-      /    \
- MBLINK   JAGLINK
-  |  |      |  |
-  |  +-- Discover
-  +----- main app
-             +-- Discover
+        |
+        +-- MBLINK
+        |    +-- main app
+        |    +-- Discover
+        +-- JAGLINK
+        |    +-- main app
+        |    +-- Discover
+        +-- BMWLINK
+        |    +-- main app
+        |    +-- Discover
+        +-- AUDILINK
+        |    +-- main app
+        |    +-- Discover
+        +-- FORDLINK
              +-- main app
+             +-- Discover
 ```
 
-The current specialist second target is Discover. MBLINK Discover and JAGLINK Discover are the manufacturer-branded ECU/module discovery, identification, read-only inventory and evidence/dump applications. Their reusable mechanics belong in LINK; their manufacturer knowledge belongs in the owning product repository.
+The current specialist second target is Discover. MBLINK Discover, JAGLINK Discover, BMWLINK Discover, AUDILINK Discover and FORDLINK Discover are manufacturer-branded ECU/module discovery, identification, read-only inventory and evidence/dump applications built from LINK's shared Discover machinery. Their reusable mechanics belong in LINK; their manufacturer knowledge belongs in the owning product repository.
 
 ## LINK owns behaviour
 
-Anything behavioural that should work the same in both products belongs in LINK unless it is generic enough to belong in Infiltratr Common.
+Anything behavioural that should work the same across LINK-family products belongs in LINK unless it is generic enough to belong in Infiltratr Common.
 
 Examples include protocol engines, transport/provider contracts, discovery state machines, ECU/module interrogation primitives, evidence/logging, safety policy, shared UI structure, platform glue, packaging helpers and common build/release behaviour.
 
@@ -52,13 +61,13 @@ A product repository may own:
 - its icon/emblem and other brand assets;
 - its README/version/release identity;
 - multiple branded application targets that share the same manufacturer lifecycle;
-- Mercedes-only or Jaguar-only network/module definitions and diagnostic behaviour;
+- manufacturer-specific Mercedes, Jaguar, BMW, Audi or Ford network/module definitions and diagnostic behaviour;
 - evidence-backed manufacturer-specific read-only ECU/module probes and decoders;
 - minimal compatibility facades needed while old product-prefixed APIs are migrated.
 
 A product repository must not own a copied generic LINK implementation.
 
-The fact that MBLINK Discover and JAGLINK Discover can expose different modules, identifiers or views does not justify separate generic scanner implementations: those differences are manufacturer data/behaviour layered over the same engine.
+The fact that the five Discover product faces can expose different modules, identifiers or views does not justify separate generic scanner implementations: those differences are manufacturer data/behaviour layered over the same engine.
 
 ## Repository boundary rule
 
@@ -72,6 +81,9 @@ Therefore the intended automotive repository set remains:
 LINK
 MBLINK
 JAGLINK
+BMWLINK
+AUDILINK
+FORDLINK
 ```
 
 not:
@@ -84,11 +96,11 @@ JAGLINK
 JAGLINK-Reader
 ```
 
-Discover already fills the specialist reader/dumper role inside MBLINK and JAGLINK and should evolve there.
+Discover already fills the specialist reader/dumper role inside the LINK-family product repositories and should evolve there.
 
 ## Face-only rule
 
-Two product files that differ only because one says MBLINK and the other says JAGLINK are candidates to become one LINK file with face parameters.
+Product files that differ only by product name, icon, colours or metadata are candidates to become one LINK file with face parameters.
 
 A product-specific file is justified only when changing it for one manufacturer/vehicle family would genuinely be wrong for the other.
 
@@ -109,23 +121,26 @@ LINK reuses Infiltratr Common wherever possible. If logic is broadly reusable ou
 The intended dependency graph is therefore:
 
 ```text
-MBLINK -> LINK -> Infiltratr Common
-JAGLINK -> LINK -> Infiltratr Common
+MBLINK   -> LINK -> Infiltratr Common
+JAGLINK  -> LINK -> Infiltratr Common
+BMWLINK  -> LINK -> Infiltratr Common
+AUDILINK -> LINK -> Infiltratr Common
+FORDLINK -> LINK -> Infiltratr Common
 ```
 
-Application targets inside MBLINK/JAGLINK do not introduce new dependency roots; they consume the same pinned LINK tree.
+Application targets inside MBLINK, JAGLINK, BMWLINK, AUDILINK and FORDLINK do not introduce new dependency roots; they consume the same pinned LINK tree.
 
 ## Regression test
 
 When reviewing a change, ask:
 
-1. Would both MBLINK and JAGLINK want this behaviour? If yes, it belongs in LINK.
+1. Would multiple LINK-family products want this behaviour? If yes, it belongs in LINK.
 2. Would unrelated projects want this primitive? If yes, it probably belongs in Common.
 3. Is the only difference name/icon/metadata? If yes, make it a product-face parameter.
-4. Is it genuinely Mercedes-only or Jaguar-only? If yes, leave it in the product repository.
+4. Is it genuinely manufacturer-specific to Mercedes, Jaguar, BMW, Audi or Ford? If yes, leave it in the product repository.
 5. Is this merely another application target for the same manufacturer product? If yes, keep it in the existing product repository rather than creating another repo.
 
-Any reintroduction of duplicated generic application source into MBLINK and JAGLINK, or creation of parallel Reader repos that merely duplicate Discover, should be treated as an architectural regression.
+Any reintroduction of duplicated generic application source into MBLINK, JAGLINK, BMWLINK, AUDILINK or FORDLINK, or creation of parallel Reader repos that merely duplicate Discover, should be treated as an architectural regression.
 
 
 
@@ -157,11 +172,11 @@ header behaviour, connection/progress placement, primary diagnostic grid,
 secondary tools, panel/tile shapes, corner radii, padding and spacing.
 
 Manufacturer products inject a `LinkDiagnosticTheme` plus their logo,
-wording and manufacturer-specific content. They may add Mercedes-only or
-Jaguar-only diagnostic screens and fields, but they must not fork the shared
+wording and manufacturer-specific content. They may add manufacturer-specific
+diagnostic screens and fields, but they must not fork the shared
 layout primitives merely to change colours, fonts or branding.
 
 An iPhone layout change intended for every vehicle product must therefore be
 made in LINK first and consumed by each pinned product face. This makes visual
-and structural drift between MBLINK, JAGLINK and future LINK products an
+and structural drift between MBLINK, JAGLINK, BMWLINK, AUDILINK, FORDLINK and future LINK products an
 explicit architectural regression rather than normal parallel development.
