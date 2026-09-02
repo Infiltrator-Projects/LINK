@@ -4,7 +4,7 @@
 
 [![LINK CI](https://github.com/Infiltrator-Projects/LINK/actions/workflows/ci.yml/badge.svg)](https://github.com/Infiltrator-Projects/LINK/actions/workflows/ci.yml)
 
-LINK is the shared C11 vehicle-diagnostics and application engine used by MBLINK and JAGLINK.
+LINK is the shared C11 vehicle-diagnostics and application engine used by MBLINK, JAGLINK, BMWLINK, AUDILINK and FORDLINK.
 
 **Current source version:** see [`VERSION`](VERSION)  
 **Shared foundation:** exact Infiltratr Common release/commit pinned by `src/infiltratr-common` and `CMakeLists.txt`  
@@ -17,13 +17,17 @@ LINK is the shared C11 vehicle-diagnostics and application engine used by MBLINK
 Infiltratr Common
         ↓
        LINK
-      ↙    ↘
-  MBLINK  JAGLINK
+        │
+        ├── MBLINK
+        ├── JAGLINK
+        ├── BMWLINK
+        ├── AUDILINK
+        └── FORDLINK
 ```
 
-Infiltratr Common owns portable facilities useful outside vehicle diagnostics. LINK owns product-neutral automotive functionality. MBLINK and JAGLINK own branding, metadata and genuinely manufacturer-specific behaviour.
+Infiltratr Common owns portable facilities useful outside vehicle diagnostics. LINK owns product-neutral automotive functionality. MBLINK, JAGLINK, BMWLINK, AUDILINK and FORDLINK own branding, metadata and genuinely manufacturer-specific behaviour.
 
-Each manufacturer repository may build multiple branded application targets without creating a new repository. Today that includes the main MBLINK/JAGLINK applications and the specialist MBLINK Discover/JAGLINK Discover targets. Discover is the ECU/module discovery, identification, read-only inventory and evidence/dump application; its generic mechanics live in LINK while Mercedes/Jaguar knowledge remains in the appropriate product repository.
+Each manufacturer repository may build multiple branded application targets without creating a new repository. Today that includes the main MBLINK, JAGLINK, BMWLINK, AUDILINK and FORDLINK applications plus their LINK-backed Discover targets where enabled. Discover is the ECU/module discovery, identification, read-only inventory and evidence/dump application; its generic mechanics live in LINK while manufacturer knowledge remains in the appropriate product repository.
 
 ## Capabilities
 
@@ -102,12 +106,15 @@ Discover is not a separate product repository. It is a specialist branded applic
 
 ```text
 LINK shared Discover engine
-       ↓                 ↓
-MBLINK Discover     JAGLINK Discover
- Mercedes face       Jaguar face
+        │
+        ├── MBLINK Discover
+        ├── JAGLINK Discover
+        ├── BMWLINK Discover
+        ├── AUDILINK Discover
+        └── FORDLINK Discover
 ```
 
-The current implementation provides passive CAN capture, bounded standard OBD inventory and a shared deep read-only discovery-plan interface that product repositories can populate with evidence-backed manufacturer targets. MBLINK already uses that interface for its explicit Mercedes FULL SWEEP; JAGLINK intentionally remains at the bounded/passive stage until Jaguar-specific routes and requests are corroborated. ECU identification, structured evidence/dump export and all generic discovery mechanics remain single-source in LINK.
+The current implementation provides passive CAN capture, bounded standard OBD inventory and a shared deep read-only discovery-plan interface that product repositories can populate with evidence-backed manufacturer targets. MBLINK already uses that interface for its explicit Mercedes FULL SWEEP; JAGLINK intentionally remains at the bounded/passive stage until Jaguar-specific routes and requests are corroborated; BMWLINK, AUDILINK and FORDLINK consume the same generic Discover machinery while manufacturer-specific depth remains evidence-gated. ECU identification, structured evidence/dump export and all generic discovery mechanics remain single-source in LINK.
 
 That evolution must not fork the generic scanner. Mercedes-specific module topology, identifiers and probes belong in MBLINK; Jaguar-specific equivalents belong in JAGLINK. The reusable state machine, transports, safety classifier, evidence model and platform shell stay here.
 
@@ -147,7 +154,7 @@ cmake --build build-sanitized --parallel
 ctest --test-dir build-sanitized --output-on-failure
 ```
 
-GitHub Actions builds and tests the strict portable core on Linux, macOS and Windows, runs ASan+UBSan on Linux, and independently compiles LINK's native BlueZ/direct-libUSB adapter providers in LINK CI. The OpenPort regression suite rejects J2534 start-of-message, loopback and TX-done records as completed vehicle responses. Product Linux builds provide a second integration check; physical USB handshake validation remains a hardware test rather than something CI can simulate. The DTC knowledge suite enforces the exact 9,533-definition catalogue size and pinned upstream snapshot, samples all seven generic families, checks generic/manufacturer range boundaries, preserves lowercase normalization and malformed-code rejection, and verifies shared UDS status semantics. The ISO-TP suite covers preserved Classical CAN behaviour as well as CAN-FD single-frame, multi-frame and extended-length traffic. The STM32 regression suite host-simulates the bounded interrupt queue, wrapping HAL-style millisecond clock and a complete multi-frame UDS F190 transaction through the same LINK ISO-TP/UDS core. The Windows configuration proves that the same shared Discover implementation can produce both MBLINK and JAGLINK product faces.
+GitHub Actions builds and tests the strict portable core on Linux, macOS and Windows, runs ASan+UBSan on Linux, and independently compiles LINK's native BlueZ/direct-libUSB adapter providers in LINK CI. The OpenPort regression suite rejects J2534 start-of-message, loopback and TX-done records as completed vehicle responses. Product Linux builds provide a second integration check; physical USB handshake validation remains a hardware test rather than something CI can simulate. The DTC knowledge suite enforces the exact 9,533-definition catalogue size and pinned upstream snapshot, samples all seven generic families, checks generic/manufacturer range boundaries, preserves lowercase normalization and malformed-code rejection, and verifies shared UDS status semantics. The ISO-TP suite covers preserved Classical CAN behaviour as well as CAN-FD single-frame, multi-frame and extended-length traffic. The STM32 regression suite host-simulates the bounded interrupt queue, wrapping HAL-style millisecond clock and a complete multi-frame UDS F190 transaction through the same LINK ISO-TP/UDS core. The Windows configuration proves the shared Discover implementation through the MBLINK and JAGLINK reference faces; BMWLINK, AUDILINK and FORDLINK consume the same LINK-owned constructor in their product repositories.
 
 CI also installs LINK and its Common dependency to a clean prefix, rediscovers the exported `LINK::Core` package with `find_package`, and builds an external consumer that exercises the 27-service catalogue and 64-byte CAN-FD contract.
 
@@ -170,7 +177,7 @@ A numbered LINK release publishes:
 | `LINK-<version>-source.zip` | Exact tested source archive, including the pinned dependency tree. |
 | `SHA256SUMS.txt` | SHA-256 checksum for the source archive. |
 
-LINK is a shared engine rather than an end-user application, so product installers remain in MBLINK and JAGLINK.
+LINK is a shared engine rather than an end-user application, so product installers remain in MBLINK, JAGLINK, BMWLINK, AUDILINK and FORDLINK.
 
 ## Repository and release policy
 
