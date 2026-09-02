@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "link/diagnostic_capability.h"
 
+#include <stddef.h>
+
 LinkDiagnosticTier link_diagnostic_capability_classify(
     const LinkDiagnosticCapabilityEvidence *evidence)
 {
