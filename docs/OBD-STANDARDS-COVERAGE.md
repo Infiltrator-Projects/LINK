@@ -1,5 +1,29 @@
 # OBD standards coverage
 
+## Diagnostic generations and capability detection
+
+LINK classifies diagnostic generation from observed communication, not from a
+vehicle's model year or connector shape.
+
+- **Legacy / OBD-I-era**: a positively identified legacy diagnostic surface
+  answers and no standard OBD surface answers.
+- **Transitional / OBD1.5**: both a standards-shaped OBD surface and a legacy
+  diagnostic surface answer. "OBD1.5" is an informal project/UI label rather
+  than a universal SAE or ISO standard.
+- **Standard OBD-II / EOBD**: a standards-shaped OBD surface answers and no
+  legacy surface has been positively identified.
+- **Unknown / probing**: evidence is still incomplete.
+- **No supported diagnostics detected**: the bounded probe has completed
+  without either supported surface.
+
+The classification reports software-visible capability. It is not a legal
+emissions-compliance certification.
+
+The 1999 AU Falcon is retained as a project regression/example target for the
+transitional category: FORDLINK contributes Ford-specific legacy evidence while
+LINK owns the common classification and presentation.
+
+
 This is LINK's canonical generic OBD implementation boundary. Protocol support,
 current-standard targeting, semantic-registry coverage and regulatory conformance
 are deliberately separate claims.

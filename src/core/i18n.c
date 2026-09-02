@@ -9,6 +9,8 @@
 static const InfiltratrI18nEntry en_au[] = {
     ENTRY("nav.vehicle", "Vehicle"),
     ENTRY("nav.vehicle.summary", "Vehicle identity, adapter and connection information"),
+    ENTRY("nav.obd", "OBD"),
+    ENTRY("nav.obd.summary", "Common legacy, transitional and OBD-II / EOBD diagnostics"),
     ENTRY("nav.modules", "Modules"),
     ENTRY("nav.modules.summary", "Discovered control modules and ECU identification"),
     ENTRY("nav.faults", "Faults"),
