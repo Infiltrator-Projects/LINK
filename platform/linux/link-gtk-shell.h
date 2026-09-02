@@ -2,6 +2,7 @@
 #ifndef LINK_GTK_SHELL_H
 #define LINK_GTK_SHELL_H
 
+#include "link/diagnostic_capability.h"
 #include "link/diagnostic_flow.h"
 #include "link/transport.h"
 #include <gtk/gtk.h>
@@ -81,6 +82,9 @@ typedef struct LinkGtkShellDescriptor {
                                bool active,
                                bool ready,
                                void *context);
+    void (*diagnostic_capability_evidence)(
+        LinkDiagnosticCapabilityEvidence *evidence,
+        void *context);
     /*
      * Optional product-owned runtime polling policy. Returning false keeps a
      * capability-advertised PID visible but removes it from routine dispatch.
