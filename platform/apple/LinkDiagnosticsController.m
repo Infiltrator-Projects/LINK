@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #import "LinkDiagnosticsController.h"
 
+#import "link/diagnostic_capability.h"
 #import "link/elm327.h"
 #import "link/mercedes_me_adapter.h"
 #import "link/obd2.h"
@@ -79,6 +80,7 @@
     NSString *_standardVINStatusText;
     NSString *_lastRecordedTransportStatus;
     BOOL _pidPollingEnabled[256];
+    BOOL _legacyDiagnosticResponseObserved;
 }
 
 static uint64_t LinkAppleMonotonicMilliseconds(void)
@@ -342,6 +344,77 @@ static void LinkAppleAppendReadinessMonitor(
             value]];
     }
     return [rows copy];
+}
+
+static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
+{
+    size_t count = 0U;
+    unsigned int raw;
+    if (flow == NULL) return 0U;
+    for (raw = 1U; raw <= UINT8_MAX; ++raw) {
+        if (link_obd2_pid_set_contains(&flow->supported_pids, (uint8_t)raw))
+            ++count;
+    }
+    return count;
+}
+
+- (LinkDiagnosticCapabilityEvidence)diagnosticCapabilityEvidence
+{
+    LinkDiagnosticCapabilityEvidence evidence = {0};
+    evidence.probe_complete =
+        _flow.standard_diagnostic_context_complete ||
+        self.isReady ||
+        _flow.stage == LINK_DIAGNOSTIC_FLOW_FAILED;
+    evidence.standard_obd_response =
+        _flow.supported_pid_responders.count != 0U ||
+        LinkAppleSupportedPIDCount(&_flow) != 0U ||
+        _flow.standard_vin_available ||
+        _flow.readiness_available ||
+        _flow.stored_dtcs.count != 0U ||
+        _flow.pending_dtcs.count != 0U ||
+        _flow.permanent_dtcs.count != 0U;
+    evidence.legacy_diagnostic_response =
+        _legacyDiagnosticResponseObserved ? true : false;
+    return evidence;
+}
+
+- (NSString *)diagnosticCapabilityText
+{
+    const LinkDiagnosticCapabilityEvidence evidence =
+        [self diagnosticCapabilityEvidence];
+    const LinkDiagnosticTier tier =
+        link_diagnostic_capability_classify(&evidence);
+    return [NSString stringWithUTF8String:link_diagnostic_tier_name(tier)];
+}
+
+- (NSString *)diagnosticCapabilityDetailText
+{
+    const LinkDiagnosticCapabilityEvidence evidence =
+        [self diagnosticCapabilityEvidence];
+    const LinkDiagnosticTier tier =
+        link_diagnostic_capability_classify(&evidence);
+    return [NSString stringWithUTF8String:link_diagnostic_tier_summary(tier)];
+}
+
+- (NSString *)standardResponderSummary
+{
+    return [NSString stringWithFormat:@"%zu physical responder%@",
+        _flow.supported_pid_responders.count,
+        _flow.supported_pid_responders.count == 1U ? @"" : @"s"];
+}
+
+- (NSString *)supportedPIDSummary
+{
+    const size_t count = LinkAppleSupportedPIDCount(&_flow);
+    return [NSString stringWithFormat:@"%zu advertised PID%@",
+        count, count == 1U ? @"" : @"s"];
+}
+
+- (void)setLegacyDiagnosticResponseObserved:(BOOL)observed
+{
+    if (_legacyDiagnosticResponseObserved == observed) return;
+    _legacyDiagnosticResponseObserved = observed;
+    [self notifyDelegate];
 }
 
 - (BOOL)isSimulated

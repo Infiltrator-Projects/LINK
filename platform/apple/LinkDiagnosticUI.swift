@@ -500,4 +500,167 @@ private struct LinkDiagnosticScreenModifier: ViewModifier {
             .toolbarColorScheme(.dark, for: .navigationBar)
     }
 }
+struct LinkStandardObdSnapshot {
+    let capability: String
+    let capabilityDetail: String
+    let vin: String
+    let responderSummary: String
+    let pidSummary: String
+    let readiness: String
+    let readinessMonitors: [String]
+    let freezeFrame: [String]
+    let storedDTCs: [String]
+    let pendingDTCs: [String]
+    let permanentDTCs: [String]
+    let liveRows: [String]
+
+    init(
+        capability: String,
+        capabilityDetail: String,
+        vin: String,
+        responderSummary: String,
+        pidSummary: String,
+        readiness: String,
+        readinessMonitors: [String] = [],
+        freezeFrame: [String] = [],
+        storedDTCs: [String] = [],
+        pendingDTCs: [String] = [],
+        permanentDTCs: [String] = [],
+        liveRows: [String] = []
+    ) {
+        self.capability = capability
+        self.capabilityDetail = capabilityDetail
+        self.vin = vin
+        self.responderSummary = responderSummary
+        self.pidSummary = pidSummary
+        self.readiness = readiness
+        self.readinessMonitors = readinessMonitors
+        self.freezeFrame = freezeFrame
+        self.storedDTCs = storedDTCs
+        self.pendingDTCs = pendingDTCs
+        self.permanentDTCs = permanentDTCs
+        self.liveRows = liveRows
+    }
+}
+
+struct LinkStandardObdView: View {
+    @Environment(\.linkDiagnosticTheme) private var theme
+    let snapshot: LinkStandardObdSnapshot
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: LinkDiagnosticLayout.sectionSpacing) {
+                LinkLabeledPanel(title: "Diagnostic generation", systemImage: "car.side") {
+                    Text(snapshot.capability)
+                        .font(theme.typography.headline)
+                        .foregroundStyle(theme.accent)
+                    Text(snapshot.capabilityDetail)
+                        .font(theme.typography.caption)
+                        .foregroundStyle(theme.mutedText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                LinkLabeledPanel(title: "Standard OBD-II / EOBD", systemImage: "cpu") {
+                    obdRow("VIN", snapshot.vin)
+                    Divider().overlay(theme.border)
+                    obdRow("Responders", snapshot.responderSummary)
+                    Divider().overlay(theme.border)
+                    obdRow("Mode 01 live data", snapshot.pidSummary)
+                    Divider().overlay(theme.border)
+                    obdRow("Readiness", snapshot.readiness)
+                }
+
+                if !snapshot.readinessMonitors.isEmpty {
+                    LinkLabeledPanel(title: "Readiness monitors", systemImage: "checklist") {
+                        ForEach(snapshot.readinessMonitors, id: \.self) { row in
+                            Text(row)
+                                .font(theme.typography.subheadline)
+                                .foregroundStyle(theme.secondaryText)
+                        }
+                    }
+                }
+
+                LinkLabeledPanel(title: "Fault memory", systemImage: "exclamationmark.triangle") {
+                    faultGroup("Stored", snapshot.storedDTCs)
+                    faultGroup("Pending", snapshot.pendingDTCs)
+                    faultGroup("Permanent", snapshot.permanentDTCs)
+                }
+
+                LinkLabeledPanel(title: "Freeze frame", systemImage: "camera.metering.matrix") {
+                    if snapshot.freezeFrame.isEmpty {
+                        Text("No Mode 02 frame-zero context captured.")
+                            .font(theme.typography.subheadline)
+                            .foregroundStyle(theme.mutedText)
+                    } else {
+                        ForEach(snapshot.freezeFrame, id: \.self) { row in
+                            Text(row)
+                                .font(theme.typography.subheadline)
+                                .foregroundStyle(theme.secondaryText)
+                        }
+                    }
+                }
+
+                LinkLabeledPanel(title: "Live data", systemImage: "waveform.path.ecg") {
+                    if snapshot.liveRows.isEmpty {
+                        Text("No advertised standard live parameters yet.")
+                            .font(theme.typography.subheadline)
+                            .foregroundStyle(theme.mutedText)
+                    } else {
+                        ForEach(snapshot.liveRows, id: \.self) { row in
+                            Text(row)
+                                .font(theme.typography.subheadline)
+                                .foregroundStyle(theme.secondaryText)
+                        }
+                    }
+                }
+
+                LinkLabeledPanel(title: "Common coverage", systemImage: "square.stack.3d.up") {
+                    obdRow("Mode 01", "Supported-PID discovery, readiness and current data")
+                    obdRow("Mode 02", "Bounded freeze-frame context")
+                    obdRow("Modes 03 / 07 / 0A", "Stored, pending and permanent DTC inventory")
+                    obdRow("Mode 09", "Vehicle information including standard VIN where available")
+                    obdRow("OBDonUDS", "SAE J1979-2 foundation through LINK")
+                }
+            }
+            .padding(.horizontal, LinkDiagnosticLayout.screenHorizontalPadding)
+            .padding(.top, LinkDiagnosticLayout.screenTopPadding)
+            .padding(.bottom, LinkDiagnosticLayout.screenBottomPadding)
+        }
+        .linkDiagnosticScreen("OBD")
+    }
+
+    @ViewBuilder
+    private func faultGroup(_ title: String, _ values: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(theme.typography.captionBold)
+                .foregroundStyle(theme.mutedText)
+            if values.isEmpty {
+                Text("None reported")
+                    .font(theme.typography.subheadline)
+                    .foregroundStyle(theme.secondaryText)
+            } else {
+                ForEach(values, id: \.self) { value in
+                    Text(value)
+                        .font(theme.typography.subheadline)
+                        .foregroundStyle(theme.secondaryText)
+                }
+            }
+        }
+    }
+
+    private func obdRow(_ label: String, _ value: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Text(label)
+                .font(theme.typography.captionBold)
+                .foregroundStyle(theme.mutedText)
+            Spacer(minLength: 8)
+            Text(value)
+                .font(theme.typography.subheadline)
+                .foregroundStyle(theme.primaryText)
+                .multilineTextAlignment(.trailing)
+        }
+    }
+}
+
 #endif

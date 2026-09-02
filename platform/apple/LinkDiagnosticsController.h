@@ -11,6 +11,7 @@
 #import <Foundation/Foundation.h>
 
 #import "LinkBLETransport.h"
+#import "link/diagnostic_capability.h"
 #import "link/diagnostic_flow.h"
 #import "link/elm327_session.h"
 #import "link/elm327_simulator.h"
@@ -49,6 +50,13 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic, copy, readonly) NSArray<NSString *> *readinessMonitorStatus;
 /** Canonical Mode 02 frame-zero context values captured for stored faults. */
 @property(nonatomic, copy, readonly) NSArray<NSString *> *freezeFrameContext;
+/** Evidence-based diagnostic generation label shared by all product faces. */
+@property(nonatomic, copy, readonly) NSString *diagnosticCapabilityText;
+/** Caveated explanation for the current capability classification. */
+@property(nonatomic, copy, readonly) NSString *diagnosticCapabilityDetailText;
+/** Shared responder/PID summaries for the standard OBD workspace. */
+@property(nonatomic, copy, readonly) NSString *standardResponderSummary;
+@property(nonatomic, copy, readonly) NSString *supportedPIDSummary;
 @property(nonatomic, readonly, getter=isActive) BOOL active;
 @property(nonatomic, readonly, getter=isReady) BOOL ready;
 @property(nonatomic, readonly, getter=isNativeAdapterConnected)
@@ -87,6 +95,12 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)failWithStatus:(NSString *)status;
 - (void)updateStatusText:(NSString *)status;
 - (void)setVehicleIdentifier:(const char *)vehicleIdentifier;
+/**
+ * Manufacturer products call this only after positively identifying a
+ * legacy/pre-OBD-II diagnostic exchange. Modern proprietary UDS/KWP traffic
+ * must not set it.
+ */
+- (void)setLegacyDiagnosticResponseObserved:(BOOL)observed;
 
 - (NSArray<NSNumber *> *)recentValuesForPID:(uint8_t)pid
                                       limit:(NSUInteger)limit;
