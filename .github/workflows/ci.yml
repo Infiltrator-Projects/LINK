@@ -129,6 +129,9 @@ jobs:
           grep -Fq 'link-test-stm32-uds-server' CMakeLists.txt
           grep -Fq 'request_can_id = 0x7e0U' examples/stm32c092/issue-38-server/Src-main.c
           grep -Fq 'link_stm32c092_hal_start_standard_dual' examples/stm32c092/link-stm32c092-hal.c
+          grep -Fq 'link-test-stm32-bxcan-hal' CMakeLists.txt
+          grep -Fq 'link_stm32_bxcan_hal_start_standard_dual' examples/stm32-bxcan/link-stm32-bxcan-hal.c
+          grep -Fq 'STM32F103, STM32F107 and STM32F767' examples/stm32-bxcan/README.md
           grep -Fq 'functional_address_enabled' platform/stm32/link-stm32-uds-server.h
           grep -Fq 'nrc == UINT8_C(0x31)' platform/stm32/link-stm32-uds-server.c
           grep -Fq 'request.can_id = 0x7dfU' tests/test_stm32_uds_server.c
@@ -223,7 +226,7 @@ jobs:
         run: ctest --test-dir build-linux-providers -R '^link-linux-openport2-status$' --output-on-failure
 
   stm32-arm-cross:
-    name: STM32C092 / Cortex-M0+ cross-compile
+    name: STM32 / Cortex-M cross-compile
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -266,6 +269,37 @@ jobs:
             arm-none-eabi-gcc "${flags[@]}" -c "$source" -o "$object"
           done
           arm-none-eabi-size build-stm32-arm/*.o
+
+      - name: Cross-compile STM32F103/F107/F767 bxCAN source set
+        shell: bash
+        run: |
+          set -euo pipefail
+          sources=(
+            src/core/isotp.c
+            src/uds/uds.c
+            src/uds/uds_services.c
+            src/infiltratr-common/src/core.c
+            platform/stm32/link-stm32-can.c
+            platform/stm32/link-stm32-uds.c
+            examples/stm32-bxcan/link-stm32-bxcan-hal.c
+            examples/stm32-bxcan/link-stm32-bxcan-example.c
+          )
+          for cpu in cortex-m3 cortex-m7; do
+            output="build-stm32-bxcan-${cpu}"
+            mkdir -p "$output"
+            flags=(
+              "-mcpu=${cpu}" -mthumb -std=c11 -ffreestanding
+              -Wall -Wextra -Wpedantic -Wshadow -Wformat=2
+              -Wstrict-prototypes -Wmissing-prototypes -Werror
+              -Iinclude -Iplatform/stm32 -Iexamples/stm32-bxcan
+              -Itests/stm32_bxcan_hal_stub -Isrc/infiltratr-common/include
+            )
+            for source in "${sources[@]}"; do
+              object="$output/$(printf '%s' "$source" | tr '/.' '__').o"
+              arm-none-eabi-gcc "${flags[@]}" -c "$source" -o "$object"
+            done
+            arm-none-eabi-size "$output"/*.o
+          done
 
   sanitizers:
     name: Local Linux / ASan + UBSan
