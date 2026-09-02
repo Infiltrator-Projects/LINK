@@ -55,7 +55,8 @@ be supplied by the target application rather than invented inside LINK.
 The STM32 transport in `platform/stm32/link-stm32-uds-server.c` performs
 ISO-TP request reassembly, generated Flow Control, response segmentation,
 Flow Control reception for multi-frame responses, real FDCAN TX-completion
-tracking, and timeout handling. It supports Classical CAN and CAN FD using
+tracking, timeout handling, and a bounded deferred-request FIFO for PCAN bursts
+that race an active multi-frame response. It supports Classical CAN and CAN FD using
 LINK's existing ISO-TP implementation, including extended FF_DL above 4095
 bytes when caller buffers are large enough.
 
@@ -183,8 +184,11 @@ The repaired submitted-project sources were exercised with:
 - strict C11 host builds;
 - Cortex-M0+ syntax checking against the submitted STM32C0 HAL/CMSIS headers;
 - `10 01 -> 50 01 00 32 01 F4`;
-- all 27 standards-shaped `0x19` requests returning positive `0x59`
-  responses from the demonstration backend;
+- all 27 standards-shaped `0x19` requests reaching the shared dispatcher;
+  the bounded status-only store returns positive `0x59` data only where it
+  owns the required record fields and returns a standards-valid `7F 19 31`
+  for snapshot/extended/severity/user-memory data it does not own, instead of
+  fabricating those records;
 - `22 F190` VIN response;
 - the submitted `uds_app_fdcan + endpoint + isotp + can_transport_fdcan`
   path with a mocked FDCAN HAL, including multi-frame DTC response and Flow
@@ -201,7 +205,10 @@ The issue-38 `Src-main.c` now calls
 `link_stm32c092_server_example_poll_rx()` before processing the server.
 The normal `HAL_FDCAN_RxFifo0Callback()` path remains active. If the board
 receives into FIFO0 but the IRQ is not delivered, the main loop therefore
-still drains and processes the frame.
+still drains and processes the frame. If several PCAN requests race a response,
+LINK retains them in the same bounded depth as its STM32 RX queue and replays
+them in arrival order after the active response completes; only a true bounded
+queue overflow increments the drop counter.
 
 ## F190 VIN test
 

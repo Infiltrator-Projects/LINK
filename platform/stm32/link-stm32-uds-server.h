@@ -62,9 +62,10 @@ typedef struct {
     bool pending_tx_tracks_transmitter;
     bool in_flight_tracks_transmitter;
     bool response_active;
-    LinkIsoTpCanFrame deferred_rx;
-    uint64_t deferred_rx_arrival_us;
-    bool deferred_rx_valid;
+    LinkIsoTpCanFrame deferred_rx[LINK_STM32_CAN_RX_QUEUE_CAPACITY];
+    uint64_t deferred_rx_arrival_us[LINK_STM32_CAN_RX_QUEUE_CAPACITY];
+    uint8_t deferred_rx_head;
+    uint8_t deferred_rx_tail;
     uint32_t deferred_rx_dropped;
     uint64_t tx_completion_deadline_us;
     LinkIsoTpResult isotp_result;

@@ -8,6 +8,7 @@
 #define CHECK(c) do {     if (!(c)) {         fprintf(stderr, "CHECK failed %s:%d: %s\n", __FILE__, __LINE__, #c);         return 1;     } } while (0)
 
 #define MOCK_MAX_FRAMES 16U
+#define RACE_REQUEST_COUNT 6U
 
 typedef struct {
     LinkIsoTpCanFrame rx[MOCK_MAX_FRAMES];
@@ -105,6 +106,7 @@ int main(void)
     uint8_t rx_storage[256U];
     uint8_t tx_storage[256U];
     LinkIsoTpCanFrame request;
+    unsigned int race_index;
     const uint8_t expected_session[] = {
         0x06U, 0x50U, 0x01U, 0x00U, 0x32U, 0x01U, 0xf4U, 0xccU
     };
@@ -192,13 +194,15 @@ int main(void)
      * Reproduce the reporter's intermittent PCAN symptom: a new request races
      * the still-active multi-frame response. It must be deferred, not lost.
      */
-    memset(&request, 0, sizeof(request));
-    request.can_id = 0x7e0U;
-    request.length = 3U;
-    request.data[0] = 0x02U;
-    request.data[1] = 0x3eU;
-    request.data[2] = 0x00U;
-    mock_push(&mock, &request);
+    for (race_index = 0U; race_index < RACE_REQUEST_COUNT; ++race_index) {
+        memset(&request, 0, sizeof(request));
+        request.can_id = 0x7e0U;
+        request.length = 3U;
+        request.data[0] = 0x02U;
+        request.data[1] = 0x3eU;
+        request.data[2] = 0x00U;
+        mock_push(&mock, &request);
+    }
 
     memset(&request, 0, sizeof(request));
     memset(request.data, 0xcc, sizeof(request.data));
@@ -218,14 +222,21 @@ int main(void)
         mock.tx[2].data, expected_dtc_cf, sizeof(expected_dtc_cf)) == 0);
     CHECK(link_stm32_uds_server_deferred_rx_dropped(&transport) == 0U);
 
-    /* The raced TesterPresent request is replayed after the DTC response. */
-    CHECK(poll_until_complete(&transport, &mock) == 0);
-    CHECK(mock.tx_count == 4U);
-    CHECK(mock.tx[3].can_id == 0x7e8U);
-    CHECK(mock.tx[3].length == sizeof(expected_tester_present));
-    CHECK(memcmp(
-        mock.tx[3].data, expected_tester_present,
-        sizeof(expected_tester_present)) == 0);
+    /*
+     * Every raced TesterPresent request is replayed in FIFO order after the
+     * DTC response. This models the reporter's repeated-PCAN-send hardware
+     * symptom rather than proving only a single lucky deferred frame.
+     */
+    for (race_index = 0U; race_index < RACE_REQUEST_COUNT; ++race_index) {
+        const size_t tx_index = 3U + (size_t)race_index;
+        CHECK(poll_until_complete(&transport, &mock) == 0);
+        CHECK(mock.tx_count == tx_index + 1U);
+        CHECK(mock.tx[tx_index].can_id == 0x7e8U);
+        CHECK(mock.tx[tx_index].length == sizeof(expected_tester_present));
+        CHECK(memcmp(
+            mock.tx[tx_index].data, expected_tester_present,
+            sizeof(expected_tester_present)) == 0);
+    }
 
     memset(&request, 0, sizeof(request));
     request.can_id = 0x7e8U;
@@ -238,7 +249,7 @@ int main(void)
 
     CHECK(link_stm32_uds_server_poll(&transport) ==
           LINK_STM32_UDS_SERVER_RESULT_WAITING);
-    CHECK(mock.tx_count == 4U);
+    CHECK(mock.tx_count == 3U + RACE_REQUEST_COUNT);
 
     puts("stm32 uds server tests passed");
     return EXIT_SUCCESS;
