@@ -6,9 +6,14 @@
 
 int main(void)
 {
+    static const char *expected_keys[] = {
+        "vehicle", "errors", "table", "dashboard", "graph",
+        "tests", "services", "log", "settings"
+    };
     size_t index;
 
-    if (link_workspace_section_count() != (size_t)LINK_WORKSPACE_SECTION_COUNT) {
+    if (link_workspace_section_count() !=
+        sizeof(expected_keys) / sizeof(expected_keys[0])) {
         (void)fprintf(stderr, "workspace section count mismatch\n");
         return 1;
     }
@@ -18,7 +23,8 @@ int main(void)
             link_workspace_section_at(index);
         if (descriptor == NULL ||
             descriptor->section != (LinkWorkspaceSection)index ||
-            descriptor->key == NULL || descriptor->key[0] == '\0' ||
+            descriptor->key == NULL ||
+            strcmp(descriptor->key, expected_keys[index]) != 0 ||
             descriptor->title == NULL || descriptor->title[0] == '\0' ||
             descriptor->summary == NULL || descriptor->summary[0] == '\0' ||
             link_workspace_section(descriptor->section) != descriptor) {
@@ -28,19 +34,10 @@ int main(void)
     }
 
     if (link_workspace_section_at(link_workspace_section_count()) != NULL ||
-        link_workspace_section((LinkWorkspaceSection)LINK_WORKSPACE_SECTION_COUNT) != NULL) {
-        (void)fprintf(stderr, "invalid workspace index was accepted\n");
-        return 1;
-    }
-
-    if (strcmp(link_workspace_section(LINK_WORKSPACE_OBD)->key, "obd") != 0) {
-        (void)fprintf(stderr, "OBD stable key changed\n");
-        return 1;
-    }
-
-    if (strcmp(link_workspace_section(LINK_WORKSPACE_LIVE_DATA)->key,
-               "live-data") != 0) {
-        (void)fprintf(stderr, "live-data stable key changed\n");
+        link_workspace_section(LINK_WORKSPACE_OBD) != NULL ||
+        link_workspace_section(LINK_WORKSPACE_MODULES) != NULL ||
+        link_workspace_section(LINK_WORKSPACE_LIVE_DATA) != NULL) {
+        (void)fprintf(stderr, "internal source section leaked into navigation\n");
         return 1;
     }
 
