@@ -488,7 +488,7 @@ static int test_dtc_rich_all_subfunctions(void)
         {0x19U,0x17U,0xffU,0x01U},
         {0x19U,0x18U,0x12U,0x34U,0x56U,0x01U,0x01U},
         {0x19U,0x19U,0x12U,0x34U,0x56U,0x01U,0x01U},
-        {0x19U,0x42U,0x33U,0xffU,0xffU},
+        {0x19U,0x42U,0x33U,0x09U,0x20U},
         {0x19U,0x55U,0x33U}
     };
     static const uint8_t lengths[] = {
@@ -546,12 +546,172 @@ static int test_dtc_rich_all_subfunctions(void)
               &server,requests[25],lengths[25],
               response,sizeof(response),&length) ==
           LINK_UDS_SERVER_RESULT_POSITIVE);
+    CHECK(length == 11U);
     CHECK(response[0] == 0x59U && response[1] == 0x42U &&
           response[2] == 0x33U && response[3] == 0xffU &&
           response[4] == 0xffU && response[5] == 0x04U);
     CHECK(response[6] == 0x20U && response[7] == 0x12U &&
           response[8] == 0x34U && response[9] == 0x56U &&
           response[10] == 0x09U);
+    return 0;
+}
+
+static int test_dtc_empty_supported_and_history(void)
+{
+    static const LinkUdsDtcRecord records[] = {
+        { UINT32_C(0x111111), UINT8_C(0x00) },
+        { UINT32_C(0x222222), LINK_UDS_DTC_STATUS_CONFIRMED_DTC }
+    };
+    static const uint8_t obd_ext[] = { UINT8_C(0xaa) };
+    static const LinkUdsServerDtcDetail details[] = {
+        {
+            UINT32_C(0x111111),0x20U,0x01U,0x20U,1U,1U,
+            true,true,true,0x33U,0x01U,
+            0x01U,0U,NULL,0U,
+            0x01U,0U,NULL,0U,
+            0x01U,NULL,0U
+        },
+        {
+            UINT32_C(0x222222),0x40U,0x02U,0U,2U,2U,
+            false,true,false,0x33U,0x01U,
+            0U,0U,NULL,0U,
+            0U,0U,NULL,0U,
+            0x90U,obd_ext,sizeof(obd_ext)
+        }
+    };
+    LinkUdsServerDtcStore store = {
+        records,2U,LINK_UDS_DTC_STATUS_MASK_ALL,0xffU,0x01U,
+        details,2U,0x04U
+    };
+    LinkUdsServer server;
+    LinkUdsServerConfig config = LINK_UDS_SERVER_CONFIG_INIT;
+    uint8_t response[64U];
+    size_t length = 0U;
+    const uint8_t r0a[] = {0x19U,0x0aU};
+    const uint8_t r15[] = {0x19U,0x15U};
+    const uint8_t r0b[] = {0x19U,0x0bU};
+    const uint8_t r04[] = {0x19U,0x04U,0x11U,0x11U,0x11U,0x01U};
+    const uint8_t r05[] = {0x19U,0x05U,0x01U};
+    const uint8_t r06[] = {0x19U,0x06U,0x11U,0x11U,0x11U,0x01U};
+    const uint8_t r10[] = {0x19U,0x10U,0x11U,0x11U,0x11U,0x01U};
+    const uint8_t r16[] = {0x19U,0x16U,0x01U};
+    const uint8_t r18[] = {
+        0x19U,0x18U,0x11U,0x11U,0x11U,0x01U,0x01U
+    };
+    const uint8_t r19[] = {
+        0x19U,0x19U,0x11U,0x11U,0x11U,0x01U,0x01U
+    };
+    const uint8_t r06_fe_non_obd[] = {
+        0x19U,0x06U,0x11U,0x11U,0x11U,0xfeU
+    };
+    const uint8_t r06_fe_obd[] = {
+        0x19U,0x06U,0x22U,0x22U,0x22U,0xfeU
+    };
+
+    CHECK(link_uds_server_init(&server,&config));
+    CHECK(link_uds_server_set_handler(
+        &server,0x19U,link_uds_server_dtc_handler,&store));
+
+    /* reportSupportedDTC includes supported DTCs even at status 0x00. */
+    CHECK(link_uds_server_handle(
+              &server,r0a,sizeof(r0a),
+              response,sizeof(response),&length) ==
+          LINK_UDS_SERVER_RESULT_POSITIVE);
+    CHECK(length == 11U);
+    CHECK(response[0] == 0x59U && response[1] == 0x0aU &&
+          response[2] == 0xffU);
+    CHECK(response[3] == 0x11U && response[4] == 0x11U &&
+          response[5] == 0x11U && response[6] == 0x00U);
+
+    /* Permanent status is independent of current ordinary status bits. */
+    CHECK(link_uds_server_handle(
+              &server,r15,sizeof(r15),
+              response,sizeof(response),&length) ==
+          LINK_UDS_SERVER_RESULT_POSITIVE);
+    CHECK(length == 7U);
+    CHECK(response[3] == 0x11U && response[4] == 0x11U &&
+          response[5] == 0x11U && response[6] == 0x00U);
+
+    /* Historical first-failed information survives current status healing. */
+    CHECK(link_uds_server_handle(
+              &server,r0b,sizeof(r0b),
+              response,sizeof(response),&length) ==
+          LINK_UDS_SERVER_RESULT_POSITIVE);
+    CHECK(length == 7U);
+    CHECK(response[3] == 0x11U && response[4] == 0x11U &&
+          response[5] == 0x11U && response[6] == 0x00U);
+
+    /* Supported snapshot/extended records with no data stay positive. */
+    CHECK(link_uds_server_handle(
+              &server,r04,sizeof(r04),
+              response,sizeof(response),&length) ==
+          LINK_UDS_SERVER_RESULT_POSITIVE);
+    CHECK(length == 6U && response[1] == 0x04U &&
+          response[2] == 0x11U && response[5] == 0x00U);
+
+    CHECK(link_uds_server_handle(
+              &server,r05,sizeof(r05),
+              response,sizeof(response),&length) ==
+          LINK_UDS_SERVER_RESULT_POSITIVE);
+    CHECK(length == 3U && response[0] == 0x59U &&
+          response[1] == 0x05U && response[2] == 0x01U);
+
+    CHECK(link_uds_server_handle(
+              &server,r06,sizeof(r06),
+              response,sizeof(response),&length) ==
+          LINK_UDS_SERVER_RESULT_POSITIVE);
+    CHECK(length == 6U && response[1] == 0x06U &&
+          response[2] == 0x11U && response[5] == 0x00U);
+
+    CHECK(link_uds_server_handle(
+              &server,r10,sizeof(r10),
+              response,sizeof(response),&length) ==
+          LINK_UDS_SERVER_RESULT_POSITIVE);
+    CHECK(length == 6U && response[1] == 0x10U);
+
+    CHECK(link_uds_server_handle(
+              &server,r16,sizeof(r16),
+              response,sizeof(response),&length) ==
+          LINK_UDS_SERVER_RESULT_POSITIVE);
+    CHECK(length == 3U && response[1] == 0x16U &&
+          response[2] == 0x01U);
+
+    CHECK(link_uds_server_handle(
+              &server,r18,sizeof(r18),
+              response,sizeof(response),&length) ==
+          LINK_UDS_SERVER_RESULT_POSITIVE);
+    CHECK(length == 7U && response[1] == 0x18U &&
+          response[2] == 0x01U && response[6] == 0x00U);
+
+    CHECK(link_uds_server_handle(
+              &server,r19,sizeof(r19),
+              response,sizeof(response),&length) ==
+          LINK_UDS_SERVER_RESULT_POSITIVE);
+    CHECK(length == 7U && response[1] == 0x19U &&
+          response[2] == 0x01U && response[6] == 0x00U);
+
+    /*
+     * 0xFE means all OBD extended records (0x90..0xEF), not every
+     * extended-data record. Ordinary 0x01 must not match it.
+     */
+    CHECK(link_uds_server_handle(
+              &server,r06_fe_non_obd,sizeof(r06_fe_non_obd),
+              response,sizeof(response),&length) ==
+          LINK_UDS_SERVER_RESULT_NEGATIVE);
+    CHECK(length == 3U && response[0] == 0x7fU &&
+          response[1] == 0x19U &&
+          response[2] == LINK_UDS_NRC_REQUEST_OUT_OF_RANGE);
+
+    CHECK(link_uds_server_handle(
+              &server,r06_fe_obd,sizeof(r06_fe_obd),
+              response,sizeof(response),&length) ==
+          LINK_UDS_SERVER_RESULT_POSITIVE);
+    CHECK(length == 8U && response[0] == 0x59U &&
+          response[1] == 0x06U &&
+          response[2] == 0x22U && response[3] == 0x22U &&
+          response[4] == 0x22U && response[5] == 0x08U &&
+          response[6] == 0x90U && response[7] == 0xaaU);
+
     return 0;
 }
 
@@ -590,6 +750,7 @@ int main(void)
     if (test_custom_handlers() != 0) return EXIT_FAILURE;
     if (test_dtc_all_subfunctions() != 0) return EXIT_FAILURE;
     if (test_dtc_rich_all_subfunctions() != 0) return EXIT_FAILURE;
+    if (test_dtc_empty_supported_and_history() != 0) return EXIT_FAILURE;
     if (test_negative_paths() != 0) return EXIT_FAILURE;
     puts("uds server tests passed");
     return EXIT_SUCCESS;

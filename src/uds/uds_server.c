@@ -622,6 +622,30 @@ static LinkUdsServerHandlerResult uds_dtc_status_list_response(
     return link_uds_server_handler_positive(offset);
 }
 
+static LinkUdsServerHandlerResult uds_dtc_supported_list_response(
+    const LinkUdsServerDtcStore *store,
+    uint8_t subfunction,
+    uint8_t *data,
+    size_t capacity)
+{
+    size_t offset = 0U;
+    size_t index;
+
+    if (!uds_dtc_put_u8(data, capacity, &offset, subfunction) ||
+        !uds_dtc_put_u8(data, capacity, &offset,
+                        store->status_availability_mask)) {
+        return uds_dtc_too_long();
+    }
+
+    for (index = 0U; index < store->record_count; ++index) {
+        if (!uds_dtc_put_record(
+                data, capacity, &offset, &store->records[index])) {
+            return uds_dtc_too_long();
+        }
+    }
+    return link_uds_server_handler_positive(offset);
+}
+
 static bool uds_dtc_detail_matches(
     const LinkUdsServerDtcStore *store,
     const LinkUdsServerDtcDetail *detail,
@@ -674,12 +698,8 @@ static LinkUdsServerHandlerResult uds_dtc_temporal_response(
         const uint32_t sequence = confirmed
             ? detail->confirmed_sequence
             : detail->first_test_failed_sequence;
-        const uint8_t required = confirmed
-            ? LINK_UDS_DTC_STATUS_CONFIRMED_DTC
-            : LINK_UDS_DTC_STATUS_TEST_FAILED;
 
-        if (record == NULL || sequence == 0U ||
-            (record->status & required) == 0U) {
+        if (record == NULL || sequence == 0U) {
             continue;
         }
         if (selected == NULL ||
@@ -738,8 +758,11 @@ static bool uds_dtc_record_number_matches(uint8_t requested, uint8_t actual)
 
 static bool uds_dtc_ext_record_number_matches(uint8_t requested, uint8_t actual)
 {
-    return requested == actual || requested == UINT8_C(0xfe) ||
-           requested == UINT8_C(0xff);
+    if (requested == actual || requested == UINT8_C(0xff)) return true;
+    if (requested == UINT8_C(0xfe)) {
+        return actual >= UINT8_C(0x90) && actual <= UINT8_C(0xef);
+    }
+    return false;
 }
 
 static LinkUdsServerHandlerResult uds_dtc_snapshot_by_dtc_response(
@@ -754,7 +777,6 @@ static LinkUdsServerHandlerResult uds_dtc_snapshot_by_dtc_response(
 
     if (record == NULL || detail == NULL ||
         detail->snapshot_record_number == 0U ||
-        detail->snapshot_data == NULL ||
         !uds_dtc_record_number_matches(
             requested_record, detail->snapshot_record_number) ||
         (user_memory &&
@@ -768,8 +790,15 @@ static LinkUdsServerHandlerResult uds_dtc_snapshot_by_dtc_response(
         !uds_dtc_put_u8(data, capacity, &offset, memory_selection)) {
         return uds_dtc_too_long();
     }
-    if (!uds_dtc_put_record(data, capacity, &offset, record) ||
-        !uds_dtc_put_u8(
+    if (!uds_dtc_put_record(data, capacity, &offset, record))
+        return uds_dtc_too_long();
+
+    if (detail->snapshot_data == NULL ||
+        detail->snapshot_data_length == 0U) {
+        return link_uds_server_handler_positive(offset);
+    }
+
+    if (!uds_dtc_put_u8(
             data, capacity, &offset, detail->snapshot_record_number) ||
         !uds_dtc_put_u8(
             data, capacity, &offset, detail->snapshot_identifier_count) ||
@@ -787,7 +816,8 @@ static LinkUdsServerHandlerResult uds_dtc_stored_data_response(
 {
     size_t index;
     size_t offset = 0U;
-    bool wrote = false;
+    bool supported = false;
+    bool wrote_data = false;
 
     if (store->detail_count == 0U) return uds_dtc_out_of_range();
     if (!uds_dtc_put_u8(data, capacity, &offset, subfunction))
@@ -799,11 +829,16 @@ static LinkUdsServerHandlerResult uds_dtc_stored_data_response(
             uds_dtc_record_for_code(store, detail->code);
 
         if (record == NULL || detail->stored_data_record_number == 0U ||
-            detail->stored_data == NULL ||
             !uds_dtc_record_number_matches(
                 requested_record, detail->stored_data_record_number)) {
             continue;
         }
+        supported = true;
+        if (detail->stored_data == NULL ||
+            detail->stored_data_length == 0U) {
+            continue;
+        }
+
         if (!uds_dtc_put_u8(
                 data, capacity, &offset, detail->stored_data_record_number) ||
             !uds_dtc_put_record(data, capacity, &offset, record) ||
@@ -815,11 +850,16 @@ static LinkUdsServerHandlerResult uds_dtc_stored_data_response(
                 detail->stored_data, detail->stored_data_length)) {
             return uds_dtc_too_long();
         }
-        wrote = true;
+        wrote_data = true;
         if (requested_record != UINT8_C(0xff)) break;
     }
-    return wrote ? link_uds_server_handler_positive(offset)
-                 : uds_dtc_out_of_range();
+
+    if (!supported) return uds_dtc_out_of_range();
+    if (!wrote_data) {
+        if (!uds_dtc_put_u8(data, capacity, &offset, requested_record))
+            return uds_dtc_too_long();
+    }
+    return link_uds_server_handler_positive(offset);
 }
 
 static LinkUdsServerHandlerResult uds_dtc_ext_by_dtc_response(
@@ -835,7 +875,6 @@ static LinkUdsServerHandlerResult uds_dtc_ext_by_dtc_response(
 
     if (record == NULL || detail == NULL ||
         detail->ext_data_record_number == 0U ||
-        detail->ext_data == NULL ||
         !uds_dtc_ext_record_number_matches(
             requested_record, detail->ext_data_record_number) ||
         (require_mirror && !detail->mirror_memory) ||
@@ -849,8 +888,13 @@ static LinkUdsServerHandlerResult uds_dtc_ext_by_dtc_response(
         !uds_dtc_put_u8(data, capacity, &offset, memory_selection)) {
         return uds_dtc_too_long();
     }
-    if (!uds_dtc_put_record(data, capacity, &offset, record) ||
-        !uds_dtc_put_u8(
+    if (!uds_dtc_put_record(data, capacity, &offset, record))
+        return uds_dtc_too_long();
+
+    if (detail->ext_data == NULL || detail->ext_data_length == 0U)
+        return link_uds_server_handler_positive(offset);
+
+    if (!uds_dtc_put_u8(
             data, capacity, &offset, detail->ext_data_record_number) ||
         !uds_dtc_put_bytes(
             data, capacity, &offset,
@@ -1007,7 +1051,8 @@ static LinkUdsServerHandlerResult uds_dtc_fault_counter_response(
 
     for (index = 0U; index < store->detail_count; ++index) {
         const LinkUdsServerDtcDetail *detail = &store->details[index];
-        if (detail->fault_detection_counter == 0U ||
+        if (uds_dtc_record_for_code(store, detail->code) == NULL ||
+            detail->fault_detection_counter == 0U ||
             detail->fault_detection_counter >= UINT8_C(0x7f)) {
             continue;
         }
@@ -1027,7 +1072,7 @@ static LinkUdsServerHandlerResult uds_dtc_ext_by_record_response(
 {
     size_t index;
     size_t offset = 0U;
-    bool wrote = false;
+    bool supported = false;
 
     if (store->detail_count == 0U || record_number > UINT8_C(0xef))
         return uds_dtc_out_of_range();
@@ -1040,20 +1085,23 @@ static LinkUdsServerHandlerResult uds_dtc_ext_by_record_response(
         const LinkUdsServerDtcDetail *detail = &store->details[index];
         const LinkUdsDtcRecord *record =
             uds_dtc_record_for_code(store, detail->code);
-        if (record == NULL || detail->ext_data == NULL ||
+
+        if (record == NULL ||
             detail->ext_data_record_number != record_number) {
             continue;
         }
+        supported = true;
+        if (detail->ext_data == NULL || detail->ext_data_length == 0U)
+            continue;
         if (!uds_dtc_put_record(data, capacity, &offset, record) ||
             !uds_dtc_put_bytes(
                 data, capacity, &offset,
                 detail->ext_data, detail->ext_data_length)) {
             return uds_dtc_too_long();
         }
-        wrote = true;
     }
-    return wrote ? link_uds_server_handler_positive(offset)
-                 : uds_dtc_out_of_range();
+    return supported ? link_uds_server_handler_positive(offset)
+                     : uds_dtc_out_of_range();
 }
 
 static LinkUdsServerHandlerResult uds_dtc_user_memory_list_response(
@@ -1237,9 +1285,8 @@ LinkUdsServerHandlerResult link_uds_server_dtc_handler(
 
     case LINK_UDS_DTC_REPORT_SUPPORTED_DTC:
         if (request->pdu_length != 2U) return uds_dtc_bad_length();
-        return uds_dtc_status_list_response(
-            store, subfunction, UINT8_C(0xff), false, false,
-            data, capacity);
+        return uds_dtc_supported_list_response(
+            store, subfunction, data, capacity);
 
     case LINK_UDS_DTC_REPORT_FIRST_TEST_FAILED_DTC:
         if (request->pdu_length != 2U) return uds_dtc_bad_length();
@@ -1299,7 +1346,7 @@ LinkUdsServerHandlerResult link_uds_server_dtc_handler(
     case LINK_UDS_DTC_REPORT_WITH_PERMANENT_STATUS:
         if (request->pdu_length != 2U) return uds_dtc_bad_length();
         return uds_dtc_detail_status_list_response(
-            store, subfunction, UINT8_C(0xff),
+            store, subfunction, 0U,
             false, false, true, data, capacity);
 
     case LINK_UDS_DTC_REPORT_EXT_DATA_BY_RECORD_NUMBER:
