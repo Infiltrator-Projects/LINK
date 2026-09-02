@@ -1,6 +1,6 @@
 # LINK migration status
 
-Dependency hierarchy: `Infiltratr Common -> LINK -> MBLINK / JAGLINK`.
+Dependency hierarchy: `Infiltratr Common -> LINK -> MBLINK / JAGLINK / BMWLINK / AUDILINK / FORDLINK`.
 
 ## Completed shared ownership through LINK 0.9.1
 
@@ -30,8 +30,8 @@ Product-prefixed files may remain only as compatibility aliases/wrappers. They m
 3. shared iPhone application structure, with Swift/Objective-C limited to presentation/platform glue;
 4. packaging/release helpers and common CI assertions.
 
-Vehicle-specific Mercedes and Jaguar definitions, probes and presentation assets stay in their product repositories.
+Vehicle-specific Mercedes, Jaguar, BMW, Audi and Ford definitions, probes and presentation assets stay in their product repositories.
 
-A migration is complete only when LINK is the source of truth, both products consume it, duplicate implementation is removed, regression tests pass, and documentation accurately records ownership.
+A migration is complete only when LINK is the source of truth, all LINK-family products consume it, duplicate implementation is removed, regression tests pass, and documentation accurately records ownership.
 
 SPDX-License-Identifier: GPL-3.0-or-later
