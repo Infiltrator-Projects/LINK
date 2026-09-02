@@ -22,6 +22,13 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Enable Git Bash on self-hosted Windows
+        if: runner.os == 'Windows' && runner.environment == 'self-hosted'
+        shell: pwsh
+        run: |
+          $gitBin = Join-Path $env:ProgramFiles 'Git\bin'
+          if (-not (Test-Path (Join-Path $gitBin 'bash.exe'))) { throw 'Git Bash is unavailable on the self-hosted Windows runner.' }
+          $gitBin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Enforce main-only automatic release policy
         shell: bash
