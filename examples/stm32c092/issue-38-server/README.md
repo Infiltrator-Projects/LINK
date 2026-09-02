@@ -5,6 +5,18 @@ This directory is the concrete server-role integration requested by
 `chenyurong22` in MBLINK issue #38. It is intentionally the opposite CAN
 role from LINK's original STM32 diagnostic-tester example.
 
+## Reporter project source overlay
+
+The repaired source replacements for the STM32C092_UDS.zip supplied by
+chenyurong22 are tracked directly in:
+
+`examples/stm32c092/issue-38-server/reporter-project-fixed/`
+
+That directory preserves the original project-relative paths for the six files
+changed by the hardware/PCAN investigation. Apply those files over the supplied
+KEIL/Cube project. Unchanged STM32 HAL/CMSIS and generated build products are
+not duplicated in LINK.
+
 ## Ownership boundary
 
 This directory is the **generic LINK half** of that work: STM32 FDCAN,
