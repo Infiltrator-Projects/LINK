@@ -355,7 +355,8 @@ if(WIN32 AND PROJECT_IS_TOP_LEVEL)
         PRODUCT_NAME "LINK" PRODUCT_SLUG "link" WINDOW_CLASS "LINKDiscoverWindow"
         PRODUCT_VERSION "${PROJECT_VERSION}" PRODUCT_COPYRIGHT "Copyright (C) 2026 The First Infiltrator"
         PRODUCT_SUBTITLE "Shared Vehicle Diagnostics"
-        PRODUCT_WEBSITE "https://github.com/Infiltrator-Projects/LINK")
+        PRODUCT_WEBSITE "https://github.com/Infiltrator-Projects/LINK"
+        PRODUCT_ICON_PNG "${CMAKE_CURRENT_SOURCE_DIR}/assets/branding/link-obd-icon-base.png")
     if(LINK_BUILD_REFERENCE_PRODUCT_FACES)
         link_add_windows_discover(mblink-discover PRODUCT_NAME "MBLINK" PRODUCT_SLUG "mblink"
             WINDOW_CLASS "MBLINKDiscoverWindow" PRODUCT_VERSION "${PROJECT_VERSION}"

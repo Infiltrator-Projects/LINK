@@ -65,6 +65,19 @@ A product repository may own:
 - evidence-backed manufacturer-specific read-only ECU/module probes and decoders;
 - minimal compatibility facades needed while old product-prefixed APIs are migrated.
 
+## Shared icon composition
+
+LINK owns the neutral high-resolution icon base at
+`assets/branding/link-obd-icon-base.png`. It contains the shared dark
+rounded-square panel and the front-facing 16-pin OBD-II connector, with the
+upper emblem area intentionally empty.
+
+Manufacturer product icons derive from that base by adding only the
+manufacturer emblem in the reserved upper area. The base panel and connector
+are the visual invariant; each branded derivative remains owned and packaged
+by its product repository. MBLINK, JAGLINK, FORDLINK, BMWLINK and AUDILINK all
+use this composition, which is also the rule for future product faces.
+
 A product repository must not own a copied generic LINK implementation.
 
 The fact that the five Discover product faces can expose different modules, identifiers or views does not justify separate generic scanner implementations: those differences are manufacturer data/behaviour layered over the same engine.
