@@ -364,18 +364,21 @@ int main(void)
               LINK_STM32_UDS_SERVER_ACTIVE);
     }
 
-    memset(&request, 0, sizeof(request));
-    request.can_id = 0x7e8U;
-    request.length = 3U;
-    request.data[0] = 0x02U;
-    request.data[1] = 0x10U;
-    request.data[2] = 0x01U;
-    mock_push(&mock, &request);
-    link_stm32_can_rx_isr(&channel);
+    {
+        const size_t before = mock.tx_count;
+        memset(&request, 0, sizeof(request));
+        request.can_id = 0x7e8U;
+        request.length = 3U;
+        request.data[0] = 0x02U;
+        request.data[1] = 0x10U;
+        request.data[2] = 0x01U;
+        mock_push(&mock, &request);
+        link_stm32_can_rx_isr(&channel);
 
-    CHECK(link_stm32_uds_server_poll(&transport) ==
-          LINK_STM32_UDS_SERVER_RESULT_WAITING);
-    CHECK(mock.tx_count == 3U + RACE_REQUEST_COUNT);
+        CHECK(link_stm32_uds_server_poll(&transport) ==
+              LINK_STM32_UDS_SERVER_RESULT_WAITING);
+        CHECK(mock.tx_count == before);
+    }
 
     puts("stm32 uds server tests passed");
     return EXIT_SUCCESS;
