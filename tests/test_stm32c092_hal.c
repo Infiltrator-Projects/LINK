@@ -184,6 +184,23 @@ static int test_classic_tx_and_completion(void)
     return 0;
 }
 
+static int test_dual_physical_functional_filter(void)
+{
+    FDCAN_HandleTypeDef hfdcan;
+    LinkStm32C092Hal adapter;
+
+    reset_fake_hal();
+    memset(&hfdcan, 0, sizeof(hfdcan));
+    link_stm32c092_hal_init(&adapter, &hfdcan, false);
+    REQUIRE(link_stm32c092_hal_start_standard_dual(
+        &adapter, UINT32_C(0x7e0), UINT32_C(0x7df)));
+    REQUIRE(fake_filter_configured);
+    REQUIRE(fake_filter.FilterType == FDCAN_FILTER_DUAL);
+    REQUIRE(fake_filter.FilterID1 == UINT32_C(0x7e0));
+    REQUIRE(fake_filter.FilterID2 == UINT32_C(0x7df));
+    return 0;
+}
+
 static int test_can_fd_and_extended_id_mapping(void)
 {
     reset_fake_hal();
@@ -260,6 +277,7 @@ static int test_rx_mapping_and_event_loss(void)
 int main(void)
 {
     REQUIRE(test_classic_tx_and_completion() == 0);
+    REQUIRE(test_dual_physical_functional_filter() == 0);
     REQUIRE(test_can_fd_and_extended_id_mapping() == 0);
     REQUIRE(test_rx_mapping_and_event_loss() == 0);
     return 0;

@@ -224,9 +224,11 @@ void link_stm32c092_hal_tx_event_irq(
     }
 }
 
-bool link_stm32c092_hal_start_standard(
+static bool link_stm32c092_hal_start_standard_filter(
     LinkStm32C092Hal *adapter,
-    uint32_t receive_id)
+    uint32_t receive_id,
+    uint32_t second_id,
+    bool dual)
 {
     FDCAN_FilterTypeDef filter;
     const uint32_t notifications =
@@ -234,17 +236,19 @@ bool link_stm32c092_hal_start_standard(
         FDCAN_IT_TX_EVT_FIFO_NEW_DATA |
         FDCAN_IT_TX_EVT_FIFO_ELT_LOST;
 
-    if (adapter == NULL || adapter->hfdcan == NULL || receive_id > 0x7ffU) {
+    if (adapter == NULL || adapter->hfdcan == NULL ||
+        receive_id > UINT32_C(0x7ff) ||
+        second_id > UINT32_C(0x7ff)) {
         return false;
     }
 
     memset(&filter, 0, sizeof(filter));
     filter.IdType = FDCAN_STANDARD_ID;
     filter.FilterIndex = 0U;
-    filter.FilterType = FDCAN_FILTER_MASK;
+    filter.FilterType = dual ? FDCAN_FILTER_DUAL : FDCAN_FILTER_MASK;
     filter.FilterConfig = FDCAN_FILTER_TO_RXFIFO0;
     filter.FilterID1 = receive_id;
-    filter.FilterID2 = 0x7ffU;
+    filter.FilterID2 = dual ? second_id : UINT32_C(0x7ff);
 
     if (HAL_FDCAN_ConfigFilter(adapter->hfdcan, &filter) != HAL_OK ||
         HAL_FDCAN_ConfigGlobalFilter(
@@ -256,4 +260,21 @@ bool link_stm32c092_hal_start_standard(
         return false;
     }
     return true;
+}
+
+bool link_stm32c092_hal_start_standard(
+    LinkStm32C092Hal *adapter,
+    uint32_t receive_id)
+{
+    return link_stm32c092_hal_start_standard_filter(
+        adapter, receive_id, receive_id, false);
+}
+
+bool link_stm32c092_hal_start_standard_dual(
+    LinkStm32C092Hal *adapter,
+    uint32_t receive_id,
+    uint32_t functional_receive_id)
+{
+    return link_stm32c092_hal_start_standard_filter(
+        adapter, receive_id, functional_receive_id, true);
 }

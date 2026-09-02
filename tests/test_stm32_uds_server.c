@@ -140,6 +140,13 @@ int main(void)
     transport_config.address.rx_can_id = 0x7e0U;
     transport_config.address.addressing_mode = LINK_ISOTP_ADDRESSING_NORMAL;
     transport_config.address.target_type = LINK_ISOTP_TARGET_PHYSICAL;
+    transport_config.functional_address_enabled = true;
+    transport_config.functional_address.tx_can_id = 0x7e8U;
+    transport_config.functional_address.rx_can_id = 0x7dfU;
+    transport_config.functional_address.addressing_mode =
+        LINK_ISOTP_ADDRESSING_NORMAL;
+    transport_config.functional_address.target_type =
+        LINK_ISOTP_TARGET_FUNCTIONAL;
     transport_config.consecutive_timeout_us = UINT64_C(1000000);
     transport_config.flow_control_timeout_us = UINT64_C(1000000);
     transport_config.max_wait_frames = 3U;
@@ -237,6 +244,124 @@ int main(void)
         CHECK(memcmp(
             mock.tx[tx_index].data, expected_tester_present,
             sizeof(expected_tester_present)) == 0);
+    }
+
+    /* Functional TesterPresent uses 0x7DF and answers physically on 0x7E8. */
+    {
+        const size_t before = mock.tx_count;
+        memset(&request, 0, sizeof(request));
+        request.can_id = 0x7dfU;
+        request.length = 3U;
+        request.data[0] = 0x02U;
+        request.data[1] = 0x3eU;
+        request.data[2] = 0x00U;
+        mock_push(&mock, &request);
+        link_stm32_can_rx_isr(&channel);
+        CHECK(poll_until_complete(&transport, &mock) == 0);
+        CHECK(mock.tx_count == before + 1U);
+        CHECK(mock.tx[before].can_id == 0x7e8U);
+        CHECK(memcmp(
+            mock.tx[before].data, expected_tester_present,
+            sizeof(expected_tester_present)) == 0);
+    }
+
+    /* Suppress the standard functional-address unsupported-service NRC. */
+    {
+        const size_t before = mock.tx_count;
+        memset(&request, 0, sizeof(request));
+        request.can_id = 0x7dfU;
+        request.length = 2U;
+        request.data[0] = 0x01U;
+        request.data[1] = 0x99U;
+        mock_push(&mock, &request);
+        link_stm32_can_rx_isr(&channel);
+        CHECK(poll_until_complete(&transport, &mock) == 0);
+        CHECK(mock.tx_count == before);
+        CHECK(link_stm32_uds_server_state(&transport) ==
+              LINK_STM32_UDS_SERVER_ACTIVE);
+    }
+
+    /* Physical addressing still returns the same negative response. */
+    {
+        const size_t before = mock.tx_count;
+        const uint8_t expected_negative[] = {
+            0x03U, 0x7fU, 0x99U, 0x11U, 0xccU, 0xccU, 0xccU, 0xccU
+        };
+        memset(&request, 0, sizeof(request));
+        request.can_id = 0x7e0U;
+        request.length = 2U;
+        request.data[0] = 0x01U;
+        request.data[1] = 0x99U;
+        mock_push(&mock, &request);
+        link_stm32_can_rx_isr(&channel);
+        CHECK(poll_until_complete(&transport, &mock) == 0);
+        CHECK(mock.tx_count == before + 1U);
+        CHECK(mock.tx[before].can_id == 0x7e8U);
+        CHECK(memcmp(
+            mock.tx[before].data, expected_negative,
+            sizeof(expected_negative)) == 0);
+    }
+
+    /*
+     * Functional request, segmented positive response: FlowControl is sent to
+     * this ECU's physical request ID 0x7E0.
+     */
+    {
+        const size_t before = mock.tx_count;
+        memset(&request, 0, sizeof(request));
+        request.can_id = 0x7dfU;
+        request.length = 4U;
+        request.data[0] = 0x03U;
+        request.data[1] = 0x19U;
+        request.data[2] = 0x02U;
+        request.data[3] = 0xffU;
+        mock_push(&mock, &request);
+        link_stm32_can_rx_isr(&channel);
+        CHECK(link_stm32_uds_server_poll(&transport) ==
+              LINK_STM32_UDS_SERVER_RESULT_WAITING);
+        CHECK(mock.tx_count == before + 1U);
+        CHECK(mock.tx[before].can_id == 0x7e8U);
+        CHECK(memcmp(
+            mock.tx[before].data, expected_dtc_ff,
+            sizeof(expected_dtc_ff)) == 0);
+
+        CHECK(link_stm32_uds_server_poll(&transport) ==
+              LINK_STM32_UDS_SERVER_RESULT_WAITING);
+        memset(&request, 0, sizeof(request));
+        memset(request.data, 0xcc, sizeof(request.data));
+        request.can_id = 0x7e0U;
+        request.length = 8U;
+        request.data[0] = 0x30U;
+        request.data[1] = 0x00U;
+        request.data[2] = 0x00U;
+        mock_push(&mock, &request);
+        link_stm32_can_rx_isr(&channel);
+        CHECK(poll_until_complete(&transport, &mock) == 0);
+        CHECK(mock.tx_count == before + 2U);
+        CHECK(mock.tx[before + 1U].can_id == 0x7e8U);
+        CHECK(memcmp(
+            mock.tx[before + 1U].data, expected_dtc_cf,
+            sizeof(expected_dtc_cf)) == 0);
+    }
+
+    /* Functional First Frames are ignored; broadcast requests are SF-only. */
+    {
+        const size_t before = mock.tx_count;
+        memset(&request, 0, sizeof(request));
+        request.can_id = 0x7dfU;
+        request.length = 8U;
+        request.data[0] = 0x10U;
+        request.data[1] = 0x09U;
+        request.data[2] = 0x22U;
+        request.data[3] = 0xf1U;
+        request.data[4] = 0x90U;
+        mock_push(&mock, &request);
+        link_stm32_can_rx_isr(&channel);
+        CHECK(link_stm32_uds_server_poll(&transport) ==
+              LINK_STM32_UDS_SERVER_RESULT_WAITING);
+        CHECK(mock.tx_count == before);
+        CHECK(link_stm32_uds_server_state(&transport) ==
+              LINK_STM32_UDS_SERVER_ACTIVE);
     }
 
     memset(&request, 0, sizeof(request));

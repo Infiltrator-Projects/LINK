@@ -18,7 +18,11 @@ extern "C" {
 #endif
 
 typedef struct {
+    /* Physical request/response address. Responses always use this address. */
     LinkIsoTpAddress address;
+    /* Optional functional request address (for example 0x7DF on 11-bit OBD). */
+    bool functional_address_enabled;
+    LinkIsoTpAddress functional_address;
     uint8_t rx_block_size;
     uint8_t rx_stmin;
     uint64_t consecutive_timeout_us;

@@ -128,6 +128,10 @@ jobs:
           grep -Fq 'link-test-uds-server tests/test_uds_server.c link-uds-server' CMakeLists.txt
           grep -Fq 'link-test-stm32-uds-server' CMakeLists.txt
           grep -Fq 'request_can_id = 0x7e0U' examples/stm32c092/issue-38-server/Src-main.c
+          grep -Fq 'link_stm32c092_hal_start_standard_dual' examples/stm32c092/link-stm32c092-hal.c
+          grep -Fq 'functional_address_enabled' platform/stm32/link-stm32-uds-server.h
+          grep -Fq 'nrc == UINT8_C(0x31)' platform/stm32/link-stm32-uds-server.c
+          grep -Fq 'request.can_id = 0x7dfU' tests/test_stm32_uds_server.c
           if grep -REn '\?[[:space:]]*:' platform/apple; then
             echo 'Apple platform code must not use the GNU omitted-middle ?: extension.' >&2
             exit 1

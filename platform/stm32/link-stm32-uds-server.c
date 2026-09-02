@@ -7,12 +7,25 @@
 static bool link_stm32_uds_server_config_valid(
     const LinkStm32UdsServerConfig *config)
 {
-    return config != NULL &&
-           link_isotp_address_is_valid(&config->address) &&
-           config->consecutive_timeout_us != 0U &&
-           config->flow_control_timeout_us != 0U &&
-           link_isotp_can_data_length_is_valid(
-               config->can_fd, config->data_length);
+    if (config == NULL ||
+        !link_isotp_address_is_valid(&config->address) ||
+        config->address.target_type != LINK_ISOTP_TARGET_PHYSICAL ||
+        config->consecutive_timeout_us == 0U ||
+        config->flow_control_timeout_us == 0U ||
+        !link_isotp_can_data_length_is_valid(
+            config->can_fd, config->data_length)) {
+        return false;
+    }
+    if (!config->functional_address_enabled) return true;
+    return link_isotp_address_is_valid(&config->functional_address) &&
+           config->functional_address.target_type ==
+               LINK_ISOTP_TARGET_FUNCTIONAL &&
+           config->functional_address.tx_can_id ==
+               config->address.tx_can_id &&
+           config->functional_address.tx_extended_id ==
+               config->address.tx_extended_id &&
+           config->functional_address.addressing_mode ==
+               config->address.addressing_mode;
 }
 
 static uint64_t link_stm32_uds_server_deadline(
@@ -205,15 +218,31 @@ static LinkStm32UdsServerResult link_stm32_uds_server_begin_response(
     return link_stm32_uds_server_send_pending(transport);
 }
 
-static LinkStm32UdsServerResult link_stm32_uds_server_dispatch(
+static bool link_stm32_uds_server_functional_nrc_suppressed(
+    const uint8_t *response,
+    size_t response_length)
+{
+    uint8_t nrc;
+    if (response == NULL || response_length < 3U ||
+        response[0] != UINT8_C(0x7f)) {
+        return false;
+    }
+    nrc = response[2];
+    return nrc == UINT8_C(0x11) ||
+           nrc == UINT8_C(0x12) ||
+           nrc == UINT8_C(0x31) ||
+           nrc == UINT8_C(0x7e) ||
+           nrc == UINT8_C(0x7f);
+}
+
+static LinkStm32UdsServerResult link_stm32_uds_server_dispatch_payload(
     LinkStm32UdsServer *transport,
+    const uint8_t *request,
+    size_t request_length,
+    bool functional_request,
     uint64_t now_us)
 {
-    const uint8_t *request;
-    size_t request_length = 0U;
     size_t response_length = 0U;
-
-    request = link_isotp_rx_payload(&transport->receiver, &request_length);
     if (request == NULL || request_length == 0U) {
         return link_stm32_uds_server_fail(
             transport, LINK_STM32_UDS_SERVER_RESULT_ISOTP_ERROR);
@@ -226,13 +255,104 @@ static LinkStm32UdsServerResult link_stm32_uds_server_dispatch(
         return link_stm32_uds_server_fail(
             transport, LINK_STM32_UDS_SERVER_RESULT_UDS_ERROR);
     }
-    link_isotp_rx_reset(&transport->receiver);
+    if (functional_request &&
+        link_stm32_uds_server_functional_nrc_suppressed(
+            transport->tx_storage, response_length)) {
+        response_length = 0U;
+    }
     if (response_length == 0U) {
         transport->completed_request_count++;
         return LINK_STM32_UDS_SERVER_RESULT_REQUEST_COMPLETE;
     }
     return link_stm32_uds_server_begin_response(
         transport, response_length, now_us);
+}
+
+static LinkStm32UdsServerResult link_stm32_uds_server_dispatch(
+    LinkStm32UdsServer *transport,
+    uint64_t now_us)
+{
+    const uint8_t *request;
+    size_t request_length = 0U;
+    LinkStm32UdsServerResult result;
+    request = link_isotp_rx_payload(&transport->receiver, &request_length);
+    result = link_stm32_uds_server_dispatch_payload(
+        transport, request, request_length, false, now_us);
+    link_isotp_rx_reset(&transport->receiver);
+    return result;
+}
+
+static bool link_stm32_uds_server_frame_matches_rx(
+    const LinkIsoTpAddress *address,
+    const LinkIsoTpCanFrame *frame,
+    size_t *offset)
+{
+    size_t local_offset;
+    if (address == NULL || frame == NULL ||
+        frame->can_id != address->rx_can_id ||
+        frame->extended_id != address->rx_extended_id) {
+        return false;
+    }
+    local_offset = address->addressing_mode == LINK_ISOTP_ADDRESSING_NORMAL
+        ? 0U : 1U;
+    if (frame->length <= local_offset) return false;
+    if (local_offset != 0U &&
+        frame->data[0] != address->rx_address_extension) {
+        return false;
+    }
+    if (offset != NULL) *offset = local_offset;
+    return true;
+}
+
+static LinkStm32UdsServerResult link_stm32_uds_server_accept_functional(
+    LinkStm32UdsServer *transport,
+    const LinkIsoTpCanFrame *frame,
+    uint64_t arrival_us)
+{
+    LinkIsoTpRx receiver;
+    LinkIsoTpRxConfig rx_config;
+    LinkIsoTpCanFrame unused_flow_control;
+    bool flow_control_ready = false;
+    const uint8_t *request;
+    size_t request_length = 0U;
+    size_t offset = 0U;
+    LinkIsoTpResult result;
+
+    if (!transport->config.functional_address_enabled ||
+        !link_stm32_uds_server_frame_matches_rx(
+            &transport->config.functional_address, frame, &offset)) {
+        return LINK_STM32_UDS_SERVER_RESULT_OK;
+    }
+    if ((frame->data[offset] >> 4U) != 0U) {
+        return LINK_STM32_UDS_SERVER_RESULT_OK;
+    }
+
+    memset(&rx_config, 0, sizeof(rx_config));
+    rx_config.address = transport->config.functional_address;
+    rx_config.consecutive_timeout_us =
+        transport->config.consecutive_timeout_us;
+    rx_config.can_fd = transport->config.can_fd;
+    rx_config.data_length = transport->config.data_length;
+    rx_config.pad_short_frames = transport->config.pad_short_frames;
+    rx_config.padding_byte = transport->config.padding_byte;
+
+    result = link_isotp_rx_init(
+        &receiver, &rx_config,
+        transport->rx_storage, transport->rx_capacity);
+    if (result != LINK_ISOTP_RESULT_OK) {
+        return link_stm32_uds_server_fail(
+            transport, LINK_STM32_UDS_SERVER_RESULT_ISOTP_ERROR);
+    }
+    memset(&unused_flow_control, 0, sizeof(unused_flow_control));
+    result = link_isotp_rx_feed(
+        &receiver, frame, arrival_us,
+        &unused_flow_control, &flow_control_ready);
+    if (result != LINK_ISOTP_RESULT_COMPLETE || flow_control_ready) {
+        return LINK_STM32_UDS_SERVER_RESULT_OK;
+    }
+    request = link_isotp_rx_payload(&receiver, &request_length);
+    return link_stm32_uds_server_dispatch_payload(
+        transport, request, request_length, true, arrival_us);
 }
 
 static bool link_stm32_uds_server_defer_rx(
@@ -306,6 +426,13 @@ static LinkStm32UdsServerResult link_stm32_uds_server_accept_rx(
         (void)link_stm32_uds_server_defer_rx(
             transport, frame, arrival_us);
         return LINK_STM32_UDS_SERVER_RESULT_WAITING;
+    }
+
+    if (transport->config.functional_address_enabled &&
+        link_stm32_uds_server_frame_matches_rx(
+            &transport->config.functional_address, frame, NULL)) {
+        return link_stm32_uds_server_accept_functional(
+            transport, frame, arrival_us);
     }
 
     transport->isotp_result = link_isotp_rx_feed(

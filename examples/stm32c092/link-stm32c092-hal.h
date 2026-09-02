@@ -33,6 +33,10 @@ void link_stm32c092_hal_tx_event_irq(
 bool link_stm32c092_hal_start_standard(
     LinkStm32C092Hal *adapter,
     uint32_t receive_id);
+bool link_stm32c092_hal_start_standard_dual(
+    LinkStm32C092Hal *adapter,
+    uint32_t receive_id,
+    uint32_t functional_receive_id);
 
 #ifdef __cplusplus
 }
