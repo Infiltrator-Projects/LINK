@@ -272,6 +272,77 @@ struct LinkDiagnosticGrid<Content: View>: View {
     }
 }
 
+enum LinkDiagnosticTask: CaseIterable {
+    case vehicle
+    case log
+    case errors
+    case dashboard
+    case table
+    case graph
+    case tests
+    case services
+
+    var title: String {
+        switch self {
+        case .vehicle: return "Vehicle"
+        case .log: return "Log"
+        case .errors: return "Errors"
+        case .dashboard: return "Dashboard"
+        case .table: return "Table"
+        case .graph: return "Graph"
+        case .tests: return "Tests"
+        case .services: return "Services"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .vehicle: return "Identity, connection, networks and modules"
+        case .log: return "Chronological diagnostic session activity"
+        case .errors: return "Standard and manufacturer fault memory"
+        case .dashboard: return "Selected live measurements at a glance"
+        case .table: return "Search and view live diagnostic parameters"
+        case .graph: return "Selected parameters over time"
+        case .tests: return "Readiness, monitor results and self-tests"
+        case .services: return "Supported service procedures"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .vehicle: return "car.side.fill"
+        case .log: return "list.bullet.rectangle"
+        case .errors: return "exclamationmark.triangle.fill"
+        case .dashboard: return "gauge.with.dots.needle.67percent"
+        case .table: return "tablecells"
+        case .graph: return "chart.xyaxis.line"
+        case .tests: return "checkmark.square.fill"
+        case .services: return "wrench.and.screwdriver.fill"
+        }
+    }
+}
+
+struct LinkTaskTile<Destination: View>: View {
+    let task: LinkDiagnosticTask
+    let destination: () -> Destination
+
+    init(
+        _ task: LinkDiagnosticTask,
+        @ViewBuilder destination: @escaping () -> Destination
+    ) {
+        self.task = task
+        self.destination = destination
+    }
+
+    var body: some View {
+        LinkHomeTile(
+            task.title,
+            task.subtitle,
+            task.symbol,
+            destination: destination)
+    }
+}
+
 struct LinkHomeTile<Destination: View>: View {
     let title: String
     let subtitle: String
