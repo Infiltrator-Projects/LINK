@@ -37,12 +37,37 @@ static const LinkUdsDtcRecord example_dtc_records[] = {
         LINK_UDS_DTC_STATUS_CONFIRMED_DTC
     }
 };
+static const uint8_t example_snapshot_1[] = {0x12U,0x34U,0x56U,0x78U};
+static const uint8_t example_snapshot_2[] = {0x12U,0x35U,0x9aU};
+static const uint8_t example_stored_1[] = {0x22U,0x01U,0x55U};
+static const uint8_t example_stored_2[] = {0x22U,0x02U,0x66U};
+static const uint8_t example_ext_1[] = {0x05U,0x09U};
+static const uint8_t example_ext_2[] = {0x03U,0x08U};
+static const LinkUdsServerDtcDetail example_dtc_details[] = {
+    {
+        UINT32_C(0x123456),0x20U,0x01U,0x20U,1U,1U,
+        true,true,true,0x33U,0x01U,
+        0x01U,0x01U,example_snapshot_1,sizeof(example_snapshot_1),
+        0x01U,0x01U,example_stored_1,sizeof(example_stored_1),
+        0x01U,example_ext_1,sizeof(example_ext_1)
+    },
+    {
+        UINT32_C(0xabcdef),0x40U,0x02U,0x10U,0U,2U,
+        true,true,false,0x33U,0x01U,
+        0x01U,0x01U,example_snapshot_2,sizeof(example_snapshot_2),
+        0x01U,0x01U,example_stored_2,sizeof(example_stored_2),
+        0x01U,example_ext_2,sizeof(example_ext_2)
+    }
+};
 static const LinkUdsServerDtcStore example_dtc_store = {
     example_dtc_records,
     sizeof(example_dtc_records) / sizeof(example_dtc_records[0]),
     LINK_UDS_DTC_STATUS_MASK_ALL,
     UINT8_C(0xff),
-    UINT8_C(0x01)
+    UINT8_C(0x01),
+    example_dtc_details,
+    sizeof(example_dtc_details) / sizeof(example_dtc_details[0]),
+    UINT8_C(0x04)
 };
 
 static uint32_t link_stm32c092_server_clock_ms(void *context)

@@ -7,10 +7,10 @@
  * catalogue. Application-specific ECU behaviour is supplied through bounded
  * service handlers; DiagnosticSessionControl, ECUReset and TesterPresent have
  * portable built-in handlers. ReadDTCInformation has codecs for all 27 LINK
- * report types. The bounded DTC store handler answers only reports that can be
- * derived truthfully from DTC number + status; reports requiring snapshots,
- * extended data, severity, mirror/user/permanent memory or FDC metadata return
- * RequestOutOfRange unless the application installs a richer 0x19 handler.
+ * report types. The DTC store handler supports a compact status-only mode and
+ * an optional rich metadata model for ISO 14229-1:2013 snapshot, stored-data,
+ * extended-data, severity, mirror/emissions/permanent/user-memory, FDC and
+ * WWH-OBD responses.
  */
 #ifndef LINK_UDS_SERVER_H
 #define LINK_UDS_SERVER_H
@@ -130,15 +130,47 @@ typedef struct {
 } LinkUdsServer;
 
 typedef struct {
+    uint32_t code;
+    uint8_t severity;
+    uint8_t functional_unit;
+    uint8_t fault_detection_counter;
+    uint32_t first_test_failed_sequence;
+    uint32_t confirmed_sequence;
+    bool mirror_memory;
+    bool emissions_obd;
+    bool permanent_status;
+    uint8_t functional_group_identifier;
+    uint8_t user_memory_selection;
+    uint8_t snapshot_record_number;
+    uint8_t snapshot_identifier_count;
+    const uint8_t *snapshot_data;
+    size_t snapshot_data_length;
+    uint8_t stored_data_record_number;
+    uint8_t stored_data_identifier_count;
+    const uint8_t *stored_data;
+    size_t stored_data_length;
+    uint8_t ext_data_record_number;
+    const uint8_t *ext_data;
+    size_t ext_data_length;
+} LinkUdsServerDtcDetail;
+
+#define LINK_UDS_SERVER_DTC_DETAIL_INIT \
+    { 0U, 0U, 0U, 0U, 0U, 0U, false, false, false, 0U, 0U, \
+      0U, 0U, NULL, 0U, 0U, 0U, NULL, 0U, 0U, NULL, 0U }
+
+typedef struct {
     const LinkUdsDtcRecord *records;
     size_t record_count;
     uint8_t status_availability_mask;
     uint8_t severity_availability_mask;
     uint8_t dtc_format_identifier;
+    const LinkUdsServerDtcDetail *details;
+    size_t detail_count;
+    uint8_t wwh_dtc_format_identifier;
 } LinkUdsServerDtcStore;
 
 #define LINK_UDS_SERVER_DTC_STORE_INIT \
-    { NULL, 0U, LINK_UDS_DTC_STATUS_MASK_ALL, 0U, 0x01U }
+    { NULL, 0U, LINK_UDS_DTC_STATUS_MASK_ALL, 0U, 0x01U, NULL, 0U, 0x04U }
 
 LinkUdsServerHandlerResult link_uds_server_handler_positive(size_t data_length);
 LinkUdsServerHandlerResult link_uds_server_handler_negative(uint8_t nrc);

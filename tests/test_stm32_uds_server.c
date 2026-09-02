@@ -99,7 +99,8 @@ int main(void)
           LINK_UDS_DTC_STATUS_CONFIRMED_DTC }
     };
     LinkUdsServerDtcStore dtc_store = {
-        dtc_records, 2U, LINK_UDS_DTC_STATUS_MASK_ALL, 0xffU, 0x01U
+        dtc_records, 2U, LINK_UDS_DTC_STATUS_MASK_ALL, 0xffU, 0x01U,
+        NULL, 0U, 0x04U
     };
     LinkStm32UdsServer transport;
     LinkStm32UdsServerConfig transport_config;

@@ -309,7 +309,8 @@ static int test_dtc_all_subfunctions(void)
         }
     };
     LinkUdsServerDtcStore store = {
-        records, 2U, LINK_UDS_DTC_STATUS_MASK_ALL, 0xffU, 0x01U
+        records, 2U, LINK_UDS_DTC_STATUS_MASK_ALL, 0xffU, 0x01U,
+        NULL, 0U, 0x04U
     };
     LinkUdsServer server;
     LinkUdsServerConfig config = LINK_UDS_SERVER_CONFIG_INIT;
@@ -421,6 +422,139 @@ static int test_dtc_all_subfunctions(void)
     return 0;
 }
 
+static int test_dtc_rich_all_subfunctions(void)
+{
+    static const LinkUdsDtcRecord records[] = {
+        { UINT32_C(0x123456),
+          LINK_UDS_DTC_STATUS_TEST_FAILED |
+          LINK_UDS_DTC_STATUS_CONFIRMED_DTC },
+        { UINT32_C(0xabcdef),
+          LINK_UDS_DTC_STATUS_CONFIRMED_DTC }
+    };
+    static const uint8_t snapshot_1[] = {0x12U,0x34U,0x56U,0x78U};
+    static const uint8_t snapshot_2[] = {0x12U,0x35U,0x9aU};
+    static const uint8_t stored_1[] = {0x22U,0x01U,0x55U};
+    static const uint8_t stored_2[] = {0x22U,0x02U,0x66U};
+    static const uint8_t ext_1[] = {0x05U,0x09U};
+    static const uint8_t ext_2[] = {0x03U,0x08U};
+    static const LinkUdsServerDtcDetail details[] = {
+        {
+            UINT32_C(0x123456),0x20U,0x01U,0x20U,1U,1U,
+            true,true,true,0x33U,0x01U,
+            0x01U,0x01U,snapshot_1,sizeof(snapshot_1),
+            0x01U,0x01U,stored_1,sizeof(stored_1),
+            0x01U,ext_1,sizeof(ext_1)
+        },
+        {
+            UINT32_C(0xabcdef),0x40U,0x02U,0x10U,0U,2U,
+            true,true,false,0x33U,0x01U,
+            0x01U,0x01U,snapshot_2,sizeof(snapshot_2),
+            0x01U,0x01U,stored_2,sizeof(stored_2),
+            0x01U,ext_2,sizeof(ext_2)
+        }
+    };
+    LinkUdsServerDtcStore store = {
+        records,2U,LINK_UDS_DTC_STATUS_MASK_ALL,0xffU,0x01U,
+        details,2U,0x04U
+    };
+    LinkUdsServer server;
+    LinkUdsServerConfig config = LINK_UDS_SERVER_CONFIG_INIT;
+    uint8_t response[256U];
+    size_t length = 0U;
+    size_t index;
+    static const uint8_t requests[][7] = {
+        {0x19U,0x01U,0xffU},
+        {0x19U,0x02U,0xffU},
+        {0x19U,0x03U},
+        {0x19U,0x04U,0x12U,0x34U,0x56U,0x01U},
+        {0x19U,0x05U,0x01U},
+        {0x19U,0x06U,0x12U,0x34U,0x56U,0x01U},
+        {0x19U,0x07U,0xffU,0xffU},
+        {0x19U,0x08U,0xffU,0xffU},
+        {0x19U,0x09U,0x12U,0x34U,0x56U},
+        {0x19U,0x0aU},
+        {0x19U,0x0bU},
+        {0x19U,0x0cU},
+        {0x19U,0x0dU},
+        {0x19U,0x0eU},
+        {0x19U,0x0fU,0xffU},
+        {0x19U,0x10U,0x12U,0x34U,0x56U,0x01U},
+        {0x19U,0x11U,0xffU},
+        {0x19U,0x12U,0xffU},
+        {0x19U,0x13U,0xffU},
+        {0x19U,0x14U},
+        {0x19U,0x15U},
+        {0x19U,0x16U,0x01U},
+        {0x19U,0x17U,0xffU,0x01U},
+        {0x19U,0x18U,0x12U,0x34U,0x56U,0x01U,0x01U},
+        {0x19U,0x19U,0x12U,0x34U,0x56U,0x01U,0x01U},
+        {0x19U,0x42U,0x33U,0xffU,0xffU},
+        {0x19U,0x55U,0x33U}
+    };
+    static const uint8_t lengths[] = {
+        3U,3U,2U,6U,3U,6U,4U,4U,5U,
+        2U,2U,2U,2U,2U,3U,6U,3U,3U,
+        3U,2U,2U,3U,4U,7U,7U,5U,3U
+    };
+
+    CHECK(link_uds_server_init(&server,&config));
+    CHECK(link_uds_server_set_handler(
+        &server,0x19U,link_uds_server_dtc_handler,&store));
+
+    for(index=0U;index<sizeof(lengths);++index){
+        LinkUdsDtcInformationResponse decoded;
+        CHECK(link_uds_server_handle(
+                  &server,requests[index],lengths[index],
+                  response,sizeof(response),&length) ==
+              LINK_UDS_SERVER_RESULT_POSITIVE);
+        CHECK(length >= 2U);
+        CHECK(response[0] == 0x59U && response[1] == requests[index][1]);
+        CHECK(link_uds_decode_read_dtc_information_response(
+                  requests[index][1],response,length,&decoded) ==
+              LINK_UDS_RESULT_OK);
+    }
+
+    CHECK(link_uds_server_handle(
+              &server,requests[2],lengths[2],
+              response,sizeof(response),&length) ==
+          LINK_UDS_SERVER_RESULT_POSITIVE);
+    CHECK(length == 10U);
+    CHECK(response[0] == 0x59U && response[1] == 0x03U);
+    CHECK(response[2] == 0x12U && response[3] == 0x34U &&
+          response[4] == 0x56U && response[5] == 0x01U);
+
+    CHECK(link_uds_server_handle(
+              &server,requests[3],lengths[3],
+              response,sizeof(response),&length) ==
+          LINK_UDS_SERVER_RESULT_POSITIVE);
+    CHECK(response[0] == 0x59U && response[1] == 0x04U);
+    CHECK(response[2] == 0x12U && response[3] == 0x34U &&
+          response[4] == 0x56U && response[5] == 0x09U);
+    CHECK(response[6] == 0x01U && response[7] == 0x01U);
+
+    CHECK(link_uds_server_handle(
+              &server,requests[7],lengths[7],
+              response,sizeof(response),&length) ==
+          LINK_UDS_SERVER_RESULT_POSITIVE);
+    CHECK(response[0] == 0x59U && response[1] == 0x08U &&
+          response[2] == 0xffU);
+    CHECK(response[3] == 0x20U && response[4] == 0x01U &&
+          response[5] == 0x12U && response[6] == 0x34U &&
+          response[7] == 0x56U && response[8] == 0x09U);
+
+    CHECK(link_uds_server_handle(
+              &server,requests[25],lengths[25],
+              response,sizeof(response),&length) ==
+          LINK_UDS_SERVER_RESULT_POSITIVE);
+    CHECK(response[0] == 0x59U && response[1] == 0x42U &&
+          response[2] == 0x33U && response[3] == 0xffU &&
+          response[4] == 0xffU && response[5] == 0x04U);
+    CHECK(response[6] == 0x20U && response[7] == 0x12U &&
+          response[8] == 0x34U && response[9] == 0x56U &&
+          response[10] == 0x09U);
+    return 0;
+}
+
 static int test_negative_paths(void)
 {
     LinkUdsServer server;
@@ -455,6 +589,7 @@ int main(void)
     if (test_ecu_reset_semantics() != 0) return EXIT_FAILURE;
     if (test_custom_handlers() != 0) return EXIT_FAILURE;
     if (test_dtc_all_subfunctions() != 0) return EXIT_FAILURE;
+    if (test_dtc_rich_all_subfunctions() != 0) return EXIT_FAILURE;
     if (test_negative_paths() != 0) return EXIT_FAILURE;
     puts("uds server tests passed");
     return EXIT_SUCCESS;
