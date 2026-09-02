@@ -5,86 +5,33 @@
 #include <stddef.h>
 
 static LinkWorkspaceSectionDescriptor link_workspace_sections[] = {
-    {
-        .section = LINK_WORKSPACE_VEHICLE,
-        .key = "vehicle",
-        .title = "Vehicle",
-        .summary = "Vehicle identity, adapter and connection information",
-        .title_i18n_key = "nav.vehicle",
-        .summary_i18n_key = "nav.vehicle.summary"
-    },
-    {
-        .section = LINK_WORKSPACE_OBD,
-        .key = "obd",
-        .title = "OBD",
-        .summary = "Common legacy, transitional and OBD-II / EOBD diagnostics",
-        .title_i18n_key = "nav.obd",
-        .summary_i18n_key = "nav.obd.summary"
-    },
-    {
-        .section = LINK_WORKSPACE_MODULES,
-        .key = "modules",
-        .title = "Modules",
-        .summary = "Discovered control modules and ECU identification",
-        .title_i18n_key = "nav.modules",
-        .summary_i18n_key = "nav.modules.summary"
-    },
-    {
-        .section = LINK_WORKSPACE_FAULTS,
-        .key = "faults",
-        .title = "Faults",
-        .summary = "Diagnostic trouble codes by control module",
-        .title_i18n_key = "nav.faults",
-        .summary_i18n_key = "nav.faults.summary"
-    },
-    {
-        .section = LINK_WORKSPACE_LIVE_DATA,
-        .key = "live-data",
-        .title = "Live Data",
-        .summary = "Search, select and favourite live diagnostic parameters",
-        .title_i18n_key = "nav.live_data",
-        .summary_i18n_key = "nav.live_data.summary"
-    },
-    {
-        .section = LINK_WORKSPACE_TABLE,
-        .key = "table",
-        .title = "Table",
-        .summary = "Dense live values for selected diagnostic parameters",
-        .title_i18n_key = "nav.table",
-        .summary_i18n_key = "nav.table.summary"
-    },
-    {
-        .section = LINK_WORKSPACE_DASHBOARD,
-        .key = "dashboard",
-        .title = "Dashboard",
-        .summary = "At-a-glance live diagnostic measurements",
-        .title_i18n_key = "nav.dashboard",
-        .summary_i18n_key = "nav.dashboard.summary"
-    },
-    {
-        .section = LINK_WORKSPACE_GRAPHS,
-        .key = "graphs",
-        .title = "Graphs",
-        .summary = "Time-series views for selected diagnostic parameters",
-        .title_i18n_key = "nav.graphs",
-        .summary_i18n_key = "nav.graphs.summary"
-    },
-    {
-        .section = LINK_WORKSPACE_LOG,
-        .key = "log",
-        .title = "Log",
-        .summary = "Diagnostic session history and exported telemetry",
-        .title_i18n_key = "nav.log",
-        .summary_i18n_key = "nav.log.summary"
-    },
-    {
-        .section = LINK_WORKSPACE_SETTINGS,
-        .key = "settings",
-        .title = "Settings",
-        .summary = "Display, adapter, units, logging and application preferences",
-        .title_i18n_key = "nav.settings",
-        .summary_i18n_key = "nav.settings.summary"
-    }
+    { LINK_WORKSPACE_VEHICLE, "vehicle", "Vehicle",
+      "Vehicle identity, connection, networks and module inventory",
+      "nav.vehicle", "nav.vehicle.summary" },
+    { LINK_WORKSPACE_FAULTS, "errors", "Errors",
+      "Standard and manufacturer diagnostic trouble codes",
+      "nav.errors", "nav.errors.summary" },
+    { LINK_WORKSPACE_TABLE, "table", "Table",
+      "Search, select and view live diagnostic parameters",
+      "nav.table", "nav.table.summary" },
+    { LINK_WORKSPACE_DASHBOARD, "dashboard", "Dashboard",
+      "Selected live measurements at a glance",
+      "nav.dashboard", "nav.dashboard.summary" },
+    { LINK_WORKSPACE_GRAPHS, "graph", "Graph",
+      "Time-series views for selected diagnostic parameters",
+      "nav.graph", "nav.graph.summary" },
+    { LINK_WORKSPACE_TESTS, "tests", "Tests",
+      "Readiness, monitor results and supported diagnostic tests",
+      "nav.tests", "nav.tests.summary" },
+    { LINK_WORKSPACE_SERVICES, "services", "Services",
+      "Supported service procedures with explicit safety gating",
+      "nav.services", "nav.services.summary" },
+    { LINK_WORKSPACE_LOG, "log", "Log",
+      "Chronological diagnostic session history and evidence",
+      "nav.log", "nav.log.summary" },
+    { LINK_WORKSPACE_SETTINGS, "settings", "Settings",
+      "Display, adapter, units, logging and application preferences",
+      "nav.settings", "nav.settings.summary" }
 };
 
 static const LinkWorkspaceSectionDescriptor *localise(size_t index)
@@ -112,11 +59,9 @@ const LinkWorkspaceSectionDescriptor *link_workspace_section(
     LinkWorkspaceSection section)
 {
     size_t index;
-
     for (index = 0U; index < link_workspace_section_count(); ++index) {
-        if (link_workspace_sections[index].section == section) {
+        if (link_workspace_sections[index].section == section)
             return localise(index);
-        }
     }
     return NULL;
 }
