@@ -57,6 +57,10 @@ NS_ASSUME_NONNULL_BEGIN
 /** Shared responder/PID summaries for the standard OBD workspace. */
 @property(nonatomic, copy, readonly) NSString *standardResponderSummary;
 @property(nonatomic, copy, readonly) NSString *supportedPIDSummary;
+/** Standard Mode 09 VIN, independent of manufacturer profile decoding. */
+@property(nonatomic, copy, readonly) NSString *standardVINText;
+/** Shared formatted rows for every advertised standard Mode 01 PID. */
+@property(nonatomic, copy, readonly) NSArray<NSString *> *standardLiveValueRows;
 @property(nonatomic, readonly, getter=isActive) BOOL active;
 @property(nonatomic, readonly, getter=isReady) BOOL ready;
 @property(nonatomic, readonly, getter=isNativeAdapterConnected)

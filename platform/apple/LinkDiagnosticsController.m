@@ -410,6 +410,47 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
         count, count == 1U ? @"" : @"s"];
 }
 
+- (NSString *)standardVINText
+{
+    if (_flow.standard_vin_available && _flow.standard_vin[0] != '\0')
+        return [NSString stringWithUTF8String:_flow.standard_vin];
+    return @"Unavailable / not yet read";
+}
+
+- (NSArray<NSString *> *)standardLiveValueRows
+{
+    NSMutableArray<NSString *> *rows = [NSMutableArray array];
+    for (NSUInteger raw = 1U; raw <= UINT8_MAX; ++raw) {
+        const uint8_t pid = (uint8_t)raw;
+        if (!link_obd2_pid_set_contains(&_flow.supported_pids, pid)) continue;
+        const LinkObd2PidDefinition *definition =
+            link_obd2_pid_definition(1U, pid);
+        const char *name =
+            definition != NULL && definition->name != NULL
+                ? definition->name : link_obd2_pid_name(pid);
+        NSArray<NSNumber *> *history =
+            [self recentValuesForPID:pid limit:1U];
+        if (history.count != 0U) {
+            NSString *unit =
+                definition != NULL && definition->unit != NULL
+                    ? [NSString stringWithUTF8String:definition->unit] : @"";
+            [rows addObject:[NSString stringWithFormat:
+                @"PID %02lX · %s — %.3f%@%@",
+                (unsigned long)pid,
+                name != NULL ? name : "Unknown",
+                history.lastObject.doubleValue,
+                unit.length != 0U ? @" " : @"",
+                unit]];
+        } else {
+            [rows addObject:[NSString stringWithFormat:
+                @"PID %02lX · %s — waiting",
+                (unsigned long)pid,
+                name != NULL ? name : "Unknown"]];
+        }
+    }
+    return [rows copy];
+}
+
 - (void)setLegacyDiagnosticResponseObserved:(BOOL)observed
 {
     if (_legacyDiagnosticResponseObserved == observed) return;
