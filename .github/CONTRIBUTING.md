@@ -3,8 +3,8 @@
 # Contributing to LINK
 
 LINK owns product-neutral automotive transport, ELM327, OBD-II, ISO-TP, UDS,
-diagnostic-flow, and evidence behavior. MBLINK and JAGLINK should remain thin
-product/manufacturer layers, while non-automotive reusable primitives belong in
+diagnostic-flow, and evidence behavior. MBLINK, JAGLINK, BMWLINK, AUDILINK and
+FORDLINK should remain thin product/manufacturer layers, while non-automotive reusable primitives belong in
 Infiltratr Common.
 
 Keep portable behavior in strict C11 and platform providers at their native OS
