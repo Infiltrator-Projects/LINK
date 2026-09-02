@@ -87,10 +87,21 @@ typedef struct {
     uint32_t s3_server_timeout_ms;
     LinkUdsServerClockMsFn clock_ms;
     void *clock_context;
+
+    /*
+     * Product/target ECUReset capabilities. 0x01..0x03 are advertised only
+     * when the corresponding bit is set. 0x04/0x05 are controlled separately
+     * because they change rapid-power-shutdown state rather than resetting the
+     * processor. power_down_time_seconds is returned only for 0x04.
+     */
+    uint8_t supported_ecu_reset_types;
+    bool rapid_power_shutdown_supported;
+    uint8_t rapid_power_shutdown_time_seconds;
 } LinkUdsServerConfig;
 
 #define LINK_UDS_SERVER_CONFIG_INIT \
-    { UINT16_C(50), UINT16_C(500), true, false, 0U, NULL, NULL }
+    { UINT16_C(50), UINT16_C(500), true, false, 0U, NULL, NULL, \
+      LINK_UDS_ECU_RESET_SUPPORT_ALL_RESETS, false, 0U }
 
 typedef enum {
     LINK_UDS_SERVER_RESULT_POSITIVE = 0,
@@ -109,6 +120,7 @@ typedef struct {
     uint8_t last_service;
     uint8_t last_negative_response_code;
     uint8_t pending_ecu_reset_type;
+    bool rapid_power_shutdown_enabled;
     uint32_t last_activity_ms;
     bool activity_started;
     uint32_t request_count;
@@ -152,6 +164,8 @@ void link_uds_server_reset_session(LinkUdsServer *server);
 bool link_uds_server_take_pending_ecu_reset(
     LinkUdsServer *server,
     uint8_t *reset_type);
+bool link_uds_server_rapid_power_shutdown_enabled(
+    const LinkUdsServer *server);
 
 LinkUdsServerHandlerResult link_uds_server_dtc_handler(
     void *context,

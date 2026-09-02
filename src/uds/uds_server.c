@@ -8,7 +8,9 @@ static bool uds_server_config_valid(const LinkUdsServerConfig *config)
 {
     return config != NULL && config->p2_server_max_ms != 0U &&
            config->p2_star_server_max_10ms != 0U &&
-           (config->s3_server_timeout_ms == 0U || config->clock_ms != NULL);
+           (config->s3_server_timeout_ms == 0U || config->clock_ms != NULL) &&
+           (config->supported_ecu_reset_types &
+            (uint8_t)~LINK_UDS_ECU_RESET_SUPPORT_ALL_RESETS) == 0U;
 }
 
 static bool uds_server_nrc_valid(uint8_t nrc)
@@ -115,6 +117,12 @@ bool link_uds_server_take_pending_ecu_reset(
     *reset_type = server->pending_ecu_reset_type;
     server->pending_ecu_reset_type = 0U;
     return true;
+}
+
+bool link_uds_server_rapid_power_shutdown_enabled(
+    const LinkUdsServer *server)
+{
+    return server != NULL && server->rapid_power_shutdown_enabled;
 }
 
 static LinkUdsServerHandlerSlot *uds_server_find_handler(
@@ -231,26 +239,76 @@ static LinkUdsServerHandlerResult uds_server_builtin_ecu_reset(
     uint8_t *data,
     size_t capacity)
 {
-    uint8_t reset_type;
+    const uint8_t reset_type = request->subfunction;
+    uint8_t support_bit;
 
     if (request->pdu_length != 2U) {
         return link_uds_server_handler_negative(
             LINK_UDS_NRC_INCORRECT_MESSAGE_LENGTH_OR_INVALID_FORMAT);
     }
-    reset_type = request->subfunction;
-    if (reset_type < LINK_UDS_ECU_RESET_HARD ||
-        reset_type > LINK_UDS_ECU_RESET_DISABLE_RAPID_POWER_SHUTDOWN) {
+
+    switch (reset_type) {
+    case LINK_UDS_ECU_RESET_HARD:
+    case LINK_UDS_ECU_RESET_KEY_OFF_ON:
+    case LINK_UDS_ECU_RESET_SOFT:
+        support_bit = (uint8_t)(UINT8_C(1) << (reset_type - 1U));
+        if ((server->config.supported_ecu_reset_types & support_bit) == 0U) {
+            return link_uds_server_handler_negative(
+                LINK_UDS_NRC_SUBFUNCTION_NOT_SUPPORTED);
+        }
+        if (capacity < 1U) {
+            return link_uds_server_handler_negative(
+                LINK_UDS_NRC_RESPONSE_TOO_LONG);
+        }
+
+        /*
+         * Only true ECU restart requests become pending reset actions.
+         * The application executes the target-specific reset after transport
+         * confirms the positive response has completed.
+         */
+        data[0] = reset_type;
+        server->pending_ecu_reset_type = reset_type;
+        server->active_session = LINK_UDS_SESSION_DEFAULT;
+        return link_uds_server_handler_positive(1U);
+
+    case LINK_UDS_ECU_RESET_ENABLE_RAPID_POWER_SHUTDOWN:
+        if (!server->config.rapid_power_shutdown_supported) {
+            return link_uds_server_handler_negative(
+                LINK_UDS_NRC_SUBFUNCTION_NOT_SUPPORTED);
+        }
+        if (capacity < 2U) {
+            return link_uds_server_handler_negative(
+                LINK_UDS_NRC_RESPONSE_TOO_LONG);
+        }
+
+        /*
+         * ISO 14229 0x04 is not an ECU reset. It enables the rapid shutdown
+         * mode and its positive response includes powerDownTime in seconds.
+         */
+        data[0] = reset_type;
+        data[1] = server->config.rapid_power_shutdown_time_seconds;
+        server->rapid_power_shutdown_enabled = true;
+        return link_uds_server_handler_positive(2U);
+
+    case LINK_UDS_ECU_RESET_DISABLE_RAPID_POWER_SHUTDOWN:
+        if (!server->config.rapid_power_shutdown_supported) {
+            return link_uds_server_handler_negative(
+                LINK_UDS_NRC_SUBFUNCTION_NOT_SUPPORTED);
+        }
+        if (capacity < 1U) {
+            return link_uds_server_handler_negative(
+                LINK_UDS_NRC_RESPONSE_TOO_LONG);
+        }
+
+        /* 0x05 disables the mode; it must never queue an MCU reset. */
+        data[0] = reset_type;
+        server->rapid_power_shutdown_enabled = false;
+        return link_uds_server_handler_positive(1U);
+
+    default:
         return link_uds_server_handler_negative(
             LINK_UDS_NRC_SUBFUNCTION_NOT_SUPPORTED);
     }
-    if (capacity < 1U) {
-        return link_uds_server_handler_negative(LINK_UDS_NRC_RESPONSE_TOO_LONG);
-    }
-
-    data[0] = reset_type;
-    server->pending_ecu_reset_type = reset_type;
-    server->active_session = LINK_UDS_SESSION_DEFAULT;
-    return link_uds_server_handler_positive(1U);
 }
 
 static LinkUdsServerHandlerResult uds_server_builtin_tester_present(

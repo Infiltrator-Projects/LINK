@@ -189,6 +189,76 @@ static int test_session_state_machine_and_ecu_reset(void)
     return 0;
 }
 
+static int test_ecu_reset_semantics(void)
+{
+    LinkUdsServer server;
+    LinkUdsServerConfig config = LINK_UDS_SERVER_CONFIG_INIT;
+    uint8_t response[16U];
+    uint8_t pending = 0U;
+    size_t length = 0U;
+    const uint8_t hard[] = {0x11U, 0x01U};
+    const uint8_t key_cycle[] = {0x11U, 0x02U};
+    const uint8_t soft[] = {0x11U, 0x03U};
+    const uint8_t rapid_on[] = {0x11U, 0x04U};
+    const uint8_t rapid_off[] = {0x11U, 0x05U};
+
+    /*
+     * This target advertises hard + soft reset, but not key-off/on. Rapid
+     * shutdown is enabled separately with a configured one-byte powerDownTime.
+     */
+    config.supported_ecu_reset_types =
+        LINK_UDS_ECU_RESET_SUPPORT_HARD |
+        LINK_UDS_ECU_RESET_SUPPORT_SOFT;
+    config.rapid_power_shutdown_supported = true;
+    config.rapid_power_shutdown_time_seconds = UINT8_C(5);
+    CHECK(link_uds_server_init(&server, &config));
+
+    CHECK(link_uds_server_handle(
+              &server, hard, sizeof(hard),
+              response, sizeof(response), &length) ==
+          LINK_UDS_SERVER_RESULT_POSITIVE);
+    CHECK(length == 2U && response[0] == 0x51U && response[1] == 0x01U);
+    CHECK(link_uds_server_take_pending_ecu_reset(&server, &pending));
+    CHECK(pending == 0x01U);
+
+    CHECK(link_uds_server_handle(
+              &server, key_cycle, sizeof(key_cycle),
+              response, sizeof(response), &length) ==
+          LINK_UDS_SERVER_RESULT_NEGATIVE);
+    CHECK(length == 3U && response[0] == 0x7fU &&
+          response[1] == 0x11U &&
+          response[2] == LINK_UDS_NRC_SUBFUNCTION_NOT_SUPPORTED);
+    CHECK(!link_uds_server_take_pending_ecu_reset(&server, &pending));
+
+    CHECK(link_uds_server_handle(
+              &server, soft, sizeof(soft),
+              response, sizeof(response), &length) ==
+          LINK_UDS_SERVER_RESULT_POSITIVE);
+    CHECK(length == 2U && response[0] == 0x51U && response[1] == 0x03U);
+    CHECK(link_uds_server_take_pending_ecu_reset(&server, &pending));
+    CHECK(pending == 0x03U);
+
+    CHECK(!link_uds_server_rapid_power_shutdown_enabled(&server));
+    CHECK(link_uds_server_handle(
+              &server, rapid_on, sizeof(rapid_on),
+              response, sizeof(response), &length) ==
+          LINK_UDS_SERVER_RESULT_POSITIVE);
+    CHECK(length == 3U && response[0] == 0x51U &&
+          response[1] == 0x04U && response[2] == 0x05U);
+    CHECK(link_uds_server_rapid_power_shutdown_enabled(&server));
+    CHECK(!link_uds_server_take_pending_ecu_reset(&server, &pending));
+
+    CHECK(link_uds_server_handle(
+              &server, rapid_off, sizeof(rapid_off),
+              response, sizeof(response), &length) ==
+          LINK_UDS_SERVER_RESULT_POSITIVE);
+    CHECK(length == 2U && response[0] == 0x51U && response[1] == 0x05U);
+    CHECK(!link_uds_server_rapid_power_shutdown_enabled(&server));
+    CHECK(!link_uds_server_take_pending_ecu_reset(&server, &pending));
+
+    return 0;
+}
+
 static int test_custom_handlers(void)
 {
     LinkUdsServer server;
@@ -382,6 +452,7 @@ int main(void)
 {
     if (test_session_and_tester_present() != 0) return EXIT_FAILURE;
     if (test_session_state_machine_and_ecu_reset() != 0) return EXIT_FAILURE;
+    if (test_ecu_reset_semantics() != 0) return EXIT_FAILURE;
     if (test_custom_handlers() != 0) return EXIT_FAILURE;
     if (test_dtc_all_subfunctions() != 0) return EXIT_FAILURE;
     if (test_negative_paths() != 0) return EXIT_FAILURE;
