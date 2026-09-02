@@ -14,6 +14,11 @@ extern "C" {
 
 typedef enum LinkWorkspaceSection {
     LINK_WORKSPACE_VEHICLE = 0,
+    /*
+     * LINK-owned capability/standards workspace. Product faces must not
+     * replace this with a manufacturer-specific OBD implementation.
+     */
+    LINK_WORKSPACE_OBD,
     LINK_WORKSPACE_MODULES,
     LINK_WORKSPACE_FAULTS,
     LINK_WORKSPACE_LIVE_DATA,

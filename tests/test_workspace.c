@@ -33,6 +33,11 @@ int main(void)
         return 1;
     }
 
+    if (strcmp(link_workspace_section(LINK_WORKSPACE_OBD)->key, "obd") != 0) {
+        (void)fprintf(stderr, "OBD stable key changed\n");
+        return 1;
+    }
+
     if (strcmp(link_workspace_section(LINK_WORKSPACE_LIVE_DATA)->key,
                "live-data") != 0) {
         (void)fprintf(stderr, "live-data stable key changed\n");

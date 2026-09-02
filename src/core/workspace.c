@@ -14,6 +14,14 @@ static LinkWorkspaceSectionDescriptor link_workspace_sections[] = {
         .summary_i18n_key = "nav.vehicle.summary"
     },
     {
+        .section = LINK_WORKSPACE_OBD,
+        .key = "obd",
+        .title = "OBD",
+        .summary = "Common legacy, transitional and OBD-II / EOBD diagnostics",
+        .title_i18n_key = "nav.obd",
+        .summary_i18n_key = "nav.obd.summary"
+    },
+    {
         .section = LINK_WORKSPACE_MODULES,
         .key = "modules",
         .title = "Modules",

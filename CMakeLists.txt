@@ -113,6 +113,7 @@ add_library(link-core STATIC
     src/core/fuel_economy.c
     src/core/diagnostic_request.c
     src/core/diagnostic_flow.c
+    src/core/diagnostic_capability.c
     src/core/isotp.c
     src/core/parameter.c
     src/core/scheduler.c
@@ -410,6 +411,7 @@ endfunction()
 
 if(BUILD_TESTING AND PROJECT_IS_TOP_LEVEL)
     link_add_test(link-test-workspace tests/test_workspace.c link-workspace)
+    link_add_test(link-test-diagnostic-capability tests/test_diagnostic_capability.c link-diagnostic-capability)
     link_add_test(link-test-i18n tests/test_i18n.c link-i18n)
     link_add_test(link-test-fuel-economy tests/test_fuel_economy.c link-fuel-economy)
     link_add_test(link-test-parameter-observation tests/test_parameter_observation.c link-parameter-observation)
