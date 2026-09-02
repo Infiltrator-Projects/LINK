@@ -40,10 +40,19 @@ The LINK-owned standard surface includes supported-PID discovery, live Mode 01
 data, readiness, Mode 02 freeze-frame context, stored/pending/permanent DTCs,
 Mode 09 vehicle information, responder attribution and the OBDonUDS foundation.
 
-## Ownership
+## Ownership and presentation
 
-The common OBD workspace belongs to LINK on every platform. It must not be
-reimplemented independently in MBLINK, JAGLINK, FORDLINK, AUDILINK or BMWLINK.
+The diagnostic-generation model belongs to LINK, but diagnostic generation is
+not a top-level operator destination. OBD-II, OBDonUDS, UDS and legacy
+manufacturer protocols feed the shared task-oriented screens:
 
-Manufacturer repositories own only manufacturer-specific diagnostic knowledge
-and screens layered on top of that common surface.
+- Vehicle receives identity, protocol, network and module inventory.
+- Errors receives standard and manufacturer DTCs.
+- Table, Dashboard and Graph receive standard and manufacturer live parameters.
+- Tests receives readiness, monitor results and supported self-tests.
+- Services receives only explicitly supported procedures and remains
+  deny-by-default for unsafe or unknown operations.
+- Log receives the chronological evidence trail.
+
+Manufacturer repositories own only manufacturer-specific protocol knowledge and
+capabilities layered into those LINK-owned tasks.
