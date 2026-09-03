@@ -17,7 +17,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [linux-native, macos-latest, windows-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
 
     steps:
       - name: Checkout
@@ -182,7 +182,7 @@ jobs:
 
   linux-native-adapters:
     name: Ubuntu / native Linux adapter providers
-    runs-on: [self-hosted, Linux, X64, linux-native]
+    runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - name: Checkout
@@ -302,8 +302,8 @@ jobs:
           done
 
   sanitizers:
-    name: Local Linux / ASan + UBSan
-    runs-on: [self-hosted, Linux, X64, linux-native]
+    name: Linux / ASan + UBSan
+    runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - name: Checkout
