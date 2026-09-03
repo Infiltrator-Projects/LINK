@@ -93,14 +93,10 @@
     BOOL _legacyDiagnosticResponseObserved;
     NSString *_selectedLanguageTag;
     NSString *_selectedMeasurementSystemKey;
-    BOOL _preferFavouriteSignals;
-    BOOL _showUnavailableParameters;
 }
 
 static NSString *const LinkAppleLanguageDefaultsKey = @"link.displayLanguage";
 static NSString *const LinkAppleMeasurementDefaultsKey = @"link.measurementSystem";
-static NSString *const LinkApplePreferFavouritesDefaultsKey = @"link.preferFavouriteSignals";
-static NSString *const LinkAppleShowUnavailableDefaultsKey = @"link.showUnavailableParameters";
 
 static uint64_t LinkAppleMonotonicMilliseconds(void)
 {
@@ -231,21 +227,11 @@ static void LinkAppleSessionEvent(
     NSString *savedMeasurement =
         [[NSUserDefaults standardUserDefaults] stringForKey:LinkAppleMeasurementDefaultsKey];
     [self applyLanguagePreference:
-        savedLanguage.length != 0U ? savedLanguage : @"system"
+        savedLanguage.length != 0U ? savedLanguage : @"en-AU"
         persist:NO notify:NO];
     [self applyMeasurementPreference:
-        savedMeasurement.length != 0U ? savedMeasurement : @"system"
+        savedMeasurement.length != 0U ? savedMeasurement : @"metric"
         persist:NO notify:NO];
-
-    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    _preferFavouriteSignals =
-        [defaults objectForKey:LinkApplePreferFavouritesDefaultsKey] == nil
-            ? YES
-            : [defaults boolForKey:LinkApplePreferFavouritesDefaultsKey];
-    _showUnavailableParameters =
-        [defaults objectForKey:LinkAppleShowUnavailableDefaultsKey] == nil
-            ? YES
-            : [defaults boolForKey:LinkAppleShowUnavailableDefaultsKey];
 
     _provider = [[LinkBLETransport alloc] init];
     _provider.delegate = self;
@@ -293,7 +279,7 @@ static void LinkAppleSessionEvent(
 
 - (NSArray<NSString *> *)availableLanguageTags
 {
-    NSMutableArray<NSString *> *tags = [NSMutableArray arrayWithObject:@"system"];
+    NSMutableArray<NSString *> *tags = [NSMutableArray array];
     for (size_t index = 0U; index < link_i18n_installed_locale_count(); ++index) {
         const char *tag = link_i18n_installed_locale(index);
         if (tag != NULL && tag[0] != '\0')
@@ -304,8 +290,7 @@ static void LinkAppleSessionEvent(
 
 - (NSArray<NSString *> *)availableLanguageNames
 {
-    NSMutableArray<NSString *> *names = [NSMutableArray arrayWithObject:
-        [self localizedTextForKey:@"language.system"]];
+    NSMutableArray<NSString *> *names = [NSMutableArray array];
     for (size_t index = 0U; index < link_i18n_installed_locale_count(); ++index) {
         const char *name = link_i18n_installed_locale_name(index);
         [names addObject:name != NULL
@@ -316,24 +301,22 @@ static void LinkAppleSessionEvent(
 
 - (NSString *)selectedLanguageTag
 {
-    return _selectedLanguageTag != nil ? _selectedLanguageTag : @"system";
+    return _selectedLanguageTag != nil ? _selectedLanguageTag : @"en-AU";
 }
 
 - (NSString *)effectiveLanguageTag
 {
-    const char *tag = link_i18n_selected_locale();
-    return tag != NULL ? [NSString stringWithUTF8String:tag] : @"en-AU";
+    return self.selectedLanguageTag;
 }
 
 - (NSArray<NSString *> *)availableMeasurementSystemKeys
 {
-    return @[@"system", @"metric", @"us-customary"];
+    return @[@"metric", @"us-customary"];
 }
 
 - (NSArray<NSString *> *)availableMeasurementSystemNames
 {
     return @[
-        [self localizedTextForKey:@"units.system"],
         [self localizedTextForKey:@"units.metric"],
         [self localizedTextForKey:@"units.us_customary"]
     ];
@@ -342,7 +325,7 @@ static void LinkAppleSessionEvent(
 - (NSString *)selectedMeasurementSystemKey
 {
     return _selectedMeasurementSystemKey != nil
-        ? _selectedMeasurementSystemKey : @"system";
+        ? _selectedMeasurementSystemKey : @"metric";
 }
 
 - (NSString *)localizedTextForKey:(NSString *)key
@@ -356,17 +339,8 @@ static void LinkAppleSessionEvent(
                         persist:(BOOL)persist
                          notify:(BOOL)notify
 {
-    NSString *candidate = tag.length != 0U ? tag : @"system";
-    BOOL accepted = NO;
-    if ([candidate isEqualToString:@"system"]) {
-        NSString *preferred = NSLocale.preferredLanguages.firstObject;
-        if (preferred.length != 0U)
-            accepted = link_i18n_select_locale(preferred.UTF8String);
-        if (!accepted) accepted = link_i18n_select_locale("en-AU");
-    } else {
-        accepted = link_i18n_select_locale(candidate.UTF8String);
-    }
-    if (!accepted) return;
+    NSString *candidate = tag.length != 0U ? tag : @"en-AU";
+    if (!link_i18n_select_locale(candidate.UTF8String)) return;
     _selectedLanguageTag = [candidate copy];
     if (persist)
         [[NSUserDefaults standardUserDefaults]
@@ -384,10 +358,10 @@ static void LinkAppleSessionEvent(
                             notify:(BOOL)notify
 {
     LinkMeasurementSystem system;
-    NSString *candidate = key.length != 0U ? key : @"system";
+    NSString *candidate = key.length != 0U ? key : @"metric";
     if (!link_measurement_system_from_key(candidate.UTF8String, &system)) return;
-    (void)system;
-    _selectedMeasurementSystemKey = [candidate copy];
+    _selectedMeasurementSystemKey =
+        [NSString stringWithUTF8String:link_measurement_system_key(system)];
     if (persist)
         [[NSUserDefaults standardUserDefaults]
             setObject:_selectedMeasurementSystemKey
@@ -400,43 +374,12 @@ static void LinkAppleSessionEvent(
     [self applyMeasurementPreference:key persist:YES notify:YES];
 }
 
-- (BOOL)preferFavouriteSignals
-{
-    return _preferFavouriteSignals;
-}
-
-- (void)setPreferFavouriteSignals:(BOOL)enabled
-{
-    if (_preferFavouriteSignals == enabled) return;
-    _preferFavouriteSignals = enabled;
-    [[NSUserDefaults standardUserDefaults]
-        setBool:enabled forKey:LinkApplePreferFavouritesDefaultsKey];
-    [self notifyDelegate];
-}
-
-- (BOOL)showUnavailableParameters
-{
-    return _showUnavailableParameters;
-}
-
-- (void)setShowUnavailableParameters:(BOOL)enabled
-{
-    if (_showUnavailableParameters == enabled) return;
-    _showUnavailableParameters = enabled;
-    [[NSUserDefaults standardUserDefaults]
-        setBool:enabled forKey:LinkAppleShowUnavailableDefaultsKey];
-    [self notifyDelegate];
-}
-
 - (LinkMeasurementSystem)resolvedMeasurementSystem
 {
-    LinkMeasurementSystem requested = LINK_MEASUREMENT_SYSTEM_DEFAULT;
+    LinkMeasurementSystem system = LINK_MEASUREMENT_SYSTEM_METRIC;
     (void)link_measurement_system_from_key(
-        self.selectedMeasurementSystemKey.UTF8String, &requested);
-    NSNumber *usesMetric =
-        [[NSLocale currentLocale] objectForKey:NSLocaleUsesMetricSystem];
-    return link_measurement_system_resolve(
-        requested, usesMetric == nil ? YES : usesMetric.boolValue);
+        self.selectedMeasurementSystemKey.UTF8String, &system);
+    return system;
 }
 
 - (NSArray<NSNumber *> *)displayRecentValuesForPID:(uint8_t)pid

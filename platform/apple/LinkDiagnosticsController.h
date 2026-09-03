@@ -71,7 +71,7 @@ NS_ASSUME_NONNULL_BEGIN
     BOOL manufacturerExtensionActive;
 @property(nonatomic, readonly) NSUInteger recordedSampleCount;
 
-/* Shared Apple presentation preferences owned by LINK. */
+/* Shared language and measurement preferences used by Apple product faces. */
 @property(nonatomic, copy, readonly) NSArray<NSString *> *availableLanguageTags;
 @property(nonatomic, copy, readonly) NSArray<NSString *> *availableLanguageNames;
 @property(nonatomic, copy, readonly) NSString *selectedLanguageTag;
@@ -79,8 +79,6 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic, copy, readonly) NSArray<NSString *> *availableMeasurementSystemKeys;
 @property(nonatomic, copy, readonly) NSArray<NSString *> *availableMeasurementSystemNames;
 @property(nonatomic, copy, readonly) NSString *selectedMeasurementSystemKey;
-@property(nonatomic, readonly) BOOL preferFavouriteSignals;
-@property(nonatomic, readonly) BOOL showUnavailableParameters;
 
 - (instancetype)initWithProductSlug:(NSString *)productSlug
                          flowConfig:(LinkDiagnosticFlowConfig)flowConfig
@@ -129,8 +127,6 @@ NS_ASSUME_NONNULL_BEGIN
 - (NSString *)localizedTextForKey:(NSString *)key;
 - (void)setSelectedLanguageTag:(NSString *)tag;
 - (void)setSelectedMeasurementSystemKey:(NSString *)key;
-- (void)setPreferFavouriteSignals:(BOOL)enabled;
-- (void)setShowUnavailableParameters:(BOOL)enabled;
 /** Recent values returned by one exact 11/29-bit CAN responder. */
 - (NSArray<NSNumber *> *)recentValuesForPID:(uint8_t)pid
                      responderCANIdentifier:(uint32_t)responderCANIdentifier

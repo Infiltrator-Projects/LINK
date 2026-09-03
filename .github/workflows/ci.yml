@@ -124,14 +124,15 @@ jobs:
           grep -Fq 'native protocol capture' platform/linux/link-gtk-shell.c
           grep -Fq 'transport.isNativeAdapter' platform/apple/LinkDiagnosticsController.m
           grep -Fq 'case settings' platform/apple/LinkDiagnosticUI.swift
-          grep -Fq 'struct LinkDiagnosticSettingsView' platform/apple/LinkDiagnosticUI.swift
           grep -Fq 'linkDiagnosticLocalization' platform/apple/LinkDiagnosticUI.swift
           grep -Fq 'setSelectedLanguageTag' platform/apple/LinkDiagnosticsController.m
           grep -Fq 'setSelectedMeasurementSystemKey' platform/apple/LinkDiagnosticsController.m
-          grep -Fq 'setPreferFavouriteSignals' platform/apple/LinkDiagnosticsController.m
-          grep -Fq 'setShowUnavailableParameters' platform/apple/LinkDiagnosticsController.m
-          grep -Fq 'settings.prefer_favourites' platform/apple/LinkDiagnosticUI.swift
-          grep -Fq 'settings.show_unavailable' platform/apple/LinkDiagnosticUI.swift
+          ! grep -Fq 'LinkDiagnosticSettingsView' platform/apple/LinkDiagnosticUI.swift
+          ! grep -Fq 'preferFavouriteSignals' platform/apple/LinkDiagnosticsController.h
+          ! grep -Fq 'showUnavailableParameters' platform/apple/LinkDiagnosticsController.h
+          ! grep -Fq 'settings.prefer_favourites' src/core/i18n.c
+          ! grep -Fq 'settings.show_unavailable' src/core/i18n.c
+          grep -Fq 'return @[@"metric", @"us-customary"];' platform/apple/LinkDiagnosticsController.m
           grep -Fq 'src/core/units.c' CMakeLists.txt
           grep -Fq 'link-test-units tests/test_units.c link-units' CMakeLists.txt
           grep -Fq 'NATIVE_RX' platform/apple/LinkDiagnosticsController.m

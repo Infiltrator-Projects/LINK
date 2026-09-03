@@ -7,17 +7,14 @@ The initial built-in locales are `en-AU`, `en-US`, `de-DE`, `fr-FR`, `es-ES` and
 Visible reusable text must be referenced by semantic keys through `link_i18n_tr()` or `link_i18n_format()`. Linux, Windows Discover and Apple faces should initialise the catalogue from the operating system's preferred locale and may expose an explicit override. Product-specific catalogues use the same Infiltratr Common engine rather than forking LINK's tables.
 
 
-## Apple Settings ownership
+## Apple language and measurement preferences
 
-The Apple product face exposes LINK's locale catalogue through the shared
-Settings task. The selected language is persisted inside each product
-application sandbox. System Default follows Foundation's first preferred
-language; an explicit selection uses the same BCP-47 catalogue as the other
-LINK platforms.
+Apple product faces use LINK's installed locale catalogue and persist the
+explicitly selected language. The default is `en-AU`, matching MBLINK's
+established behaviour. Product applications apply that selected locale to
+their own interface; LINK does not own the complete Settings page.
 
-Measurement units are independent from language. LINK owns a portable
-presentation-unit model with System Default, Metric and US customary choices.
-Canonical diagnostic values, telemetry history and CSV evidence remain in
-standards units; conversion is presentation-only. Manufacturer products inherit
-this behaviour and layer their own signal definitions on top instead of
-forking the preference system.
+Measurement units are independent from language. LINK exposes the same two
+choices established by MBLINK: Metric and US customary. The MBLINK conversions
+for temperature, vehicle speed, pressure and fuel rate are shared; canonical
+diagnostic values and CSV evidence remain unchanged.

@@ -53,11 +53,9 @@ Manufacturer repositories may contribute evidence-backed legacy protocols,
 module scans, parameters, tests and service procedures, but must not fork the
 shared task structure.
 
-Settings is shared application behaviour. LINK owns the language catalogue,
-measurement-unit preference model and Apple Settings surface. A manufacturer
-face supplies product identity/version/theme and may append genuinely
-manufacturer-specific preferences, but it must not replace the shared Settings
-task with a product-local implementation.
+Language selection and measurement conversion are shared capabilities in LINK.
+Each manufacturer application owns the composition and appearance of its own
+Settings page and calls those shared capabilities where appropriate.
 
 ## Product repositories own identity and vehicle specificity
 
@@ -201,11 +199,11 @@ and structural drift between MBLINK, JAGLINK, BMWLINK, AUDILINK, FORDLINK and fu
 explicit architectural regression rather than normal parallel development.
 
 
-### Shared Apple Settings baseline
+### Apple language and units boundary
 
-The shared Settings surface is seeded from the mature MBLINK face. LINK owns
-the generic controls: adapter name/identity/status, application version/bundle,
-language, unit system, preference for favourites on Dashboard/Graphs, and
-whether unavailable values are shown in Data Table. Manufacturer products may
-add manufacturer-specific settings, but must not duplicate or remove this
-baseline.
+LINK supplies the common language catalogue/selection API and the two
+measurement systems proven in MBLINK: Metric and US customary. Manufacturer
+applications decide how their Settings page is laid out and which
+manufacturer-specific settings appear there. LINK does not own favourites
+policy, unavailable-value policy, adapter/About rows, or a complete Settings
+screen.
