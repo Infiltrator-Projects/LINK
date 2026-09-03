@@ -2,6 +2,8 @@
 #ifndef LINK_MERCEDES_ME_ADAPTER_H
 #define LINK_MERCEDES_ME_ADAPTER_H
 
+#include "link/features.h"
+
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -119,6 +121,8 @@ typedef struct LinkMercedesMeStreamParser {
     size_t overflow_count;
 } LinkMercedesMeStreamParser;
 
+#if LINK_ENABLE_MERCEDES_ME_NATIVE
+
 LinkMercedesMeAdapterFamily link_mercedes_me_adapter_family_from_name(
     const char *name);
 const char *link_mercedes_me_adapter_family_name(
@@ -133,49 +137,138 @@ const char *link_mercedes_me_execution_state_name(int ordinal);
 const char *link_mercedes_me_reason_name(int ordinal);
 const char *link_mercedes_me_comm_state_name(int ordinal);
 
-/**
- * Official application-layer connection-problem catalogue. Ordinal access is
- * intentional because the archived Java enum carries stable 0..28 ordering.
- */
 size_t link_mercedes_me_connection_problem_count(void);
 const LinkMercedesMeConnectionProblemDefinition *
 link_mercedes_me_connection_problem_at(size_t ordinal);
 const LinkMercedesMeConnectionProblemDefinition *
 link_mercedes_me_connection_problem_find_error_code(int error_code);
 
-/**
- * The archived official bridge refuses outbound GDK commands that do not end
- * in CR. This validates only the proved transport record boundary; it does not
- * claim that the command vocabulary itself is known.
- */
 bool link_mercedes_me_command_has_valid_terminator(
     const uint8_t *bytes,
     size_t size);
 
-/**
- * Initialise the bounded record parser recovered from the official bridge
- * behavior. No allocation is performed.
- */
 void link_mercedes_me_stream_parser_init(
     LinkMercedesMeStreamParser *parser);
 
-/**
- * Feed native Bluetooth bytes and emit complete CR or NACK records.
- *
- * A CR (0x0D) produces STREAM_RECORD and is retained in the record. BEL (0x07)
- * produces STREAM_NACK and is likewise retained. If an unterminated record
- * reaches the observed 698-byte clear threshold, STREAM_OVERFLOW is emitted
- * with the bytes that are about to be discarded and the triggering
- * non-terminal byte is dropped, matching the archived bridge behavior.
- *
- * Returns the number of emitted events.
- */
 size_t link_mercedes_me_stream_parser_feed(
     LinkMercedesMeStreamParser *parser,
     const uint8_t *bytes,
     size_t size,
     LinkMercedesMeStreamEventFn event_fn,
     void *event_context);
+
+#else
+
+/*
+ * Provider-disabled facade. The shared transport/controller can retain one
+ * source path, while a non-Mercedes product resolves every provider hook
+ * locally and can omit all Mercedes implementation translation units.
+ */
+static inline LinkMercedesMeAdapterFamily
+link_mercedes_me_adapter_family_from_name(const char *name)
+{
+    (void)name;
+    return LINK_MERCEDES_ME_ADAPTER_UNKNOWN;
+}
+
+static inline const char *link_mercedes_me_adapter_family_name(
+    LinkMercedesMeAdapterFamily family)
+{
+    (void)family;
+    return "disabled";
+}
+
+static inline bool link_mercedes_me_adapter_prefers_ble(
+    LinkMercedesMeAdapterFamily family)
+{
+    (void)family;
+    return false;
+}
+
+static inline bool link_mercedes_me_adapter_prefers_classic_spp(
+    LinkMercedesMeAdapterFamily family)
+{
+    (void)family;
+    return false;
+}
+
+static inline const char *link_mercedes_me_qos_state_name(int ordinal)
+{
+    (void)ordinal;
+    return "disabled";
+}
+
+static inline const char *link_mercedes_me_execution_state_name(int ordinal)
+{
+    (void)ordinal;
+    return "disabled";
+}
+
+static inline const char *link_mercedes_me_reason_name(int ordinal)
+{
+    (void)ordinal;
+    return "disabled";
+}
+
+static inline const char *link_mercedes_me_comm_state_name(int ordinal)
+{
+    (void)ordinal;
+    return "disabled";
+}
+
+static inline size_t link_mercedes_me_connection_problem_count(void)
+{
+    return 0U;
+}
+
+static inline const LinkMercedesMeConnectionProblemDefinition *
+link_mercedes_me_connection_problem_at(size_t ordinal)
+{
+    (void)ordinal;
+    return NULL;
+}
+
+static inline const LinkMercedesMeConnectionProblemDefinition *
+link_mercedes_me_connection_problem_find_error_code(int error_code)
+{
+    (void)error_code;
+    return NULL;
+}
+
+static inline bool link_mercedes_me_command_has_valid_terminator(
+    const uint8_t *bytes,
+    size_t size)
+{
+    (void)bytes;
+    (void)size;
+    return false;
+}
+
+static inline void link_mercedes_me_stream_parser_init(
+    LinkMercedesMeStreamParser *parser)
+{
+    if (parser != NULL) {
+        parser->used = 0U;
+        parser->overflow_count = 0U;
+    }
+}
+
+static inline size_t link_mercedes_me_stream_parser_feed(
+    LinkMercedesMeStreamParser *parser,
+    const uint8_t *bytes,
+    size_t size,
+    LinkMercedesMeStreamEventFn event_fn,
+    void *event_context)
+{
+    (void)parser;
+    (void)bytes;
+    (void)size;
+    (void)event_fn;
+    (void)event_context;
+    return 0U;
+}
+
+#endif
 
 #ifdef __cplusplus
 }
