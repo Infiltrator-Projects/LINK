@@ -73,16 +73,44 @@ private struct LinkDiagnosticThemeKey: EnvironmentKey {
     static let defaultValue = LinkDiagnosticTheme.neutral
 }
 
+struct LinkDiagnosticLocalizer {
+    let resolve: (String) -> String
+
+    func text(_ key: String, fallback: String) -> String {
+        let value = resolve(key)
+        return value.isEmpty || value == key ? fallback : value
+    }
+
+    static let fallback = LinkDiagnosticLocalizer(resolve: { $0 })
+}
+
+private struct LinkDiagnosticLocalizerKey: EnvironmentKey {
+    static let defaultValue = LinkDiagnosticLocalizer.fallback
+}
+
 extension EnvironmentValues {
     var linkDiagnosticTheme: LinkDiagnosticTheme {
         get { self[LinkDiagnosticThemeKey.self] }
         set { self[LinkDiagnosticThemeKey.self] = newValue }
+    }
+
+    var linkDiagnosticLocalizer: LinkDiagnosticLocalizer {
+        get { self[LinkDiagnosticLocalizerKey.self] }
+        set { self[LinkDiagnosticLocalizerKey.self] = newValue }
     }
 }
 
 extension View {
     func linkDiagnosticTheme(_ theme: LinkDiagnosticTheme) -> some View {
         environment(\.linkDiagnosticTheme, theme)
+    }
+
+    func linkDiagnosticLocalization(
+        _ resolve: @escaping (String) -> String
+    ) -> some View {
+        environment(
+            \.linkDiagnosticLocalizer,
+            LinkDiagnosticLocalizer(resolve: resolve))
     }
 
     func linkDiagnosticScreen(_ title: String) -> some View {
@@ -281,6 +309,7 @@ enum LinkDiagnosticTask: CaseIterable {
     case graph
     case tests
     case services
+    case settings
 
     var title: String {
         switch self {
@@ -292,6 +321,7 @@ enum LinkDiagnosticTask: CaseIterable {
         case .graph: return "Graph"
         case .tests: return "Tests"
         case .services: return "Services"
+        case .settings: return "Settings"
         }
     }
 
@@ -305,7 +335,26 @@ enum LinkDiagnosticTask: CaseIterable {
         case .graph: return "Selected parameters over time"
         case .tests: return "Readiness, monitor results and self-tests"
         case .services: return "Supported service procedures"
+        case .settings: return "Display, adapter, units, logging and application preferences"
         }
+    }
+
+    var titleKey: String {
+        switch self {
+        case .vehicle: return "nav.vehicle"
+        case .log: return "nav.log"
+        case .errors: return "nav.errors"
+        case .dashboard: return "nav.dashboard"
+        case .table: return "nav.table"
+        case .graph: return "nav.graph"
+        case .tests: return "nav.tests"
+        case .services: return "nav.services"
+        case .settings: return "nav.settings"
+        }
+    }
+
+    var subtitleKey: String {
+        titleKey + ".summary"
     }
 
     var symbol: String {
@@ -318,11 +367,13 @@ enum LinkDiagnosticTask: CaseIterable {
         case .graph: return "chart.xyaxis.line"
         case .tests: return "checkmark.square.fill"
         case .services: return "wrench.and.screwdriver.fill"
+        case .settings: return "gearshape.fill"
         }
     }
 }
 
 struct LinkTaskTile<Destination: View>: View {
+    @Environment(\.linkDiagnosticLocalizer) private var localizer
     let task: LinkDiagnosticTask
     let destination: () -> Destination
 
@@ -336,8 +387,8 @@ struct LinkTaskTile<Destination: View>: View {
 
     var body: some View {
         LinkHomeTile(
-            task.title,
-            task.subtitle,
+            localizer.text(task.titleKey, fallback: task.title),
+            localizer.text(task.subtitleKey, fallback: task.subtitle),
             task.symbol,
             destination: destination)
     }
@@ -571,6 +622,100 @@ private struct LinkDiagnosticScreenModifier: ViewModifier {
             .toolbarColorScheme(.dark, for: .navigationBar)
     }
 }
+struct LinkSettingOption: Identifiable, Hashable {
+    let id: String
+    let title: String
+}
+
+struct LinkDiagnosticSettingsView: View {
+    @Environment(\.linkDiagnosticTheme) private var theme
+    @Environment(\.linkDiagnosticLocalizer) private var localizer
+
+    let languageOptions: [LinkSettingOption]
+    @Binding var selectedLanguageID: String
+    let measurementOptions: [LinkSettingOption]
+    @Binding var selectedMeasurementID: String
+    let productName: String
+    let productVersion: String
+    let adapterName: String
+    let coreSummary: String
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: LinkDiagnosticLayout.sectionSpacing) {
+                LinkLabeledPanel(
+                    title: localizer.text("nav.settings", fallback: "Settings"),
+                    systemImage: "gearshape.fill"
+                ) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(localizer.text("language.label", fallback: "Language"))
+                            .font(theme.typography.subheadlineBold)
+                            .foregroundStyle(theme.primaryText)
+                        Picker(
+                            localizer.text("language.label", fallback: "Language"),
+                            selection: $selectedLanguageID
+                        ) {
+                            ForEach(languageOptions) { option in
+                                Text(option.title).tag(option.id)
+                            }
+                        }
+                        .pickerStyle(.menu)
+                    }
+
+                    Divider().overlay(theme.border)
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(localizer.text("units.label", fallback: "Measurement units"))
+                            .font(theme.typography.subheadlineBold)
+                            .foregroundStyle(theme.primaryText)
+                        Picker(
+                            localizer.text("units.label", fallback: "Measurement units"),
+                            selection: $selectedMeasurementID
+                        ) {
+                            ForEach(measurementOptions) { option in
+                                Text(option.title).tag(option.id)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                    }
+                }
+
+                LinkLabeledPanel(
+                    title: localizer.text("common.about", fallback: "About"),
+                    systemImage: "info.circle.fill"
+                ) {
+                    settingsRow(productName, productVersion)
+                    Divider().overlay(theme.border)
+                    settingsRow(
+                        localizer.text("common.adapter", fallback: "Adapter"),
+                        adapterName)
+                    Divider().overlay(theme.border)
+                    settingsRow("LINK", coreSummary)
+                }
+            }
+            .padding(.horizontal, LinkDiagnosticLayout.screenHorizontalPadding)
+            .padding(.top, LinkDiagnosticLayout.screenTopPadding)
+            .padding(.bottom, LinkDiagnosticLayout.screenBottomPadding)
+        }
+        .linkDiagnosticScreen(
+            localizer.text("nav.settings", fallback: "Settings"))
+    }
+
+    @ViewBuilder
+    private func settingsRow(_ label: String, _ value: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Text(label)
+                .font(theme.typography.captionBold)
+                .foregroundStyle(theme.secondaryText)
+            Spacer(minLength: 12)
+            Text(value)
+                .font(theme.typography.caption)
+                .foregroundStyle(theme.primaryText)
+                .multilineTextAlignment(.trailing)
+        }
+    }
+}
+
 struct LinkStandardObdSnapshot {
     let capability: String
     let capabilityDetail: String
