@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "link/diagnostic_flow.h"
+#include "link/fault_scan.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -619,8 +620,37 @@ static int test_readiness_and_freeze_context(void)
     return 0;
 }
 
+
+static int test_fault_scan_presentation_state(void)
+{
+    CHECK(link_fault_scan_presentation_state(
+              false, false, false, false, 0U) ==
+          LINK_FAULT_SCAN_NOT_SCANNED);
+    CHECK(link_fault_scan_presentation_state(
+              true, false, false, false, 0U) ==
+          LINK_FAULT_SCAN_IN_PROGRESS);
+    CHECK(link_fault_scan_presentation_state(
+              true, true, false, false, 0U) ==
+          LINK_FAULT_SCAN_IN_PROGRESS);
+    CHECK(link_fault_scan_presentation_state(
+              true, false, false, true, 0U) ==
+          LINK_FAULT_SCAN_FAILED);
+    CHECK(link_fault_scan_presentation_state(
+              true, false, true, false, 0U) ==
+          LINK_FAULT_SCAN_CLEAN);
+    CHECK(link_fault_scan_presentation_state(
+              true, false, true, false, 2U) ==
+          LINK_FAULT_SCAN_FAULTS_PRESENT);
+    CHECK(strcmp(
+              link_fault_scan_presentation_state_name(
+                  LINK_FAULT_SCAN_CLEAN),
+              "clean") == 0);
+    return 0;
+}
+
 int main(void)
 {
+    if (test_fault_scan_presentation_state() != 0) return 1;
     if (test_standard_sequence() != 0) return 1;
     if (test_live_timeout_recovery() != 0) return 1;
     if (test_readiness_and_freeze_context() != 0) return 1;
