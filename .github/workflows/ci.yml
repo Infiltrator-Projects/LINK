@@ -113,6 +113,10 @@ jobs:
           grep -Fq 'const LinkAboutInfo *about;' platform/linux/link-gtk-shell.h
           grep -Fq 'link_gtk_show_about(' platform/linux/link-gtk-about.c
           grep -Fq 'link_windows_show_about(' platform/windows/link-windows-about.c
+          grep -Fq 'LINK_PRODUCT_FONT_UI' platform/windows/link-windows-about.c
+          grep -Fq 'LINK_THEME_BACKGROUND' platform/windows/link-windows-about.c
+          grep -Fq 'link_windows_about_apply_nonclient' platform/windows/link-windows-about.c
+          grep -Fq 'link_windows_about_prepare_child' platform/windows/link-windows-about.c
           grep -Fq 'struct LinkDiagnosticAboutInfo' platform/apple/LinkDiagnosticUI.swift
           grep -Fq 'struct LinkDiagnosticAboutView' platform/apple/LinkDiagnosticUI.swift
           grep -Fq 'struct LinkDiagnosticAboutButton' platform/apple/LinkDiagnosticUI.swift

@@ -12,6 +12,27 @@
 #include <string.h>
 #include <wchar.h>
 
+#ifndef LINK_THEME_BACKGROUND
+#define LINK_THEME_BACKGROUND RGB(18, 21, 25)
+#endif
+#ifndef LINK_THEME_PANEL
+#define LINK_THEME_PANEL RGB(28, 32, 37)
+#endif
+#ifndef LINK_THEME_TEXT
+#define LINK_THEME_TEXT RGB(235, 239, 242)
+#endif
+#ifndef LINK_THEME_ACCENT
+#define LINK_THEME_ACCENT RGB(190, 199, 207)
+#endif
+#ifndef LINK_PRODUCT_FONT_UI
+#define LINK_PRODUCT_FONT_UI "Segoe UI"
+#endif
+
+static HBRUSH link_windows_about_background_brush;
+static HFONT link_windows_about_font;
+static WNDPROC link_windows_about_original_proc;
+
+
 static int link_windows_about_has_text(const char *value)
 {
     return value != NULL && value[0] != '\0';
@@ -63,12 +84,158 @@ static void link_windows_about_field(
     link_windows_about_append(buffer, capacity, value);
 }
 
+static void link_windows_about_apply_nonclient(HWND window)
+{
+    typedef HRESULT (WINAPI *DwmSetWindowAttributeFn)(
+        HWND, DWORD, LPCVOID, DWORD);
+    HMODULE module = LoadLibraryA("dwmapi.dll");
+    DwmSetWindowAttributeFn set_attribute = NULL;
+    BOOL dark = TRUE;
+    COLORREF caption = (COLORREF)LINK_THEME_BACKGROUND;
+    COLORREF text = (COLORREF)LINK_THEME_TEXT;
+    COLORREF border = (COLORREF)LINK_THEME_ACCENT;
+
+    if (module == NULL) return;
+    {
+        FARPROC proc = GetProcAddress(module, "DwmSetWindowAttribute");
+        if (proc != NULL)
+            memcpy(&set_attribute, &proc, sizeof(set_attribute));
+    }
+    if (set_attribute != NULL) {
+        (void)set_attribute(window, 20U, &dark, (DWORD)sizeof(dark));
+        (void)set_attribute(window, 35U, &caption, (DWORD)sizeof(caption));
+        (void)set_attribute(window, 36U, &text, (DWORD)sizeof(text));
+        (void)set_attribute(window, 34U, &border, (DWORD)sizeof(border));
+    }
+    FreeLibrary(module);
+}
+
+static void link_windows_about_apply_control_theme(HWND control)
+{
+    typedef HRESULT (WINAPI *SetWindowThemeFn)(HWND, LPCWSTR, LPCWSTR);
+    HMODULE module = LoadLibraryA("uxtheme.dll");
+    SetWindowThemeFn set_theme = NULL;
+
+    if (module == NULL) return;
+    {
+        FARPROC proc = GetProcAddress(module, "SetWindowTheme");
+        if (proc != NULL) memcpy(&set_theme, &proc, sizeof(set_theme));
+    }
+    if (set_theme != NULL)
+        (void)set_theme(control, L"DarkMode_Explorer", NULL);
+    FreeLibrary(module);
+}
+
+static HFONT link_windows_about_make_font(HWND window)
+{
+    wchar_t family[LF_FACESIZE];
+    HDC dc = GetDC(window);
+    int dpi = dc != NULL ? GetDeviceCaps(dc, LOGPIXELSY) : 96;
+    int height = -MulDiv(10, dpi, 72);
+
+    if (dc != NULL) ReleaseDC(window, dc);
+    if (!link_windows_about_utf8_to_wide(
+            LINK_PRODUCT_FONT_UI, family,
+            sizeof(family) / sizeof(family[0]))) {
+        (void)wcscpy_s(family, sizeof(family) / sizeof(family[0]),
+                       L"Segoe UI");
+    }
+
+    return CreateFontW(
+        height, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, family);
+}
+
+static BOOL CALLBACK link_windows_about_prepare_child(
+    HWND child, LPARAM parameter)
+{
+    HFONT font = (HFONT)parameter;
+    link_windows_about_apply_control_theme(child);
+    if (font != NULL)
+        SendMessageW(child, WM_SETFONT, (WPARAM)font, TRUE);
+    return TRUE;
+}
+
+static LRESULT CALLBACK link_windows_about_window_proc(
+    HWND window, UINT message, WPARAM wparam, LPARAM lparam)
+{
+    WNDPROC original = link_windows_about_original_proc;
+
+    switch (message) {
+    case WM_ERASEBKGND:
+        if (link_windows_about_background_brush != NULL) {
+            RECT rect;
+            HDC dc = (HDC)wparam;
+            if (dc != NULL) {
+                GetClientRect(window, &rect);
+                FillRect(dc, &rect, link_windows_about_background_brush);
+                return 1;
+            }
+        }
+        break;
+    case WM_CTLCOLORSTATIC:
+    case WM_CTLCOLORBTN:
+        if (link_windows_about_background_brush != NULL) {
+            HDC dc = (HDC)wparam;
+            if (dc != NULL) {
+                SetTextColor(dc, (COLORREF)LINK_THEME_TEXT);
+                SetBkColor(dc, (COLORREF)LINK_THEME_BACKGROUND);
+                SetBkMode(dc, TRANSPARENT);
+                return (LRESULT)(INT_PTR)link_windows_about_background_brush;
+            }
+        }
+        break;
+    case WM_NCDESTROY:
+        if (original != NULL) {
+            LRESULT result;
+            (void)SetWindowLongPtrW(
+                window, GWLP_WNDPROC, (LONG_PTR)original);
+            link_windows_about_original_proc = NULL;
+            result = CallWindowProcW(
+                original, window, message, wparam, lparam);
+            if (link_windows_about_font != NULL) {
+                DeleteObject(link_windows_about_font);
+                link_windows_about_font = NULL;
+            }
+            if (link_windows_about_background_brush != NULL) {
+                DeleteObject(link_windows_about_background_brush);
+                link_windows_about_background_brush = NULL;
+            }
+            return result;
+        }
+        break;
+    default:
+        break;
+    }
+
+    return original != NULL
+        ? CallWindowProcW(original, window, message, wparam, lparam)
+        : DefWindowProcW(window, message, wparam, lparam);
+}
+
 static HRESULT CALLBACK link_windows_about_callback(
     HWND window, UINT notification, WPARAM wparam, LPARAM lparam,
     LONG_PTR reference_data)
 {
     (void)wparam;
     (void)reference_data;
+
+    if (notification == TDN_CREATED) {
+        link_windows_about_background_brush =
+            CreateSolidBrush((COLORREF)LINK_THEME_BACKGROUND);
+        link_windows_about_font = link_windows_about_make_font(window);
+        link_windows_about_apply_nonclient(window);
+        link_windows_about_apply_control_theme(window);
+        link_windows_about_original_proc = (WNDPROC)SetWindowLongPtrW(
+            window, GWLP_WNDPROC,
+            (LONG_PTR)link_windows_about_window_proc);
+        (void)EnumChildWindows(
+            window, link_windows_about_prepare_child,
+            (LPARAM)link_windows_about_font);
+        InvalidateRect(window, NULL, TRUE);
+    }
+
     if (notification == TDN_HYPERLINK_CLICKED && lparam != 0) {
         (void)ShellExecuteW(
             window, L"open", (LPCWSTR)lparam, NULL, NULL, SW_SHOWNORMAL);
