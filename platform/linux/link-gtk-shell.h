@@ -2,6 +2,7 @@
 #ifndef LINK_GTK_SHELL_H
 #define LINK_GTK_SHELL_H
 
+#include "link/about.h"
 #include "link/diagnostic_capability.h"
 #include "link/diagnostic_flow.h"
 #include "link/transport.h"
@@ -72,6 +73,15 @@ typedef struct LinkGtkShellDescriptor {
     const char *emblem_resource;
     const char *css;
     void (*render_section)(size_t section, GtkWidget *body, void *context);
+    /*
+     * Standard LINK-owned About metadata. Product code supplies identity;
+     * LINK supplies the GTK presentation.
+     */
+    const LinkAboutInfo *about;
+    /*
+     * Transitional compatibility override for existing product-owned About
+     * dialogs. New integrations should supply about above.
+     */
     void (*show_about)(GtkWindow *window, void *context);
     void (*connection_changed)(LinkTransport *transport,
                                bool connected,

@@ -109,6 +109,13 @@ jobs:
           grep -Fq 'docs/MERCEDES-ME-NATIVE-BINARIES.md' README.md
           grep -Fq 'docs/MERCEDES-ME-ADAPTER-INTEROP.md' README.md
           grep -Fq 'link_linux_serial_probe_adapter' platform/linux/link-gtk-shell.c
+          grep -Fq 'typedef struct LinkAboutInfo' include/link/about.h
+          grep -Fq 'const LinkAboutInfo *about;' platform/linux/link-gtk-shell.h
+          grep -Fq 'link_gtk_show_about(' platform/linux/link-gtk-about.c
+          grep -Fq 'link_windows_show_about(' platform/windows/link-windows-about.c
+          grep -Fq 'struct LinkDiagnosticAboutInfo' platform/apple/LinkDiagnosticUI.swift
+          grep -Fq 'struct LinkDiagnosticAboutView' platform/apple/LinkDiagnosticUI.swift
+          grep -Fq 'struct LinkDiagnosticAboutButton' platform/apple/LinkDiagnosticUI.swift
           grep -Fq 'bool use_client_side_titlebar;' platform/linux/link-gtk-shell.h
           if grep -Fq 'adapter_combo_width' platform/linux/link-gtk-shell.h; then
             echo 'Adapter-selector geometry must be LINK-owned, not product-configurable.' >&2

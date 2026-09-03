@@ -31,6 +31,8 @@
 #include <string.h>
 #include <wchar.h>
 
+#include "link-windows-about.h"
+
 #ifdef _MSC_VER
 #pragma comment(linker, "\"/manifestdependency:type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")
 #endif
@@ -105,6 +107,24 @@ static BOOL set_window_text_utf8(HWND window, const char *text)
 #endif
 #ifndef LINK_PRODUCT_WEBSITE
 #define LINK_PRODUCT_WEBSITE "https://github.com/Infiltrator-Projects/LINK"
+#endif
+#ifndef LINK_PRODUCT_DESCRIPTION
+#define LINK_PRODUCT_DESCRIPTION "OpenPort 2.0 / SAE J2534 read-only discovery and evidence capture."
+#endif
+#ifndef LINK_PRODUCT_RELEASE_DATE
+#define LINK_PRODUCT_RELEASE_DATE ""
+#endif
+#ifndef LINK_PRODUCT_AUTHORS
+#define LINK_PRODUCT_AUTHORS ""
+#endif
+#ifndef LINK_PRODUCT_LICENSE_NAME
+#define LINK_PRODUCT_LICENSE_NAME "GPL-3.0-or-later"
+#endif
+#ifndef LINK_PRODUCT_LICENSE_TEXT
+#define LINK_PRODUCT_LICENSE_TEXT ""
+#endif
+#ifndef LINK_PRODUCT_CREDITS
+#define LINK_PRODUCT_CREDITS ""
 #endif
 #ifndef LINK_PRODUCT_FONT_UI
 #define LINK_PRODUCT_FONT_UI "Segoe UI"
@@ -301,81 +321,23 @@ static HMENU create_main_menu(void)
     return menu;
 }
 
-static HRESULT CALLBACK about_callback(HWND window, UINT notification,
-                                       WPARAM wparam, LPARAM lparam,
-                                       LONG_PTR reference_data)
-{
-    (void)wparam;
-    (void)reference_data;
-
-    if (notification == TDN_HYPERLINK_CLICKED && lparam != 0) {
-        (void)ShellExecuteW(window, L"open", (LPCWSTR)lparam,
-                            NULL, NULL, SW_SHOWNORMAL);
-    }
-    return S_OK;
-}
-
-/**
- * Present the standard LINK-family About experience using Task Dialogs.
- * TaskDialogIndirect gives the application a current Windows 10/11 visual
- * treatment while retaining the product icon and platform-native behaviour.
- */
 static void show_about(void)
 {
-    char title_utf8[160];
-    char content_utf8[1024];
-    wchar_t title[160];
-    wchar_t product_name[160];
-    wchar_t content[1024];
-    TASKDIALOGCONFIG config;
-    HRESULT result;
+    static const LinkAboutInfo info = {
+        LINK_PRODUCT_NAME " Discover",
+        LINK_PRODUCT_SUBTITLE,
+        LINK_PRODUCT_VERSION,
+        LINK_PRODUCT_DESCRIPTION,
+        LINK_PRODUCT_RELEASE_DATE,
+        LINK_PRODUCT_AUTHORS,
+        LINK_PRODUCT_COPYRIGHT,
+        LINK_PRODUCT_WEBSITE,
+        LINK_PRODUCT_LICENSE_NAME,
+        LINK_PRODUCT_LICENSE_TEXT,
+        LINK_PRODUCT_CREDITS
+    };
 
-    (void)snprintf(title_utf8, sizeof(title_utf8),
-                   "About %s Discover", LINK_PRODUCT_NAME);
-    (void)snprintf(content_utf8, sizeof(content_utf8),
-                   "Version %s\n%s\n\n"
-                   "OpenPort 2.0 / SAE J2534 read-only discovery and evidence capture.\n"
-                   "Unsafe and unknown diagnostic services are denied before transmission.\n\n"
-                   "<a href=\"%s\">Project website</a>\n\n"
-                   "%s\nGPL-3.0-or-later",
-                   LINK_PRODUCT_VERSION,
-                   LINK_PRODUCT_SUBTITLE,
-                   LINK_PRODUCT_WEBSITE,
-                   LINK_PRODUCT_COPYRIGHT);
-    title_utf8[sizeof(title_utf8) - 1U] = '\0';
-    content_utf8[sizeof(content_utf8) - 1U] = '\0';
-
-    if (!utf8_to_wide(title_utf8, title,
-                      sizeof(title) / sizeof(title[0])) ||
-        !utf8_to_wide(LINK_PRODUCT_NAME, product_name,
-                      sizeof(product_name) / sizeof(product_name[0])) ||
-        !utf8_to_wide(content_utf8, content,
-                      sizeof(content) / sizeof(content[0]))) {
-        MessageBoxA(g_app.window, "Unable to prepare About information.",
-                    LINK_PRODUCT_NAME " Discover", MB_OK | MB_ICONERROR);
-        return;
-    }
-
-    memset(&config, 0, sizeof(config));
-    config.cbSize = sizeof(config);
-    config.hwndParent = g_app.window;
-    config.dwFlags = TDF_USE_HICON_MAIN |
-                     TDF_ENABLE_HYPERLINKS |
-                     TDF_POSITION_RELATIVE_TO_WINDOW |
-                     TDF_SIZE_TO_CONTENT;
-    config.dwCommonButtons = TDCBF_CLOSE_BUTTON;
-    config.pszWindowTitle = title;
-    config.pszMainInstruction = product_name;
-    config.pszContent = content;
-    config.hMainIcon = g_product_icon;
-    config.pfCallback = about_callback;
-
-    result = TaskDialogIndirect(&config, NULL, NULL, NULL);
-    if (FAILED(result)) {
-        /* Task Dialogs require Common Controls v6; keep a safe fallback. */
-        (void)MessageBoxW(g_app.window, content, title,
-                          MB_OK | MB_ICONINFORMATION);
-    }
+    link_windows_show_about(g_app.window, g_product_icon, &info);
 }
 
 static void browse_for_j2534_dll(void)

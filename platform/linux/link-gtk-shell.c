@@ -6,6 +6,7 @@
 #include "link/i18n.h"
 #include "link/workspace.h"
 #include "link-gtk-widgets.h"
+#include "link-gtk-about.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -1889,9 +1890,32 @@ static gboolean navigation_stress_step(gpointer user_data)
 static void about_clicked(GtkButton *button, gpointer user_data)
 {
     LinkGtkShell *shell = user_data;
+    LinkAboutInfo info = {0};
+    const LinkGtkShellDescriptor *descriptor;
+
     (void)button;
-    if (shell->descriptor->show_about != NULL)
-        shell->descriptor->show_about(shell->window, shell->descriptor->context);
+    if (shell == NULL || shell->descriptor == NULL) return;
+    descriptor = shell->descriptor;
+
+    /*
+     * Metadata opts a product into the LINK renderer. Existing callbacks stay
+     * valid until each product is migrated independently.
+     */
+    if (descriptor->about == NULL && descriptor->show_about != NULL) {
+        descriptor->show_about(shell->window, descriptor->context);
+        return;
+    }
+
+    if (descriptor->about != NULL) info = *descriptor->about;
+    if (info.product_name == NULL || info.product_name[0] == '\0')
+        info.product_name = descriptor->brand_name;
+    if (info.subtitle == NULL || info.subtitle[0] == '\0')
+        info.subtitle = descriptor->brand_subtitle;
+    if (info.version == NULL || info.version[0] == '\0')
+        info.version = descriptor->version;
+
+    link_gtk_show_about(
+        shell->window, &info, descriptor->emblem_resource);
 }
 
 static GtkWidget *build_connection_bar(LinkGtkShell *shell)

@@ -188,6 +188,8 @@ function(link_enable_linux_gtk_shell target)
 
     set(link_gtk_shell_source
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platform/linux/link-gtk-shell.c")
+    set(link_gtk_about_source
+        "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platform/linux/link-gtk-about.c")
     set(link_gtk_i18n_header
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platform/linux/link-gtk-i18n.h")
     set(link_openport_source
@@ -200,6 +202,7 @@ function(link_enable_linux_gtk_shell target)
         "${link_openport_source}"
         "${link_openport_j2534_source}"
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platform/linux/link-gtk-i18n.c"
+        "${link_gtk_about_source}"
         "${link_gtk_shell_source}")
     set_source_files_properties("${link_gtk_shell_source}" PROPERTIES
         COMPILE_OPTIONS "-include;${link_gtk_i18n_header}")
@@ -250,6 +253,8 @@ function(link_add_windows_discover target)
         set(one_value_args
             PRODUCT_NAME PRODUCT_SLUG WINDOW_CLASS PRODUCT_VERSION
             PRODUCT_COPYRIGHT PRODUCT_SUBTITLE PRODUCT_WEBSITE PRODUCT_ICON_PNG
+            PRODUCT_DESCRIPTION PRODUCT_RELEASE_DATE PRODUCT_AUTHORS
+            PRODUCT_LICENSE_NAME PRODUCT_LICENSE_TEXT PRODUCT_CREDITS
             FULL_SWEEP_PLAN_FUNCTION INVENTORY_VIN_FORMATTER_FUNCTION)
         cmake_parse_arguments(LINK_FACE "" "${one_value_args}" "" ${ARGN})
         if(LINK_FACE_UNPARSED_ARGUMENTS)
@@ -274,11 +279,31 @@ function(link_add_windows_discover target)
     if(NOT LINK_FACE_PRODUCT_WEBSITE)
         set(LINK_FACE_PRODUCT_WEBSITE "https://github.com/Infiltrator-Projects/LINK")
     endif()
+    if(NOT LINK_FACE_PRODUCT_DESCRIPTION)
+        set(LINK_FACE_PRODUCT_DESCRIPTION "OpenPort 2.0 / SAE J2534 read-only discovery and evidence capture.")
+    endif()
+    if(NOT DEFINED LINK_FACE_PRODUCT_RELEASE_DATE)
+        set(LINK_FACE_PRODUCT_RELEASE_DATE "")
+    endif()
+    if(NOT DEFINED LINK_FACE_PRODUCT_AUTHORS)
+        set(LINK_FACE_PRODUCT_AUTHORS "")
+    endif()
+    if(NOT LINK_FACE_PRODUCT_LICENSE_NAME)
+        set(LINK_FACE_PRODUCT_LICENSE_NAME "GPL-3.0-or-later")
+    endif()
+    if(NOT DEFINED LINK_FACE_PRODUCT_LICENSE_TEXT)
+        set(LINK_FACE_PRODUCT_LICENSE_TEXT "")
+    endif()
+    if(NOT DEFINED LINK_FACE_PRODUCT_CREDITS)
+        set(LINK_FACE_PRODUCT_CREDITS "")
+    endif()
 
     set(link_windows_discover_source "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platform/windows/link-discover-ui.c")
+    set(link_windows_about_source "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platform/windows/link-windows-about.c")
     set(link_windows_i18n_header "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platform/windows/link-discover-i18n.h")
     add_executable(${target} WIN32
         "${link_windows_discover_source}"
+        "${link_windows_about_source}"
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platform/windows/link-discover-i18n.c")
     target_link_libraries(${target} PRIVATE LINK::Core comdlg32 advapi32 shell32 comctl32)
     target_compile_definitions(${target} PRIVATE
@@ -289,7 +314,13 @@ function(link_add_windows_discover target)
         LINK_PRODUCT_VERSION="${LINK_FACE_PRODUCT_VERSION}"
         LINK_PRODUCT_COPYRIGHT="${LINK_FACE_PRODUCT_COPYRIGHT}"
         LINK_PRODUCT_SUBTITLE="${LINK_FACE_PRODUCT_SUBTITLE}"
-        LINK_PRODUCT_WEBSITE="${LINK_FACE_PRODUCT_WEBSITE}")
+        LINK_PRODUCT_WEBSITE="${LINK_FACE_PRODUCT_WEBSITE}"
+        LINK_PRODUCT_DESCRIPTION="${LINK_FACE_PRODUCT_DESCRIPTION}"
+        LINK_PRODUCT_RELEASE_DATE="${LINK_FACE_PRODUCT_RELEASE_DATE}"
+        LINK_PRODUCT_AUTHORS="${LINK_FACE_PRODUCT_AUTHORS}"
+        LINK_PRODUCT_LICENSE_NAME="${LINK_FACE_PRODUCT_LICENSE_NAME}"
+        LINK_PRODUCT_LICENSE_TEXT="${LINK_FACE_PRODUCT_LICENSE_TEXT}"
+        LINK_PRODUCT_CREDITS="${LINK_FACE_PRODUCT_CREDITS}")
     if(LINK_FACE_FULL_SWEEP_PLAN_FUNCTION)
         target_compile_definitions(${target} PRIVATE
             LINK_ENABLE_FULL_SWEEP=1
@@ -356,7 +387,10 @@ if(WIN32 AND PROJECT_IS_TOP_LEVEL)
         PRODUCT_NAME "LINK" PRODUCT_SLUG "link" WINDOW_CLASS "LINKDiscoverWindow"
         PRODUCT_VERSION "${PROJECT_VERSION}" PRODUCT_COPYRIGHT "Copyright (C) 2026 The First Infiltrator"
         PRODUCT_SUBTITLE "Shared Vehicle Diagnostics"
+        PRODUCT_DESCRIPTION "Shared OpenPort 2.0 / SAE J2534 read-only discovery and evidence capture."
+        PRODUCT_AUTHORS "The First Infiltrator"
         PRODUCT_WEBSITE "https://github.com/Infiltrator-Projects/LINK"
+        PRODUCT_LICENSE_NAME "GPL-3.0-or-later"
         PRODUCT_ICON_PNG "${CMAKE_CURRENT_SOURCE_DIR}/assets/branding/link-obd-icon-base.png")
     if(LINK_BUILD_REFERENCE_PRODUCT_FACES)
         link_add_windows_discover(mblink-discover PRODUCT_NAME "MBLINK" PRODUCT_SLUG "mblink"

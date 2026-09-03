@@ -57,6 +57,12 @@ Language selection and measurement conversion are shared capabilities in LINK.
 Each manufacturer application owns the composition and appearance of its own
 Settings page and calls those shared capabilities where appropriate.
 
+About is a shared LINK capability and, unlike Settings, is a complete standard
+surface. LINK owns the Linux, Windows and iPhone About renderers and their
+behaviour. Product repositories supply only identity metadata such as product
+name, version, description, release date, author/authors, copyright, website,
+licence, credits and the product emblem.
+
 ## Product repositories own identity and vehicle specificity
 
 A product repository may own:
@@ -205,5 +211,25 @@ LINK supplies the common language catalogue/selection API and the two
 measurement systems proven in MBLINK: Metric and US customary. Manufacturer
 applications decide how their Settings page is laid out and which
 manufacturer-specific settings appear there. LINK does not own favourites
-policy, unavailable-value policy, adapter/About rows, or a complete Settings
-screen.
+policy, unavailable-value policy, adapter rows, or a complete Settings screen.
+About is deliberately separate from Settings and is LINK-owned.
+
+
+## Shared About contract
+
+About is application infrastructure, not manufacturer diagnostic behaviour.
+LINK owns the standard About presentation on every supported face:
+
+- Linux uses `link_gtk_show_about()` with `LinkAboutInfo`;
+- Windows uses `link_windows_show_about()` with `LinkAboutInfo`;
+- iPhone uses `LinkDiagnosticAboutView` with `LinkDiagnosticAboutInfo`.
+
+Product repositories supply facts and branding only. They must not fork the
+layout merely to change a name, version, logo, author list, date, description,
+website, licence or credits.
+
+The Linux `show_about` callback remains temporarily for source compatibility
+with product faces that already own an About dialog. Supplying
+`LinkGtkShellDescriptor.about` selects the LINK renderer; the compatibility
+callback can be removed as each product is migrated. New product faces should
+not introduce another custom About implementation.

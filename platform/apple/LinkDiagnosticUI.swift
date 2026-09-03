@@ -785,4 +785,240 @@ struct LinkStandardObdView: View {
     }
 }
 
+
+struct LinkDiagnosticAboutInfo {
+    let productName: String
+    let subtitle: String?
+    let version: String
+    let summary: String?
+    let releaseDate: String?
+    let authors: [String]
+    let copyright: String?
+    let website: URL?
+    let licenseName: String?
+    let licenseText: String?
+    let credits: [String]
+
+    init(
+        productName: String,
+        subtitle: String? = nil,
+        version: String,
+        summary: String? = nil,
+        releaseDate: String? = nil,
+        authors: [String] = [],
+        copyright: String? = nil,
+        website: URL? = nil,
+        licenseName: String? = nil,
+        licenseText: String? = nil,
+        credits: [String] = []
+    ) {
+        self.productName = productName
+        self.subtitle = subtitle
+        self.version = version
+        self.summary = summary
+        self.releaseDate = releaseDate
+        self.authors = authors
+        self.copyright = copyright
+        self.website = website
+        self.licenseName = licenseName
+        self.licenseText = licenseText
+        self.credits = credits
+    }
+}
+
+private enum LinkDiagnosticAboutDetail: String, Identifiable {
+    case credits
+    case license
+    var id: String { rawValue }
+}
+
+struct LinkDiagnosticAboutView<Logo: View>: View {
+    @Environment(\.linkDiagnosticTheme) private var theme
+    let info: LinkDiagnosticAboutInfo
+    let logo: Logo
+    let onClose: () -> Void
+    @State private var detail: LinkDiagnosticAboutDetail?
+
+    init(
+        info: LinkDiagnosticAboutInfo,
+        onClose: @escaping () -> Void,
+        @ViewBuilder logo: () -> Logo
+    ) {
+        self.info = info
+        self.onClose = onClose
+        self.logo = logo()
+    }
+
+    var body: some View {
+        ZStack {
+            LinkDiagnosticBackground()
+            VStack(spacing: 0) {
+                ScrollView {
+                    VStack(spacing: 17) {
+                        logo.padding(.top, 30)
+                        VStack(spacing: 4) {
+                            Text(info.productName)
+                                .font(theme.typography.display)
+                                .foregroundStyle(theme.primaryText)
+                            if let subtitle = info.subtitle, !subtitle.isEmpty {
+                                Text(subtitle)
+                                    .font(theme.typography.caption2Bold)
+                                    .textCase(.uppercase)
+                                    .tracking(1.4)
+                                    .foregroundStyle(theme.secondaryText)
+                            }
+                        }
+                        Text("Version \(info.version)")
+                            .font(theme.typography.subheadline)
+                            .foregroundStyle(theme.mutedText)
+                        if let summary = info.summary, !summary.isEmpty {
+                            Text(summary)
+                                .font(theme.typography.body)
+                                .multilineTextAlignment(.center)
+                                .foregroundStyle(theme.primaryText)
+                                .padding(.horizontal, 28)
+                        }
+                        if let releaseDate = info.releaseDate,
+                           !releaseDate.isEmpty {
+                            Text("Release date: \(releaseDate)")
+                                .font(theme.typography.subheadline)
+                                .foregroundStyle(theme.mutedText)
+                        }
+                        if !info.authors.isEmpty {
+                            LinkPanel {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text(info.authors.count == 1 ? "Author" : "Authors")
+                                        .font(theme.typography.captionBold)
+                                        .foregroundStyle(theme.mutedText)
+                                    ForEach(info.authors.indices, id: \.self) { index in
+                                        Text(info.authors[index])
+                                            .font(theme.typography.subheadline)
+                                            .foregroundStyle(theme.primaryText)
+                                    }
+                                }
+                            }
+                            .padding(.horizontal, 16)
+                        }
+                        if let copyright = info.copyright, !copyright.isEmpty {
+                            Text(copyright)
+                                .font(theme.typography.subheadline)
+                                .foregroundStyle(theme.mutedText)
+                        }
+                        if let website = info.website {
+                            Link("Project Website", destination: website)
+                                .font(theme.typography.bodyBold)
+                                .foregroundStyle(theme.accent)
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+
+                HStack(spacing: 10) {
+                    if !info.authors.isEmpty || !info.credits.isEmpty {
+                        Button("Credits") { detail = .credits }
+                            .buttonStyle(.bordered)
+                    }
+                    if hasLicense {
+                        Button("License") { detail = .license }
+                            .buttonStyle(.bordered)
+                    }
+                    Button("Close") { onClose() }
+                        .buttonStyle(.borderedProminent)
+                        .tint(theme.accent)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(theme.panelRaised)
+                .overlay(alignment: .top) {
+                    Rectangle().fill(theme.border).frame(height: 1)
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+        .sheet(item: $detail) { item in
+            NavigationStack {
+                ZStack {
+                    LinkDiagnosticBackground()
+                    LinkPanel {
+                        Text(item == .credits ? creditsText : licenseText)
+                            .font(theme.typography.body)
+                            .foregroundStyle(theme.primaryText)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .padding(16)
+                }
+                .navigationTitle(item == .credits ? "Credits" : "License")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbarBackground(theme.backgroundTop, for: .navigationBar)
+                .toolbarBackground(.visible, for: .navigationBar)
+            }
+            .preferredColorScheme(.dark)
+        }
+    }
+
+    private var hasLicense: Bool {
+        if let text = info.licenseText, !text.isEmpty { return true }
+        if let name = info.licenseName, !name.isEmpty { return true }
+        return false
+    }
+
+    private var creditsText: String {
+        var sections: [String] = []
+        if !info.authors.isEmpty {
+            sections.append(
+                (info.authors.count == 1 ? "Author\n" : "Authors\n") +
+                info.authors.joined(separator: "\n"))
+        }
+        if !info.credits.isEmpty {
+            sections.append(info.credits.joined(separator: "\n"))
+        }
+        return sections.joined(separator: "\n\n")
+    }
+
+    private var licenseText: String {
+        if let text = info.licenseText, !text.isEmpty { return text }
+        return info.licenseName ?? ""
+    }
+}
+
+extension LinkDiagnosticAboutView where Logo == EmptyView {
+    init(info: LinkDiagnosticAboutInfo, onClose: @escaping () -> Void) {
+        self.init(info: info, onClose: onClose) { EmptyView() }
+    }
+}
+
+struct LinkDiagnosticAboutButton: View {
+    @Environment(\.linkDiagnosticTheme) private var theme
+    let productName: String
+    let copyright: String?
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Text(productName).font(theme.typography.captionBold)
+                if let copyright, !copyright.isEmpty {
+                    Text(copyright)
+                        .font(theme.typography.caption)
+                        .foregroundStyle(theme.mutedText)
+                }
+                Spacer(minLength: 8)
+                Label("About", systemImage: "info.circle")
+                    .font(theme.typography.caption)
+            }
+            .foregroundStyle(theme.secondaryText)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 9)
+            .frame(maxWidth: .infinity)
+            .background(theme.panelRaised)
+            .overlay(alignment: .top) {
+                Rectangle().fill(theme.border).frame(height: 1)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 #endif
