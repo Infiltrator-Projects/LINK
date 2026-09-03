@@ -635,10 +635,45 @@ struct LinkDiagnosticSettingsView: View {
     @Binding var selectedLanguageID: String
     let measurementOptions: [LinkSettingOption]
     @Binding var selectedMeasurementID: String
+    @Binding var preferFavouriteSignals: Bool
+    @Binding var showUnavailableParameters: Bool
     let productName: String
     let productVersion: String
     let adapterName: String
+    let adapterIdentity: String
+    let connectionStatus: String
+    let bundleIdentifier: String
     let coreSummary: String
+
+    init(
+        languageOptions: [LinkSettingOption],
+        selectedLanguageID: Binding<String>,
+        measurementOptions: [LinkSettingOption],
+        selectedMeasurementID: Binding<String>,
+        preferFavouriteSignals: Binding<Bool> = .constant(true),
+        showUnavailableParameters: Binding<Bool> = .constant(true),
+        productName: String,
+        productVersion: String,
+        adapterName: String,
+        adapterIdentity: String = "",
+        connectionStatus: String = "",
+        bundleIdentifier: String = "",
+        coreSummary: String
+    ) {
+        self.languageOptions = languageOptions
+        self._selectedLanguageID = selectedLanguageID
+        self.measurementOptions = measurementOptions
+        self._selectedMeasurementID = selectedMeasurementID
+        self._preferFavouriteSignals = preferFavouriteSignals
+        self._showUnavailableParameters = showUnavailableParameters
+        self.productName = productName
+        self.productVersion = productVersion
+        self.adapterName = adapterName
+        self.adapterIdentity = adapterIdentity
+        self.connectionStatus = connectionStatus
+        self.bundleIdentifier = bundleIdentifier
+        self.coreSummary = coreSummary
+    }
 
     var body: some View {
         ScrollView {
@@ -665,11 +700,11 @@ struct LinkDiagnosticSettingsView: View {
                     Divider().overlay(theme.border)
 
                     VStack(alignment: .leading, spacing: 8) {
-                        Text(localizer.text("units.label", fallback: "Measurement units"))
+                        Text(localizer.text("units.label", fallback: "Unit system"))
                             .font(theme.typography.subheadlineBold)
                             .foregroundStyle(theme.primaryText)
                         Picker(
-                            localizer.text("units.label", fallback: "Measurement units"),
+                            localizer.text("units.label", fallback: "Unit system"),
                             selection: $selectedMeasurementID
                         ) {
                             ForEach(measurementOptions) { option in
@@ -678,17 +713,62 @@ struct LinkDiagnosticSettingsView: View {
                         }
                         .pickerStyle(.segmented)
                     }
+
+                    Divider().overlay(theme.border)
+
+                    Toggle(
+                        localizer.text(
+                            "settings.prefer_favourites",
+                            fallback: "Prefer favourites on Dashboard and Graphs"),
+                        isOn: $preferFavouriteSignals)
+                        .tint(theme.accent)
+                        .foregroundStyle(theme.primaryText)
+
+                    Divider().overlay(theme.border)
+
+                    Toggle(
+                        localizer.text(
+                            "settings.show_unavailable",
+                            fallback: "Show unavailable values in Data Table"),
+                        isOn: $showUnavailableParameters)
+                        .tint(theme.accent)
+                        .foregroundStyle(theme.primaryText)
+                }
+
+                LinkLabeledPanel(
+                    title: localizer.text("common.adapter", fallback: "Adapter"),
+                    systemImage: "cable.connector"
+                ) {
+                    settingsRow(
+                        localizer.text("settings.adapter_name", fallback: "Name"),
+                        adapterName)
+                    if !adapterIdentity.isEmpty {
+                        Divider().overlay(theme.border)
+                        settingsRow(
+                            localizer.text("settings.adapter_identity", fallback: "Identity"),
+                            adapterIdentity)
+                    }
+                    if !connectionStatus.isEmpty {
+                        Divider().overlay(theme.border)
+                        settingsRow(
+                            localizer.text("settings.status", fallback: "Status"),
+                            connectionStatus)
+                    }
                 }
 
                 LinkLabeledPanel(
                     title: localizer.text("common.about", fallback: "About"),
                     systemImage: "info.circle.fill"
                 ) {
-                    settingsRow(productName, productVersion)
-                    Divider().overlay(theme.border)
                     settingsRow(
-                        localizer.text("common.adapter", fallback: "Adapter"),
-                        adapterName)
+                        localizer.text("settings.version", fallback: "Version"),
+                        "\(productName) \(productVersion)")
+                    if !bundleIdentifier.isEmpty {
+                        Divider().overlay(theme.border)
+                        settingsRow(
+                            localizer.text("settings.bundle", fallback: "Bundle"),
+                            bundleIdentifier)
+                    }
                     Divider().overlay(theme.border)
                     settingsRow("LINK", coreSummary)
                 }
@@ -712,6 +792,7 @@ struct LinkDiagnosticSettingsView: View {
                 .font(theme.typography.caption)
                 .foregroundStyle(theme.primaryText)
                 .multilineTextAlignment(.trailing)
+                .textSelection(.enabled)
         }
     }
 }

@@ -93,10 +93,14 @@
     BOOL _legacyDiagnosticResponseObserved;
     NSString *_selectedLanguageTag;
     NSString *_selectedMeasurementSystemKey;
+    BOOL _preferFavouriteSignals;
+    BOOL _showUnavailableParameters;
 }
 
 static NSString *const LinkAppleLanguageDefaultsKey = @"link.displayLanguage";
 static NSString *const LinkAppleMeasurementDefaultsKey = @"link.measurementSystem";
+static NSString *const LinkApplePreferFavouritesDefaultsKey = @"link.preferFavouriteSignals";
+static NSString *const LinkAppleShowUnavailableDefaultsKey = @"link.showUnavailableParameters";
 
 static uint64_t LinkAppleMonotonicMilliseconds(void)
 {
@@ -232,6 +236,16 @@ static void LinkAppleSessionEvent(
     [self applyMeasurementPreference:
         savedMeasurement.length != 0U ? savedMeasurement : @"system"
         persist:NO notify:NO];
+
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    _preferFavouriteSignals =
+        [defaults objectForKey:LinkApplePreferFavouritesDefaultsKey] == nil
+            ? YES
+            : [defaults boolForKey:LinkApplePreferFavouritesDefaultsKey];
+    _showUnavailableParameters =
+        [defaults objectForKey:LinkAppleShowUnavailableDefaultsKey] == nil
+            ? YES
+            : [defaults boolForKey:LinkAppleShowUnavailableDefaultsKey];
 
     _provider = [[LinkBLETransport alloc] init];
     _provider.delegate = self;
@@ -384,6 +398,34 @@ static void LinkAppleSessionEvent(
 - (void)setSelectedMeasurementSystemKey:(NSString *)key
 {
     [self applyMeasurementPreference:key persist:YES notify:YES];
+}
+
+- (BOOL)preferFavouriteSignals
+{
+    return _preferFavouriteSignals;
+}
+
+- (void)setPreferFavouriteSignals:(BOOL)enabled
+{
+    if (_preferFavouriteSignals == enabled) return;
+    _preferFavouriteSignals = enabled;
+    [[NSUserDefaults standardUserDefaults]
+        setBool:enabled forKey:LinkApplePreferFavouritesDefaultsKey];
+    [self notifyDelegate];
+}
+
+- (BOOL)showUnavailableParameters
+{
+    return _showUnavailableParameters;
+}
+
+- (void)setShowUnavailableParameters:(BOOL)enabled
+{
+    if (_showUnavailableParameters == enabled) return;
+    _showUnavailableParameters = enabled;
+    [[NSUserDefaults standardUserDefaults]
+        setBool:enabled forKey:LinkAppleShowUnavailableDefaultsKey];
+    [self notifyDelegate];
 }
 
 - (LinkMeasurementSystem)resolvedMeasurementSystem

@@ -199,3 +199,13 @@ An iPhone layout change intended for every vehicle product must therefore be
 made in LINK first and consumed by each pinned product face. This makes visual
 and structural drift between MBLINK, JAGLINK, BMWLINK, AUDILINK, FORDLINK and future LINK products an
 explicit architectural regression rather than normal parallel development.
+
+
+### Shared Apple Settings baseline
+
+The shared Settings surface is seeded from the mature MBLINK face. LINK owns
+the generic controls: adapter name/identity/status, application version/bundle,
+language, unit system, preference for favourites on Dashboard/Graphs, and
+whether unavailable values are shown in Data Table. Manufacturer products may
+add manufacturer-specific settings, but must not duplicate or remove this
+baseline.
