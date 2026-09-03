@@ -78,7 +78,7 @@ void link_gtk_show_about(GtkWindow *parent,
     if (link_about_has_text(info->authors)) {
         authors = g_strsplit(info->authors, "\n", -1);
         gtk_about_dialog_set_authors(
-            about, (const char * const *)authors);
+            about, (const char **)authors);
     }
     if (link_about_has_text(info->website)) {
         gtk_about_dialog_set_website(about, info->website);
