@@ -15,6 +15,7 @@
 #import "link/diagnostic_flow.h"
 #import "link/elm327_session.h"
 #import "link/elm327_simulator.h"
+#import "link/units.h"
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -70,6 +71,15 @@ NS_ASSUME_NONNULL_BEGIN
     BOOL manufacturerExtensionActive;
 @property(nonatomic, readonly) NSUInteger recordedSampleCount;
 
+/* Shared Apple presentation preferences owned by LINK. */
+@property(nonatomic, copy, readonly) NSArray<NSString *> *availableLanguageTags;
+@property(nonatomic, copy, readonly) NSArray<NSString *> *availableLanguageNames;
+@property(nonatomic, copy, readonly) NSString *selectedLanguageTag;
+@property(nonatomic, copy, readonly) NSString *effectiveLanguageTag;
+@property(nonatomic, copy, readonly) NSArray<NSString *> *availableMeasurementSystemKeys;
+@property(nonatomic, copy, readonly) NSArray<NSString *> *availableMeasurementSystemNames;
+@property(nonatomic, copy, readonly) NSString *selectedMeasurementSystemKey;
+
 - (instancetype)initWithProductSlug:(NSString *)productSlug
                          flowConfig:(LinkDiagnosticFlowConfig)flowConfig
                      liveStatusText:(NSString *)liveStatusText
@@ -108,6 +118,15 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (NSArray<NSNumber *> *)recentValuesForPID:(uint8_t)pid
                                       limit:(NSUInteger)limit;
+/** Presentation-converted history; canonical telemetry remains unchanged. */
+- (NSArray<NSNumber *> *)displayRecentValuesForPID:(uint8_t)pid
+                                             limit:(NSUInteger)limit;
+- (NSString *)displayUnitForPID:(uint8_t)pid;
+- (NSArray<NSNumber *> *)displayRangeForPID:(uint8_t)pid;
+
+- (NSString *)localizedTextForKey:(NSString *)key;
+- (void)setSelectedLanguageTag:(NSString *)tag;
+- (void)setSelectedMeasurementSystemKey:(NSString *)key;
 /** Recent values returned by one exact 11/29-bit CAN responder. */
 - (NSArray<NSNumber *> *)recentValuesForPID:(uint8_t)pid
                      responderCANIdentifier:(uint32_t)responderCANIdentifier

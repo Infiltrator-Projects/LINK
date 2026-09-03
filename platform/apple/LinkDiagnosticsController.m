@@ -3,6 +3,9 @@
 
 #import "link/diagnostic_capability.h"
 #import "link/elm327.h"
+#import "link/i18n.h"
+#import "link/parameter.h"
+#import "link/units.h"
 #import "link/mercedes_me_adapter.h"
 #import "link/obd2.h"
 #import "link/telemetry.h"
@@ -46,6 +49,13 @@
 - (BOOL)applyFlowEvent:(const LinkDiagnosticFlowEvent *)event;
 - (void)applyPollingPreferencesToScheduler;
 - (void)driveDiagnosticFlow;
+- (void)applyLanguagePreference:(NSString *)tag
+                        persist:(BOOL)persist
+                         notify:(BOOL)notify;
+- (void)applyMeasurementPreference:(NSString *)key
+                           persist:(BOOL)persist
+                            notify:(BOOL)notify;
+- (LinkMeasurementSystem)resolvedMeasurementSystem;
 @end
 
 @implementation LinkDiagnosticsController {
@@ -81,7 +91,12 @@
     NSString *_lastRecordedTransportStatus;
     BOOL _pidPollingEnabled[256];
     BOOL _legacyDiagnosticResponseObserved;
+    NSString *_selectedLanguageTag;
+    NSString *_selectedMeasurementSystemKey;
 }
+
+static NSString *const LinkAppleLanguageDefaultsKey = @"link.displayLanguage";
+static NSString *const LinkAppleMeasurementDefaultsKey = @"link.measurementSystem";
 
 static uint64_t LinkAppleMonotonicMilliseconds(void)
 {
@@ -206,6 +221,18 @@ static void LinkAppleSessionEvent(
     _standardVINStatusText = [standardVINStatusText copy];
     _flowConfig = flowConfig;
 
+    link_i18n_init();
+    NSString *savedLanguage =
+        [[NSUserDefaults standardUserDefaults] stringForKey:LinkAppleLanguageDefaultsKey];
+    NSString *savedMeasurement =
+        [[NSUserDefaults standardUserDefaults] stringForKey:LinkAppleMeasurementDefaultsKey];
+    [self applyLanguagePreference:
+        savedLanguage.length != 0U ? savedLanguage : @"system"
+        persist:NO notify:NO];
+    [self applyMeasurementPreference:
+        savedMeasurement.length != 0U ? savedMeasurement : @"system"
+        persist:NO notify:NO];
+
     _provider = [[LinkBLETransport alloc] init];
     _provider.delegate = self;
 
@@ -248,6 +275,180 @@ static void LinkAppleSessionEvent(
     } else if (!_simulated) {
         [_provider disconnect];
     }
+}
+
+- (NSArray<NSString *> *)availableLanguageTags
+{
+    NSMutableArray<NSString *> *tags = [NSMutableArray arrayWithObject:@"system"];
+    for (size_t index = 0U; index < link_i18n_installed_locale_count(); ++index) {
+        const char *tag = link_i18n_installed_locale(index);
+        if (tag != NULL && tag[0] != '\0')
+            [tags addObject:[NSString stringWithUTF8String:tag]];
+    }
+    return tags;
+}
+
+- (NSArray<NSString *> *)availableLanguageNames
+{
+    NSMutableArray<NSString *> *names = [NSMutableArray arrayWithObject:
+        [self localizedTextForKey:@"language.system"]];
+    for (size_t index = 0U; index < link_i18n_installed_locale_count(); ++index) {
+        const char *name = link_i18n_installed_locale_name(index);
+        [names addObject:name != NULL
+            ? [NSString stringWithUTF8String:name] : @"Unknown"];
+    }
+    return names;
+}
+
+- (NSString *)selectedLanguageTag
+{
+    return _selectedLanguageTag != nil ? _selectedLanguageTag : @"system";
+}
+
+- (NSString *)effectiveLanguageTag
+{
+    const char *tag = link_i18n_selected_locale();
+    return tag != NULL ? [NSString stringWithUTF8String:tag] : @"en-AU";
+}
+
+- (NSArray<NSString *> *)availableMeasurementSystemKeys
+{
+    return @[@"system", @"metric", @"us-customary"];
+}
+
+- (NSArray<NSString *> *)availableMeasurementSystemNames
+{
+    return @[
+        [self localizedTextForKey:@"units.system"],
+        [self localizedTextForKey:@"units.metric"],
+        [self localizedTextForKey:@"units.us_customary"]
+    ];
+}
+
+- (NSString *)selectedMeasurementSystemKey
+{
+    return _selectedMeasurementSystemKey != nil
+        ? _selectedMeasurementSystemKey : @"system";
+}
+
+- (NSString *)localizedTextForKey:(NSString *)key
+{
+    if (key.length == 0U) return @"";
+    const char *text = link_i18n_text(key.UTF8String);
+    return text != NULL ? [NSString stringWithUTF8String:text] : key;
+}
+
+- (void)applyLanguagePreference:(NSString *)tag
+                        persist:(BOOL)persist
+                         notify:(BOOL)notify
+{
+    NSString *candidate = tag.length != 0U ? tag : @"system";
+    BOOL accepted = NO;
+    if ([candidate isEqualToString:@"system"]) {
+        NSString *preferred = NSLocale.preferredLanguages.firstObject;
+        if (preferred.length != 0U)
+            accepted = link_i18n_select_locale(preferred.UTF8String);
+        if (!accepted) accepted = link_i18n_select_locale("en-AU");
+    } else {
+        accepted = link_i18n_select_locale(candidate.UTF8String);
+    }
+    if (!accepted) return;
+    _selectedLanguageTag = [candidate copy];
+    if (persist)
+        [[NSUserDefaults standardUserDefaults]
+            setObject:_selectedLanguageTag forKey:LinkAppleLanguageDefaultsKey];
+    if (notify) [self notifyDelegate];
+}
+
+- (void)setSelectedLanguageTag:(NSString *)tag
+{
+    [self applyLanguagePreference:tag persist:YES notify:YES];
+}
+
+- (void)applyMeasurementPreference:(NSString *)key
+                           persist:(BOOL)persist
+                            notify:(BOOL)notify
+{
+    LinkMeasurementSystem system;
+    NSString *candidate = key.length != 0U ? key : @"system";
+    if (!link_measurement_system_from_key(candidate.UTF8String, &system)) return;
+    (void)system;
+    _selectedMeasurementSystemKey = [candidate copy];
+    if (persist)
+        [[NSUserDefaults standardUserDefaults]
+            setObject:_selectedMeasurementSystemKey
+               forKey:LinkAppleMeasurementDefaultsKey];
+    if (notify) [self notifyDelegate];
+}
+
+- (void)setSelectedMeasurementSystemKey:(NSString *)key
+{
+    [self applyMeasurementPreference:key persist:YES notify:YES];
+}
+
+- (LinkMeasurementSystem)resolvedMeasurementSystem
+{
+    LinkMeasurementSystem requested = LINK_MEASUREMENT_SYSTEM_DEFAULT;
+    (void)link_measurement_system_from_key(
+        self.selectedMeasurementSystemKey.UTF8String, &requested);
+    NSNumber *usesMetric =
+        [[NSLocale currentLocale] objectForKey:NSLocaleUsesMetricSystem];
+    return link_measurement_system_resolve(
+        requested, usesMetric == nil ? YES : usesMetric.boolValue);
+}
+
+- (NSArray<NSNumber *> *)displayRecentValuesForPID:(uint8_t)pid
+                                             limit:(NSUInteger)limit
+{
+    NSArray<NSNumber *> *canonical = [self recentValuesForPID:pid limit:limit];
+    LinkObd2UnitCode unit = LINK_OBD2_UNIT_NONE;
+    if (!link_parameter_obd2_expected_unit(pid, &unit)) return canonical;
+    NSMutableArray<NSNumber *> *values =
+        [NSMutableArray arrayWithCapacity:canonical.count];
+    const LinkMeasurementSystem system = [self resolvedMeasurementSystem];
+    for (NSNumber *number in canonical) {
+        double display = number.doubleValue;
+        const char *label = "";
+        if (!link_units_convert_obd2(unit, display, system, &display, &label))
+            display = number.doubleValue;
+        [values addObject:@(display)];
+    }
+    return values;
+}
+
+- (NSString *)displayUnitForPID:(uint8_t)pid
+{
+    LinkObd2UnitCode unit = LINK_OBD2_UNIT_NONE;
+    if (link_parameter_obd2_expected_unit(pid, &unit)) {
+        double ignored = 0.0;
+        const char *label = "";
+        if (link_units_convert_obd2(
+                unit, 0.0, [self resolvedMeasurementSystem],
+                &ignored, &label) && label != NULL)
+            return [NSString stringWithUTF8String:label];
+    }
+    const LinkObd2PidDefinition *definition =
+        link_obd2_pid_definition(UINT8_C(0x01), pid);
+    return definition != NULL && definition->unit != NULL
+        ? [NSString stringWithUTF8String:definition->unit] : @"";
+}
+
+- (NSArray<NSNumber *> *)displayRangeForPID:(uint8_t)pid
+{
+    const LinkParameterDefinition *definition =
+        link_parameter_obd2_definition(pid);
+    LinkObd2UnitCode unit = LINK_OBD2_UNIT_NONE;
+    if (definition == NULL ||
+        !link_parameter_obd2_expected_unit(pid, &unit))
+        return @[];
+    double minimum = definition->minimum;
+    double maximum = definition->maximum;
+    const char *label = "";
+    const LinkMeasurementSystem system = [self resolvedMeasurementSystem];
+    if (!link_units_convert_obd2(unit, minimum, system, &minimum, &label) ||
+        !link_units_convert_obd2(unit, maximum, system, &maximum, &label))
+        return @[];
+    return @[@(minimum), @(maximum)];
 }
 
 static void LinkAppleAppendReadinessMonitor(
@@ -328,14 +529,18 @@ static void LinkAppleAppendReadinessMonitor(
     for (size_t index = 0U; index < count; ++index) {
         const LinkObd2Sample *sample = &samples[index];
         const char *name = link_obd2_pid_name(sample->pid);
-        const char *unit = link_obd2_unit_name(sample->unit);
+        double displayValue = sample->value;
+        const char *unit = "";
+        (void)link_units_convert_obd2(
+            sample->unit, sample->value, [self resolvedMeasurementSystem],
+            &displayValue, &unit);
         NSString *value;
         if (sample->unit == LINK_OBD2_UNIT_NONE ||
             unit == NULL || unit[0] == '\0') {
-            value = [NSString stringWithFormat:@"%.2f", sample->value];
+            value = [NSString stringWithFormat:@"%.2f", displayValue];
         } else {
             value = [NSString stringWithFormat:@"%.2f %s",
-                sample->value, unit];
+                displayValue, unit];
         }
         [rows addObject:[NSString stringWithFormat:
             @"PID 0x%02X · %s · %@",
@@ -428,16 +633,16 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
         const char *name =
             definition != NULL && definition->name != NULL
                 ? definition->name : link_obd2_pid_name(pid);
+        const char *translatedName =
+            name != NULL ? link_i18n_text(name) : "Unknown";
         NSArray<NSNumber *> *history =
-            [self recentValuesForPID:pid limit:1U];
+            [self displayRecentValuesForPID:pid limit:1U];
         if (history.count != 0U) {
-            NSString *unit =
-                definition != NULL && definition->unit != NULL
-                    ? [NSString stringWithUTF8String:definition->unit] : @"";
+            NSString *unit = [self displayUnitForPID:pid];
             [rows addObject:[NSString stringWithFormat:
                 @"PID %02lX · %s — %.3f%@%@",
                 (unsigned long)pid,
-                name != NULL ? name : "Unknown",
+                translatedName != NULL ? translatedName : "Unknown",
                 history.lastObject.doubleValue,
                 unit.length != 0U ? @" " : @"",
                 unit]];
