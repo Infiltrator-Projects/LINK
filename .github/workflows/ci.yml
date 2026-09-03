@@ -123,6 +123,13 @@ jobs:
           grep -Fq 'gtk_widget_add_css_class(device_row, "link-device-row");' platform/linux/link-gtk-shell.c
           grep -Fq 'native protocol capture' platform/linux/link-gtk-shell.c
           grep -Fq 'transport.isNativeAdapter' platform/apple/LinkDiagnosticsController.m
+          grep -Fq 'case settings' platform/apple/LinkDiagnosticUI.swift
+          grep -Fq 'struct LinkDiagnosticSettingsView' platform/apple/LinkDiagnosticUI.swift
+          grep -Fq 'linkDiagnosticLocalization' platform/apple/LinkDiagnosticUI.swift
+          grep -Fq 'setSelectedLanguageTag' platform/apple/LinkDiagnosticsController.m
+          grep -Fq 'setSelectedMeasurementSystemKey' platform/apple/LinkDiagnosticsController.m
+          grep -Fq 'src/core/units.c' CMakeLists.txt
+          grep -Fq 'link-test-units tests/test_units.c link-units' CMakeLists.txt
           grep -Fq 'NATIVE_RX' platform/apple/LinkDiagnosticsController.m
           grep -Fq 'link-test-uds-dtc tests/test_uds_dtc.c link-uds-dtc' CMakeLists.txt
           grep -Fq 'link-test-uds-server tests/test_uds_server.c link-uds-server' CMakeLists.txt

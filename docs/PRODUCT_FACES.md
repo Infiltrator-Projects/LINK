@@ -53,6 +53,12 @@ Manufacturer repositories may contribute evidence-backed legacy protocols,
 module scans, parameters, tests and service procedures, but must not fork the
 shared task structure.
 
+Settings is shared application behaviour. LINK owns the language catalogue,
+measurement-unit preference model and Apple Settings surface. A manufacturer
+face supplies product identity/version/theme and may append genuinely
+manufacturer-specific preferences, but it must not replace the shared Settings
+task with a product-local implementation.
+
 ## Product repositories own identity and vehicle specificity
 
 A product repository may own:
