@@ -209,8 +209,9 @@ void link_stm32c092_server_example_poll_rx(FDCAN_HandleTypeDef *hfdcan)
     if (hfdcan != NULL && hfdcan == example_hal.hfdcan) {
         /*
          * This deliberately uses the same bounded queue path as the ISR.
-         * link_stm32_can_rx_isr() drains HAL FIFO0 through the adapter ops,
-         * and is safe to call from the main loop when no interrupt arrived.
+         * link_stm32_can_rx_isr() drains HAL FIFO0 through the adapter ops.
+         * Its re-entrancy guard makes this main-loop fallback safe even if the
+         * normal FDCAN interrupt arrives during the drain.
          */
         link_stm32_can_rx_isr(&example_can);
     }

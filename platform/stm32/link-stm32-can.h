@@ -9,8 +9,11 @@
  *
  * RX is single-producer/single-consumer: the interrupt producer snapshots both
  * the frame and its arrival tick; the main-loop consumer receives a projected
- * monotonic timestamp. TX allows one outstanding hardware frame at a time and
- * does not report completion until the concrete controller confirms it.
+ * monotonic timestamp. The drain entry is re-entrancy guarded so a target may
+ * safely use both its normal RX interrupt and a main-loop fallback without two
+ * producers entering the HAL receive callback at once. TX allows one
+ * outstanding hardware frame at a time and does not report completion until
+ * the concrete controller confirms it.
  */
 #ifndef LINK_STM32_CAN_H
 #define LINK_STM32_CAN_H
@@ -62,6 +65,7 @@ typedef struct {
     volatile uint8_t rx_head;
     volatile uint8_t rx_tail;
     volatile uint32_t rx_dropped;
+    volatile bool rx_draining;
     bool tx_in_flight;
     uint32_t last_tick_ms;
     uint64_t elapsed_ms;

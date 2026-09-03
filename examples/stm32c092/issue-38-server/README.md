@@ -203,12 +203,14 @@ CAN path.
 
 The issue-38 `Src-main.c` now calls
 `link_stm32c092_server_example_poll_rx()` before processing the server.
-The normal `HAL_FDCAN_RxFifo0Callback()` path remains active. If the board
-receives into FIFO0 but the IRQ is not delivered, the main loop therefore
-still drains and processes the frame. If several PCAN requests race a response,
-LINK retains them in the same bounded depth as its STM32 RX queue and replays
-them in arrival order after the active response completes; only a true bounded
-queue overflow increments the drop counter.
+The normal `HAL_FDCAN_RxFifo0Callback()` path remains active. The shared STM32
+RX edge rejects nested drain entry, so an interrupt that pre-empts the fallback
+cannot enter the HAL receive callback concurrently or reverse FIFO order. If
+the board receives into FIFO0 but the IRQ is not delivered, the main loop still
+drains and processes the frame. If several PCAN requests race a response, LINK
+retains them in the same bounded depth as its STM32 RX queue and replays them
+in arrival order after the active response completes; only a true bounded queue
+overflow increments the drop counter.
 
 ## F190 VIN test
 

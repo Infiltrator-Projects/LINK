@@ -24,6 +24,9 @@ typedef struct {
     bool tx_ready;
     LinkStm32CanTxStatus tx_status;
     uint32_t tx_complete_tick_ms;
+    LinkStm32Can *reenter_channel;
+    bool reenter_on_receive;
+    bool reentered;
 } FakeCan;
 
 static bool fake_receive(void *context, LinkIsoTpCanFrame *frame)
@@ -33,6 +36,11 @@ static bool fake_receive(void *context, LinkIsoTpCanFrame *frame)
         return false;
     }
     *frame = fake->rx[fake->rx_index++];
+    if (fake->reenter_on_receive && !fake->reentered &&
+        fake->reenter_channel != NULL) {
+        fake->reentered = true;
+        link_stm32_can_rx_isr(fake->reenter_channel);
+    }
     return true;
 }
 
@@ -169,6 +177,39 @@ static int test_queue_clock_and_tx_completion(void)
         &channel, &event_us) == LINK_STM32_CAN_TX_COMPLETE);
     REQUIRE(event_us == UINT64_C(9000));
     REQUIRE(!link_stm32_can_tx_in_flight(&channel));
+    return 0;
+}
+
+static int test_reentrant_rx_drain_preserves_fifo_order(void)
+{
+    FakeCan fake;
+    LinkStm32Can channel;
+    LinkStm32CanOps ops;
+    LinkIsoTpCanFrame frame;
+
+    memset(&fake, 0, sizeof(fake));
+    fake.tx_ready = true;
+    ops = fake_ops(&fake);
+    REQUIRE(link_stm32_can_init(&channel, &ops));
+
+    frame = classic_frame(0x701U);
+    fake_push_rx(&fake, &frame);
+    frame = classic_frame(0x702U);
+    fake_push_rx(&fake, &frame);
+    fake.reenter_channel = &channel;
+    fake.reenter_on_receive = true;
+
+    /* Simulate the RX IRQ pre-empting the main-loop fallback in receive(). */
+    link_stm32_can_rx_isr(&channel);
+
+    REQUIRE(fake.reentered);
+    REQUIRE(fake.rx_index == 2U);
+    REQUIRE(link_stm32_can_rx_dropped(&channel) == 0U);
+    REQUIRE(link_stm32_can_pop(&channel, &frame));
+    REQUIRE(frame.can_id == 0x701U);
+    REQUIRE(link_stm32_can_pop(&channel, &frame));
+    REQUIRE(frame.can_id == 0x702U);
+    REQUIRE(!link_stm32_can_pop(&channel, &frame));
     return 0;
 }
 
@@ -411,6 +452,7 @@ static int test_stuck_hardware_tx_is_bounded(void)
 int main(void)
 {
     REQUIRE(test_queue_clock_and_tx_completion() == 0);
+    REQUIRE(test_reentrant_rx_drain_preserves_fifo_order() == 0);
     REQUIRE(test_delayed_rx_and_multiframe_tx() == 0);
     REQUIRE(test_flow_control_overflow_fails() == 0);
     REQUIRE(test_wrong_consecutive_sequence_fails() == 0);

@@ -75,6 +75,20 @@ void link_stm32_can_rx_isr(LinkStm32Can *channel)
         return;
     }
 
+    /*
+     * Some Cube integrations retain both the FDCAN RX callback and a
+     * main-loop fallback for boards where delivery of that callback has been
+     * unreliable. On a single-core STM32 the fallback can be interrupted
+     * while it is inside the HAL receive callback. Coalesce that nested entry
+     * into the active drain so there remains exactly one RX producer and FIFO
+     * order cannot be reversed. A following IRQ or fallback pass collects a
+     * frame that arrives immediately after the active drain's final poll.
+     */
+    if (channel->rx_draining) {
+        return;
+    }
+    channel->rx_draining = true;
+
     while (channel->ops.receive(channel->ops.context, &frame)) {
         uint8_t head;
         uint32_t arrival_tick_ms;
@@ -96,6 +110,8 @@ void link_stm32_can_rx_isr(LinkStm32Can *channel)
             .arrival_tick_ms = arrival_tick_ms;
         channel->rx_head = (uint8_t)(head + 1U);
     }
+
+    channel->rx_draining = false;
 }
 
 bool link_stm32_can_pop_timed(
