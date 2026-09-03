@@ -110,6 +110,7 @@ add_library(link-core STATIC
     src/core/i18n.c
     src/core/i18n_platform.c
     src/core/language_pack.c
+    src/core/units.c
     src/core/fuel_economy.c
     src/core/diagnostic_request.c
     src/core/diagnostic_flow.c
@@ -511,6 +512,7 @@ if(BUILD_TESTING AND PROJECT_IS_TOP_LEVEL)
     add_test(NAME link-stm32-bxcan-hal COMMAND link-test-stm32-bxcan-hal)
 
     link_add_test(link-test-runtime tests/test_runtime.c link-runtime)
+    link_add_test(link-test-units tests/test_units.c link-units)
     link_add_test(link-test-elm327 tests/test_elm327.c link-elm327)
     link_add_test(link-test-elm327-session tests/test_elm327_session.c link-elm327-session)
     link_add_test(link-test-obd2 tests/test_obd2.c link-obd2)
