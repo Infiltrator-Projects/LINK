@@ -246,6 +246,47 @@ static bool simulator_append_byte(
     return true;
 }
 
+static bool simulator_append_indexed_message(
+    char *response,
+    size_t response_size,
+    const uint8_t *message,
+    size_t message_length)
+{
+    size_t position = 0U;
+    size_t index = 0U;
+    unsigned int line_index = 0U;
+    int written;
+
+    if (response == NULL || message == NULL ||
+        message_length == 0U || message_length > 0xfffU) {
+        return false;
+    }
+    written = snprintf(response, response_size, "%03X",
+                       (unsigned int)message_length);
+    if (written != 3) return false;
+    position = 3U;
+
+    while (index < message_length) {
+        size_t chunk = message_length - index;
+        size_t offset;
+        if (chunk > 7U) chunk = 7U;
+        if (position + 4U >= response_size) return false;
+        response[position++] = '\n';
+        response[position++] = simulator_hex_digit(line_index);
+        response[position++] = ':';
+        response[position] = '\0';
+        for (offset = 0U; offset < chunk; ++offset) {
+            if (!simulator_append_byte(response, response_size, &position,
+                                       message[index + offset])) {
+                return false;
+            }
+        }
+        index += chunk;
+        line_index = (line_index + 1U) & 0x0fU;
+    }
+    return true;
+}
+
 static bool simulator_pid_supported(uint8_t pid)
 {
     switch (pid) {
@@ -424,7 +465,9 @@ static bool simulator_live_response(
     size_t response_size)
 {
     uint8_t data[16];
+    uint8_t message[19];
     size_t data_length = 0U;
+    size_t message_length = 0U;
     size_t position = 0U;
     size_t index;
     const size_t fixed_payload_length = 2U + (frame_number_present ? 1U : 0U);
@@ -432,28 +475,40 @@ static bool simulator_live_response(
     if (!simulator_live_payload(simulator, pid, data, sizeof(data), &data_length)) {
         return false;
     }
+
+    message[message_length++] = service;
+    message[message_length++] = pid;
+    if (frame_number_present) message[message_length++] = frame_number;
+    if (data_length > sizeof(message) - message_length) return false;
+    memcpy(message + message_length, data, data_length);
+    message_length += data_length;
+
+    /*
+     * ELM327 presents application replies longer than one classic CAN frame
+     * as an indexed multi-line message. Emitting one oversized headerless
+     * line while ATH1 is active was internally inconsistent and caused the
+     * shared live flow to fail at the first long SAE PID (0x78), which is the
+     * eleventh scheduled simulated live sample.
+     */
+    if (fixed_payload_length + data_length > 8U) {
+        return simulator_append_indexed_message(
+            response, response_size, message, message_length);
+    }
+
     response[0] = '\0';
-    if (simulator->response_headers && fixed_payload_length + data_length <= 8U) {
+    if (simulator->response_headers) {
         const int prefix = snprintf(response, response_size, "7E8");
-        const size_t payload_length = fixed_payload_length + data_length;
         if (prefix != 3) return false;
         position = 3U;
         if (!simulator_append_byte(
                 response, response_size, &position,
-                (uint8_t)payload_length)) {
+                (uint8_t)message_length)) {
             return false;
         }
     }
-    if (!simulator_append_byte(response, response_size, &position, service) ||
-        !simulator_append_byte(response, response_size, &position, pid)) {
-        return false;
-    }
-    if (frame_number_present &&
-        !simulator_append_byte(response, response_size, &position, frame_number)) {
-        return false;
-    }
-    for (index = 0U; index < data_length; ++index) {
-        if (!simulator_append_byte(response, response_size, &position, data[index])) {
+    for (index = 0U; index < message_length; ++index) {
+        if (!simulator_append_byte(response, response_size, &position,
+                                   message[index])) {
             return false;
         }
     }

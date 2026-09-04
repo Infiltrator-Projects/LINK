@@ -163,6 +163,7 @@ int main(void)
         const LinkElm327Response *simulated_response;
         LinkObd2PidSet supported;
         LinkObd2Sample sample;
+        LinkObd2DecodedPid decoded;
         LinkObd2DtcList dtcs;
         LinkObd2Readiness readiness;
         bool has_more = false;
@@ -213,6 +214,29 @@ int main(void)
         REQUIRE(simulated_response != NULL);
         REQUIRE(link_obd2_decode_live_pid(simulated_response, 0x0cU, &sample) == LINK_OBD2_RESULT_OK);
         REQUIRE(sample.unit == LINK_OBD2_UNIT_RPM && sample.value > 0.0);
+
+        /*
+         * Regression for the exact product failure: with ATH1 active, the
+         * first ten scheduled simulated scalar PIDs are followed by PID 0x78.
+         * Its 11-byte Mode 01 reply cannot fit one classic CAN frame and must
+         * therefore use ELM's indexed multi-line representation. The shared
+         * decoder must recover all nine data bytes and four EGT signals.
+         */
+        REQUIRE(link_elm327_session_begin(&simulated_session, "ATH1", 1310U, 500U) == LINK_ELM327_SESSION_OP_OK);
+        simulated_response = link_elm327_session_response(&simulated_session);
+        REQUIRE(simulated_response != NULL && simulated_response->ok_seen);
+        REQUIRE(link_elm327_session_begin(&simulated_session, "0178", 1320U, 500U) == LINK_ELM327_SESSION_OP_OK);
+        simulated_response = link_elm327_session_response(&simulated_session);
+        REQUIRE(simulated_response != NULL);
+        REQUIRE(strncmp(simulated_response->text, "00B\n0:", 6U) == 0);
+        REQUIRE(strstr(simulated_response->text, "\n1:") != NULL);
+        REQUIRE(link_obd2_decode_live_pid_payload(
+                    simulated_response, 0x78U, &decoded) == LINK_OBD2_RESULT_OK);
+        REQUIRE(decoded.raw_length == 9U);
+        REQUIRE(decoded.signal_count == 4U);
+        REQUIRE(link_obd2_decode_live_pid(
+                    simulated_response, 0x78U, &sample) == LINK_OBD2_RESULT_OK);
+        REQUIRE(sample.unit == LINK_OBD2_UNIT_CELSIUS);
 
         REQUIRE(link_elm327_session_begin(&simulated_session, "03", 1400U, 500U) == LINK_ELM327_SESSION_OP_OK);
         simulated_response = link_elm327_session_response(&simulated_session);
