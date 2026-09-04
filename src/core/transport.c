@@ -249,7 +249,7 @@ static bool simulator_append_byte(
 static bool simulator_pid_supported(uint8_t pid)
 {
     switch (pid) {
-    case 0x04U: case 0x05U: case 0x0bU: case 0x0cU: case 0x0dU:
+    case 0x01U: case 0x04U: case 0x05U: case 0x0bU: case 0x0cU: case 0x0dU:
     case 0x0fU: case 0x10U: case 0x11U: case 0x23U: case 0x2cU:
     case 0x2dU: case 0x33U: case 0x3cU: case 0x42U: case 0x46U:
     case 0x5cU: case 0x5eU: case 0x78U: case 0x7aU: case 0x7cU:
@@ -315,6 +315,15 @@ static bool simulator_live_payload(
     if (data == NULL || data_length == NULL || data_size < 3U) return false;
     *data_length = 0U;
     switch (pid) {
+    case 0x01U:
+        /* PID 01: MIL on, one confirmed DTC, compression-ignition monitors. */
+        if (data_size < 4U) return false;
+        data[0] = 0x81U;
+        data[1] = 0x0fU;
+        data[2] = 0x80U;
+        data[3] = 0x00U;
+        *data_length = 4U;
+        return true;
     case 0x04U:
         data[0] = (uint8_t)(100U + (unsigned int)(phase % 40U)); *data_length = 1U; return true;
     case 0x05U:
@@ -378,7 +387,7 @@ static bool simulator_live_response(
     char *response,
     size_t response_size)
 {
-    uint8_t data[3];
+    uint8_t data[4];
     size_t data_length = 0U;
     size_t position = 0U;
     size_t index;

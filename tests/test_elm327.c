@@ -164,6 +164,7 @@ int main(void)
         LinkObd2PidSet supported;
         LinkObd2Sample sample;
         LinkObd2DtcList dtcs;
+        LinkObd2Readiness readiness;
         bool has_more = false;
 
         config.adapter_identifier = "ELM327 v2.3 LINK TEST";
@@ -191,7 +192,21 @@ int main(void)
         link_obd2_pid_set_clear(&supported);
         REQUIRE(link_obd2_accept_supported_pids(simulated_response, 0x00U, &supported, &has_more) == LINK_OBD2_RESULT_OK);
         REQUIRE(has_more);
+        REQUIRE(link_obd2_pid_set_contains(&supported, 0x01U));
         REQUIRE(link_obd2_pid_set_contains(&supported, 0x0cU));
+
+        /*
+         * The shared diagnostic flow always requests Mode 01 PID 01 after
+         * its DTC inventory. The simulator must return a valid readiness
+         * payload or every product using simulated data fails before live mode.
+         */
+        REQUIRE(link_elm327_session_begin(&simulated_session, "0101", 1250U, 500U) == LINK_ELM327_SESSION_OP_OK);
+        simulated_response = link_elm327_session_response(&simulated_session);
+        REQUIRE(simulated_response != NULL);
+        REQUIRE(link_obd2_decode_readiness(simulated_response, &readiness) == LINK_OBD2_RESULT_OK);
+        REQUIRE(readiness.mil_on);
+        REQUIRE(readiness.confirmed_dtc_count == 1U);
+        REQUIRE(readiness.compression_ignition);
 
         REQUIRE(link_elm327_session_begin(&simulated_session, "010C", 1300U, 500U) == LINK_ELM327_SESSION_OP_OK);
         simulated_response = link_elm327_session_response(&simulated_session);
