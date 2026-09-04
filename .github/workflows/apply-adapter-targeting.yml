@@ -3,85 +3,28 @@ name: Apply explicit adapter targeting
 
 on:
   push:
-    branches: [adapter-targeting]
+    branches:
+      - adapter-targeting
 
 permissions:
   contents: write
 
 jobs:
   patch:
-    if: ${{ github.event.head_commit.message == 'apply: adapter targeting' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           fetch-depth: 0
-      - name: Patch Apple adapter targeting API
+      - name: Apply patch when explicitly triggered
         shell: bash
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-
-          def replace_once(path, old, new):
-              p = Path(path)
-              s = p.read_text()
-              if s.count(old) != 1:
-                  raise SystemExit(f'{path}: expected one match, found {s.count(old)} for {old[:80]!r}')
-              p.write_text(s.replace(old, new, 1))
-
-          replace_once('platform/apple/LinkBLETransport.h',
-          '''- (void)start;\n- (void)disconnect;''',
-          '''- (void)start;\n/** Connect only to this exact CoreBluetooth peripheral UUID. No unrelated\n * discovered adapter is used as a fallback if the requested peripheral is\n * unavailable. */\n- (void)startWithPeripheralIdentifier:(NSString *)peripheralIdentifier;\n- (void)disconnect;''')
-
-          replace_once('platform/apple/LinkBLETransport.m',
-          '''- (void)beginScan;\n- (void)connectPeripheral:(CBPeripheral *)peripheral''',
-          '''- (void)startInternal;\n- (void)beginScan;\n- (void)connectPeripheral:(CBPeripheral *)peripheral''')
-
-          replace_once('platform/apple/LinkBLETransport.m',
-          '''    CBPeripheral *_Nullable _peripheral;\n    BOOL _startRequested;''',
-          '''    CBPeripheral *_Nullable _peripheral;\n    NSString *_Nullable _requestedPeripheralIdentifier;\n    BOOL _startRequested;''')
-
-          old_start = '''- (void)start\n{\n    if (![NSThread isMainThread]) {\n        dispatch_async(dispatch_get_main_queue(), ^{ [self start]; });\n        return;\n    }\n    if (!_startRequested) {\n        _scanAttempt = 0U;\n        _recoveryAttempt = 0U;\n        _channelProbeAttempt = 0U;\n        _knownPeripheralAttempted = NO;\n    }\n    _startRequested = YES;\n    if (self.isReady) { [self notifyDelegate]; return; }\n    if (_central == nil) {\n        _central = [[CBCentralManager alloc] initWithDelegate:self\n                                                       queue:dispatch_get_main_queue()];\n        [self setState:LinkBLETransportStateWaitingForBluetooth status:@\"Waiting for Bluetooth\"];\n        return;\n    }\n    if (_central.state == CBManagerStatePoweredOn) [self beginScan];\n    else [self setState:LinkBLETransportStateWaitingForBluetooth status:@\"Waiting for Bluetooth\"];\n}\n'''
-          new_start = '''- (void)start\n{\n    if (![NSThread isMainThread]) {\n        dispatch_async(dispatch_get_main_queue(), ^{ [self start]; });\n        return;\n    }\n    _requestedPeripheralIdentifier = nil;\n    [self startInternal];\n}\n\n- (void)startWithPeripheralIdentifier:(NSString *)peripheralIdentifier\n{\n    if (![NSThread isMainThread]) {\n        NSString *copy = [peripheralIdentifier copy];\n        dispatch_async(dispatch_get_main_queue(), ^{\n            [self startWithPeripheralIdentifier:copy];\n        });\n        return;\n    }\n    NSUUID *uuid = peripheralIdentifier.length != 0U\n        ? [[NSUUID alloc] initWithUUIDString:peripheralIdentifier] : nil;\n    if (uuid == nil) {\n        [self failAndStop:@\"Selected Bluetooth adapter identifier is invalid\"];\n        return;\n    }\n    _requestedPeripheralIdentifier = uuid.UUIDString;\n    [self startInternal];\n}\n\n- (void)startInternal\n{\n    if (!_startRequested) {\n        _scanAttempt = 0U;\n        _recoveryAttempt = 0U;\n        _channelProbeAttempt = 0U;\n        _knownPeripheralAttempted = NO;\n    }\n    _startRequested = YES;\n    if (self.isReady) { [self notifyDelegate]; return; }\n    if (_central == nil) {\n        _central = [[CBCentralManager alloc] initWithDelegate:self\n                                                       queue:dispatch_get_main_queue()];\n        [self setState:LinkBLETransportStateWaitingForBluetooth status:@\"Waiting for Bluetooth\"];\n        return;\n    }\n    if (_central.state == CBManagerStatePoweredOn) [self beginScan];\n    else [self setState:LinkBLETransportStateWaitingForBluetooth status:@\"Waiting for Bluetooth\"];\n}\n'''
-          replace_once('platform/apple/LinkBLETransport.m', old_start, new_start)
-
-          replace_once('platform/apple/LinkBLETransport.m',
-          '''    _knownPeripheralAttempted = NO;\n    _operationGeneration++;''',
-          '''    _knownPeripheralAttempted = NO;\n    _requestedPeripheralIdentifier = nil;\n    _operationGeneration++;''')
-
-          replace_once('platform/apple/LinkBLETransport.m',
-          '''        NSString *savedIdentifier = [[NSUserDefaults standardUserDefaults]\n            stringForKey:LinkKnownPeripheralDefaultsKey];''',
-          '''        NSString *savedIdentifier = _requestedPeripheralIdentifier.length != 0U\n            ? _requestedPeripheralIdentifier\n            : [[NSUserDefaults standardUserDefaults]\n                stringForKey:LinkKnownPeripheralDefaultsKey];''')
-
-          replace_once('platform/apple/LinkBLETransport.m',
-          '''    if (name.length == 0U || !LinkPeripheralNameLooksLikeAdapter(name)) return;\n    [self connectPeripheral:peripheral name:name];''',
-          '''    if (name.length == 0U || !LinkPeripheralNameLooksLikeAdapter(name)) return;\n    if (_requestedPeripheralIdentifier.length != 0U &&\n        ![peripheral.identifier.UUIDString\n            isEqualToString:_requestedPeripheralIdentifier]) {\n        return;\n    }\n    [self connectPeripheral:peripheral name:name];''')
-
-          replace_once('platform/apple/LinkDiagnosticsController.h',
-          '''- (void)start;\n- (void)startSimulatedWithAdapterIdentifier:''',
-          '''- (void)start;\n/** Start a real session against one exact CoreBluetooth peripheral UUID. */\n- (void)startWithPeripheralIdentifier:(NSString *)peripheralIdentifier;\n- (void)startSimulatedWithAdapterIdentifier:''')
-
-          replace_once('platform/apple/LinkDiagnosticsController.m',
-          '''    [_provider start];\n}\n\n- (void)startSimulatedWithAdapterIdentifier:''',
-          '''    [_provider start];\n}\n\n- (void)startWithPeripheralIdentifier:(NSString *)peripheralIdentifier\n{\n    if (![NSThread isMainThread]) {\n        NSString *copy = [peripheralIdentifier copy];\n        dispatch_async(dispatch_get_main_queue(), ^{\n            [self startWithPeripheralIdentifier:copy];\n        });\n        return;\n    }\n    if (self.active) return;\n\n    _simulated = NO;\n    if (![self prepareForStart]) {\n        [self setSharedStatus:@\"Could not start diagnostic evidence recorder\"];\n        return;\n    }\n    self.peripheralName = nil;\n    [self notifyDelegate];\n    [_provider startWithPeripheralIdentifier:peripheralIdentifier];\n}\n\n- (void)startSimulatedWithAdapterIdentifier:''')
-
-          for path in [
-              'platform/apple/LinkBLETransport.h',
-              'platform/apple/LinkBLETransport.m',
-              'platform/apple/LinkDiagnosticsController.h',
-              'platform/apple/LinkDiagnosticsController.m']:
-              text = Path(path).read_text()
-              if 'startWithPeripheralIdentifier' not in text:
-                  raise SystemExit(f'{path}: targeting selector missing after patch')
-          PY
+          test "$(git log -1 --pretty=%s)" = "apply adapter targeting" || exit 0
+          python3 tools/apply_adapter_targeting.py
           git diff --check
-      - name: Commit source change
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name 'Shannon Smith'
-          git config user.email 'infiltratr@yandex.com'
+          git config user.name "Shannon Smith"
+          git config user.email "infiltratr@yandex.com"
           git add platform/apple/LinkBLETransport.h platform/apple/LinkBLETransport.m platform/apple/LinkDiagnosticsController.h platform/apple/LinkDiagnosticsController.m
-          git commit -m 'apple: allow explicit BLE adapter targeting'
+          git commit -m "apple: allow explicit BLE adapter targeting"
           git push origin HEAD:adapter-targeting
