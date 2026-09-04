@@ -1,12 +1,15 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Validate that an embedding product's native iOS build references every
-# portable LINK::Core implementation source. Discover evidence/safety sources
-# are intentionally excluded from the iPhone footprint.
+# portable LINK::Core implementation source required by the Apple product face.
+# Discover-only UI/evidence sources are not required here; LINK's Apple portable
+# core may still include shared safety/ECU-probe primitives used by manufacturer
+# extensions.
 #
 # Product faces may reference LINK-owned Apple amalgamation entry points instead
 # of spelling every implementation source into product-owned wrapper files. The
 # validator expands those entry points before checking coverage. Optional native
-# providers disabled by the product are excluded from the required source set.
+# providers intentionally disabled by the product are excluded from the required
+# source set.
 
 function(link_validate_product_apple_bridge product_root)
     if(NOT IS_DIRECTORY "${product_root}")
@@ -66,10 +69,10 @@ function(link_validate_product_apple_bridge product_root)
         endif()
     endforeach()
 
-    # A non-Mercedes product may explicitly compile the shared Apple engine with
-    # the Mercedes me native provider disabled. In that case the shared facade
-    # remains available, but the provider implementation translation units must
-    # not be required in the branded product binary.
+    # A product may explicitly compile the shared Apple engine with an optional
+    # hardware provider disabled. For the Mercedes me adapter backend, that is a
+    # target support choice, not a vehicle-brand rule: Ford/BMW/Audi/Jaguar faces
+    # may keep the backend enabled when the adapter is technically usable there.
     string(FIND "${product_bridge_text}"
         "LINK_ENABLE_MERCEDES_ME_NATIVE=0" mercedes_disabled_position)
     if(NOT mercedes_disabled_position EQUAL -1)
