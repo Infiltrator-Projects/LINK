@@ -317,6 +317,7 @@ static bool simulator_live_payload(
     switch (pid) {
     case 0x01U:
         /* PID 01: MIL on, one confirmed DTC, compression-ignition monitors. */
+        if (data_size < 4U) return false;
         data[0] = 0x81U;
         data[1] = 0x0fU;
         data[2] = 0x80U;
