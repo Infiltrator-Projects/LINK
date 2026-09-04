@@ -2,6 +2,8 @@
 /** @file link-stm32-uds-server.c @brief STM32 LINK UDS ECU/server transport. */
 #include "link-stm32-uds-server.h"
 
+#include "infiltratr/core.h"
+
 #include <string.h>
 
 static bool link_stm32_uds_server_config_valid(
@@ -31,7 +33,7 @@ static bool link_stm32_uds_server_config_valid(
 static uint64_t link_stm32_uds_server_deadline(
     uint64_t now_us, uint64_t delta_us)
 {
-    return UINT64_MAX - now_us < delta_us ? UINT64_MAX : now_us + delta_us;
+    return infiltratr_u64_add_saturating(now_us, delta_us);
 }
 
 static LinkStm32UdsServerResult link_stm32_uds_server_fail(

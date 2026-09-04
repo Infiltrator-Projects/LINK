@@ -2,6 +2,8 @@
 /** @file link-stm32-uds.c @brief STM32 orchestration for LINK ISO-TP + UDS. */
 #include "link-stm32-uds.h"
 
+#include "infiltratr/core.h"
+
 #include <string.h>
 
 static bool link_stm32_uds_config_valid(const LinkStm32UdsConfig *config)
@@ -13,8 +15,7 @@ static bool link_stm32_uds_config_valid(const LinkStm32UdsConfig *config)
 
 static uint64_t link_stm32_uds_deadline(uint64_t now_us, uint64_t delta_us)
 {
-    return UINT64_MAX - now_us < delta_us
-        ? UINT64_MAX : now_us + delta_us;
+    return infiltratr_u64_add_saturating(now_us, delta_us);
 }
 
 static LinkStm32UdsResult link_stm32_uds_fail(

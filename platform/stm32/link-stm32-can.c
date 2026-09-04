@@ -2,6 +2,8 @@
 /** @file link-stm32-can.c @brief STM32 CAN/FDCAN edge for LINK. */
 #include "link-stm32-can.h"
 
+#include "infiltratr/core.h"
+
 #include <string.h>
 
 static bool link_stm32_can_frame_valid(const LinkIsoTpCanFrame *frame)
@@ -23,17 +25,12 @@ static uint64_t link_stm32_can_extend_tick(
 {
     const uint32_t delta = (uint32_t)(current - channel->last_tick_ms);
 
-    if (UINT64_MAX - channel->elapsed_ms < (uint64_t)delta) {
-        channel->elapsed_ms = UINT64_MAX;
-    } else {
-        channel->elapsed_ms += (uint64_t)delta;
-    }
+    channel->elapsed_ms = infiltratr_u64_add_saturating(
+        channel->elapsed_ms, (uint64_t)delta);
     channel->last_tick_ms = current;
 
-    if (channel->elapsed_ms > UINT64_MAX / UINT64_C(1000)) {
-        return UINT64_MAX;
-    }
-    return channel->elapsed_ms * UINT64_C(1000);
+    return infiltratr_u64_multiply_saturating(
+        channel->elapsed_ms, UINT64_C(1000));
 }
 
 static uint64_t link_stm32_can_project_tick_us(
