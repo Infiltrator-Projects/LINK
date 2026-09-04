@@ -2183,8 +2183,9 @@ static NSString * _Nullable LinkVehicleSessionValidAdapterIdentifier(
     if (existing == nil) return;
     NSMutableDictionary *profile = [existing mutableCopy];
     profile[@"adapterIdentifier"] = identifier;
-    [self storeProfiles:@{ vin: [profile copy] }
-        + (self.storedProfiles ?: @{})];
+    NSMutableDictionary *profiles = [self.storedProfiles mutableCopy];
+    profiles[vin] = [profile copy];
+    [self storeProfiles:profiles];
 }
 
 - (void)saveProfile:(NSDictionary *)profile forVIN:(NSString *)vin
