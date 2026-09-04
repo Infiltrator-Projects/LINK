@@ -269,6 +269,7 @@ static bool simulator_has_pid_after(uint8_t pid)
 }
 
 static bool simulator_supported_pid_response(
+    LinkElm327Simulator *simulator,
     uint8_t base, char *response, size_t response_size)
 {
     uint32_t mask = 0U;
@@ -287,6 +288,13 @@ static bool simulator_supported_pid_response(
     }
 
     response[0] = '\0';
+    if (simulator != NULL && simulator->response_headers) {
+        const int prefix = snprintf(response, response_size, "7E8");
+        if (prefix != 3) return false;
+        position = 3U;
+        if (!simulator_append_byte(response, response_size, &position, 6U))
+            return false;
+    }
     if (!simulator_append_byte(response, response_size, &position, 0x41U) ||
         !simulator_append_byte(response, response_size, &position, base) ||
         !simulator_append_byte(response, response_size, &position,
@@ -365,14 +373,42 @@ static bool simulator_live_payload(
         raw = 120U + (unsigned int)(phase * 5U);
         data[0] = (uint8_t)(raw >> 8U); data[1] = (uint8_t)raw; *data_length = 2U; return true;
     case 0x78U:
+        if (data_size < 9U) return false;
         raw = (360U + (unsigned int)(phase * 5U) + 40U) * 10U;
-        data[0] = 0x01U; data[1] = (uint8_t)(raw >> 8U); data[2] = (uint8_t)raw; *data_length = 3U; return true;
+        data[0] = 0x0fU;
+        data[1] = (uint8_t)(raw >> 8U); data[2] = (uint8_t)raw;
+        raw += 80U;
+        data[3] = (uint8_t)(raw >> 8U); data[4] = (uint8_t)raw;
+        raw += 80U;
+        data[5] = (uint8_t)(raw >> 8U); data[6] = (uint8_t)raw;
+        raw += 80U;
+        data[7] = (uint8_t)(raw >> 8U); data[8] = (uint8_t)raw;
+        *data_length = 9U;
+        return true;
     case 0x7aU:
+        if (data_size < 7U) return false;
         raw = 80U + (unsigned int)(phase * 15U);
-        data[0] = 0x01U; data[1] = (uint8_t)(raw >> 8U); data[2] = (uint8_t)raw; *data_length = 3U; return true;
+        data[0] = 0x07U;
+        data[1] = (uint8_t)(raw >> 8U); data[2] = (uint8_t)raw;
+        raw += 20U;
+        data[3] = (uint8_t)(raw >> 8U); data[4] = (uint8_t)raw;
+        raw += 20U;
+        data[5] = (uint8_t)(raw >> 8U); data[6] = (uint8_t)raw;
+        *data_length = 7U;
+        return true;
     case 0x7cU:
+        if (data_size < 9U) return false;
         raw = (330U + (unsigned int)(phase * 6U) + 40U) * 10U;
-        data[0] = 0x01U; data[1] = (uint8_t)(raw >> 8U); data[2] = (uint8_t)raw; *data_length = 3U; return true;
+        data[0] = 0x0fU;
+        data[1] = (uint8_t)(raw >> 8U); data[2] = (uint8_t)raw;
+        raw += 100U;
+        data[3] = (uint8_t)(raw >> 8U); data[4] = (uint8_t)raw;
+        raw += 100U;
+        data[5] = (uint8_t)(raw >> 8U); data[6] = (uint8_t)raw;
+        raw += 100U;
+        data[7] = (uint8_t)(raw >> 8U); data[8] = (uint8_t)raw;
+        *data_length = 9U;
+        return true;
     default:
         return false;
     }
@@ -387,20 +423,20 @@ static bool simulator_live_response(
     char *response,
     size_t response_size)
 {
-    uint8_t data[4];
+    uint8_t data[16];
     size_t data_length = 0U;
     size_t position = 0U;
     size_t index;
+    const size_t fixed_payload_length = 2U + (frame_number_present ? 1U : 0U);
 
     if (!simulator_live_payload(simulator, pid, data, sizeof(data), &data_length)) {
         return false;
     }
     response[0] = '\0';
-    if (simulator->response_headers) {
+    if (simulator->response_headers && fixed_payload_length + data_length <= 8U) {
         const int prefix = snprintf(response, response_size, "7E8");
-        const size_t payload_length =
-            2U + (frame_number_present ? 1U : 0U) + data_length;
-        if (prefix != 3 || payload_length > 8U) return false;
+        const size_t payload_length = fixed_payload_length + data_length;
+        if (prefix != 3) return false;
         position = 3U;
         if (!simulator_append_byte(
                 response, response_size, &position,
@@ -521,7 +557,8 @@ static bool simulator_default_response(
     if (strlen(command) == 4U && command[0] == '0' && command[1] == '1' &&
         simulator_parse_byte(command + 2, &pid) &&
         (pid == 0x00U || pid == 0x20U || pid == 0x40U || pid == 0x60U)) {
-        return simulator_supported_pid_response(pid, response, response_size);
+        return simulator_supported_pid_response(
+            simulator, pid, response, response_size);
     }
     if (strcmp(command, "03") == 0) {
         (void)snprintf(response, response_size, "4304010101"); return true;
