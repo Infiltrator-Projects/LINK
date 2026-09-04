@@ -1990,3 +1990,248 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
 }
 
 @end
+
+
+#pragma mark - Shared vehicle-profile/session persistence
+
+static NSString * const LinkVehicleKnownPeripheralDefaultsKey =
+    @"link.ble.knownPeripheralIdentifier.v1";
+
+static BOOL LinkVehicleSessionValidVIN(NSString *vin)
+{
+    return vin.length == 17U;
+}
+
+static NSString * _Nullable LinkVehicleSessionValidAdapterIdentifier(
+    NSString *identifier)
+{
+    if (identifier.length == 0U) return nil;
+    return [[NSUUID alloc] initWithUUIDString:identifier] != nil
+        ? identifier : nil;
+}
+
+@interface LinkVehicleProfileStore ()
+@property(nonatomic, copy, readwrite) NSString *productNamespace;
+@property(nonatomic, copy) NSString *profilesKey;
+@property(nonatomic, copy) NSString *selectedVINKey;
+@property(nonatomic, copy) NSString *adapterMappingKey;
+@property(nonatomic, copy, nullable) NSString *legacyProfileKey;
+@property(nonatomic, copy, nullable) NSString *legacySelectedVINKey;
+@property(nonatomic, copy, nullable) NSString *legacyAdapterMappingKey;
+@end
+
+@implementation LinkVehicleProfileStore
+
+- (instancetype)initWithProductNamespace:(NSString *)productNamespace
+                         legacyProfileKey:(NSString *)legacyProfileKey
+                    legacySelectedVINKey:(NSString *)legacySelectedVINKey
+                 legacyAdapterMappingKey:(NSString *)legacyAdapterMappingKey
+{
+    self = [super init];
+    if (self == nil) return nil;
+
+    NSString *namespace = [productNamespace
+        stringByTrimmingCharactersInSet:
+            [NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    if (namespace.length == 0U) namespace = @"default";
+    self.productNamespace = namespace.lowercaseString;
+    self.profilesKey = [NSString stringWithFormat:
+        @"link.vehicleProfiles.%@.v1", self.productNamespace];
+    self.selectedVINKey = [NSString stringWithFormat:
+        @"link.selectedVehicleVIN.%@.v1", self.productNamespace];
+    self.adapterMappingKey = [NSString stringWithFormat:
+        @"link.adapterPeripheralByVehicle.%@.v1", self.productNamespace];
+    self.legacyProfileKey = [legacyProfileKey copy];
+    self.legacySelectedVINKey = [legacySelectedVINKey copy];
+    self.legacyAdapterMappingKey = [legacyAdapterMappingKey copy];
+
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    if ([defaults objectForKey:self.profilesKey] == nil &&
+        self.legacyProfileKey.length != 0U) {
+        NSDictionary *legacy = [defaults dictionaryForKey:self.legacyProfileKey];
+        if (legacy != nil) [defaults setObject:legacy forKey:self.profilesKey];
+    }
+    if ([defaults objectForKey:self.selectedVINKey] == nil &&
+        self.legacySelectedVINKey.length != 0U) {
+        NSString *legacy = [defaults stringForKey:self.legacySelectedVINKey];
+        if (legacy != nil) [defaults setObject:legacy forKey:self.selectedVINKey];
+    }
+    if ([defaults objectForKey:self.adapterMappingKey] == nil &&
+        self.legacyAdapterMappingKey.length != 0U) {
+        NSDictionary *legacy =
+            [defaults dictionaryForKey:self.legacyAdapterMappingKey];
+        if (legacy != nil) [defaults setObject:legacy forKey:self.adapterMappingKey];
+    }
+    return self;
+}
+
+- (NSDictionary *)storedProfiles
+{
+    NSDictionary *profiles = [[NSUserDefaults standardUserDefaults]
+        dictionaryForKey:self.profilesKey];
+    return profiles ?: @{};
+}
+
+- (void)storeProfiles:(NSDictionary *)profiles
+{
+    [[NSUserDefaults standardUserDefaults] setObject:[profiles copy]
+                                               forKey:self.profilesKey];
+}
+
+- (NSDictionary *)storedAdapterMapping
+{
+    NSDictionary *mapping = [[NSUserDefaults standardUserDefaults]
+        dictionaryForKey:self.adapterMappingKey];
+    return mapping ?: @{};
+}
+
+- (void)storeAdapterMapping:(NSDictionary *)mapping
+{
+    [[NSUserDefaults standardUserDefaults] setObject:[mapping copy]
+                                               forKey:self.adapterMappingKey];
+}
+
+- (NSArray<NSDictionary *> *)savedProfiles
+{
+    NSMutableArray<NSDictionary *> *result = [[NSMutableArray alloc] init];
+    for (id key in self.storedProfiles) {
+        id value = self.storedProfiles[key];
+        if (![value isKindOfClass:[NSDictionary class]]) continue;
+        NSDictionary *profile = (NSDictionary *)value;
+        NSString *vin = [profile[@"vin"] isKindOfClass:[NSString class]]
+            ? profile[@"vin"] : ([key isKindOfClass:[NSString class]] ? key : nil);
+        if (!LinkVehicleSessionValidVIN(vin)) continue;
+
+        NSMutableDictionary *copy = [profile mutableCopy];
+        copy[@"vin"] = vin;
+        [result addObject:[copy copy]];
+    }
+    [result sortUsingComparator:^NSComparisonResult(
+        NSDictionary *left, NSDictionary *right) {
+        NSNumber *leftDate = [left[@"updatedAt"] isKindOfClass:[NSNumber class]]
+            ? left[@"updatedAt"] : @0;
+        NSNumber *rightDate = [right[@"updatedAt"] isKindOfClass:[NSNumber class]]
+            ? right[@"updatedAt"] : @0;
+        if (leftDate.doubleValue != rightDate.doubleValue) {
+            return leftDate.doubleValue > rightDate.doubleValue
+                ? NSOrderedAscending : NSOrderedDescending;
+        }
+        return [left[@"vin"] compare:right[@"vin"]];
+    }];
+    return [result copy];
+}
+
+- (NSString *)selectedVehicleVIN
+{
+    NSString *vin = [[NSUserDefaults standardUserDefaults]
+        stringForKey:self.selectedVINKey];
+    return LinkVehicleSessionValidVIN(vin) ? vin : nil;
+}
+
+- (NSDictionary *)profileForVIN:(NSString *)vin
+{
+    if (!LinkVehicleSessionValidVIN(vin)) return nil;
+    NSDictionary *profile = self.storedProfiles[vin];
+    if (![profile isKindOfClass:[NSDictionary class]]) return nil;
+    return [profile copy];
+}
+
+- (BOOL)selectOfflineVehicleWithVIN:(NSString *)vin
+{
+    if ([self profileForVIN:vin] == nil) return NO;
+    [[NSUserDefaults standardUserDefaults] setObject:vin
+                                               forKey:self.selectedVINKey];
+    return YES;
+}
+
+- (void)clearSelectedVehicle
+{
+    [[NSUserDefaults standardUserDefaults] removeObjectForKey:self.selectedVINKey];
+}
+
+- (NSString *)associatedAdapterIdentifierForVIN:(NSString *)vin
+{
+    if (!LinkVehicleSessionValidVIN(vin)) return nil;
+
+    NSString *identifier = [self.storedAdapterMapping[vin]
+        isKindOfClass:[NSString class]] ? self.storedAdapterMapping[vin] : nil;
+    identifier = LinkVehicleSessionValidAdapterIdentifier(identifier);
+    if (identifier != nil) return identifier;
+
+    NSDictionary *profile = [self profileForVIN:vin];
+    identifier = [profile[@"adapterIdentifier"] isKindOfClass:[NSString class]]
+        ? profile[@"adapterIdentifier"] : nil;
+    return LinkVehicleSessionValidAdapterIdentifier(identifier);
+}
+
+- (void)recordLiveVIN:(NSString *)vin
+{
+    if (!LinkVehicleSessionValidVIN(vin)) return;
+
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    [defaults setObject:vin forKey:self.selectedVINKey];
+
+    NSString *identifier = LinkVehicleSessionValidAdapterIdentifier(
+        [defaults stringForKey:LinkVehicleKnownPeripheralDefaultsKey]);
+    if (identifier == nil) return;
+
+    NSMutableDictionary *mapping = [self.storedAdapterMapping mutableCopy];
+    mapping[vin] = identifier;
+    [self storeAdapterMapping:mapping];
+
+    NSDictionary *existing = [self profileForVIN:vin];
+    if (existing == nil) return;
+    NSMutableDictionary *profile = [existing mutableCopy];
+    profile[@"adapterIdentifier"] = identifier;
+    [self storeProfiles:@{ vin: [profile copy] }
+        + (self.storedProfiles ?: @{})];
+}
+
+- (void)saveProfile:(NSDictionary *)profile forVIN:(NSString *)vin
+{
+    if (![profile isKindOfClass:[NSDictionary class]] ||
+        !LinkVehicleSessionValidVIN(vin)) return;
+
+    NSMutableDictionary *stored = [profile mutableCopy];
+    stored[@"vin"] = vin;
+    if (![stored[@"updatedAt"] isKindOfClass:[NSNumber class]]) {
+        stored[@"updatedAt"] = @([[NSDate date] timeIntervalSince1970]);
+    }
+
+    NSString *identifier = [self associatedAdapterIdentifierForVIN:vin];
+    if (identifier != nil) {
+        stored[@"adapterIdentifier"] = identifier;
+    } else {
+        identifier = LinkVehicleSessionValidAdapterIdentifier(
+            [stored[@"adapterIdentifier"] isKindOfClass:[NSString class]]
+                ? stored[@"adapterIdentifier"] : nil);
+        if (identifier != nil) {
+            NSMutableDictionary *mapping = [self.storedAdapterMapping mutableCopy];
+            mapping[vin] = identifier;
+            [self storeAdapterMapping:mapping];
+            stored[@"adapterIdentifier"] = identifier;
+        }
+    }
+
+    NSMutableDictionary *profiles = [self.storedProfiles mutableCopy];
+    profiles[vin] = [stored copy];
+    [self storeProfiles:profiles];
+}
+
+- (void)removeProfileForVIN:(NSString *)vin
+{
+    if (!LinkVehicleSessionValidVIN(vin)) return;
+
+    NSMutableDictionary *profiles = [self.storedProfiles mutableCopy];
+    [profiles removeObjectForKey:vin];
+    [self storeProfiles:profiles];
+
+    NSMutableDictionary *mapping = [self.storedAdapterMapping mutableCopy];
+    [mapping removeObjectForKey:vin];
+    [self storeAdapterMapping:mapping];
+
+    if ([self.selectedVehicleVIN isEqualToString:vin])
+        [self clearSelectedVehicle];
+}
+
+@end
