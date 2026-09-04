@@ -1,0 +1,321 @@
+from pathlib import Path
+
+header = Path('include/link/diagnostic_flow.h')
+text = header.read_text()
+old = '''typedef struct {
+    bool manufacturer_extension_after_pid_discovery;
+    bool manufacturer_extension_after_standard_dtcs;
+    bool restore_adapter_after_manufacturer_extension;
+'''
+new = '''typedef struct {
+    /*
+     * Optional vehicle-first startup hook. When enabled, Mode 09 VIN is read
+     * immediately after ELM initialisation and the manufacturer extension runs
+     * before the broader Mode 01 capability and fault-context work.
+     */
+    bool manufacturer_extension_after_standard_vin;
+    bool manufacturer_extension_after_pid_discovery;
+    bool manufacturer_extension_after_standard_dtcs;
+    bool restore_adapter_after_manufacturer_extension;
+'''
+assert old in text
+text = text.replace(old, new, 1)
+old = '''#define LINK_DIAGNOSTIC_FLOW_CONFIG_INIT \\
+    { \\
+        .manufacturer_extension_after_pid_discovery = false, \\
+        .manufacturer_extension_after_standard_dtcs = false, \\
+'''
+new = '''#define LINK_DIAGNOSTIC_FLOW_CONFIG_INIT \\
+    { \\
+        .manufacturer_extension_after_standard_vin = false, \\
+        .manufacturer_extension_after_pid_discovery = false, \\
+        .manufacturer_extension_after_standard_dtcs = false, \\
+'''
+assert old in text
+text = text.replace(old, new, 1)
+old = ''' * Resume the standard sequence after product/manufacturer discovery.  If the
+ * configuration requests restoration, the complete ELM initialisation sequence
+ * runs again before the read-only standard DTC inventory.
+'''
+new = ''' * Resume the standard sequence after product/manufacturer discovery. If the
+ * configuration requests restoration, the complete ELM initialisation sequence
+ * runs again before the next unfinished standard phase. Vehicle-first callers
+ * therefore continue with PID capability discovery; later hooks continue with
+ * DTC/readiness/live work as appropriate.
+'''
+assert old in text
+text = text.replace(old, new, 1)
+header.write_text(text)
+
+source = Path('src/core/diagnostic_flow.c')
+text = source.read_text()
+old = '''    if (flow->initialization.stage != LINK_ELM327_INIT_COMPLETE) {
+        return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
+    }
+
+    if (stage == LINK_DIAGNOSTIC_FLOW_RESTORING_AFTER_MANUFACTURER) {
+        /* Manufacturer probing may change adapter state; resume only after the
+         * standard ELM setup has been replayed in full. */
+        flow->stage = flow->standard_diagnostic_context_complete
+            ? (flow->config.preserve_live_response_headers
+                ? LINK_DIAGNOSTIC_FLOW_CONFIGURING_LIVE_HEADERS
+                : LINK_DIAGNOSTIC_FLOW_LIVE)
+            : (flow->standard_dtc_inventory_complete
+                ? LINK_DIAGNOSTIC_FLOW_READING_READINESS
+                : LINK_DIAGNOSTIC_FLOW_SCANNING_STORED_DTCS);
+    } else {
+        flow->supported_pid_base = 0x00U;
+        flow->stage = flow->config.preserve_pid_discovery_response_headers
+            ? LINK_DIAGNOSTIC_FLOW_CONFIGURING_PID_DISCOVERY_HEADERS
+            : LINK_DIAGNOSTIC_FLOW_DISCOVERING_PIDS;
+    }
+'''
+new = '''    if (flow->initialization.stage != LINK_ELM327_INIT_COMPLETE) {
+        return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
+    }
+
+    if (stage == LINK_DIAGNOSTIC_FLOW_RESTORING_AFTER_MANUFACTURER) {
+        /* Manufacturer probing may change adapter state; resume only after the
+         * standard ELM setup has been replayed in full. */
+        if (flow->standard_diagnostic_context_complete) {
+            flow->stage = flow->config.preserve_live_response_headers
+                ? LINK_DIAGNOSTIC_FLOW_CONFIGURING_LIVE_HEADERS
+                : LINK_DIAGNOSTIC_FLOW_LIVE;
+        } else if (flow->standard_dtc_inventory_complete) {
+            flow->stage = LINK_DIAGNOSTIC_FLOW_READING_READINESS;
+        } else if (flow->config.manufacturer_extension_after_standard_vin &&
+                   flow->standard_vin_attempted) {
+            flow->supported_pid_base = 0x00U;
+            flow->stage = flow->config.preserve_pid_discovery_response_headers
+                ? LINK_DIAGNOSTIC_FLOW_CONFIGURING_PID_DISCOVERY_HEADERS
+                : LINK_DIAGNOSTIC_FLOW_DISCOVERING_PIDS;
+        } else {
+            flow->stage = LINK_DIAGNOSTIC_FLOW_SCANNING_STORED_DTCS;
+        }
+    } else {
+        flow->supported_pid_base = 0x00U;
+        if (flow->config.manufacturer_extension_after_standard_vin) {
+            flow->stage = LINK_DIAGNOSTIC_FLOW_READING_STANDARD_VIN;
+        } else {
+            flow->stage = flow->config.preserve_pid_discovery_response_headers
+                ? LINK_DIAGNOSTIC_FLOW_CONFIGURING_PID_DISCOVERY_HEADERS
+                : LINK_DIAGNOSTIC_FLOW_DISCOVERING_PIDS;
+        }
+    }
+'''
+assert old in text
+text = text.replace(old, new, 1)
+old = '''    flow->stage = enabling
+        ? LINK_DIAGNOSTIC_FLOW_DISCOVERING_PIDS
+        : LINK_DIAGNOSTIC_FLOW_READING_STANDARD_VIN;
+'''
+new = '''    flow->stage = enabling
+        ? LINK_DIAGNOSTIC_FLOW_DISCOVERING_PIDS
+        : (flow->standard_vin_attempted
+            ? LINK_DIAGNOSTIC_FLOW_SCANNING_STORED_DTCS
+            : LINK_DIAGNOSTIC_FLOW_READING_STANDARD_VIN);
+'''
+assert old in text
+text = text.replace(old, new, 1)
+old = '''        flow->stage = flow->config.preserve_pid_discovery_response_headers
+            ? LINK_DIAGNOSTIC_FLOW_RESTORING_PID_DISCOVERY_HEADERS
+            : LINK_DIAGNOSTIC_FLOW_READING_STANDARD_VIN;
+        event->kind = LINK_DIAGNOSTIC_FLOW_EVENT_PID_DISCOVERY_COMPLETE;
+'''
+new = '''        flow->stage = flow->config.preserve_pid_discovery_response_headers
+            ? LINK_DIAGNOSTIC_FLOW_RESTORING_PID_DISCOVERY_HEADERS
+            : (flow->standard_vin_attempted
+                ? LINK_DIAGNOSTIC_FLOW_SCANNING_STORED_DTCS
+                : LINK_DIAGNOSTIC_FLOW_READING_STANDARD_VIN);
+        event->kind = LINK_DIAGNOSTIC_FLOW_EVENT_PID_DISCOVERY_COMPLETE;
+'''
+assert old in text
+text = text.replace(old, new, 1)
+old = '''    flow->stage = flow->config.manufacturer_extension_after_pid_discovery
+        ? LINK_DIAGNOSTIC_FLOW_MANUFACTURER_EXTENSION
+        : LINK_DIAGNOSTIC_FLOW_SCANNING_STORED_DTCS;
+'''
+new = '''    flow->stage =
+        (flow->config.manufacturer_extension_after_standard_vin ||
+         flow->config.manufacturer_extension_after_pid_discovery)
+        ? LINK_DIAGNOSTIC_FLOW_MANUFACTURER_EXTENSION
+        : LINK_DIAGNOSTIC_FLOW_SCANNING_STORED_DTCS;
+'''
+assert old in text
+text = text.replace(old, new, 1)
+old = '''    if (config != NULL) {
+        resolved = *config;
+        if (resolved.manufacturer_extension_after_pid_discovery &&
+            resolved.manufacturer_extension_after_standard_dtcs) {
+            return LINK_DIAGNOSTIC_FLOW_RESULT_INVALID_ARGUMENT;
+        }
+'''
+new = '''    if (config != NULL) {
+        unsigned int manufacturer_startup_hooks = 0U;
+        resolved = *config;
+        manufacturer_startup_hooks +=
+            resolved.manufacturer_extension_after_standard_vin ? 1U : 0U;
+        manufacturer_startup_hooks +=
+            resolved.manufacturer_extension_after_pid_discovery ? 1U : 0U;
+        manufacturer_startup_hooks +=
+            resolved.manufacturer_extension_after_standard_dtcs ? 1U : 0U;
+        if (manufacturer_startup_hooks > 1U) {
+            return LINK_DIAGNOSTIC_FLOW_RESULT_INVALID_ARGUMENT;
+        }
+'''
+assert old in text
+text = text.replace(old, new, 1)
+old = '''    if (flow->config.restore_adapter_after_manufacturer_extension) {
+        link_elm327_init_begin(&flow->initialization);
+        flow->stage = LINK_DIAGNOSTIC_FLOW_RESTORING_AFTER_MANUFACTURER;
+    } else {
+        flow->stage = flow->standard_diagnostic_context_complete
+            ? (flow->config.preserve_live_response_headers
+                ? LINK_DIAGNOSTIC_FLOW_CONFIGURING_LIVE_HEADERS
+                : LINK_DIAGNOSTIC_FLOW_LIVE)
+            : (flow->standard_dtc_inventory_complete
+                ? LINK_DIAGNOSTIC_FLOW_READING_READINESS
+                : LINK_DIAGNOSTIC_FLOW_SCANNING_STORED_DTCS);
+    }
+'''
+new = '''    if (flow->config.restore_adapter_after_manufacturer_extension) {
+        link_elm327_init_begin(&flow->initialization);
+        flow->stage = LINK_DIAGNOSTIC_FLOW_RESTORING_AFTER_MANUFACTURER;
+    } else if (flow->standard_diagnostic_context_complete) {
+        flow->stage = flow->config.preserve_live_response_headers
+            ? LINK_DIAGNOSTIC_FLOW_CONFIGURING_LIVE_HEADERS
+            : LINK_DIAGNOSTIC_FLOW_LIVE;
+    } else if (flow->standard_dtc_inventory_complete) {
+        flow->stage = LINK_DIAGNOSTIC_FLOW_READING_READINESS;
+    } else if (flow->config.manufacturer_extension_after_standard_vin &&
+               flow->standard_vin_attempted) {
+        flow->supported_pid_base = 0x00U;
+        flow->stage = flow->config.preserve_pid_discovery_response_headers
+            ? LINK_DIAGNOSTIC_FLOW_CONFIGURING_PID_DISCOVERY_HEADERS
+            : LINK_DIAGNOSTIC_FLOW_DISCOVERING_PIDS;
+    } else {
+        flow->stage = LINK_DIAGNOSTIC_FLOW_SCANNING_STORED_DTCS;
+    }
+'''
+assert old in text
+text = text.replace(old, new, 1)
+source.write_text(text)
+
+tests = Path('tests/test_diagnostic_flow.c')
+text = tests.read_text()
+marker = '''static int test_pid_capabilities_per_responder(void)
+'''
+assert marker in text
+addition = r'''static int test_manufacturer_extension_after_standard_vin(void)
+{
+    LinkDiagnosticFlow flow;
+    LinkDiagnosticFlowConfig config = LINK_DIAGNOSTIC_FLOW_CONFIG_INIT;
+    LinkDiagnosticFlowAction action;
+    LinkDiagnosticFlowEvent event;
+    LinkElm327Response response;
+
+    config.manufacturer_extension_after_standard_vin = true;
+    config.restore_adapter_after_manufacturer_extension = true;
+    config.preserve_pid_discovery_response_headers = true;
+    CHECK(link_diagnostic_flow_init(&flow, &config) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(link_diagnostic_flow_start(&flow) == LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(complete_initialization(&flow) == 0);
+
+    /* Vehicle identity is the first standard request after ELM setup. */
+    CHECK(flow.stage == LINK_DIAGNOSTIC_FLOW_READING_STANDARD_VIN);
+    CHECK(link_diagnostic_flow_next_action(&flow, 500U, &action) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(strcmp(action.command, "0902") == 0);
+    response = response_ok(
+        "49020153414A414435\n"
+        "490202364C36345744\n"
+        "4902033738343335", false);
+    CHECK(link_diagnostic_flow_accept_response(
+              &flow, &response, 500U, &event) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(event.kind == LINK_DIAGNOSTIC_FLOW_EVENT_STANDARD_VIN);
+    CHECK(event.vin_available);
+    CHECK(flow.stage == LINK_DIAGNOSTIC_FLOW_MANUFACTURER_EXTENSION);
+
+    CHECK(link_diagnostic_flow_next_action(&flow, 510U, &action) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(action.kind == LINK_DIAGNOSTIC_FLOW_ACTION_MANUFACTURER_EXTENSION);
+    CHECK(link_diagnostic_flow_resume_after_manufacturer(&flow) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(flow.stage == LINK_DIAGNOSTIC_FLOW_RESTORING_AFTER_MANUFACTURER);
+    CHECK(complete_initialization(&flow) == 0);
+
+    /* After profile/manufacturer work, resume the untouched SAE capability pass. */
+    CHECK(flow.stage ==
+          LINK_DIAGNOSTIC_FLOW_CONFIGURING_PID_DISCOVERY_HEADERS);
+    CHECK(link_diagnostic_flow_next_action(&flow, 520U, &action) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(strcmp(action.command, "ATH1") == 0);
+    response = response_ok(NULL, true);
+    CHECK(link_diagnostic_flow_accept_response(
+              &flow, &response, 520U, &event) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(flow.stage == LINK_DIAGNOSTIC_FLOW_DISCOVERING_PIDS);
+
+    CHECK(link_diagnostic_flow_next_action(&flow, 530U, &action) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(strcmp(action.command, "0100") == 0);
+    response = response_ok("410000100000", false);
+    CHECK(link_diagnostic_flow_accept_response(
+              &flow, &response, 530U, &event) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(event.kind == LINK_DIAGNOSTIC_FLOW_EVENT_PID_DISCOVERY_COMPLETE);
+    CHECK(flow.stage ==
+          LINK_DIAGNOSTIC_FLOW_RESTORING_PID_DISCOVERY_HEADERS);
+
+    CHECK(link_diagnostic_flow_next_action(&flow, 540U, &action) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(strcmp(action.command, "ATH0") == 0);
+    response = response_ok(NULL, true);
+    CHECK(link_diagnostic_flow_accept_response(
+              &flow, &response, 540U, &event) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(flow.stage == LINK_DIAGNOSTIC_FLOW_SCANNING_STORED_DTCS);
+    CHECK(flow.standard_vin_attempted);
+    return 0;
+}
+
+'''
+text = text.replace(marker, addition + marker, 1)
+old = '''    config.manufacturer_extension_after_pid_discovery = true;
+    config.manufacturer_extension_after_standard_dtcs = true;
+    CHECK(link_diagnostic_flow_init(&flow, &config) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_INVALID_ARGUMENT);
+    return 0;
+'''
+new = '''    config.manufacturer_extension_after_pid_discovery = true;
+    config.manufacturer_extension_after_standard_dtcs = true;
+    CHECK(link_diagnostic_flow_init(&flow, &config) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_INVALID_ARGUMENT);
+
+    config = (LinkDiagnosticFlowConfig)LINK_DIAGNOSTIC_FLOW_CONFIG_INIT;
+    config.manufacturer_extension_after_standard_vin = true;
+    config.manufacturer_extension_after_pid_discovery = true;
+    CHECK(link_diagnostic_flow_init(&flow, &config) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_INVALID_ARGUMENT);
+
+    config = (LinkDiagnosticFlowConfig)LINK_DIAGNOSTIC_FLOW_CONFIG_INIT;
+    config.manufacturer_extension_after_standard_vin = true;
+    config.manufacturer_extension_after_standard_dtcs = true;
+    CHECK(link_diagnostic_flow_init(&flow, &config) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_INVALID_ARGUMENT);
+    return 0;
+'''
+assert old in text
+text = text.replace(old, new, 1)
+old = '''    if (test_manufacturer_extension_restore() != 0) return 1;
+    if (test_pid_capabilities_per_responder() != 0) return 1;
+'''
+new = '''    if (test_manufacturer_extension_restore() != 0) return 1;
+    if (test_manufacturer_extension_after_standard_vin() != 0) return 1;
+    if (test_pid_capabilities_per_responder() != 0) return 1;
+'''
+assert old in text
+text = text.replace(old, new, 1)
+tests.write_text(text)
