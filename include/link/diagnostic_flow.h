@@ -84,6 +84,12 @@ typedef enum {
 } LinkDiagnosticFlowEventKind;
 
 typedef struct {
+    /*
+     * Optional vehicle-first startup hook. When enabled, Mode 09 VIN is read
+     * immediately after ELM initialisation and the manufacturer extension runs
+     * before the broader Mode 01 capability and fault-context work.
+     */
+    bool manufacturer_extension_after_standard_vin;
     bool manufacturer_extension_after_pid_discovery;
     bool manufacturer_extension_after_standard_dtcs;
     bool restore_adapter_after_manufacturer_extension;
@@ -96,6 +102,7 @@ typedef struct {
 
 #define LINK_DIAGNOSTIC_FLOW_CONFIG_INIT \
     { \
+        .manufacturer_extension_after_standard_vin = false, \
         .manufacturer_extension_after_pid_discovery = false, \
         .manufacturer_extension_after_standard_dtcs = false, \
         .restore_adapter_after_manufacturer_extension = false, \
@@ -192,9 +199,11 @@ LinkDiagnosticFlowResult link_diagnostic_flow_accept_response(
     LinkDiagnosticFlowEvent *event);
 
 /**
- * Resume the standard sequence after product/manufacturer discovery.  If the
+ * Resume the standard sequence after product/manufacturer discovery. If the
  * configuration requests restoration, the complete ELM initialisation sequence
- * runs again before the read-only standard DTC inventory.
+ * runs again before the next unfinished standard phase. Vehicle-first callers
+ * therefore continue with PID capability discovery; later hooks continue with
+ * DTC/readiness/live work as appropriate.
  */
 LinkDiagnosticFlowResult link_diagnostic_flow_resume_after_manufacturer(
     LinkDiagnosticFlow *flow);

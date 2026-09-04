@@ -309,6 +309,81 @@ static int test_manufacturer_extension_restore(void)
     return 0;
 }
 
+static int test_manufacturer_extension_after_standard_vin(void)
+{
+    LinkDiagnosticFlow flow;
+    LinkDiagnosticFlowConfig config = LINK_DIAGNOSTIC_FLOW_CONFIG_INIT;
+    LinkDiagnosticFlowAction action;
+    LinkDiagnosticFlowEvent event;
+    LinkElm327Response response;
+
+    config.manufacturer_extension_after_standard_vin = true;
+    config.restore_adapter_after_manufacturer_extension = true;
+    config.preserve_pid_discovery_response_headers = true;
+    CHECK(link_diagnostic_flow_init(&flow, &config) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(link_diagnostic_flow_start(&flow) == LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(complete_initialization(&flow) == 0);
+
+    /* Vehicle identity is the first standard request after ELM setup. */
+    CHECK(flow.stage == LINK_DIAGNOSTIC_FLOW_READING_STANDARD_VIN);
+    CHECK(link_diagnostic_flow_next_action(&flow, 500U, &action) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(strcmp(action.command, "0902") == 0);
+    response = response_ok(
+        "49020153414A414435\n"
+        "490202364C36345744\n"
+        "4902033738343335", false);
+    CHECK(link_diagnostic_flow_accept_response(
+              &flow, &response, 500U, &event) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(event.kind == LINK_DIAGNOSTIC_FLOW_EVENT_STANDARD_VIN);
+    CHECK(event.vin_available);
+    CHECK(flow.stage == LINK_DIAGNOSTIC_FLOW_MANUFACTURER_EXTENSION);
+
+    CHECK(link_diagnostic_flow_next_action(&flow, 510U, &action) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(action.kind == LINK_DIAGNOSTIC_FLOW_ACTION_MANUFACTURER_EXTENSION);
+    CHECK(link_diagnostic_flow_resume_after_manufacturer(&flow) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(flow.stage == LINK_DIAGNOSTIC_FLOW_RESTORING_AFTER_MANUFACTURER);
+    CHECK(complete_initialization(&flow) == 0);
+
+    /* After profile/manufacturer work, resume the untouched SAE capability pass. */
+    CHECK(flow.stage ==
+          LINK_DIAGNOSTIC_FLOW_CONFIGURING_PID_DISCOVERY_HEADERS);
+    CHECK(link_diagnostic_flow_next_action(&flow, 520U, &action) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(strcmp(action.command, "ATH1") == 0);
+    response = response_ok(NULL, true);
+    CHECK(link_diagnostic_flow_accept_response(
+              &flow, &response, 520U, &event) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(flow.stage == LINK_DIAGNOSTIC_FLOW_DISCOVERING_PIDS);
+
+    CHECK(link_diagnostic_flow_next_action(&flow, 530U, &action) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(strcmp(action.command, "0100") == 0);
+    response = response_ok("410000100000", false);
+    CHECK(link_diagnostic_flow_accept_response(
+              &flow, &response, 530U, &event) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(event.kind == LINK_DIAGNOSTIC_FLOW_EVENT_PID_DISCOVERY_COMPLETE);
+    CHECK(flow.stage ==
+          LINK_DIAGNOSTIC_FLOW_RESTORING_PID_DISCOVERY_HEADERS);
+
+    CHECK(link_diagnostic_flow_next_action(&flow, 540U, &action) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(strcmp(action.command, "ATH0") == 0);
+    response = response_ok(NULL, true);
+    CHECK(link_diagnostic_flow_accept_response(
+              &flow, &response, 540U, &event) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(flow.stage == LINK_DIAGNOSTIC_FLOW_SCANNING_STORED_DTCS);
+    CHECK(flow.standard_vin_attempted);
+    return 0;
+}
+
 static int test_pid_capabilities_per_responder(void)
 {
     LinkDiagnosticFlow flow;
@@ -525,6 +600,18 @@ static int test_invalid_manufacturer_extension_configuration(void)
     config.manufacturer_extension_after_standard_dtcs = true;
     CHECK(link_diagnostic_flow_init(&flow, &config) ==
           LINK_DIAGNOSTIC_FLOW_RESULT_INVALID_ARGUMENT);
+
+    config = (LinkDiagnosticFlowConfig)LINK_DIAGNOSTIC_FLOW_CONFIG_INIT;
+    config.manufacturer_extension_after_standard_vin = true;
+    config.manufacturer_extension_after_pid_discovery = true;
+    CHECK(link_diagnostic_flow_init(&flow, &config) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_INVALID_ARGUMENT);
+
+    config = (LinkDiagnosticFlowConfig)LINK_DIAGNOSTIC_FLOW_CONFIG_INIT;
+    config.manufacturer_extension_after_standard_vin = true;
+    config.manufacturer_extension_after_standard_dtcs = true;
+    CHECK(link_diagnostic_flow_init(&flow, &config) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_INVALID_ARGUMENT);
     return 0;
 }
 
@@ -655,6 +742,7 @@ int main(void)
     if (test_live_timeout_recovery() != 0) return 1;
     if (test_readiness_and_freeze_context() != 0) return 1;
     if (test_manufacturer_extension_restore() != 0) return 1;
+    if (test_manufacturer_extension_after_standard_vin() != 0) return 1;
     if (test_pid_capabilities_per_responder() != 0) return 1;
     if (test_manufacturer_extension_after_standard_dtcs() != 0) return 1;
     if (test_live_manufacturer_extension() != 0) return 1;

@@ -452,18 +452,30 @@ static LinkDiagnosticFlowResult flow_accept_initialization(
     if (stage == LINK_DIAGNOSTIC_FLOW_RESTORING_AFTER_MANUFACTURER) {
         /* Manufacturer probing may change adapter state; resume only after the
          * standard ELM setup has been replayed in full. */
-        flow->stage = flow->standard_diagnostic_context_complete
-            ? (flow->config.preserve_live_response_headers
+        if (flow->standard_diagnostic_context_complete) {
+            flow->stage = flow->config.preserve_live_response_headers
                 ? LINK_DIAGNOSTIC_FLOW_CONFIGURING_LIVE_HEADERS
-                : LINK_DIAGNOSTIC_FLOW_LIVE)
-            : (flow->standard_dtc_inventory_complete
-                ? LINK_DIAGNOSTIC_FLOW_READING_READINESS
-                : LINK_DIAGNOSTIC_FLOW_SCANNING_STORED_DTCS);
+                : LINK_DIAGNOSTIC_FLOW_LIVE;
+        } else if (flow->standard_dtc_inventory_complete) {
+            flow->stage = LINK_DIAGNOSTIC_FLOW_READING_READINESS;
+        } else if (flow->config.manufacturer_extension_after_standard_vin &&
+                   flow->standard_vin_attempted) {
+            flow->supported_pid_base = 0x00U;
+            flow->stage = flow->config.preserve_pid_discovery_response_headers
+                ? LINK_DIAGNOSTIC_FLOW_CONFIGURING_PID_DISCOVERY_HEADERS
+                : LINK_DIAGNOSTIC_FLOW_DISCOVERING_PIDS;
+        } else {
+            flow->stage = LINK_DIAGNOSTIC_FLOW_SCANNING_STORED_DTCS;
+        }
     } else {
         flow->supported_pid_base = 0x00U;
-        flow->stage = flow->config.preserve_pid_discovery_response_headers
-            ? LINK_DIAGNOSTIC_FLOW_CONFIGURING_PID_DISCOVERY_HEADERS
-            : LINK_DIAGNOSTIC_FLOW_DISCOVERING_PIDS;
+        if (flow->config.manufacturer_extension_after_standard_vin) {
+            flow->stage = LINK_DIAGNOSTIC_FLOW_READING_STANDARD_VIN;
+        } else {
+            flow->stage = flow->config.preserve_pid_discovery_response_headers
+                ? LINK_DIAGNOSTIC_FLOW_CONFIGURING_PID_DISCOVERY_HEADERS
+                : LINK_DIAGNOSTIC_FLOW_DISCOVERING_PIDS;
+        }
     }
     return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
 }
@@ -482,7 +494,9 @@ static LinkDiagnosticFlowResult flow_accept_pid_discovery_header_configuration(
     }
     flow->stage = enabling
         ? LINK_DIAGNOSTIC_FLOW_DISCOVERING_PIDS
-        : LINK_DIAGNOSTIC_FLOW_READING_STANDARD_VIN;
+        : (flow->standard_vin_attempted
+            ? LINK_DIAGNOSTIC_FLOW_SCANNING_STORED_DTCS
+            : LINK_DIAGNOSTIC_FLOW_READING_STANDARD_VIN);
     return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
 }
 
@@ -523,7 +537,9 @@ static LinkDiagnosticFlowResult flow_accept_pid_discovery(
     } else {
         flow->stage = flow->config.preserve_pid_discovery_response_headers
             ? LINK_DIAGNOSTIC_FLOW_RESTORING_PID_DISCOVERY_HEADERS
-            : LINK_DIAGNOSTIC_FLOW_READING_STANDARD_VIN;
+            : (flow->standard_vin_attempted
+                ? LINK_DIAGNOSTIC_FLOW_SCANNING_STORED_DTCS
+                : LINK_DIAGNOSTIC_FLOW_READING_STANDARD_VIN);
         event->kind = LINK_DIAGNOSTIC_FLOW_EVENT_PID_DISCOVERY_COMPLETE;
     }
     return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
@@ -556,7 +572,9 @@ static LinkDiagnosticFlowResult flow_accept_standard_vin(
     event->kind = LINK_DIAGNOSTIC_FLOW_EVENT_STANDARD_VIN;
     event->vin_available = flow->standard_vin_available;
     event->vin = flow->standard_vin_available ? flow->standard_vin : NULL;
-    flow->stage = flow->config.manufacturer_extension_after_pid_discovery
+    flow->stage =
+        (flow->config.manufacturer_extension_after_standard_vin ||
+         flow->config.manufacturer_extension_after_pid_discovery)
         ? LINK_DIAGNOSTIC_FLOW_MANUFACTURER_EXTENSION
         : LINK_DIAGNOSTIC_FLOW_SCANNING_STORED_DTCS;
     return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
@@ -711,9 +729,15 @@ LinkDiagnosticFlowResult link_diagnostic_flow_init(
         return LINK_DIAGNOSTIC_FLOW_RESULT_INVALID_ARGUMENT;
     }
     if (config != NULL) {
+        unsigned int manufacturer_startup_hooks = 0U;
         resolved = *config;
-        if (resolved.manufacturer_extension_after_pid_discovery &&
-            resolved.manufacturer_extension_after_standard_dtcs) {
+        manufacturer_startup_hooks +=
+            resolved.manufacturer_extension_after_standard_vin ? 1U : 0U;
+        manufacturer_startup_hooks +=
+            resolved.manufacturer_extension_after_pid_discovery ? 1U : 0U;
+        manufacturer_startup_hooks +=
+            resolved.manufacturer_extension_after_standard_dtcs ? 1U : 0U;
+        if (manufacturer_startup_hooks > 1U) {
             return LINK_DIAGNOSTIC_FLOW_RESULT_INVALID_ARGUMENT;
         }
         if (resolved.init_timeout_ms == 0U) {
@@ -948,14 +972,20 @@ LinkDiagnosticFlowResult link_diagnostic_flow_resume_after_manufacturer(
     if (flow->config.restore_adapter_after_manufacturer_extension) {
         link_elm327_init_begin(&flow->initialization);
         flow->stage = LINK_DIAGNOSTIC_FLOW_RESTORING_AFTER_MANUFACTURER;
+    } else if (flow->standard_diagnostic_context_complete) {
+        flow->stage = flow->config.preserve_live_response_headers
+            ? LINK_DIAGNOSTIC_FLOW_CONFIGURING_LIVE_HEADERS
+            : LINK_DIAGNOSTIC_FLOW_LIVE;
+    } else if (flow->standard_dtc_inventory_complete) {
+        flow->stage = LINK_DIAGNOSTIC_FLOW_READING_READINESS;
+    } else if (flow->config.manufacturer_extension_after_standard_vin &&
+               flow->standard_vin_attempted) {
+        flow->supported_pid_base = 0x00U;
+        flow->stage = flow->config.preserve_pid_discovery_response_headers
+            ? LINK_DIAGNOSTIC_FLOW_CONFIGURING_PID_DISCOVERY_HEADERS
+            : LINK_DIAGNOSTIC_FLOW_DISCOVERING_PIDS;
     } else {
-        flow->stage = flow->standard_diagnostic_context_complete
-            ? (flow->config.preserve_live_response_headers
-                ? LINK_DIAGNOSTIC_FLOW_CONFIGURING_LIVE_HEADERS
-                : LINK_DIAGNOSTIC_FLOW_LIVE)
-            : (flow->standard_dtc_inventory_complete
-                ? LINK_DIAGNOSTIC_FLOW_READING_READINESS
-                : LINK_DIAGNOSTIC_FLOW_SCANNING_STORED_DTCS);
+        flow->stage = LINK_DIAGNOSTIC_FLOW_SCANNING_STORED_DTCS;
     }
     return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
 }
