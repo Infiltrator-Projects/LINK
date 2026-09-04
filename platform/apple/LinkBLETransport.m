@@ -146,6 +146,7 @@ static BOOL LinkRemainingBytesAreWhitespace(const uint8_t *bytes,
 @property(nonatomic, copy, readwrite, nullable) NSString *writeCharacteristicUUID;
 @property(nonatomic, copy, readwrite, nullable) NSString *notifyCharacteristicUUID;
 @property(nonatomic, readwrite) LinkAdapterKind adapterKind;
+- (void)startInternal;
 - (void)beginScan;
 - (void)connectPeripheral:(CBPeripheral *)peripheral
                      name:(NSString *)name;
@@ -170,6 +171,7 @@ static BOOL LinkRemainingBytesAreWhitespace(const uint8_t *bytes,
 @implementation LinkBLETransport {
     CBCentralManager *_Nullable _central;
     CBPeripheral *_Nullable _peripheral;
+    NSString *_Nullable _requestedPeripheralIdentifier;
     BOOL _startRequested;
     NSUInteger _operationGeneration;
     NSUInteger _scanAttempt;
@@ -256,6 +258,32 @@ static BOOL LinkRemainingBytesAreWhitespace(const uint8_t *bytes,
         dispatch_async(dispatch_get_main_queue(), ^{ [self start]; });
         return;
     }
+    _requestedPeripheralIdentifier = nil;
+    [self startInternal];
+}
+
+- (void)startWithPeripheralIdentifier:(NSString *)peripheralIdentifier
+{
+    if (![NSThread isMainThread]) {
+        NSString *copy = [peripheralIdentifier copy];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self startWithPeripheralIdentifier:copy];
+        });
+        return;
+    }
+
+    NSUUID *identifier = peripheralIdentifier.length != 0U
+        ? [[NSUUID alloc] initWithUUIDString:peripheralIdentifier] : nil;
+    if (identifier == nil) {
+        [self failAndStop:@"Selected Bluetooth adapter identifier is invalid"];
+        return;
+    }
+    _requestedPeripheralIdentifier = identifier.UUIDString;
+    [self startInternal];
+}
+
+- (void)startInternal
+{
     if (!_startRequested) {
         _scanAttempt = 0U;
         _recoveryAttempt = 0U;
@@ -285,6 +313,7 @@ static BOOL LinkRemainingBytesAreWhitespace(const uint8_t *bytes,
     _recoveryAttempt = 0U;
     _channelProbeAttempt = 0U;
     _knownPeripheralAttempted = NO;
+    _requestedPeripheralIdentifier = nil;
     _operationGeneration++;
     _probeGeneration++;
     [_central stopScan];
@@ -401,8 +430,10 @@ static BOOL LinkRemainingBytesAreWhitespace(const uint8_t *bytes,
      */
     if (!_knownPeripheralAttempted) {
         _knownPeripheralAttempted = YES;
-        NSString *savedIdentifier = [[NSUserDefaults standardUserDefaults]
-            stringForKey:LinkKnownPeripheralDefaultsKey];
+        NSString *savedIdentifier = _requestedPeripheralIdentifier.length != 0U
+            ? _requestedPeripheralIdentifier
+            : [[NSUserDefaults standardUserDefaults]
+                stringForKey:LinkKnownPeripheralDefaultsKey];
         NSUUID *identifier = savedIdentifier.length != 0U
             ? [[NSUUID alloc] initWithUUIDString:savedIdentifier] : nil;
         if (identifier != nil) {
@@ -507,6 +538,11 @@ static BOOL LinkRemainingBytesAreWhitespace(const uint8_t *bytes,
     NSString *name = advertisementData[CBAdvertisementDataLocalNameKey];
     if (name.length == 0U) name = peripheral.name;
     if (name.length == 0U || !LinkPeripheralNameLooksLikeAdapter(name)) return;
+    if (_requestedPeripheralIdentifier.length != 0U &&
+        ![peripheral.identifier.UUIDString
+            isEqualToString:_requestedPeripheralIdentifier]) {
+        return;
+    }
     [self connectPeripheral:peripheral name:name];
     (void)RSSI;
     (void)central;

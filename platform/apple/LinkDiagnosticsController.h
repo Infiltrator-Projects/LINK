@@ -89,6 +89,8 @@ NS_ASSUME_NONNULL_BEGIN
 - (instancetype)init NS_UNAVAILABLE;
 
 - (void)start;
+/** Start a real session against one exact CoreBluetooth peripheral UUID. */
+- (void)startWithPeripheralIdentifier:(NSString *)peripheralIdentifier;
 - (void)startSimulatedWithAdapterIdentifier:(const char *)adapterIdentifier
                                         vin:(const char *)vin
                             customResponder:

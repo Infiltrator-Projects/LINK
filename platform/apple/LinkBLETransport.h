@@ -45,6 +45,9 @@ typedef NS_ENUM(NSInteger, LinkBLETransportState) {
 @property(nonatomic, readonly, getter=isNativeAdapter) BOOL nativeAdapter;
 
 - (void)start;
+/** Connect only to one exact CoreBluetooth peripheral UUID. If that
+ * peripheral cannot be reached, do not substitute another nearby adapter. */
+- (void)startWithPeripheralIdentifier:(NSString *)peripheralIdentifier;
 - (void)disconnect;
 
 @end

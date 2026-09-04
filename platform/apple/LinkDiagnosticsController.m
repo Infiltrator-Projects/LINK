@@ -768,6 +768,27 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
     [_provider start];
 }
 
+- (void)startWithPeripheralIdentifier:(NSString *)peripheralIdentifier
+{
+    if (![NSThread isMainThread]) {
+        NSString *copy = [peripheralIdentifier copy];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self startWithPeripheralIdentifier:copy];
+        });
+        return;
+    }
+    if (self.active) return;
+
+    _simulated = NO;
+    if (![self prepareForStart]) {
+        [self setSharedStatus:@"Could not start diagnostic evidence recorder"];
+        return;
+    }
+    self.peripheralName = nil;
+    [self notifyDelegate];
+    [_provider startWithPeripheralIdentifier:peripheralIdentifier];
+}
+
 - (void)startSimulatedWithAdapterIdentifier:(const char *)adapterIdentifier
                                         vin:(const char *)vin
                             customResponder:
