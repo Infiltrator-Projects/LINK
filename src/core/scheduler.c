@@ -154,6 +154,17 @@ LinkSchedulerResult link_scheduler_configure_standard_obd2_bits(LinkScheduler *s
     return LINK_SCHEDULER_RESULT_OK;
 }
 
+LinkSchedulerResult link_scheduler_configure_standard_obd2(
+    LinkScheduler *scheduler,
+    const LinkObd2PidSet *supported,
+    uint64_t first_due_ms)
+{
+    if (supported == NULL)
+        return LINK_SCHEDULER_RESULT_INVALID_ARGUMENT;
+    return link_scheduler_configure_standard_obd2_bits(
+        scheduler, supported->bits, first_due_ms);
+}
+
 void link_scheduler_set_paused(LinkScheduler *scheduler, bool paused, uint64_t now_ms)
 {
     size_t index;

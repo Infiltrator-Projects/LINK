@@ -106,6 +106,24 @@ LinkDiagnosticRequestResult link_diagnostic_request_supported_by_adapter(
     LinkAdapterKind kind);
 
 /**
+ * Deterministically choose whether a newly observed CAN route should replace
+ * the currently selected route in a single-value presentation cache.
+ *
+ * The exact preferred route is supplied by the caller so LINK does not embed
+ * manufacturer assumptions. An already-selected route always refreshes itself;
+ * otherwise the preferred route wins, then 11-bit wins over 29-bit, then the
+ * lowest CAN identifier wins. Invalid CAN identifiers are never preferred.
+ */
+bool link_diagnostic_response_route_preferred(
+    uint32_t candidate_can_id,
+    bool candidate_extended_id,
+    bool current_available,
+    uint32_t current_can_id,
+    bool current_extended_id,
+    uint32_t preferred_can_id,
+    bool preferred_extended_id);
+
+/**
  * Apply a transport-independent response policy.
  *
  * SELECT_LOWEST_CAN_ID_CACHED reuses the cached responder when present and

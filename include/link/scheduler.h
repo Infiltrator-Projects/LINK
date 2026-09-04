@@ -72,6 +72,11 @@ LinkSchedulerResult link_scheduler_set_parameter_enabled(LinkScheduler *schedule
 LinkSchedulerResult link_scheduler_add(LinkScheduler *scheduler, uint8_t pid, uint32_t interval_ms, LinkSchedulerPriority priority, uint64_t first_due_ms);
 LinkSchedulerResult link_scheduler_set_enabled(LinkScheduler *scheduler, uint8_t pid, bool enabled);
 LinkSchedulerResult link_scheduler_configure_standard_obd2_bits(LinkScheduler *scheduler, const uint8_t supported_bits[LINK_OBD2_PID_SET_BYTES], uint64_t first_due_ms);
+/** Configure the shared standard OBD-II cadence directly from LINK's PID set. */
+LinkSchedulerResult link_scheduler_configure_standard_obd2(
+    LinkScheduler *scheduler,
+    const LinkObd2PidSet *supported,
+    uint64_t first_due_ms);
 void link_scheduler_set_paused(LinkScheduler *scheduler, bool paused, uint64_t now_ms);
 LinkSchedulerNextResult link_scheduler_next(const LinkScheduler *scheduler, uint64_t now_ms, LinkSchedulerDispatch *dispatch);
 LinkSchedulerResult link_scheduler_mark_dispatched(LinkScheduler *scheduler, size_t index, uint64_t now_ms);

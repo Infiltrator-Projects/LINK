@@ -131,6 +131,48 @@ LinkDiagnosticRequestResult link_diagnostic_request_supported_by_adapter(
     return LINK_DIAGNOSTIC_REQUEST_OK;
 }
 
+bool link_diagnostic_response_route_preferred(
+    uint32_t candidate_can_id,
+    bool candidate_extended_id,
+    bool current_available,
+    uint32_t current_can_id,
+    bool current_extended_id,
+    uint32_t preferred_can_id,
+    bool preferred_extended_id)
+{
+    bool candidate_preferred;
+    bool current_preferred;
+
+    if (candidate_can_id > LINK_DIAGNOSTIC_MAX_CAN_ID ||
+        preferred_can_id > LINK_DIAGNOSTIC_MAX_CAN_ID ||
+        (!candidate_extended_id && candidate_can_id > UINT32_C(0x7ff)) ||
+        (!preferred_extended_id && preferred_can_id > UINT32_C(0x7ff))) {
+        return false;
+    }
+    if (!current_available) return true;
+    if (current_can_id > LINK_DIAGNOSTIC_MAX_CAN_ID ||
+        (!current_extended_id && current_can_id > UINT32_C(0x7ff))) {
+        return true;
+    }
+    if (candidate_can_id == current_can_id &&
+        candidate_extended_id == current_extended_id) {
+        return true;
+    }
+
+    candidate_preferred =
+        candidate_can_id == preferred_can_id &&
+        candidate_extended_id == preferred_extended_id;
+    current_preferred =
+        current_can_id == preferred_can_id &&
+        current_extended_id == preferred_extended_id;
+    if (candidate_preferred != current_preferred) return candidate_preferred;
+
+    if (candidate_extended_id != current_extended_id)
+        return !candidate_extended_id;
+
+    return candidate_can_id < current_can_id;
+}
+
 static void selection_one(LinkDiagnosticResponseSelection *selection,
                           size_t index,
                           const LinkDiagnosticResponseView *response)
