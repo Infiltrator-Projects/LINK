@@ -229,6 +229,27 @@ bool link_parameter_from_obd2_scalar(
     uint64_t timestamp_ms,
     LinkParameterSample *parameter);
 
+/**
+ * Convert a complete scalar OBD-II sample into LINK's parameter model.
+ *
+ * This preserves the mature product-face convenience API while keeping the
+ * unit validation and immutable parameter definition lookup in one shared
+ * implementation path.
+ */
+static inline bool link_parameter_from_obd2(
+    const LinkObd2Sample *sample,
+    uint64_t timestamp_ms,
+    LinkParameterSample *parameter)
+{
+    if (sample == NULL) return false;
+    return link_parameter_from_obd2_scalar(
+        sample->pid,
+        (LinkObd2UnitCode)sample->unit,
+        sample->value,
+        timestamp_ms,
+        parameter);
+}
+
 #ifdef __cplusplus
 }
 #endif

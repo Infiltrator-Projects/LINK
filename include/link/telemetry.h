@@ -213,6 +213,42 @@ bool link_telemetry_recorder_record_response_named(LinkTelemetryRecorder *record
 bool link_telemetry_recorder_finish(LinkTelemetryRecorder *recorder, uint64_t ended_epoch_ms);
 bool link_telemetry_export_csv_named(const LinkTelemetryStore *store, const LinkTelemetrySessionMetadata *metadata, const char *product_slug, LinkTelemetryPidName pid_name, LinkTelemetryUnitName unit_name, LinkTelemetryResultName result_name, LinkTelemetryTextSink sink, void *context);
 
+/**
+ * Record a complete scalar OBD-II sample without duplicating the conversion
+ * from LINK's OBD representation into the telemetry measurement model.
+ */
+static inline bool link_telemetry_store_record_obd2_sample(
+    LinkTelemetryStore *store,
+    uint64_t timestamp_ms,
+    const LinkObd2Sample *sample)
+{
+    LinkTelemetryMeasurement measurement;
+    if (sample == NULL) return false;
+    measurement.pid = sample->pid;
+    measurement.value = sample->value;
+    measurement.unit = (LinkObd2UnitCode)sample->unit;
+    return link_telemetry_store_record(store, timestamp_ms, &measurement);
+}
+
+/**
+ * Record an ELM327 response transcript while preserving LINK's canonical
+ * parser result code and normalised response text.
+ */
+static inline bool link_telemetry_store_record_elm327_transcript(
+    LinkTelemetryStore *store,
+    uint64_t timestamp_ms,
+    const char *command,
+    const LinkElm327Response *response)
+{
+    if (response == NULL) return false;
+    return link_telemetry_store_record_transcript(
+        store,
+        timestamp_ms,
+        command,
+        (uint32_t)response->result,
+        response->text);
+}
+
 #ifdef __cplusplus
 }
 #endif

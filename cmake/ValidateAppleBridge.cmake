@@ -59,6 +59,7 @@ function(link_validate_product_apple_bridge product_root)
     foreach(apple_bridge IN ITEMS
             LinkPortableCore.c
             LinkPortableObd2.c
+            LinkPortableKwp2000.c
             LinkPortableUds.c)
         string(FIND "${product_bridge_text}" "${apple_bridge}" bridge_position)
         if(NOT bridge_position EQUAL -1)
