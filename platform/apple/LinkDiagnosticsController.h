@@ -159,4 +159,43 @@ NS_ASSUME_NONNULL_BEGIN
 
 @end
 
+/**
+ * Shared persistent vehicle-profile/session store for Apple product faces.
+ *
+ * LINK owns the generic persistence and VIN/adapter association rules. Product
+ * faces store their own manufacturer-specific fields in the profile dictionary,
+ * while this class provides the common vehicle-selection and adapter-binding
+ * behaviour. Legacy keys may be supplied so an existing product migrates
+ * without losing its saved vehicles.
+ */
+@interface LinkVehicleProfileStore : NSObject
+
+- (instancetype)initWithProductNamespace:(NSString *)productNamespace
+                         legacyProfileKey:(NSString * _Nullable)legacyProfileKey
+                    legacySelectedVINKey:(NSString * _Nullable)legacySelectedVINKey
+                 legacyAdapterMappingKey:(NSString * _Nullable)legacyAdapterMappingKey
+    NS_DESIGNATED_INITIALIZER;
+- (instancetype)init NS_UNAVAILABLE;
+
+@property(nonatomic, copy, readonly) NSString *productNamespace;
+@property(nonatomic, copy, readonly) NSArray<NSDictionary *> *savedProfiles;
+@property(nonatomic, copy, readonly, nullable) NSString *selectedVehicleVIN;
+
+- (nullable NSDictionary *)profileForVIN:(NSString *)vin;
+- (BOOL)selectOfflineVehicleWithVIN:(NSString *)vin;
+- (void)clearSelectedVehicle;
+- (nullable NSString *)associatedAdapterIdentifierForVIN:(NSString *)vin;
+
+/**
+ * Accept a live VIN as authoritative. This persists the current vehicle and,
+ * when LINK has a successfully probed CoreBluetooth peripheral identifier,
+ * updates that vehicle's adapter association.
+ */
+- (void)recordLiveVIN:(NSString *)vin;
+
+- (void)saveProfile:(NSDictionary *)profile forVIN:(NSString *)vin;
+- (void)removeProfileForVIN:(NSString *)vin;
+
+@end
+
 NS_ASSUME_NONNULL_END
