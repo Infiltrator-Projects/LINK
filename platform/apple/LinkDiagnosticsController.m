@@ -2069,7 +2069,7 @@ static NSString * _Nullable LinkVehicleSessionValidAdapterIdentifier(
 {
     NSDictionary *profiles = [[NSUserDefaults standardUserDefaults]
         dictionaryForKey:self.profilesKey];
-    return profiles ?: @{};
+    return profiles != nil ? profiles : @{};
 }
 
 - (void)storeProfiles:(NSDictionary *)profiles
@@ -2082,7 +2082,7 @@ static NSString * _Nullable LinkVehicleSessionValidAdapterIdentifier(
 {
     NSDictionary *mapping = [[NSUserDefaults standardUserDefaults]
         dictionaryForKey:self.adapterMappingKey];
-    return mapping ?: @{};
+    return mapping != nil ? mapping : @{};
 }
 
 - (void)storeAdapterMapping:(NSDictionary *)mapping
