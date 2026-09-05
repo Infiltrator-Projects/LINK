@@ -169,6 +169,48 @@ int main(void)
               LINK_SCHEDULER_RESULT_OK);
     }
 
+    /*
+     * Under adapter overload, due priority must matter: an older LOW item that
+     * is still within one of its own intervals must not hold up a newly due
+     * HIGH OEM live transaction.
+     */
+    {
+        LinkScheduler overloaded;
+        LinkSchedulerDispatch overloaded_dispatch;
+        link_scheduler_init(&overloaded);
+        CHECK(link_scheduler_add(&overloaded, 0x05U, 3000U,
+                  LINK_SCHEDULER_PRIORITY_LOW, 1000U) ==
+              LINK_SCHEDULER_RESULT_OK);
+        CHECK(link_scheduler_add_external(&overloaded, UINT32_C(0x4d420001),
+                  750U, LINK_SCHEDULER_PRIORITY_HIGH, 3000U) ==
+              LINK_SCHEDULER_RESULT_OK);
+        CHECK(link_scheduler_next(&overloaded, 3500U,
+                  &overloaded_dispatch) == LINK_SCHEDULER_NEXT_READY);
+        CHECK(overloaded_dispatch.kind == LINK_SCHEDULER_ITEM_EXTERNAL);
+        CHECK(overloaded_dispatch.external_token == UINT32_C(0x4d420001));
+    }
+
+    /*
+     * Priority must not become starvation. A LOW item that has missed three of
+     * its requested periods ages to CRITICAL and is serviced ahead of a newly
+     * due CRITICAL item because its original deadline is older.
+     */
+    {
+        LinkScheduler aged;
+        LinkSchedulerDispatch aged_dispatch;
+        link_scheduler_init(&aged);
+        CHECK(link_scheduler_add(&aged, 0x05U, 1000U,
+                  LINK_SCHEDULER_PRIORITY_LOW, 1000U) ==
+              LINK_SCHEDULER_RESULT_OK);
+        CHECK(link_scheduler_add(&aged, 0x0cU, 500U,
+                  LINK_SCHEDULER_PRIORITY_CRITICAL, 4000U) ==
+              LINK_SCHEDULER_RESULT_OK);
+        CHECK(link_scheduler_next(&aged, 4000U, &aged_dispatch) ==
+              LINK_SCHEDULER_NEXT_READY);
+        CHECK(aged_dispatch.pid_valid);
+        CHECK(aged_dispatch.pid == 0x05U);
+    }
+
     link_scheduler_init(&scheduler);
     CHECK(link_scheduler_add(&scheduler, 0x0cU, 250U, LINK_SCHEDULER_PRIORITY_CRITICAL, 100U) == LINK_SCHEDULER_RESULT_OK);
     CHECK(link_scheduler_next(&scheduler, 100U, &dispatch) == LINK_SCHEDULER_NEXT_READY);
