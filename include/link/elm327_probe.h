@@ -34,6 +34,8 @@ typedef struct LinkElm327ProbeState {
 } LinkElm327ProbeState;
 
 void link_elm327_probe_begin(LinkElm327ProbeState *state);
+/** Begin only the active-protocol query (ATDP -> ATDPN), skipping AT@1. */
+void link_elm327_probe_begin_protocol(LinkElm327ProbeState *state);
 const char *link_elm327_probe_command(const LinkElm327ProbeState *state);
 
 /**

@@ -195,6 +195,63 @@ static LinkDiagnosticFlowResult flow_next_initialization_action(
     return flow_emit_command(flow, action, command, flow->config.init_timeout_ms);
 }
 
+static void flow_request_protocol_probe(LinkDiagnosticFlow *flow)
+{
+    if (flow == NULL || flow->protocol_probe_attempted) return;
+    link_elm327_probe_begin_protocol(&flow->protocol_probe);
+    flow->protocol_probe_attempted = true;
+    flow->protocol_probe_pending = true;
+}
+
+static LinkDiagnosticFlowResult flow_next_protocol_probe_action(
+    LinkDiagnosticFlow *flow,
+    LinkDiagnosticFlowAction *action)
+{
+    const char *command = link_elm327_probe_command(&flow->protocol_probe);
+    if (command == NULL) {
+        flow->protocol_probe_pending = false;
+        flow->protocol_probe_active = false;
+        return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
+    }
+    flow->protocol_probe_active = true;
+    return flow_emit_command(flow, action, command, flow->config.init_timeout_ms);
+}
+
+static LinkDiagnosticFlowResult flow_accept_protocol_probe(
+    LinkDiagnosticFlow *flow,
+    const LinkElm327Response *response,
+    LinkDiagnosticFlowEvent *event)
+{
+    const LinkElm327Result result =
+        link_elm327_probe_accept(&flow->protocol_probe, response);
+    flow->protocol_probe_active = false;
+
+    /* Protocol reporting is supplementary. Clone quirks must never turn an
+     * otherwise working diagnostic session into a failure. */
+    if (result != LINK_ELM327_RESULT_OK ||
+        flow->protocol_probe.stage == LINK_ELM327_PROBE_FAILED) {
+        flow->protocol_probe_pending = false;
+        return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
+    }
+    if (flow->protocol_probe.stage != LINK_ELM327_PROBE_COMPLETE) {
+        flow->protocol_probe_pending = true;
+        return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
+    }
+
+    flow->protocol_probe_pending = false;
+    event->protocol = link_elm327_protocol_definition(
+        flow->protocol_probe.protocol_number);
+    if (event->protocol != NULL) {
+        event->kind = LINK_DIAGNOSTIC_FLOW_EVENT_PROTOCOL_IDENTIFIED;
+        event->protocol_description =
+            flow->protocol_probe.protocol_description[0] != '\0'
+                ? flow->protocol_probe.protocol_description : NULL;
+        event->protocol_was_automatic =
+            flow->protocol_probe.protocol_was_automatic;
+    }
+    return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
+}
+
 static LinkDiagnosticFlowResult flow_next_pid_discovery_action(
     LinkDiagnosticFlow *flow,
     LinkDiagnosticFlowAction *action)
@@ -558,6 +615,7 @@ static LinkDiagnosticFlowResult flow_accept_pid_discovery(
                 ? LINK_DIAGNOSTIC_FLOW_SCANNING_STORED_DTCS
                 : LINK_DIAGNOSTIC_FLOW_READING_STANDARD_VIN);
         event->kind = LINK_DIAGNOSTIC_FLOW_EVENT_PID_DISCOVERY_COMPLETE;
+        flow_request_protocol_probe(flow);
     }
     return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
 }
@@ -594,6 +652,7 @@ static LinkDiagnosticFlowResult flow_accept_standard_vin(
          flow->config.manufacturer_extension_after_pid_discovery)
         ? LINK_DIAGNOSTIC_FLOW_MANUFACTURER_EXTENSION
         : LINK_DIAGNOSTIC_FLOW_SCANNING_STORED_DTCS;
+    flow_request_protocol_probe(flow);
     return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
 }
 
@@ -811,6 +870,9 @@ LinkDiagnosticFlowResult link_diagnostic_flow_next_action(
     if (flow->awaiting_response) {
         return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
     }
+    if (flow->protocol_probe_pending) {
+        return flow_next_protocol_probe_action(flow, action);
+    }
 
     switch (flow->stage) {
     case LINK_DIAGNOSTIC_FLOW_IDLE:
@@ -893,6 +955,9 @@ LinkDiagnosticFlowResult link_diagnostic_flow_accept_response(
 
     stage = flow->stage;
     flow->awaiting_response = false;
+    if (flow->protocol_probe_active) {
+        return flow_accept_protocol_probe(flow, response, event);
+    }
 
     switch (stage) {
     case LINK_DIAGNOSTIC_FLOW_INITIALIZING:
@@ -1132,6 +1197,35 @@ const char *link_diagnostic_flow_adapter_identifier(
         return NULL;
     }
     return flow->initialization.adapter_id;
+}
+
+const LinkElm327ProtocolDefinition *link_diagnostic_flow_obd_protocol(
+    const LinkDiagnosticFlow *flow)
+{
+    if (flow == NULL ||
+        flow->protocol_probe.stage != LINK_ELM327_PROBE_COMPLETE) {
+        return NULL;
+    }
+    return link_elm327_protocol_definition(flow->protocol_probe.protocol_number);
+}
+
+const char *link_diagnostic_flow_obd_protocol_description(
+    const LinkDiagnosticFlow *flow)
+{
+    if (flow == NULL ||
+        flow->protocol_probe.stage != LINK_ELM327_PROBE_COMPLETE ||
+        flow->protocol_probe.protocol_description[0] == '\0') {
+        return NULL;
+    }
+    return flow->protocol_probe.protocol_description;
+}
+
+bool link_diagnostic_flow_obd_protocol_was_automatic(
+    const LinkDiagnosticFlow *flow)
+{
+    return flow != NULL &&
+           flow->protocol_probe.stage == LINK_ELM327_PROBE_COMPLETE &&
+           flow->protocol_probe.protocol_was_automatic;
 }
 
 const char *link_diagnostic_flow_standard_vin(

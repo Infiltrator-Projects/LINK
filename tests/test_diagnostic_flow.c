@@ -116,6 +116,65 @@ static int complete_initialization(LinkDiagnosticFlow *flow)
                   flow, &response, 100U, &event) ==
               LINK_DIAGNOSTIC_FLOW_RESULT_OK);
     }
+    flow->protocol_probe_attempted = true;
+    flow->protocol_probe_pending = false;
+    flow->protocol_probe_active = false;
+    return 0;
+}
+
+static int test_protocol_reporting(void)
+{
+    LinkDiagnosticFlow flow;
+    LinkDiagnosticFlowConfig config = LINK_DIAGNOSTIC_FLOW_CONFIG_INIT;
+    LinkDiagnosticFlowAction action;
+    LinkDiagnosticFlowEvent event;
+    LinkElm327Response response;
+    const LinkElm327ProtocolDefinition *protocol;
+
+    CHECK(link_diagnostic_flow_init(&flow, &config) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(link_diagnostic_flow_start(&flow) == LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(complete_initialization(&flow) == 0);
+    flow.protocol_probe_attempted = false;
+
+    CHECK(link_diagnostic_flow_next_action(&flow, 200U, &action) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(strcmp(action.command, "0100") == 0);
+    response = response_ok("410000000000", false);
+    CHECK(link_diagnostic_flow_accept_response(
+              &flow, &response, 200U, &event) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(flow.protocol_probe_pending);
+
+    CHECK(link_diagnostic_flow_next_action(&flow, 210U, &action) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(strcmp(action.command, "ATDP") == 0);
+    response = response_ok("ISO 9141-2", false);
+    CHECK(link_diagnostic_flow_accept_response(
+              &flow, &response, 210U, &event) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(flow.protocol_probe_pending);
+
+    CHECK(link_diagnostic_flow_next_action(&flow, 220U, &action) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(strcmp(action.command, "ATDPN") == 0);
+    response = response_ok("A3", false);
+    CHECK(link_diagnostic_flow_accept_response(
+              &flow, &response, 220U, &event) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(event.kind == LINK_DIAGNOSTIC_FLOW_EVENT_PROTOCOL_IDENTIFIED);
+    CHECK(event.protocol != NULL);
+    CHECK(event.protocol->family == LINK_ELM327_PROTOCOL_FAMILY_ISO_9141_2);
+    CHECK(event.protocol_was_automatic);
+    CHECK(strcmp(event.protocol_description, "ISO 9141-2") == 0);
+    protocol = link_diagnostic_flow_obd_protocol(&flow);
+    CHECK(protocol != NULL);
+    CHECK(protocol->number == LINK_ELM327_PROTOCOL_ISO_9141_2);
+    CHECK(protocol->bit_rate == 10400U);
+    CHECK(protocol->init == LINK_ELM327_PROTOCOL_INIT_FIVE_BAUD);
+    CHECK(link_diagnostic_flow_obd_protocol_was_automatic(&flow));
+    CHECK(strcmp(link_diagnostic_flow_obd_protocol_description(&flow),
+                 "ISO 9141-2") == 0);
     return 0;
 }
 
@@ -779,6 +838,7 @@ int main(void)
 {
     if (test_scheduled_manufacturer_job() != 0) return 1;
     if (test_fault_scan_presentation_state() != 0) return 1;
+    if (test_protocol_reporting() != 0) return 1;
     if (test_standard_sequence() != 0) return 1;
     if (test_live_timeout_recovery() != 0) return 1;
     if (test_readiness_and_freeze_context() != 0) return 1;

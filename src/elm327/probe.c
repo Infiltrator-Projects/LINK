@@ -68,6 +68,16 @@ void link_elm327_probe_begin(LinkElm327ProbeState *state)
     state->failure = LINK_ELM327_RESULT_OK;
 }
 
+void link_elm327_probe_begin_protocol(LinkElm327ProbeState *state)
+{
+    if (state == NULL) {
+        return;
+    }
+    memset(state, 0, sizeof(*state));
+    state->stage = LINK_ELM327_PROBE_PROTOCOL_DESCRIPTION;
+    state->failure = LINK_ELM327_RESULT_OK;
+}
+
 const char *link_elm327_probe_command(
     const LinkElm327ProbeState *state)
 {

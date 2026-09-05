@@ -14,6 +14,7 @@
 #define LINK_DIAGNOSTIC_FLOW_H
 
 #include "link/elm327.h"
+#include "link/elm327_probe.h"
 #include "link/obd2.h"
 #include "link/scheduler.h"
 
@@ -72,6 +73,7 @@ typedef enum {
 typedef enum {
     LINK_DIAGNOSTIC_FLOW_EVENT_NONE = 0,
     LINK_DIAGNOSTIC_FLOW_EVENT_ADAPTER_IDENTIFIED,
+    LINK_DIAGNOSTIC_FLOW_EVENT_PROTOCOL_IDENTIFIED,
     LINK_DIAGNOSTIC_FLOW_EVENT_PID_DISCOVERY_COMPLETE,
     LINK_DIAGNOSTIC_FLOW_EVENT_STANDARD_VIN,
     LINK_DIAGNOSTIC_FLOW_EVENT_DTC_LIST,
@@ -130,6 +132,9 @@ typedef struct {
     const LinkObd2DtcList *dtc_list;
     const char *vin;
     bool vin_available;
+    const LinkElm327ProtocolDefinition *protocol;
+    const char *protocol_description;
+    bool protocol_was_automatic;
     LinkObd2Sample sample;
     LinkObd2ResponderSampleList responder_samples;
     LinkObd2DecodedPid decoded;
@@ -150,6 +155,10 @@ typedef struct {
     LinkObd2Result obd2_failure;
     LinkSchedulerResult scheduler_failure;
     LinkElm327InitState initialization;
+    LinkElm327ProbeState protocol_probe;
+    bool protocol_probe_attempted;
+    bool protocol_probe_pending;
+    bool protocol_probe_active;
     LinkObd2PidSet supported_pids;
     LinkObd2ResponderPidSetList supported_pid_responders;
     char standard_vin[LINK_OBD2_VIN_LENGTH + 1U];
@@ -272,6 +281,13 @@ const LinkObd2Sample *link_diagnostic_flow_freeze_frame_samples(
 bool link_diagnostic_flow_standard_context_complete(
     const LinkDiagnosticFlow *flow);
 const char *link_diagnostic_flow_adapter_identifier(
+    const LinkDiagnosticFlow *flow);
+/** Active ELM-selected OBD transport, available after the first real OBD exchange. */
+const LinkElm327ProtocolDefinition *link_diagnostic_flow_obd_protocol(
+    const LinkDiagnosticFlow *flow);
+const char *link_diagnostic_flow_obd_protocol_description(
+    const LinkDiagnosticFlow *flow);
+bool link_diagnostic_flow_obd_protocol_was_automatic(
     const LinkDiagnosticFlow *flow);
 const char *link_diagnostic_flow_standard_vin(
     const LinkDiagnosticFlow *flow);

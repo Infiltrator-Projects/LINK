@@ -124,6 +124,9 @@ diagnostic-generation boundaries.
 
 ## Architecture
 
+LINK records the ELM-selected active OBD transport after the first real OBD exchange (for example ISO 9141-2 or ISO 15765-4 CAN). Transport selection/framing remains LINK-owned; manufacturer-specific diagnostics remain product-owned.
+
+
 Portable diagnostic behaviour is C11. C++ is used only where it materially improves a design. Platform-required languages remain narrow presentation or interop edges and must not become alternate protocol implementations.
 
 Shared protocol state machines, diagnostic sequencing, safety policy, generic diagnostic knowledge and transport-independent decisions belong in LINK rather than Swift, Objective-C, GTK callbacks or Win32 message handlers.
