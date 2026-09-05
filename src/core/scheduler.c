@@ -6,6 +6,19 @@
 
 #include <string.h>
 
+static const uint8_t link_default_polling_pids[] = {
+    UINT8_C(0x0c), UINT8_C(0x0d), UINT8_C(0x05), UINT8_C(0x23),
+    UINT8_C(0x11), UINT8_C(0x49), UINT8_C(0x4a), UINT8_C(0x46),
+    UINT8_C(0x2f)
+};
+
+const uint8_t *link_scheduler_default_obd2_pids(size_t *count)
+{
+    if (count != NULL)
+        *count = sizeof(link_default_polling_pids) / sizeof(link_default_polling_pids[0]);
+    return link_default_polling_pids;
+}
+
 static bool priority_valid(LinkSchedulerPriority priority)
 {
     return priority >= LINK_SCHEDULER_PRIORITY_LOW && priority <= LINK_SCHEDULER_PRIORITY_CRITICAL;

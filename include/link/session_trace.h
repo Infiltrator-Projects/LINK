@@ -32,6 +32,9 @@ typedef struct LinkSessionTrace {
     uint64_t session_log_started_ms;
 } LinkSessionTrace;
 
+/* Shared default SAE live-data graph set used by LINK product faces. */
+const uint8_t *link_session_trace_default_graph_pids(size_t *count);
+
 bool link_session_trace_init(
     LinkSessionTrace *trace, const uint8_t *graph_pids, size_t graph_count);
 size_t link_session_trace_graph_index(

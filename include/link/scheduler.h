@@ -103,6 +103,9 @@ LinkSchedulerResult link_scheduler_set_external_enabled(
     uint32_t token,
     bool enabled);
 
+/* Product-neutral default live polling set for a fresh LINK UI. */
+const uint8_t *link_scheduler_default_obd2_pids(size_t *count);
+
 LinkSchedulerResult link_scheduler_configure_standard_obd2_bits(LinkScheduler *scheduler, const uint8_t supported_bits[LINK_OBD2_PID_SET_BYTES], uint64_t first_due_ms);
 /** Configure the shared standard OBD-II cadence directly from LINK's PID set. */
 LinkSchedulerResult link_scheduler_configure_standard_obd2(

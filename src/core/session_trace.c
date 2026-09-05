@@ -4,6 +4,18 @@
 #include <stdio.h>
 #include <string.h>
 
+static const uint8_t link_default_graph_pids[] = {
+    UINT8_C(0x0c), UINT8_C(0x0d), UINT8_C(0x05), UINT8_C(0x23),
+    UINT8_C(0x2f), UINT8_C(0x11), UINT8_C(0x46), UINT8_C(0x49)
+};
+
+const uint8_t *link_session_trace_default_graph_pids(size_t *count)
+{
+    if (count != NULL)
+        *count = sizeof(link_default_graph_pids) / sizeof(link_default_graph_pids[0]);
+    return link_default_graph_pids;
+}
+
 bool link_session_trace_init(
     LinkSessionTrace *trace, const uint8_t *graph_pids, size_t graph_count)
 {
