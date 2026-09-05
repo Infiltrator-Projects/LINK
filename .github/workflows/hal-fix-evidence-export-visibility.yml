@@ -27,7 +27,7 @@ jobs:
           replacements = {
               'enum LinkEvidenceExport {': 'public enum LinkEvidenceExport {',
               '    static func prepareTemporaryCSV(': '    public static func prepareTemporaryCSV(',
-              '    static func removeTemporaryFile(at url: URL?) {': '    public static func removeTemporaryFile(at url: URL?) {'
+              '    static func removeTemporaryFile(_ url: URL?) {': '    public static func removeTemporaryFile(_ url: URL?) {'
           }
           for old, new in replacements.items():
               count = s.count(old)
@@ -39,7 +39,7 @@ jobs:
           git diff --check
           grep -Fq 'public enum LinkEvidenceExport {' platform/apple/LinkDiagnosticUI.swift
           grep -Fq 'public static func prepareTemporaryCSV(' platform/apple/LinkDiagnosticUI.swift
-          grep -Fq 'public static func removeTemporaryFile(at url: URL?) {' platform/apple/LinkDiagnosticUI.swift
+          grep -Fq 'public static func removeTemporaryFile(_ url: URL?) {' platform/apple/LinkDiagnosticUI.swift
       - name: Commit source fix
         shell: bash
         run: |
