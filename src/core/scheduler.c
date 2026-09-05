@@ -44,9 +44,13 @@ LinkSchedulerResult link_scheduler_add_parameter(LinkScheduler *scheduler, const
     LinkSchedulerItem item;
     uint8_t pid = 0U;
     if (scheduler == NULL || !link_parameter_key_is_valid(key) || interval_ms == 0U || !priority_valid(priority)) return LINK_SCHEDULER_RESULT_INVALID_ARGUMENT;
-    for (index = 0U; index < scheduler->count; ++index) if (link_parameter_key_equal(&scheduler->items[index].key, key)) return LINK_SCHEDULER_RESULT_DUPLICATE;
+    for (index = 0U; index < scheduler->count; ++index) {
+        if (scheduler->items[index].kind == LINK_SCHEDULER_ITEM_PARAMETER &&
+            link_parameter_key_equal(&scheduler->items[index].key, key)) return LINK_SCHEDULER_RESULT_DUPLICATE;
+    }
     if (scheduler->count >= LINK_SCHEDULER_MAX_ITEMS) return LINK_SCHEDULER_RESULT_FULL;
     memset(&item, 0, sizeof(item));
+    item.kind = LINK_SCHEDULER_ITEM_PARAMETER;
     item.key = *key; item.pid_valid = key_to_pid(key, &pid); item.pid = pid; item.interval_ms = interval_ms; item.next_due_ms = first_due_ms; item.priority = priority; item.enabled = true;
     scheduler->items[scheduler->count++] = item;
     return LINK_SCHEDULER_RESULT_OK;
@@ -56,7 +60,13 @@ LinkSchedulerResult link_scheduler_set_parameter_enabled(LinkScheduler *schedule
 {
     size_t index;
     if (scheduler == NULL || !link_parameter_key_is_valid(key)) return LINK_SCHEDULER_RESULT_INVALID_ARGUMENT;
-    for (index = 0U; index < scheduler->count; ++index) if (link_parameter_key_equal(&scheduler->items[index].key, key)) { scheduler->items[index].enabled = enabled; return LINK_SCHEDULER_RESULT_OK; }
+    for (index = 0U; index < scheduler->count; ++index) {
+        if (scheduler->items[index].kind == LINK_SCHEDULER_ITEM_PARAMETER &&
+            link_parameter_key_equal(&scheduler->items[index].key, key)) {
+            scheduler->items[index].enabled = enabled;
+            return LINK_SCHEDULER_RESULT_OK;
+        }
+    }
     return LINK_SCHEDULER_RESULT_NOT_FOUND;
 }
 
@@ -70,6 +80,56 @@ LinkSchedulerResult link_scheduler_set_enabled(LinkScheduler *scheduler, uint8_t
 {
     const LinkParameterKey key = obd2_key(pid);
     return link_scheduler_set_parameter_enabled(scheduler, &key, enabled);
+}
+
+LinkSchedulerResult link_scheduler_add_external(
+    LinkScheduler *scheduler,
+    uint32_t token,
+    uint32_t interval_ms,
+    LinkSchedulerPriority priority,
+    uint64_t first_due_ms)
+{
+    LinkSchedulerItem item;
+    size_t index;
+    if (scheduler == NULL || token == 0U || interval_ms == 0U ||
+        !priority_valid(priority)) {
+        return LINK_SCHEDULER_RESULT_INVALID_ARGUMENT;
+    }
+    for (index = 0U; index < scheduler->count; ++index) {
+        if (scheduler->items[index].kind == LINK_SCHEDULER_ITEM_EXTERNAL &&
+            scheduler->items[index].external_token == token) {
+            return LINK_SCHEDULER_RESULT_DUPLICATE;
+        }
+    }
+    if (scheduler->count >= LINK_SCHEDULER_MAX_ITEMS)
+        return LINK_SCHEDULER_RESULT_FULL;
+    memset(&item, 0, sizeof(item));
+    item.kind = LINK_SCHEDULER_ITEM_EXTERNAL;
+    item.external_token = token;
+    item.interval_ms = interval_ms;
+    item.next_due_ms = first_due_ms;
+    item.priority = priority;
+    item.enabled = true;
+    scheduler->items[scheduler->count++] = item;
+    return LINK_SCHEDULER_RESULT_OK;
+}
+
+LinkSchedulerResult link_scheduler_set_external_enabled(
+    LinkScheduler *scheduler,
+    uint32_t token,
+    bool enabled)
+{
+    size_t index;
+    if (scheduler == NULL || token == 0U)
+        return LINK_SCHEDULER_RESULT_INVALID_ARGUMENT;
+    for (index = 0U; index < scheduler->count; ++index) {
+        if (scheduler->items[index].kind == LINK_SCHEDULER_ITEM_EXTERNAL &&
+            scheduler->items[index].external_token == token) {
+            scheduler->items[index].enabled = enabled;
+            return LINK_SCHEDULER_RESULT_OK;
+        }
+    }
+    return LINK_SCHEDULER_RESULT_NOT_FOUND;
 }
 
 typedef struct { uint8_t pid; uint32_t interval_ms; LinkSchedulerPriority priority; } StandardSchedule;
@@ -112,9 +172,21 @@ LinkSchedulerResult link_scheduler_configure_standard_obd2_bits(LinkScheduler *s
         { 0x31U, 10000U, LINK_SCHEDULER_PRIORITY_LOW },
         { 0x4dU, 15000U, LINK_SCHEDULER_PRIORITY_LOW }
     };
+    LinkScheduler external_only;
     size_t index;
     if (scheduler == NULL || supported_bits == NULL) return LINK_SCHEDULER_RESULT_INVALID_ARGUMENT;
-    link_scheduler_init(scheduler);
+
+    /* Rebuilding the standard SAE plan must never discard product jobs. */
+    link_scheduler_init(&external_only);
+    for (index = 0U; index < scheduler->count; ++index) {
+        if (scheduler->items[index].kind != LINK_SCHEDULER_ITEM_EXTERNAL)
+            continue;
+        if (external_only.count >= LINK_SCHEDULER_MAX_ITEMS)
+            return LINK_SCHEDULER_RESULT_FULL;
+        external_only.items[external_only.count++] = scheduler->items[index];
+    }
+    *scheduler = external_only;
+
     for (index = 0U; index < INFILTRATR_ARRAY_LENGTH(plan); ++index) {
         LinkSchedulerResult result;
         if (!bitset_contains(supported_bits, plan[index].pid)) continue;
@@ -123,7 +195,6 @@ LinkSchedulerResult link_scheduler_configure_standard_obd2_bits(LinkScheduler *s
             scheduler, plan[index].pid, plan[index].interval_ms,
             plan[index].priority, first_due_ms);
         if (result != LINK_SCHEDULER_RESULT_OK) {
-            link_scheduler_init(scheduler);
             return result;
         }
     }
@@ -147,7 +218,6 @@ LinkSchedulerResult link_scheduler_configure_standard_obd2_bits(LinkScheduler *s
                                     LINK_SCHEDULER_PRIORITY_LOW, first_due_ms);
         if (result == LINK_SCHEDULER_RESULT_DUPLICATE) continue;
         if (result != LINK_SCHEDULER_RESULT_OK) {
-            link_scheduler_init(scheduler);
             return result;
         }
     }
@@ -194,7 +264,14 @@ LinkSchedulerNextResult link_scheduler_next(const LinkScheduler *scheduler, uint
     }
     if (!have_enabled) return LINK_SCHEDULER_NEXT_EMPTY;
     if (!have_due) { dispatch->due_ms = earliest_due; dispatch->wait_ms = earliest_due > now_ms ? earliest_due - now_ms : 0U; return LINK_SCHEDULER_NEXT_WAITING; }
-    dispatch->index = selected; dispatch->key = scheduler->items[selected].key; dispatch->pid = scheduler->items[selected].pid; dispatch->pid_valid = scheduler->items[selected].pid_valid; dispatch->due_ms = scheduler->items[selected].next_due_ms; dispatch->wait_ms = 0U;
+    dispatch->index = selected;
+    dispatch->kind = scheduler->items[selected].kind;
+    dispatch->key = scheduler->items[selected].key;
+    dispatch->pid = scheduler->items[selected].pid;
+    dispatch->pid_valid = scheduler->items[selected].pid_valid;
+    dispatch->external_token = scheduler->items[selected].external_token;
+    dispatch->due_ms = scheduler->items[selected].next_due_ms;
+    dispatch->wait_ms = 0U;
     return LINK_SCHEDULER_NEXT_READY;
 }
 
