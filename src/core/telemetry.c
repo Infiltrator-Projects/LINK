@@ -372,6 +372,16 @@ void link_telemetry_session_metadata_set_vehicle(
                                vehicle_identifier);
 }
 
+void link_telemetry_session_metadata_set_obd_protocol(
+    LinkTelemetrySessionMetadata *metadata,
+    const char *obd_protocol)
+{
+    if (metadata != NULL)
+        infiltratr_copy_string(metadata->obd_protocol,
+                               sizeof(metadata->obd_protocol),
+                               obd_protocol);
+}
+
 void link_telemetry_session_metadata_finish(LinkTelemetrySessionMetadata *metadata,
                                             uint64_t ended_epoch_ms)
 {
@@ -564,7 +574,9 @@ static bool recorder_begin_session(LinkTelemetryRecorder *recorder,
         !emit_metadata(sink, context, "adapter_identifier",
                        metadata->adapter_identifier) ||
         !emit_metadata(sink, context, "vehicle_identifier",
-                       metadata->vehicle_identifier))
+                       metadata->vehicle_identifier) ||
+        !emit_metadata(sink, context, "obd_protocol",
+                       metadata->obd_protocol))
         return latch_failure(recorder);
     if (write_stream_header &&
         !emit(sink, context,
@@ -864,6 +876,8 @@ bool link_telemetry_export_csv_named(
                        metadata->adapter_identifier) ||
         !emit_metadata(sink, context, "vehicle_identifier",
                        metadata->vehicle_identifier) ||
+        !emit_metadata(sink, context, "obd_protocol",
+                       metadata->obd_protocol) ||
         !emit(sink, context,
               "sequence,timestamp_ms,pid,name,value,unit,favourite\n"))
         return false;

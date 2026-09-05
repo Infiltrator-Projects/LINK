@@ -685,6 +685,53 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
     return &_flow;
 }
 
+- (NSString *)obdProtocolText
+{
+    const LinkElm327ProtocolDefinition *protocol =
+        link_diagnostic_flow_obd_protocol(&_flow);
+    if (protocol == NULL) return @"OBD-II protocol not identified";
+
+    NSMutableArray<NSString *> *parts = [NSMutableArray array];
+    [parts addObject:LinkAppleStringFromCString(
+        link_elm327_protocol_family_name(protocol->family))];
+
+    if (protocol->bit_rate != 0U) {
+        const BOOL canFamily =
+            protocol->family == LINK_ELM327_PROTOCOL_FAMILY_ISO_15765_4 ||
+            protocol->family == LINK_ELM327_PROTOCOL_FAMILY_SAE_J1939 ||
+            protocol->family == LINK_ELM327_PROTOCOL_FAMILY_USER_DEFINED;
+        if (canFamily) {
+            [parts addObject:[NSString stringWithFormat:@"%u kbit/s",
+                (unsigned int)(protocol->bit_rate / 1000U)]];
+        } else if ((protocol->bit_rate % 1000U) == 0U) {
+            [parts addObject:[NSString stringWithFormat:@"%u kbaud",
+                (unsigned int)(protocol->bit_rate / 1000U)]];
+        } else {
+            [parts addObject:[NSString stringWithFormat:@"%.1f kbaud",
+                (double)protocol->bit_rate / 1000.0]];
+        }
+    }
+
+    if (protocol->family == LINK_ELM327_PROTOCOL_FAMILY_ISO_15765_4 ||
+        protocol->family == LINK_ELM327_PROTOCOL_FAMILY_SAE_J1939) {
+        [parts addObject:protocol->extended_can_id
+            ? @"29-bit CAN" : @"11-bit CAN"];
+    }
+    switch (protocol->init) {
+    case LINK_ELM327_PROTOCOL_INIT_NONE:
+        break;
+    case LINK_ELM327_PROTOCOL_INIT_FIVE_BAUD:
+        [parts addObject:@"5-baud init"];
+        break;
+    case LINK_ELM327_PROTOCOL_INIT_FAST:
+        [parts addObject:@"fast init"];
+        break;
+    }
+    if (link_diagnostic_flow_obd_protocol_was_automatic(&_flow))
+        [parts addObject:@"auto-selected"];
+    return [parts componentsJoinedByString:@" · "];
+}
+
 - (void)notifyDelegate
 {
     id<LinkDiagnosticsControllerDelegate> delegate = self.delegate;
@@ -1455,6 +1502,15 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
             [self rewriteCurrentSessionMetadataKey:@"adapter_identifier"
                                              value:identifier];
         }
+        break;
+    }
+
+    case LINK_DIAGNOSTIC_FLOW_EVENT_PROTOCOL_IDENTIFIED: {
+        NSString *protocolText = self.obdProtocolText;
+        link_telemetry_session_metadata_set_obd_protocol(
+            &_sessionMetadata, protocolText.UTF8String);
+        [self rewriteCurrentSessionMetadataKey:@"obd_protocol"
+                                         value:protocolText.UTF8String];
         break;
     }
 

@@ -349,9 +349,13 @@ int main(void)
             false, &decoded));
     }
     link_telemetry_session_metadata_init(&metadata, 1U, "adapter", "vehicle");
+    link_telemetry_session_metadata_set_obd_protocol(
+        &metadata, "ISO 9141-2 · 10.4 kbaud · 5-baud init · auto-selected");
     link_telemetry_session_metadata_finish(&metadata, 2U);
     CHECK(link_telemetry_export_csv_named(&telemetry, &metadata, "link", pid_name, unit_name, result_name, sink, &output));
     CHECK(strstr(output.data, "# link_csv_version,1\n") != NULL);
+    CHECK(strstr(output.data,
+                 "# obd_protocol,\"ISO 9141-2 · 10.4 kbaud · 5-baud init · auto-selected\"\n") != NULL);
     {
         char expected_link_version[64];
         (void)snprintf(expected_link_version, sizeof(expected_link_version),
@@ -401,6 +405,8 @@ int main(void)
     CHECK(link_telemetry_recorder_record_response_named(&recorder, 30U, "010C", "ok", "41 0C 13 4A"));
     CHECK(link_telemetry_recorder_finish(&recorder, 3U));
     CHECK(strstr(output.data, "# link_session_stream_version,2\n") != NULL);
+    CHECK(strstr(output.data,
+                 "# obd_protocol,\"ISO 9141-2 · 10.4 kbaud · 5-baud init · auto-selected\"\n") != NULL);
     CHECK(strstr(output.data, ",0x7E9,0,\"\",\"\",\"\"\n") != NULL);
     CHECK(strstr(output.data, "structured,3,23,0x7A,") != NULL);
     CHECK(strstr(output.data, "\"DPF pressure · ") != NULL);

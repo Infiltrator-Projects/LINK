@@ -15,6 +15,7 @@ extern "C" {
 #define LINK_TELEMETRY_HISTORY_CAPACITY 512U
 #define LINK_TELEMETRY_ADAPTER_TEXT_LENGTH 96U
 #define LINK_TELEMETRY_VEHICLE_TEXT_LENGTH 64U
+#define LINK_TELEMETRY_PROTOCOL_TEXT_LENGTH 160U
 #define LINK_TELEMETRY_TRANSCRIPT_CAPACITY 64U
 #define LINK_TELEMETRY_TRANSCRIPT_COMMAND_LENGTH 64U
 #define LINK_TELEMETRY_TRANSCRIPT_RESPONSE_LENGTH 192U
@@ -105,6 +106,7 @@ typedef struct {
     uint64_t ended_epoch_ms;
     char adapter_identifier[LINK_TELEMETRY_ADAPTER_TEXT_LENGTH];
     char vehicle_identifier[LINK_TELEMETRY_VEHICLE_TEXT_LENGTH];
+    char obd_protocol[LINK_TELEMETRY_PROTOCOL_TEXT_LENGTH];
 } LinkTelemetrySessionMetadata;
 
 typedef bool (*LinkTelemetryTextSink)(void *context, const char *bytes, size_t length);
@@ -171,6 +173,7 @@ bool link_structured_telemetry_store_history_at(
 void link_telemetry_session_metadata_init(LinkTelemetrySessionMetadata *metadata, uint64_t started_epoch_ms, const char *adapter_identifier, const char *vehicle_identifier);
 void link_telemetry_session_metadata_set_adapter(LinkTelemetrySessionMetadata *metadata, const char *adapter_identifier);
 void link_telemetry_session_metadata_set_vehicle(LinkTelemetrySessionMetadata *metadata, const char *vehicle_identifier);
+void link_telemetry_session_metadata_set_obd_protocol(LinkTelemetrySessionMetadata *metadata, const char *obd_protocol);
 void link_telemetry_session_metadata_finish(LinkTelemetrySessionMetadata *metadata, uint64_t ended_epoch_ms);
 
 void link_telemetry_recorder_init(LinkTelemetryRecorder *recorder);

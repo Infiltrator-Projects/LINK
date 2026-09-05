@@ -43,6 +43,8 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic, copy, readonly) NSString *statusText;
 @property(nonatomic, copy, readonly, nullable) NSString *peripheralName;
 @property(nonatomic, copy, readonly, nullable) NSString *adapterIdentifier;
+/** Active ELM-selected OBD transport, or a clear unavailable status. */
+@property(nonatomic, copy, readonly) NSString *obdProtocolText;
 @property(nonatomic, copy, readonly) NSString *faultScanStatusText;
 @property(nonatomic, copy, readonly) NSArray<NSString *> *storedDTCs;
 @property(nonatomic, copy, readonly) NSArray<NSString *> *pendingDTCs;
