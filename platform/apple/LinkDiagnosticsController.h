@@ -133,6 +133,13 @@ NS_ASSUME_NONNULL_BEGIN
 - (NSString *)displayUnitForPID:(uint8_t)pid;
 - (NSArray<NSNumber *> *)displayRangeForPID:(uint8_t)pid;
 
+/**
+ * Format one raw five-character SAE-style DTC for presentation without
+ * changing the stored/evidence code. Generic definitions come from LINK's
+ * standards-backed catalogue; manufacturer-specific numbers remain clearly
+ * classified for the owning product to refine.
+ */
+- (NSString *)dtcDisplayTextForCode:(NSString *)code;
 - (NSString *)localizedTextForKey:(NSString *)key;
 - (void)setSelectedLanguageTag:(NSString *)tag;
 - (void)setSelectedMeasurementSystemKey:(NSString *)key;

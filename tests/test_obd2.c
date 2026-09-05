@@ -738,6 +738,45 @@ static void test_live_and_capabilities(void)
           "secondary capability set remains independent");
 }
 
+static void test_vin_response_variants(void)
+{
+    LinkElm327Response response;
+    char vin[LINK_OBD2_VIN_LENGTH + 1U];
+
+    /* Existing byte-aligned Mode 09 response form remains valid. */
+    response = parse_response(
+        "0902",
+        "49020153414A414435\r"
+        "490202364C36345744\r"
+        "4902033738343335\r>");
+    check(link_obd2_decode_vin(&response, vin) == LINK_OBD2_RESULT_OK &&
+              strcmp(vin, "SAJAD56L64WD78435") == 0,
+          "decode existing non-padded Mode 09 VIN response");
+
+    /* Exact JAGLINK 0.2.70 X-Type/X400 capture: first frame is zero padded. */
+    response = parse_response(
+        "0902",
+        "49020100000053\r"
+        "490202414A4144\r"
+        "49020335334638\r"
+        "49020432584335\r"
+        "49020537363233\r>");
+    check(link_obd2_decode_vin(&response, vin) == LINK_OBD2_RESULT_OK &&
+              strcmp(vin, "SAJAD53F82XC57623") == 0,
+          "decode zero-padded ISO-era Mode 09 VIN response");
+
+    /* Zero bytes are padding only before the VIN; never accept them inside it. */
+    response = parse_response(
+        "0902",
+        "4902015341004A4144\r"
+        "4902023533463832\r"
+        "4902035843353736\r"
+        "4902043233\r>");
+    check(link_obd2_decode_vin(&response, vin) ==
+              LINK_OBD2_RESULT_MALFORMED_RESPONSE,
+          "reject zero byte embedded inside VIN data");
+}
+
 static void test_negative_response(void)
 {
     LinkElm327Response response;
@@ -758,6 +797,7 @@ int main(void)
     test_complete_mode01_namespace();
     test_requests();
     test_live_and_capabilities();
+    test_vin_response_variants();
     test_negative_response();
 
     if (failures != 0) {

@@ -1297,6 +1297,15 @@ LinkObd2Result link_obd2_decode_vin(
             if (byte_count >= 4U && bytes[0] == 0x49U && bytes[1] == 0x02U) {
                 for (index = 3U; index < byte_count && written < LINK_OBD2_VIN_LENGTH;
                      ++index) {
+                    /*
+                     * Some ISO 9141/KWP-era ECUs pad the first Mode 09 PID 02
+                     * message with zero bytes before the first VIN character.
+                     * Padding is framing/presentation, not VIN data: accept it
+                     * only before decoding has begun, then retain the strict
+                     * 17-character SAE VIN validation for every real byte.
+                     */
+                    if (written == 0U && bytes[index] == UINT8_C(0x00))
+                        continue;
                     if (!obd2_vin_character_valid(bytes[index])) {
                         return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
                     }

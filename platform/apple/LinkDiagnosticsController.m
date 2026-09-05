@@ -2,6 +2,7 @@
 #import "LinkDiagnosticsController.h"
 
 #import "link/diagnostic_capability.h"
+#import "link/dtc_knowledge.h"
 #import "link/elm327.h"
 #import "link/i18n.h"
 #import "link/parameter.h"
@@ -326,6 +327,27 @@ static void LinkAppleSessionEvent(
 {
     return _selectedMeasurementSystemKey != nil
         ? _selectedMeasurementSystemKey : @"metric";
+}
+
+- (NSString *)dtcDisplayTextForCode:(NSString *)code
+{
+    if (code.length == 0U) return @"";
+
+    LinkDtcKnowledge knowledge;
+    if (!link_dtc_resolve(code.UTF8String, &knowledge)) return code;
+
+    NSString *normalized = LinkAppleStringFromCString(knowledge.code);
+    if (knowledge.definition_known && knowledge.title[0] != '\0') {
+        NSString *title = LinkAppleStringFromCString(knowledge.title);
+        return [NSString stringWithFormat:@"%@ — %@", normalized, title];
+    }
+
+    const char *origin = link_dtc_origin_name(knowledge.origin);
+    if (origin != NULL && origin[0] != '\0') {
+        return [NSString stringWithFormat:@"%@ — %@", normalized,
+            LinkAppleStringFromCString(origin)];
+    }
+    return normalized;
 }
 
 - (NSString *)localizedTextForKey:(NSString *)key
