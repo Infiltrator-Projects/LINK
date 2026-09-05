@@ -25,21 +25,15 @@ jobs:
           from pathlib import Path
           p = Path('platform/apple/LinkDiagnosticsController.m')
           s = p.read_text()
-          old = '''        for (id pid in storedPIDs) {
-            if (![pid isKindOfClass:[NSNumber class]]) continue;
-            const unsigned int value = [pid unsignedIntValue];
-            if (value <= UINT8_MAX) [pids addObject:@(value)];
-        }
-'''
-          new = '''        for (id pid in storedPIDs) {
-            if (![pid isKindOfClass:[NSNumber class]]) continue;
-            const unsigned int pidValue = [pid unsignedIntValue];
-            if (pidValue <= UINT8_MAX) [pids addObject:@(pidValue)];
-        }
-'''
-          if s.count(old) != 1:
-              raise SystemExit(f'expected exactly one Apple PID shadow block, found {s.count(old)}')
-          p.write_text(s.replace(old, new))
+          declaration = '            const unsigned int value = [pid unsignedIntValue];'
+          use = '            if (value <= UINT8_MAX) [pids addObject:@(value)];'
+          if s.count(declaration) != 1:
+              raise SystemExit(f'expected one shadowing declaration, found {s.count(declaration)}')
+          if s.count(use) != 1:
+              raise SystemExit(f'expected one shadowing use, found {s.count(use)}')
+          s = s.replace(declaration, '            const unsigned int pidValue = [pid unsignedIntValue];')
+          s = s.replace(use, '            if (pidValue <= UINT8_MAX) [pids addObject:@(pidValue)];')
+          p.write_text(s)
           PY
           git diff --check
           grep -F 'const unsigned int pidValue = [pid unsignedIntValue];' platform/apple/LinkDiagnosticsController.m
