@@ -1157,8 +1157,8 @@ struct LinkPIDConfigurationItem: Identifiable {
     let advertised: Bool
 }
 
-enum LinkEvidenceExport {
-    static func prepareTemporaryCSV(_ data: Data, productName: String) async throws -> URL {
+public enum LinkEvidenceExport {
+    public static func prepareTemporaryCSV(_ data: Data, productName: String) async throws -> URL {
         let filename = "\(productName)-diagnostic-evidence-\(UUID().uuidString).csv"
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
         do {
@@ -1172,7 +1172,7 @@ enum LinkEvidenceExport {
         }
     }
 
-    static func removeTemporaryFile(_ url: URL?) {
+    public static func removeTemporaryFile(_ url: URL?) {
         guard let url else { return }
         try? FileManager.default.removeItem(at: url)
     }
