@@ -213,6 +213,16 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)removeProfileForVIN:(NSString *)vin;
 
 
+/** Merge standard responder/PID capability evidence while preserving product fields. */
+- (BOOL)mergeStandardCapabilitiesFromDiagnosticFlow:
+    (const LinkDiagnosticFlow *)flow
+                                             forVIN:(NSString *)vin;
+- (BOOL)mergeStandardCapabilitiesFromFlowEvent:
+    (const LinkDiagnosticFlowEvent *)event
+                                        forVIN:(NSString *)vin;
+
+@end
+
 /**
  * Extract the cached standard Mode 01 PID set for one exact responder from a
  * product profile. The profile dictionary may contain arbitrary manufacturer
@@ -236,16 +246,6 @@ LinkVehicleProfileStandardResponders(NSDictionary * _Nullable profile);
 /** Number of valid standard OBD responder records cached in a profile. */
 FOUNDATION_EXPORT NSUInteger LinkVehicleProfileStandardResponderCount(
     NSDictionary * _Nullable profile);
-
-/** Merge standard responder/PID capability evidence while preserving product fields. */
-- (BOOL)mergeStandardCapabilitiesFromDiagnosticFlow:
-    (const LinkDiagnosticFlow *)flow
-                                             forVIN:(NSString *)vin;
-- (BOOL)mergeStandardCapabilitiesFromFlowEvent:
-    (const LinkDiagnosticFlowEvent *)event
-                                        forVIN:(NSString *)vin;
-
-@end
 
 /**
  * Shared per-product standard PID selection persistence for Apple faces.
