@@ -2218,6 +2218,19 @@ NSArray<NSNumber *> *LinkVehicleProfileCachedPIDs(
     return [[pids array] sortedArrayUsingSelector:@selector(compare:)];
 }
 
+
+NSUInteger LinkVehicleProfileStandardResponderCount(NSDictionary *profile)
+{
+    if (![profile isKindOfClass:[NSDictionary class]]) return 0U;
+    NSArray *responders = [profile[@"liveResponders"] isKindOfClass:[NSArray class]]
+        ? profile[@"liveResponders"] : @[];
+    NSUInteger count = 0U;
+    for (id value in responders) {
+        if ([value isKindOfClass:[NSDictionary class]]) ++count;
+    }
+    return count;
+}
+
 @implementation LinkVehicleProfileStore
 
 - (BOOL)mergeStandardCapabilitiesFromDiagnosticFlow:
@@ -2549,6 +2562,118 @@ NSArray<NSNumber *> *LinkVehicleProfileCachedPIDs(
 
     if ([self.selectedVehicleVIN isEqualToString:vin])
         [self clearSelectedVehicle];
+}
+
+@end
+#pragma mark - Shared standard PID selection persistence
+
+static NSArray<NSString *> *LinkSortedUniqueStableKeys(id raw)
+{
+    if (![raw isKindOfClass:[NSArray class]]) return @[];
+    NSMutableOrderedSet<NSString *> *values = [[NSMutableOrderedSet alloc] init];
+    for (id value in (NSArray *)raw) {
+        if (![value isKindOfClass:[NSString class]]) continue;
+        NSString *key = [(NSString *)value
+            stringByTrimmingCharactersInSet:
+                [NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        if (key.length != 0U) [values addObject:key];
+    }
+    return [[values array] sortedArrayUsingSelector:@selector(compare:)];
+}
+
+@interface LinkPIDSelectionStore ()
+@property(nonatomic, copy) NSString *globalKey;
+@property(nonatomic, copy) NSString *vehicleKey;
+@end
+
+@implementation LinkPIDSelectionStore
+
+- (instancetype)initWithProductNamespace:(NSString *)productNamespace
+                         legacyGlobalKey:(NSString *)legacyGlobalKey
+                        legacyVehicleKey:(NSString *)legacyVehicleKey
+{
+    self = [super init];
+    if (self == nil) return nil;
+    NSString *name = [productNamespace
+        stringByTrimmingCharactersInSet:
+            [NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    if (name.length == 0U) name = @"default";
+    name = name.lowercaseString;
+    self.globalKey = [NSString stringWithFormat:
+        @"link.pidSelections.global.%@.v1", name];
+    self.vehicleKey = [NSString stringWithFormat:
+        @"link.pidSelections.byVehicle.%@.v1", name];
+
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    if ([defaults objectForKey:self.globalKey] == nil && legacyGlobalKey.length != 0U) {
+        id legacy = [defaults objectForKey:legacyGlobalKey];
+        if ([legacy isKindOfClass:[NSArray class]])
+            [defaults setObject:LinkSortedUniqueStableKeys(legacy) forKey:self.globalKey];
+    }
+    if ([defaults objectForKey:self.vehicleKey] == nil && legacyVehicleKey.length != 0U) {
+        NSDictionary *legacy = [defaults dictionaryForKey:legacyVehicleKey];
+        if (legacy != nil) [defaults setObject:legacy forKey:self.vehicleKey];
+    }
+    return self;
+}
+
+- (BOOL)hasGlobalSelection
+{
+    return [[NSUserDefaults standardUserDefaults] objectForKey:self.globalKey] != nil;
+}
+
+- (NSArray<NSString *> *)globalStableKeys
+{
+    return LinkSortedUniqueStableKeys(
+        [[NSUserDefaults standardUserDefaults] objectForKey:self.globalKey]);
+}
+
+- (void)setGlobalStableKeys:(NSArray<NSString *> *)stableKeys
+{
+    [[NSUserDefaults standardUserDefaults]
+        setObject:LinkSortedUniqueStableKeys(stableKeys) forKey:self.globalKey];
+}
+
+- (NSDictionary *)storedVehicleSelections
+{
+    NSDictionary *stored = [[NSUserDefaults standardUserDefaults]
+        dictionaryForKey:self.vehicleKey];
+    return stored != nil ? stored : @{};
+}
+
+- (BOOL)hasSelectionForVIN:(NSString *)vin
+      controllerIdentifier:(NSString *)controllerIdentifier
+{
+    if (vin.length != 17U || controllerIdentifier.length == 0U) return NO;
+    NSDictionary *vehicle = [self.storedVehicleSelections[vin]
+        isKindOfClass:[NSDictionary class]]
+        ? self.storedVehicleSelections[vin] : nil;
+    return vehicle != nil && vehicle[controllerIdentifier] != nil;
+}
+
+- (NSArray<NSString *> *)stableKeysForVIN:(NSString *)vin
+                     controllerIdentifier:(NSString *)controllerIdentifier
+{
+    if (vin.length != 17U || controllerIdentifier.length == 0U) return @[];
+    NSDictionary *vehicle = [self.storedVehicleSelections[vin]
+        isKindOfClass:[NSDictionary class]]
+        ? self.storedVehicleSelections[vin] : @{};
+    return LinkSortedUniqueStableKeys(vehicle[controllerIdentifier]);
+}
+
+- (void)setStableKeys:(NSArray<NSString *> *)stableKeys
+               forVIN:(NSString *)vin
+ controllerIdentifier:(NSString *)controllerIdentifier
+{
+    if (vin.length != 17U || controllerIdentifier.length == 0U) return;
+    NSMutableDictionary *root = [self.storedVehicleSelections mutableCopy];
+    NSDictionary *existing = [root[vin] isKindOfClass:[NSDictionary class]]
+        ? root[vin] : @{};
+    NSMutableDictionary *vehicle = [existing mutableCopy];
+    vehicle[controllerIdentifier] = LinkSortedUniqueStableKeys(stableKeys);
+    root[vin] = [vehicle copy];
+    [[NSUserDefaults standardUserDefaults] setObject:[root copy]
+                                               forKey:self.vehicleKey];
 }
 
 @end

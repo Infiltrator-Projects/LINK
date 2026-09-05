@@ -223,6 +223,10 @@ FOUNDATION_EXPORT NSArray<NSNumber *> *LinkVehicleProfileCachedPIDs(
     uint32_t responderCANIdentifier,
     BOOL extendedID);
 
+/** Number of valid standard OBD responder records cached in a profile. */
+FOUNDATION_EXPORT NSUInteger LinkVehicleProfileStandardResponderCount(
+    NSDictionary * _Nullable profile);
+
 /** Merge standard responder/PID capability evidence while preserving product fields. */
 - (BOOL)mergeStandardCapabilitiesFromDiagnosticFlow:
     (const LinkDiagnosticFlow *)flow
@@ -231,6 +235,30 @@ FOUNDATION_EXPORT NSArray<NSNumber *> *LinkVehicleProfileCachedPIDs(
     (const LinkDiagnosticFlowEvent *)event
                                         forVIN:(NSString *)vin;
 
+@end
+
+/**
+ * Shared per-product standard PID selection persistence for Apple faces.
+ * LINK owns both the global selection and VIN/controller-bounded choices;
+ * product repositories retain only one-time migration rules for obsolete
+ * product-specific defaults.
+ */
+@interface LinkPIDSelectionStore : NSObject
+- (instancetype)initWithProductNamespace:(NSString *)productNamespace
+                         legacyGlobalKey:(NSString * _Nullable)legacyGlobalKey
+                        legacyVehicleKey:(NSString * _Nullable)legacyVehicleKey
+    NS_DESIGNATED_INITIALIZER;
+- (instancetype)init NS_UNAVAILABLE;
+@property(nonatomic, readonly) BOOL hasGlobalSelection;
+@property(nonatomic, copy, readonly) NSArray<NSString *> *globalStableKeys;
+- (void)setGlobalStableKeys:(NSArray<NSString *> *)stableKeys;
+- (BOOL)hasSelectionForVIN:(NSString *)vin
+      controllerIdentifier:(NSString *)controllerIdentifier;
+- (NSArray<NSString *> *)stableKeysForVIN:(NSString *)vin
+                     controllerIdentifier:(NSString *)controllerIdentifier;
+- (void)setStableKeys:(NSArray<NSString *> *)stableKeys
+               forVIN:(NSString *)vin
+ controllerIdentifier:(NSString *)controllerIdentifier;
 @end
 
 NS_ASSUME_NONNULL_END

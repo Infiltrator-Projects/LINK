@@ -303,6 +303,42 @@ struct LinkDiagnosticGrid<Content: View>: View {
     }
 }
 
+struct LinkInterfaceLanguage: Identifiable, Hashable {
+    let id: String
+    let nativeName: String
+
+    static let all: [LinkInterfaceLanguage] = {
+        let count = Int(link_i18n_supported_locale_count())
+        return (0..<count).compactMap { index in
+            guard let locale = link_i18n_supported_locale(index),
+                  let name = link_i18n_supported_locale_name(index) else { return nil }
+            return LinkInterfaceLanguage(
+                id: String(cString: locale),
+                nativeName: String(cString: name))
+        }
+    }()
+
+    static func canonical(
+        _ stored: String,
+        aliases: [String: String] = [:],
+        fallback: String = "en-AU"
+    ) -> String {
+        let candidate = aliases[stored] ?? stored
+        return all.contains(where: { $0.id == candidate }) ? candidate : fallback
+    }
+
+    static func displayName(
+        for stored: String,
+        aliases: [String: String] = [:],
+        fallback: String = "en-AU"
+    ) -> String {
+        let code = canonical(stored, aliases: aliases, fallback: fallback)
+        return all.first(where: { $0.id == code })?.nativeName
+            ?? all.first(where: { $0.id == fallback })?.nativeName
+            ?? fallback
+    }
+}
+
 enum LinkDiagnosticTask: CaseIterable {
     case vehicle
     case log
@@ -1128,6 +1164,42 @@ struct LinkSavedVehicleProfileSummary: Identifiable {
     let moduleCount: Int
     let responderCount: Int
     let updatedAt: Date?
+
+    init(
+        id: String,
+        vin: String,
+        displayName: String,
+        moduleCount: Int,
+        responderCount: Int,
+        updatedAt: Date?
+    ) {
+        self.id = id
+        self.vin = vin
+        self.displayName = displayName
+        self.moduleCount = moduleCount
+        self.responderCount = responderCount
+        self.updatedAt = updatedAt
+    }
+
+    init?(
+        profile: NSDictionary,
+        moduleCount: Int,
+        fallbackDisplayName: String
+    ) {
+        guard let vin = profile["vin"] as? String, vin.count == 17 else {
+            return nil
+        }
+        let displayName = (profile["displayName"] as? String)
+            ?? fallbackDisplayName
+        let timestamp = (profile["updatedAt"] as? NSNumber)?.doubleValue
+        self.init(
+            id: vin,
+            vin: vin,
+            displayName: displayName,
+            moduleCount: moduleCount,
+            responderCount: Int(LinkVehicleProfileStandardResponderCount(profile)),
+            updatedAt: timestamp.map { Date(timeIntervalSince1970: $0) })
+    }
 }
 
 struct LinkDiagnosticFault: Identifiable {
