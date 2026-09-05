@@ -1,0 +1,276 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: HAL quick-five boundary migration
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  migrate:
+    if: github.event.head_commit.message == 'Add quick-five boundary migration helper'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          submodules: recursive
+          fetch-depth: 0
+      - name: Apply shared ownership migrations
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace(path, old, new, count=1):
+              p = Path(path)
+              text = p.read_text()
+              if text.count(old) != count:
+                  raise SystemExit(f'{path}: expected {count} occurrence(s), found {text.count(old)} for replacement')
+              p.write_text(text.replace(old, new, count))
+
+          # 1) Expose a structured shared connection phase instead of making products parse status strings.
+          replace('platform/apple/LinkDiagnosticsController.h',
+                  '@class LinkDiagnosticsController;\n\n@protocol LinkDiagnosticsControllerDelegate <NSObject>',
+                  '''@class LinkDiagnosticsController;\n\ntypedef NS_ENUM(NSUInteger, LinkDiagnosticConnectionPhase) {\n    LinkDiagnosticConnectionPhaseIdle = 0,\n    LinkDiagnosticConnectionPhaseScanning,\n    LinkDiagnosticConnectionPhaseConnecting,\n    LinkDiagnosticConnectionPhaseInitializing,\n    LinkDiagnosticConnectionPhaseStandardDiagnostics,\n    LinkDiagnosticConnectionPhaseManufacturer,\n    LinkDiagnosticConnectionPhaseLive,\n    LinkDiagnosticConnectionPhaseFailed\n};\n\n@protocol LinkDiagnosticsControllerDelegate <NSObject>''')
+          replace('platform/apple/LinkDiagnosticsController.h',
+                  '@property(nonatomic, weak, nullable) id<LinkDiagnosticsControllerDelegate> delegate;\n\n@property(nonatomic, copy, readonly) NSString *statusText;',
+                  '@property(nonatomic, weak, nullable) id<LinkDiagnosticsControllerDelegate> delegate;\n\n@property(nonatomic, readonly) LinkDiagnosticConnectionPhase connectionPhase;\n@property(nonatomic, copy, readonly) NSString *statusText;')
+
+          phase_impl = r'''- (LinkDiagnosticConnectionPhase)connectionPhase
+{
+    if (_manufacturerExtensionActive || _manufacturerRecoveryActive)
+        return LinkDiagnosticConnectionPhaseManufacturer;
+    if (_flow.stage == LINK_DIAGNOSTIC_FLOW_FAILED ||
+        _provider.state == LinkBLETransportStateFailed)
+        return LinkDiagnosticConnectionPhaseFailed;
+
+    switch (_flow.stage) {
+    case LINK_DIAGNOSTIC_FLOW_INITIALIZING:
+        return LinkDiagnosticConnectionPhaseInitializing;
+    case LINK_DIAGNOSTIC_FLOW_DISCOVERING_PIDS:
+    case LINK_DIAGNOSTIC_FLOW_READING_STANDARD_VIN:
+    case LINK_DIAGNOSTIC_FLOW_SCANNING_STORED_DTCS:
+    case LINK_DIAGNOSTIC_FLOW_SCANNING_PENDING_DTCS:
+    case LINK_DIAGNOSTIC_FLOW_SCANNING_PERMANENT_DTCS:
+    case LINK_DIAGNOSTIC_FLOW_READING_READINESS:
+    case LINK_DIAGNOSTIC_FLOW_READING_FREEZE_FRAME:
+    case LINK_DIAGNOSTIC_FLOW_RESTORING_AFTER_MANUFACTURER:
+        return LinkDiagnosticConnectionPhaseStandardDiagnostics;
+    case LINK_DIAGNOSTIC_FLOW_LIVE:
+    case LINK_DIAGNOSTIC_FLOW_READING_LIVE:
+        return LinkDiagnosticConnectionPhaseLive;
+    default:
+        break;
+    }
+
+    switch (_provider.state) {
+    case LinkBLETransportStateWaitingForBluetooth:
+    case LinkBLETransportStateScanning:
+        return LinkDiagnosticConnectionPhaseScanning;
+    case LinkBLETransportStateConnecting:
+    case LinkBLETransportStateDiscovering:
+    case LinkBLETransportStateProbing:
+    case LinkBLETransportStateReady:
+        return LinkDiagnosticConnectionPhaseConnecting;
+    case LinkBLETransportStateFailed:
+        return LinkDiagnosticConnectionPhaseFailed;
+    case LinkBLETransportStateIdle:
+    case LinkBLETransportStateDisconnected:
+        break;
+    }
+    return self.active
+        ? LinkDiagnosticConnectionPhaseConnecting
+        : LinkDiagnosticConnectionPhaseIdle;
+}
+
+'''
+          replace('platform/apple/LinkDiagnosticsController.m',
+                  '- (instancetype)initWithProductSlug:(NSString *)productSlug\n',
+                  phase_impl + '- (instancetype)initWithProductSlug:(NSString *)productSlug\n')
+
+          # 2) LINK preserves LINK-owned responder capability when a product saves its fields.
+          replace('platform/apple/LinkDiagnosticsController.m',
+                  '''    NSMutableDictionary *stored = [profile mutableCopy];
+    stored[@"vin"] = vin;
+    if (![stored[@"updatedAt"] isKindOfClass:[NSNumber class]]) {
+        stored[@"updatedAt"] = @([[NSDate date] timeIntervalSince1970]);
+    }
+
+    NSString *identifier = [self associatedAdapterIdentifierForVIN:vin];''',
+                  '''    NSMutableDictionary *stored = [profile mutableCopy];
+    stored[@"vin"] = vin;
+    if (![stored[@"updatedAt"] isKindOfClass:[NSNumber class]]) {
+        stored[@"updatedAt"] = @([[NSDate date] timeIntervalSince1970]);
+    }
+
+    /* LINK-owned capability evidence survives product-owned profile rewrites. */
+    NSDictionary *existing = [self profileForVIN:vin];
+    NSArray *existingResponders =
+        [existing[@"liveResponders"] isKindOfClass:[NSArray class]]
+            ? existing[@"liveResponders"] : nil;
+    if (stored[@"liveResponders"] == nil && existingResponders != nil)
+        stored[@"liveResponders"] = existingResponders;
+
+    NSString *identifier = [self associatedAdapterIdentifierForVIN:vin];''')
+
+          # 3 + 4) Shared evidence-export plumbing and standard PID configuration helpers.
+          ui = Path('platform/apple/LinkDiagnosticUI.swift')
+          text = ui.read_text()
+          marker = '''struct LinkPIDConfigurationItem: Identifiable {
+    let id: String
+    let pid: UInt8
+    let shortName: String
+    let title: String
+    let pollingEnabled: Bool
+    let favourite: Bool
+    let advertised: Bool
+}
+'''
+          if text.count(marker) != 1:
+              raise SystemExit('LinkDiagnosticUI.swift: PID item marker mismatch')
+          addition = marker + r'''
+
+enum LinkStandardPIDConfiguration {
+    private static func text(_ value: UnsafePointer<CChar>?) -> String {
+        guard let value else { return "" }
+        return String(cString: value)
+    }
+
+    static func stableKey(for pid: UInt8) -> String {
+        if let scalar = link_parameter_obd2_definition(pid) {
+            let key = text(scalar.pointee.stable_key)
+            if !key.isEmpty { return key }
+        }
+        return String(format: "sae.obd2.mode01.%02X", pid)
+    }
+
+    static func pid(forStableKey stableKey: String) -> UInt8? {
+        if stableKey.hasPrefix("sae.obd2.mode01."),
+           let value = UInt8(stableKey.suffix(2), radix: 16) {
+            return value
+        }
+        return stableKey.withCString { key in
+            guard let definition =
+                link_parameter_obd2_definition_for_stable_key(key)
+            else { return nil }
+            return UInt8(exactly: definition.pointee.key.identifier)
+        }
+    }
+
+    static func items(
+        advertised: Set<UInt8>,
+        selected: Set<String>,
+        favourite: (UInt8) -> Bool
+    ) -> [LinkPIDConfigurationItem] {
+        guard !advertised.isEmpty else { return [] }
+        let count = link_obd2_pid_definition_count()
+        guard count > 0 else { return [] }
+        var result = [LinkPIDConfigurationItem]()
+        for index in 0..<count {
+            guard let definition = link_obd2_pid_definition_at(index) else {
+                continue
+            }
+            let metadata = definition.pointee
+            guard metadata.mode == 0x01 else { continue }
+            let pid = metadata.pid
+            guard (pid & 0x1F) != 0, advertised.contains(pid) else {
+                continue
+            }
+            let scalar = link_parameter_obd2_definition(pid)
+            let title = scalar.map { text($0.pointee.name) }
+                ?? text(metadata.name)
+            let shortName = scalar.map { text($0.pointee.short_name) }
+                ?? String(format: "PID %02X", pid)
+            let key = stableKey(for: pid)
+            result.append(LinkPIDConfigurationItem(
+                id: key,
+                pid: pid,
+                shortName: shortName,
+                title: title,
+                pollingEnabled: selected.contains(key),
+                favourite: favourite(pid),
+                advertised: true))
+        }
+        return result.sorted {
+            if $0.pid != $1.pid { return $0.pid < $1.pid }
+            return $0.title < $1.title
+        }
+    }
+}
+
+enum LinkEvidenceExport {
+    static func prepareTemporaryCSV(
+        _ data: Data,
+        productName: String
+    ) async throws -> URL {
+        let filename =
+            "\(productName)-diagnostic-evidence-\(UUID().uuidString).csv"
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent(filename)
+        do {
+            try await Task.detached(priority: .utility) {
+                try data.write(to: url, options: .atomic)
+            }.value
+            return url
+        } catch {
+            try? FileManager.default.removeItem(at: url)
+            throw error
+        }
+    }
+
+    static func removeTemporaryFile(_ url: URL?) {
+        guard let url else { return }
+        try? FileManager.default.removeItem(at: url)
+    }
+}
+'''
+          ui.write_text(text.replace(marker, addition, 1))
+
+          # 5) LINK CI owns assertions about LINK internals.
+          replace('.github/workflows/ci.yml',
+                  '''          grep -Fq 'link_telemetry_recorder_begin(' platform/apple/LinkDiagnosticsController.m
+          grep -Fq '"BLE", stateName.UTF8String' platform/apple/LinkDiagnosticsController.m''',
+                  '''          grep -Fq 'link_telemetry_recorder_begin(' platform/apple/LinkDiagnosticsController.m
+          grep -Fq 'link_uds_standard_service_count' src/uds/uds_services.c
+          grep -Fq 'link_elm327_parser_feed' src/elm327/elm327.c
+          grep -Fq 'link_elm327_can_decode_pdu' src/elm327/can.c
+          grep -Fq 'link_elm327_session_begin' src/elm327/session.c
+          grep -Fq 'link_obd2_decode_live_pid' src/obd2/obd2.c
+          grep -Fq 'link_uds_decode_response' src/uds/uds.c
+          grep -Fq 'link_diagnostic_flow_next_action' src/core/diagnostic_flow.c
+          grep -Fq 'link_diagnostic_flow_accept_response' platform/apple/LinkDiagnosticsController.m
+          grep -Fq 'link_diagnostic_flow_resume_after_manufacturer' platform/apple/LinkDiagnosticsController.m
+          grep -Fq 'link_obd2_is_negative_response' src/core/diagnostic_flow.c
+          grep -Fq '"BLE", stateName.UTF8String' platform/apple/LinkDiagnosticsController.m''')
+          PY
+
+          grep -Fq 'LinkDiagnosticConnectionPhase connectionPhase' platform/apple/LinkDiagnosticsController.h
+          grep -Fq 'existing[@"liveResponders"]' platform/apple/LinkDiagnosticsController.m
+          grep -Fq 'enum LinkStandardPIDConfiguration' platform/apple/LinkDiagnosticUI.swift
+          grep -Fq 'enum LinkEvidenceExport' platform/apple/LinkDiagnosticUI.swift
+      - name: Validate portable core
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --parallel
+          ctest --test-dir build --output-on-failure
+      - name: Commit migration and remove helper
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git config user.name 'HAL migration'
+          git config user.email 'actions@users.noreply.github.com'
+          git rm .github/workflows/hal-quick5-boundary-migration.yml
+          git add platform/apple/LinkDiagnosticsController.h \
+                  platform/apple/LinkDiagnosticsController.m \
+                  platform/apple/LinkDiagnosticUI.swift \
+                  .github/workflows/ci.yml
+          git commit -m 'Move five small product boundaries into LINK'
+          git push origin HEAD:main
