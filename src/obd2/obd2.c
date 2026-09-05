@@ -177,33 +177,33 @@ static LinkObd2Result obd2_parse_data_line_with_responder(
     }
 
     if (!headered) {
-    result = obd2_parse_hex_line(
-        line + first, last - first, bytes, bytes_size, byte_count);
-    if (result != LINK_OBD2_RESULT_OK) return result;
+        result = obd2_parse_hex_line(
+            line + first, last - first, bytes, bytes_size, byte_count);
+        if (result != LINK_OBD2_RESULT_OK) return result;
 
-    /*
-     * ISO 9141-2 with ATH1 returns:
-     *   48 6B <source> <OBD payload...> <additive checksum>
-     *
-     * Require both the fixed OBD response header and a valid checksum
-     * before stripping framing. The source address is retained as the
-     * responder identity so evidence can still distinguish ECUs.
-     */
-    if (obd2_iso9141_frame_valid(bytes, *byte_count)) {
-        const uint32_t source = bytes[2];
-        const size_t payload_count = *byte_count - 4U;
-        if (payload_count == 0U)
-            return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
-        memmove(bytes, bytes + 3U, payload_count);
-        *byte_count = payload_count;
-        if (responder_id_available != NULL)
-            *responder_id_available = true;
-        if (responder_id != NULL) *responder_id = source;
-        if (extended_id != NULL) *extended_id = false;
+        /*
+         * ISO 9141-2 with ATH1 returns:
+         *   48 6B <source> <OBD payload...> <additive checksum>
+         *
+         * Require both the fixed OBD response header and a valid checksum
+         * before stripping framing. The source address is retained as the
+         * responder identity so evidence can still distinguish ECUs.
+         */
+        if (obd2_iso9141_frame_valid(bytes, *byte_count)) {
+            const uint32_t source = bytes[2];
+            const size_t payload_count = *byte_count - 4U;
+            if (payload_count == 0U)
+                return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
+            memmove(bytes, bytes + 3U, payload_count);
+            *byte_count = payload_count;
+            if (responder_id_available != NULL)
+                *responder_id_available = true;
+            if (responder_id != NULL) *responder_id = source;
+            if (extended_id != NULL) *extended_id = false;
+        }
+        return LINK_OBD2_RESULT_OK;
     }
-    return LINK_OBD2_RESULT_OK;
-}
-if (data_start >= last) return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
+    if (data_start >= last) return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
 
     if (responder_id_available != NULL || responder_id != NULL ||
         extended_id != NULL) {
