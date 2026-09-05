@@ -676,6 +676,26 @@ static void test_live_and_capabilities(void)
               responders.samples[1].responder_id == 0x7e9U,
           "retain secondary responder identity");
 
+    /* Real Jaguar X-Type/X400 ISO 9141-2 capture with ATH1/ATS0. */
+    response = parse_response(
+        "010C", "486B11410C0BD7F3\r>");
+    check(link_obd2_decode_live_pid_responders(
+              &response, 0x0cU, &responders) == LINK_OBD2_RESULT_OK &&
+              responders.count == 1U && !responders.truncated,
+          "decode X400 ISO-9141 RPM response with ATH1 framing");
+    check(responders.samples[0].responder_id_available &&
+              responders.samples[0].responder_id == 0x11U &&
+              !responders.samples[0].extended_id &&
+              responders.samples[0].sample.value == 757.75,
+          "retain X400 ISO-9141 source and RPM value");
+
+    response = parse_response(
+        "010C", "486B11410C0BD7F2\r>");
+    check(link_obd2_decode_live_pid_responders(
+              &response, 0x0cU, &responders) ==
+              LINK_OBD2_RESULT_UNEXPECTED_RESPONSE,
+          "do not strip ISO-9141-looking data with an invalid checksum");
+
     response = parse_response(
         "0100",
         "7E8 06 41 00 98 3B A0 13\r"

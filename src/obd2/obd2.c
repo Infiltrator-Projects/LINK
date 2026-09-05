@@ -102,12 +102,34 @@ static LinkObd2Result obd2_parse_hex_line(
 }
 
 
+static bool obd2_iso9141_frame_valid(
+    const uint8_t *bytes, size_t byte_count)
+{
+    unsigned int checksum = 0U;
+    size_t index;
+    bool response_service;
+
+    if (bytes == NULL || byte_count < 5U) return false;
+    if (bytes[0] != UINT8_C(0x48) || bytes[1] != UINT8_C(0x6b))
+        return false;
+
+    response_service =
+        (bytes[3] >= UINT8_C(0x41) && bytes[3] <= UINT8_C(0x4a)) ||
+        bytes[3] == UINT8_C(0x7f);
+    if (!response_service) return false;
+
+    for (index = 0U; index + 1U < byte_count; ++index)
+        checksum = (checksum + bytes[index]) & 0xffU;
+    return (uint8_t)checksum == bytes[byte_count - 1U];
+}
+
 /*
- * ELM327 ATH1 adds the CAN responder identifier to each line. With ATS0,
- * 11-bit identifiers may be glued directly to the DLC (for example
- * "7E804410C1AF8"); with spaces enabled the same response is commonly
- * "7E8 04 41 0C 1A F8". Strip only a positively identified 11/29-bit
- * header and optional DLC, leaving ordinary headerless OBD payloads untouched.
+ * ELM327 ATH1 exposes transport headers as well as OBD payload bytes.
+ * CAN 11/29-bit identifiers may be glued directly to the DLC (for example
+ * "7E804410C1AF8") or separated as "7E8 04 41 0C 1A F8". ISO 9141-2
+ * responses use the three-byte 48 6B xx header and a trailing additive
+ * checksum. Strip only positively identified framing so ordinary headerless
+ * OBD payloads remain untouched.
  */
 static LinkObd2Result obd2_parse_data_line_with_responder(
     const char *line, size_t line_length,
@@ -155,10 +177,33 @@ static LinkObd2Result obd2_parse_data_line_with_responder(
     }
 
     if (!headered) {
-        return obd2_parse_hex_line(
-            line + first, last - first, bytes, bytes_size, byte_count);
+    result = obd2_parse_hex_line(
+        line + first, last - first, bytes, bytes_size, byte_count);
+    if (result != LINK_OBD2_RESULT_OK) return result;
+
+    /*
+     * ISO 9141-2 with ATH1 returns:
+     *   48 6B <source> <OBD payload...> <additive checksum>
+     *
+     * Require both the fixed OBD response header and a valid checksum
+     * before stripping framing. The source address is retained as the
+     * responder identity so evidence can still distinguish ECUs.
+     */
+    if (obd2_iso9141_frame_valid(bytes, *byte_count)) {
+        const uint32_t source = bytes[2];
+        const size_t payload_count = *byte_count - 4U;
+        if (payload_count == 0U)
+            return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
+        memmove(bytes, bytes + 3U, payload_count);
+        *byte_count = payload_count;
+        if (responder_id_available != NULL)
+            *responder_id_available = true;
+        if (responder_id != NULL) *responder_id = source;
+        if (extended_id != NULL) *extended_id = false;
     }
-    if (data_start >= last) return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
+    return LINK_OBD2_RESULT_OK;
+}
+if (data_start >= last) return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
 
     if (responder_id_available != NULL || responder_id != NULL ||
         extended_id != NULL) {
