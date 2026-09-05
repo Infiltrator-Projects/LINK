@@ -2218,6 +2218,8 @@ NSArray<NSNumber *> *LinkVehicleProfileCachedPIDs(
     return [[pids array] sortedArrayUsingSelector:@selector(compare:)];
 }
 
+@implementation LinkVehicleProfileStore
+
 - (BOOL)mergeStandardCapabilitiesFromDiagnosticFlow:
     (const LinkDiagnosticFlow *)flow
                                              forVIN:(NSString *)vin
@@ -2335,7 +2337,6 @@ NSArray<NSNumber *> *LinkVehicleProfileCachedPIDs(
     return YES;
 }
 
-@implementation LinkVehicleProfileStore
 
 - (instancetype)initWithProductNamespace:(NSString *)productNamespace
                          legacyProfileKey:(NSString *)legacyProfileKey
