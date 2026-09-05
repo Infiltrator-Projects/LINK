@@ -1,0 +1,64 @@
+name: HAL fix Apple profile implementation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/hal-fix-apple-profile.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Place profile methods inside Objective-C implementation
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('platform/apple/LinkDiagnosticsController.m')
+          text = path.read_text(encoding='utf-8')
+          implementation = '@implementation LinkVehicleProfileStore\n'
+          method = '- (BOOL)mergeStandardCapabilitiesFromDiagnosticFlow:'
+          if text.count(implementation) != 1:
+              raise SystemExit('unexpected LinkVehicleProfileStore implementation count')
+          if text.count(method) != 1:
+              raise SystemExit('unexpected capability merge method count')
+          text = text.replace(implementation, '', 1)
+          text = text.replace(method, implementation + '\n' + method, 1)
+          path.write_text(text, encoding='utf-8')
+          PY
+
+          python3 - <<'PY'
+          from pathlib import Path
+          text = Path('platform/apple/LinkDiagnosticsController.m').read_text(encoding='utf-8')
+          impl = text.index('@implementation LinkVehicleProfileStore')
+          merge_flow = text.index('- (BOOL)mergeStandardCapabilitiesFromDiagnosticFlow:')
+          merge_event = text.index('- (BOOL)mergeStandardCapabilitiesFromFlowEvent:')
+          init = text.index('- (instancetype)initWithProductNamespace:')
+          end = text.index('\n@end', impl)
+          assert impl < merge_flow < merge_event < init < end
+          assert text.count('@implementation LinkVehicleProfileStore') == 1
+          PY
+          git diff --check
+
+      - name: Commit corrected LINK source and remove one-shot workflow
+        shell: bash
+        run: |
+          set -euxo pipefail
+          rm -f .github/workflows/hal-fix-apple-profile.yml
+          git config user.name 'Shannon Smith'
+          git config user.email 'infiltratr@yandex.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'Place vehicle profile methods in LINK implementation'
+          git push origin HEAD:main
