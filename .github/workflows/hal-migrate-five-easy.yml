@@ -212,7 +212,7 @@ jobs:
           @end
           '''
           if '@implementation LinkPIDSelectionStore' not in m:
-              m = m.rstrip() + selection_impl + '\n'
+              m = m.rstrip() + '\n' + selection_impl.strip() + '\n'
           mpath.write_text(m)
 
           spath = Path('platform/apple/LinkDiagnosticUI.swift')
