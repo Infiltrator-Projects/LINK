@@ -1,0 +1,135 @@
+name: HAL fix Apple profile header structure
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/hal-fix-profile-header.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Move typed responder API outside profile store interface
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('platform/apple/LinkDiagnosticsController.h')
+          s = p.read_text()
+          old = '''
+          /**
+           * Extract the cached standard Mode 01 PID set for one exact responder from a
+           * product profile. The profile dictionary may contain arbitrary manufacturer
+           * fields; LINK only owns the `liveResponders` standard-capability member.
+           */
+          FOUNDATION_EXPORT NSArray<NSNumber *> *LinkVehicleProfileCachedPIDs(
+              NSDictionary * _Nullable profile,
+              uint32_t responderCANIdentifier,
+              BOOL extendedID);
+
+          /** Product-neutral cached standard OBD responder capability. */
+          @interface LinkVehicleProfileStandardResponder : NSObject
+          @property(nonatomic, readonly) uint32_t responderCANIdentifier;
+          @property(nonatomic, readonly, getter=isExtendedID) BOOL extendedID;
+          @property(nonatomic, copy, readonly) NSArray<NSNumber *> *pids;
+          @end
+
+          FOUNDATION_EXPORT NSArray<LinkVehicleProfileStandardResponder *> *
+          LinkVehicleProfileStandardResponders(NSDictionary * _Nullable profile);
+
+          /** Number of valid standard OBD responder records cached in a profile. */
+          FOUNDATION_EXPORT NSUInteger LinkVehicleProfileStandardResponderCount(
+              NSDictionary * _Nullable profile);
+
+          /** Merge standard responder/PID capability evidence while preserving product fields. */
+          - (BOOL)mergeStandardCapabilitiesFromDiagnosticFlow:
+              (const LinkDiagnosticFlow *)flow
+                                                       forVIN:(NSString *)vin;
+          - (BOOL)mergeStandardCapabilitiesFromFlowEvent:
+              (const LinkDiagnosticFlowEvent *)event
+                                                  forVIN:(NSString *)vin;
+
+          @end
+          '''
+          new = '''
+          /** Merge standard responder/PID capability evidence while preserving product fields. */
+          - (BOOL)mergeStandardCapabilitiesFromDiagnosticFlow:
+              (const LinkDiagnosticFlow *)flow
+                                                       forVIN:(NSString *)vin;
+          - (BOOL)mergeStandardCapabilitiesFromFlowEvent:
+              (const LinkDiagnosticFlowEvent *)event
+                                                  forVIN:(NSString *)vin;
+
+          @end
+
+          /**
+           * Extract the cached standard Mode 01 PID set for one exact responder from a
+           * product profile. The profile dictionary may contain arbitrary manufacturer
+           * fields; LINK only owns the `liveResponders` standard-capability member.
+           */
+          FOUNDATION_EXPORT NSArray<NSNumber *> *LinkVehicleProfileCachedPIDs(
+              NSDictionary * _Nullable profile,
+              uint32_t responderCANIdentifier,
+              BOOL extendedID);
+
+          /** Product-neutral cached standard OBD responder capability. */
+          @interface LinkVehicleProfileStandardResponder : NSObject
+          @property(nonatomic, readonly) uint32_t responderCANIdentifier;
+          @property(nonatomic, readonly, getter=isExtendedID) BOOL extendedID;
+          @property(nonatomic, copy, readonly) NSArray<NSNumber *> *pids;
+          @end
+
+          FOUNDATION_EXPORT NSArray<LinkVehicleProfileStandardResponder *> *
+          LinkVehicleProfileStandardResponders(NSDictionary * _Nullable profile);
+
+          /** Number of valid standard OBD responder records cached in a profile. */
+          FOUNDATION_EXPORT NSUInteger LinkVehicleProfileStandardResponderCount(
+              NSDictionary * _Nullable profile);
+          '''
+          if old not in s:
+              raise SystemExit('malformed profile-store block not found exactly')
+          s = s.replace(old, new, 1)
+          p.write_text(s)
+          PY
+          git diff --check
+          python3 - <<'PY'
+          from pathlib import Path
+          s = Path('platform/apple/LinkDiagnosticsController.h').read_text()
+          store_start = s.index('@interface LinkVehicleProfileStore : NSObject')
+          store_end = s.index('@end', store_start)
+          responder = s.index('@interface LinkVehicleProfileStandardResponder : NSObject')
+          if not store_end < responder:
+              raise SystemExit('responder interface is still nested inside profile store')
+          if not s.index('mergeStandardCapabilitiesFromDiagnosticFlow:', store_start) < store_end:
+              raise SystemExit('profile-store merge methods moved outside the class')
+          PY
+
+      - name: Validate LINK portable suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S . -B build -DBUILD_TESTING=ON
+          cmake --build build -j2
+          ctest --test-dir build --output-on-failure
+          rm -rf build
+
+      - name: Publish source fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "Shannon Smith"
+          git config user.email "infiltratr@yandex.com"
+          git add platform/apple/LinkDiagnosticsController.h
+          git diff --cached --check
+          git commit -m "Fix Apple vehicle profile header structure"
+          git push origin HEAD:main
