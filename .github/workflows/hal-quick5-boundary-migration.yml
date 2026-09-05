@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   migrate:
-    if: github.event.head_commit.message == 'Retry quick-five boundary migration helper'
+    if: github.event.head_commit.message == 'Publish quick-five source migration'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -97,9 +97,6 @@ jobs:
               '        try? FileManager.default.removeItem(at: url)',
               '    }', '}', ''])
           ui.write_text(text.replace(marker, marker + helper, 1))
-
-          ci = '.github/workflows/ci.yml'
-          replace(ci, "          grep -Fq 'link_telemetry_recorder_begin(' platform/apple/LinkDiagnosticsController.m\n          grep -Fq '\"BLE\", stateName.UTF8String' platform/apple/LinkDiagnosticsController.m", "          grep -Fq 'link_telemetry_recorder_begin(' platform/apple/LinkDiagnosticsController.m\n          grep -Fq 'link_uds_standard_service_count' src/uds/uds_services.c\n          grep -Fq 'link_elm327_parser_feed' src/elm327/elm327.c\n          grep -Fq 'link_elm327_can_decode_pdu' src/elm327/can.c\n          grep -Fq 'link_elm327_session_begin' src/elm327/session.c\n          grep -Fq 'link_obd2_decode_live_pid' src/obd2/obd2.c\n          grep -Fq 'link_uds_decode_response' src/uds/uds.c\n          grep -Fq 'link_diagnostic_flow_next_action' src/core/diagnostic_flow.c\n          grep -Fq 'link_diagnostic_flow_accept_response' platform/apple/LinkDiagnosticsController.m\n          grep -Fq 'link_diagnostic_flow_resume_after_manufacturer' platform/apple/LinkDiagnosticsController.m\n          grep -Fq 'link_obd2_is_negative_response' src/core/diagnostic_flow.c\n          grep -Fq '\"BLE\", stateName.UTF8String' platform/apple/LinkDiagnosticsController.m")
           PY
           grep -Fq 'displayValueForPID' platform/apple/LinkDiagnosticsController.h
           grep -Fq 'supportsPID' platform/apple/LinkDiagnosticsController.h
@@ -112,13 +109,12 @@ jobs:
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
           cmake --build build --parallel
           ctest --test-dir build --output-on-failure
-      - name: Commit migration and remove helper
+      - name: Publish source migration
         shell: bash
         run: |
           set -euo pipefail
           git config user.name 'HAL migration'
           git config user.email 'actions@users.noreply.github.com'
-          git rm .github/workflows/hal-quick5-boundary-migration.yml
-          git add platform/apple/LinkDiagnosticsController.h platform/apple/LinkDiagnosticsController.m platform/apple/LinkDiagnosticUI.swift .github/workflows/ci.yml
+          git add platform/apple/LinkDiagnosticsController.h platform/apple/LinkDiagnosticsController.m platform/apple/LinkDiagnosticUI.swift
           git commit -m 'Centralise five small Apple product boundaries'
           git push origin HEAD:main
