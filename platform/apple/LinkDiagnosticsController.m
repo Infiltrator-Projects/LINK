@@ -404,6 +404,37 @@ static void LinkAppleSessionEvent(
     return system;
 }
 
+- (double)displayValueForPID:(uint8_t)pid canonicalValue:(double)value
+{
+    LinkObd2UnitCode unit = LINK_OBD2_UNIT_NONE;
+    double display = value;
+    const char *label = "";
+    if (link_parameter_obd2_expected_unit(pid, &unit) &&
+        link_units_convert_obd2(unit, value, [self resolvedMeasurementSystem],
+            &display, &label))
+        return display;
+    return value;
+}
+
+- (double)displayTemperatureCelsius:(double)celsius
+{
+    double display = celsius;
+    const char *label = "°C";
+    if (link_units_convert_obd2(LINK_OBD2_UNIT_CELSIUS, celsius,
+            [self resolvedMeasurementSystem], &display, &label))
+        return display;
+    return celsius;
+}
+
+- (NSString *)displayTemperatureUnit
+{
+    double ignored = 0.0;
+    const char *label = "°C";
+    (void)link_units_convert_obd2(LINK_OBD2_UNIT_CELSIUS, 0.0,
+        [self resolvedMeasurementSystem], &ignored, &label);
+    return label != NULL ? [NSString stringWithUTF8String:label] : @"°C";
+}
+
 - (NSArray<NSNumber *> *)displayRecentValuesForPID:(uint8_t)pid
                                              limit:(NSUInteger)limit
 {
@@ -2046,6 +2077,11 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
     return values;
 }
 
+- (BOOL)supportsPID:(uint8_t)pid
+{
+    return link_obd2_pid_set_contains(&_flow.supported_pids, pid);
+}
+
 - (BOOL)favouriteForPID:(uint8_t)pid
 {
     return link_telemetry_store_is_favourite(&_telemetry, pid);
@@ -2566,6 +2602,13 @@ NSUInteger LinkVehicleProfileStandardResponderCount(NSDictionary *profile)
     if (![stored[@"updatedAt"] isKindOfClass:[NSNumber class]]) {
         stored[@"updatedAt"] = @([[NSDate date] timeIntervalSince1970]);
     }
+
+    /* Preserve LINK-owned standard responder capability across product saves. */
+    NSDictionary *existing = [self profileForVIN:vin];
+    NSArray *responders = [existing[@"liveResponders"] isKindOfClass:[NSArray class]]
+        ? existing[@"liveResponders"] : nil;
+    if (stored[@"liveResponders"] == nil && responders != nil)
+        stored[@"liveResponders"] = responders;
 
     NSString *identifier = [self associatedAdapterIdentifierForVIN:vin];
     if (identifier != nil) {

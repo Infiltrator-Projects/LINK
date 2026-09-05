@@ -1157,6 +1157,27 @@ struct LinkPIDConfigurationItem: Identifiable {
     let advertised: Bool
 }
 
+enum LinkEvidenceExport {
+    static func prepareTemporaryCSV(_ data: Data, productName: String) async throws -> URL {
+        let filename = "\(productName)-diagnostic-evidence-\(UUID().uuidString).csv"
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
+        do {
+            try await Task.detached(priority: .utility) {
+                try data.write(to: url, options: .atomic)
+            }.value
+            return url
+        } catch {
+            try? FileManager.default.removeItem(at: url)
+            throw error
+        }
+    }
+
+    static func removeTemporaryFile(_ url: URL?) {
+        guard let url else { return }
+        try? FileManager.default.removeItem(at: url)
+    }
+}
+
 struct LinkSavedVehicleProfileSummary: Identifiable {
     let id: String
     let vin: String

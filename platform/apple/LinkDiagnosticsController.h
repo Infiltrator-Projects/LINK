@@ -130,6 +130,9 @@ NS_ASSUME_NONNULL_BEGIN
 - (NSArray<NSNumber *> *)recentValuesForPID:(uint8_t)pid
                                       limit:(NSUInteger)limit;
 /** Presentation-converted history; canonical telemetry remains unchanged. */
+- (double)displayValueForPID:(uint8_t)pid canonicalValue:(double)value;
+- (double)displayTemperatureCelsius:(double)celsius;
+- (NSString *)displayTemperatureUnit;
 - (NSArray<NSNumber *> *)displayRecentValuesForPID:(uint8_t)pid
                                              limit:(NSUInteger)limit;
 - (NSString *)displayUnitForPID:(uint8_t)pid;
@@ -157,6 +160,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (NSArray<NSNumber *> *)supportedPIDsForResponderCANIdentifier:
     (uint32_t)responderCANIdentifier
                                                        extendedID:(BOOL)extendedID;
+- (BOOL)supportsPID:(uint8_t)pid;
 - (BOOL)favouriteForPID:(uint8_t)pid;
 - (void)setFavourite:(BOOL)favourite forPID:(uint8_t)pid;
 
