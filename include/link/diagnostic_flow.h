@@ -6,9 +6,9 @@
  * This state machine owns the product-neutral sequence around an already-open
  * ELM327 session: adapter initialisation, standard OBD-II capability discovery,
  * the bounded read-only DTC inventory, standard live-data scheduling and live
- * PID decoding.  Manufacturer-specific discovery is represented by one explicit
- * extension point.  Platform code remains responsible only for transporting the
- * commands/actions and presenting events.
+ * PID decoding. Manufacturer-specific discovery is represented by explicit
+ * extension points; recurring manufacturer live work is scheduled by the same
+ * LINK queue as standard OBD so only one owner ever feeds the adapter.
  */
 #ifndef LINK_DIAGNOSTIC_FLOW_H
 #define LINK_DIAGNOSTIC_FLOW_H
@@ -64,6 +64,7 @@ typedef enum {
     LINK_DIAGNOSTIC_FLOW_ACTION_SEND_COMMAND,
     LINK_DIAGNOSTIC_FLOW_ACTION_WAIT,
     LINK_DIAGNOSTIC_FLOW_ACTION_MANUFACTURER_EXTENSION,
+    LINK_DIAGNOSTIC_FLOW_ACTION_SCHEDULED_MANUFACTURER_JOB,
     LINK_DIAGNOSTIC_FLOW_ACTION_READY,
     LINK_DIAGNOSTIC_FLOW_ACTION_FAILED
 } LinkDiagnosticFlowActionKind;
@@ -119,6 +120,7 @@ typedef struct {
     uint64_t timeout_ms;
     uint64_t wait_ms;
     uint8_t pid;
+    uint32_t manufacturer_job_token;
     LinkObd2DtcKind dtc_kind;
 } LinkDiagnosticFlowAction;
 
@@ -169,6 +171,8 @@ typedef struct {
     uint8_t supported_pid_base;
     size_t active_schedule_index;
     uint8_t active_pid;
+    uint32_t active_manufacturer_job_token;
+    bool scheduled_manufacturer_job_active;
     bool awaiting_response;
     bool standard_dtc_inventory_complete;
     bool standard_diagnostic_context_complete;
@@ -199,24 +203,37 @@ LinkDiagnosticFlowResult link_diagnostic_flow_accept_response(
     LinkDiagnosticFlowEvent *event);
 
 /**
- * Resume the standard sequence after product/manufacturer discovery. If the
- * configuration requests restoration, the complete ELM initialisation sequence
- * runs again before the next unfinished standard phase. Vehicle-first callers
- * therefore continue with PID capability discovery; later hooks continue with
- * DTC/readiness/live work as appropriate.
+ * Register one recurring product/manufacturer live transaction in LINK's
+ * single adapter scheduler. The token is opaque to LINK and must be non-zero.
+ * Registration is accepted after standard live scheduling has been created;
+ * duplicate tokens are rejected.
+ */
+LinkDiagnosticFlowResult link_diagnostic_flow_register_live_manufacturer_job(
+    LinkDiagnosticFlow *flow,
+    uint32_t token,
+    uint32_t interval_ms,
+    LinkSchedulerPriority priority,
+    uint64_t first_due_ms);
+LinkDiagnosticFlowResult link_diagnostic_flow_set_live_manufacturer_job_enabled(
+    LinkDiagnosticFlow *flow,
+    uint32_t token,
+    bool enabled);
+
+/**
+ * Resume the standard sequence after product/manufacturer discovery or a
+ * scheduled manufacturer transaction. If the configuration requests full
+ * restoration, the complete ELM initialisation sequence runs again before the
+ * next unfinished standard phase.
  */
 LinkDiagnosticFlowResult link_diagnostic_flow_resume_after_manufacturer(
     LinkDiagnosticFlow *flow);
 
 /**
  * Enter the manufacturer extension from an already-live diagnostic session.
- *
- * Product faces use this for read-only manufacturer data acquisition after the
- * normal startup census has completed.  The transition is only accepted from
- * the idle LIVE scheduler state with no response in flight.  Existing OBD-II
- * capability, DTC, readiness and scheduler state is retained, and
- * link_diagnostic_flow_resume_after_manufacturer() returns to live acquisition
- * (optionally through adapter restoration) when the product extension ends.
+ * Manual/product-initiated work uses this API. Recurring manufacturer live work
+ * should instead be registered with
+ * link_diagnostic_flow_register_live_manufacturer_job() so it cannot compete
+ * with a second polling loop.
  */
 LinkDiagnosticFlowResult link_diagnostic_flow_begin_live_manufacturer_extension(
     LinkDiagnosticFlow *flow);
