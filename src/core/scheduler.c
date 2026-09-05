@@ -24,6 +24,36 @@ static bool key_to_pid(const LinkParameterKey *key, uint8_t *pid)
     return true;
 }
 
+/*
+ * Priority is allowed to choose between work that is already due, but it must
+ * never starve slower telemetry forever. Each complete missed interval ages a
+ * job by one priority class, capped at CRITICAL. That gives urgent live values
+ * (RPM, speed, OEM gear jobs) preference under overload while a LOW/NORMAL job
+ * eventually catches up after being late relative to its own requested cadence.
+ * No item is dispatched early and missed periods are still collapsed by
+ * link_scheduler_mark_dispatched().
+ */
+static LinkSchedulerPriority effective_priority(
+    const LinkSchedulerItem *item,
+    uint64_t now_ms)
+{
+    uint64_t missed_intervals;
+    uint64_t promotable;
+    uint64_t promoted;
+
+    if (item == NULL || item->interval_ms == 0U ||
+        now_ms <= item->next_due_ms) {
+        return item != NULL ? item->priority : LINK_SCHEDULER_PRIORITY_LOW;
+    }
+
+    missed_intervals =
+        (now_ms - item->next_due_ms) / (uint64_t)item->interval_ms;
+    promotable = (uint64_t)LINK_SCHEDULER_PRIORITY_CRITICAL -
+                 (uint64_t)item->priority;
+    promoted = missed_intervals < promotable ? missed_intervals : promotable;
+    return (LinkSchedulerPriority)((uint64_t)item->priority + promoted);
+}
+
 const char *link_scheduler_result_name(LinkSchedulerResult result)
 {
     switch (result) { case LINK_SCHEDULER_RESULT_OK: return "ok"; case LINK_SCHEDULER_RESULT_INVALID_ARGUMENT: return "invalid-argument"; case LINK_SCHEDULER_RESULT_FULL: return "full"; case LINK_SCHEDULER_RESULT_DUPLICATE: return "duplicate"; case LINK_SCHEDULER_RESULT_NOT_FOUND: return "not-found"; }
@@ -251,16 +281,35 @@ LinkSchedulerNextResult link_scheduler_next(const LinkScheduler *scheduler, uint
     bool have_enabled = false, have_due = false;
     size_t selected = 0U, index;
     uint64_t earliest_due = UINT64_MAX;
+    LinkSchedulerPriority selected_effective_priority =
+        LINK_SCHEDULER_PRIORITY_LOW;
     if (dispatch != NULL) memset(dispatch, 0, sizeof(*dispatch));
     if (scheduler == NULL || dispatch == NULL) return LINK_SCHEDULER_NEXT_INVALID_ARGUMENT;
     if (scheduler->paused) return LINK_SCHEDULER_NEXT_PAUSED;
     for (index = 0U; index < scheduler->count; ++index) {
         const LinkSchedulerItem *item = &scheduler->items[index];
+        LinkSchedulerPriority item_effective_priority;
         if (!item->enabled) continue;
         if (!have_enabled || item->next_due_ms < earliest_due) earliest_due = item->next_due_ms;
         have_enabled = true;
         if (item->next_due_ms > now_ms) continue;
-        if (!have_due || item->next_due_ms < scheduler->items[selected].next_due_ms || (item->next_due_ms == scheduler->items[selected].next_due_ms && item->priority > scheduler->items[selected].priority) || (item->next_due_ms == scheduler->items[selected].next_due_ms && item->priority == scheduler->items[selected].priority && index < selected)) { selected = index; have_due = true; }
+
+        item_effective_priority = effective_priority(item, now_ms);
+        if (!have_due ||
+            item_effective_priority > selected_effective_priority ||
+            (item_effective_priority == selected_effective_priority &&
+             item->next_due_ms < scheduler->items[selected].next_due_ms) ||
+            (item_effective_priority == selected_effective_priority &&
+             item->next_due_ms == scheduler->items[selected].next_due_ms &&
+             item->priority > scheduler->items[selected].priority) ||
+            (item_effective_priority == selected_effective_priority &&
+             item->next_due_ms == scheduler->items[selected].next_due_ms &&
+             item->priority == scheduler->items[selected].priority &&
+             index < selected)) {
+            selected = index;
+            selected_effective_priority = item_effective_priority;
+            have_due = true;
+        }
     }
     if (!have_enabled) return LINK_SCHEDULER_NEXT_EMPTY;
     if (!have_due) { dispatch->due_ms = earliest_due; dispatch->wait_ms = earliest_due > now_ms ? earliest_due - now_ms : 0U; return LINK_SCHEDULER_NEXT_WAITING; }
