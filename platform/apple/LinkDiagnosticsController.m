@@ -1112,6 +1112,35 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
     return YES;
 }
 
+- (BOOL)registerLiveManufacturerJobWithToken:(uint32_t)token
+                        intervalMilliseconds:(uint32_t)intervalMs
+                                    priority:(LinkSchedulerPriority)priority
+{
+    if (!_sessionInitialized || !self.active || token == 0U || intervalMs == 0U)
+        return NO;
+    const LinkDiagnosticFlowResult result =
+        link_diagnostic_flow_register_live_manufacturer_job(
+            &_flow, token, intervalMs, priority,
+            LinkAppleMonotonicMilliseconds() + (uint64_t)intervalMs);
+    if (result != LINK_DIAGNOSTIC_FLOW_RESULT_OK) return NO;
+    [self driveDiagnosticFlow];
+    return YES;
+}
+
+- (BOOL)setLiveManufacturerJobEnabled:(BOOL)enabled token:(uint32_t)token
+{
+    if (token == 0U) return NO;
+    const LinkDiagnosticFlowResult result =
+        link_diagnostic_flow_set_live_manufacturer_job_enabled(
+            &_flow, token, enabled ? true : false);
+    if (result != LINK_DIAGNOSTIC_FLOW_RESULT_OK) return NO;
+    if (enabled && self.active && !_flow.awaiting_response &&
+        !_manufacturerExtensionActive) {
+        [self driveDiagnosticFlow];
+    }
+    return YES;
+}
+
 - (BOOL)beginManufacturerCommand:(const char *)command
                          timeout:(uint64_t)timeoutMs
 {
@@ -1724,6 +1753,22 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
         }
         _manufacturerExtensionActive = YES;
         [delegate linkDiagnosticsControllerBeginManufacturerExtension:self];
+        return;
+    }
+
+    case LINK_DIAGNOSTIC_FLOW_ACTION_SCHEDULED_MANUFACTURER_JOB: {
+        id<LinkDiagnosticsControllerDelegate> delegate = self.delegate;
+        if (action.manufacturer_job_token == 0U ||
+            ![delegate respondsToSelector:
+                @selector(linkDiagnosticsController:beginScheduledManufacturerJob:)]) {
+            [self failWithStatus:
+                @"Scheduled manufacturer job has no product handler"];
+            return;
+        }
+        ++_pollGeneration;
+        _manufacturerExtensionActive = YES;
+        [delegate linkDiagnosticsController:self
+            beginScheduledManufacturerJob:action.manufacturer_job_token];
         return;
     }
 

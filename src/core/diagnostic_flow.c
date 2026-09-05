@@ -406,24 +406,41 @@ static LinkDiagnosticFlowResult flow_next_live_action(
         action->wait_ms = dispatch.wait_ms;
         return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
     }
-    if (next != LINK_SCHEDULER_NEXT_READY || !dispatch.pid_valid) {
+    if (next != LINK_SCHEDULER_NEXT_READY) {
         return flow_fail_scheduler(flow, LINK_SCHEDULER_RESULT_INVALID_ARGUMENT);
     }
 
+    /* Reserve every wire slot before dispatch. Missed deadlines collapse
+     * to one transaction; LINK never creates catch-up bursts. */
+    if (link_scheduler_mark_dispatched(&flow->scheduler, dispatch.index, now_ms) !=
+        LINK_SCHEDULER_RESULT_OK) {
+        return flow_fail_scheduler(flow, LINK_SCHEDULER_RESULT_INVALID_ARGUMENT);
+    }
+    flow->active_schedule_index = dispatch.index;
+
+    if (dispatch.kind == LINK_SCHEDULER_ITEM_EXTERNAL) {
+        if (dispatch.external_token == 0U) {
+            return flow_fail_scheduler(flow, LINK_SCHEDULER_RESULT_INVALID_ARGUMENT);
+        }
+        flow->active_manufacturer_job_token = dispatch.external_token;
+        flow->scheduled_manufacturer_job_active = true;
+        flow->stage = LINK_DIAGNOSTIC_FLOW_MANUFACTURER_EXTENSION;
+        action->kind = LINK_DIAGNOSTIC_FLOW_ACTION_SCHEDULED_MANUFACTURER_JOB;
+        action->manufacturer_job_token = dispatch.external_token;
+        return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
+    }
+
+    if (dispatch.kind != LINK_SCHEDULER_ITEM_PARAMETER ||
+        !dispatch.pid_valid) {
+        return flow_fail_scheduler(flow, LINK_SCHEDULER_RESULT_INVALID_ARGUMENT);
+    }
     obd2_result = link_obd2_build_live_pid_request(
         dispatch.pid, command, sizeof(command));
     if (obd2_result != LINK_OBD2_RESULT_OK) {
         return flow_fail_obd2(flow, obd2_result);
     }
 
-    /* Reserve the slot before transmission so retries cannot over-poll a PID. */
-    if (link_scheduler_mark_dispatched(&flow->scheduler, dispatch.index, now_ms) !=
-        LINK_SCHEDULER_RESULT_OK) {
-        return flow_fail_scheduler(flow, LINK_SCHEDULER_RESULT_INVALID_ARGUMENT);
-    }
-
     flow->active_pid = dispatch.pid;
-    flow->active_schedule_index = dispatch.index;
     flow->stage = LINK_DIAGNOSTIC_FLOW_READING_LIVE;
     action->pid = dispatch.pid;
     return flow_emit_command(flow, action, command, flow->config.live_timeout_ms);
@@ -818,6 +835,10 @@ LinkDiagnosticFlowResult link_diagnostic_flow_next_action(
         return flow_next_vin_action(flow, action);
 
     case LINK_DIAGNOSTIC_FLOW_MANUFACTURER_EXTENSION:
+        if (flow->scheduled_manufacturer_job_active) {
+            action->kind = LINK_DIAGNOSTIC_FLOW_ACTION_NONE;
+            return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
+        }
         action->kind = LINK_DIAGNOSTIC_FLOW_ACTION_MANUFACTURER_EXTENSION;
         return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
 
@@ -910,6 +931,44 @@ LinkDiagnosticFlowResult link_diagnostic_flow_accept_response(
     return flow_fail_invalid_state(flow);
 }
 
+LinkDiagnosticFlowResult link_diagnostic_flow_register_live_manufacturer_job(
+    LinkDiagnosticFlow *flow,
+    uint32_t token,
+    uint32_t interval_ms,
+    LinkSchedulerPriority priority,
+    uint64_t first_due_ms)
+{
+    LinkSchedulerResult result;
+    if (flow == NULL || token == 0U || interval_ms == 0U) {
+        return LINK_DIAGNOSTIC_FLOW_RESULT_INVALID_ARGUMENT;
+    }
+    result = link_scheduler_add_external(
+        &flow->scheduler, token, interval_ms, priority, first_due_ms);
+    if (result != LINK_SCHEDULER_RESULT_OK) {
+        flow->scheduler_failure = result;
+        return LINK_DIAGNOSTIC_FLOW_RESULT_SCHEDULER_ERROR;
+    }
+    return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
+}
+
+LinkDiagnosticFlowResult link_diagnostic_flow_set_live_manufacturer_job_enabled(
+    LinkDiagnosticFlow *flow,
+    uint32_t token,
+    bool enabled)
+{
+    LinkSchedulerResult result;
+    if (flow == NULL || token == 0U) {
+        return LINK_DIAGNOSTIC_FLOW_RESULT_INVALID_ARGUMENT;
+    }
+    result = link_scheduler_set_external_enabled(
+        &flow->scheduler, token, enabled);
+    if (result != LINK_SCHEDULER_RESULT_OK) {
+        flow->scheduler_failure = result;
+        return LINK_DIAGNOSTIC_FLOW_RESULT_SCHEDULER_ERROR;
+    }
+    return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
+}
+
 LinkDiagnosticFlowResult link_diagnostic_flow_recover_live_timeout(
     LinkDiagnosticFlow *flow,
     uint64_t now_ms)
@@ -954,6 +1013,8 @@ LinkDiagnosticFlowResult link_diagnostic_flow_begin_live_manufacturer_extension(
         return LINK_DIAGNOSTIC_FLOW_RESULT_INVALID_STATE;
     }
 
+    flow->scheduled_manufacturer_job_active = false;
+    flow->active_manufacturer_job_token = 0U;
     flow->stage = LINK_DIAGNOSTIC_FLOW_MANUFACTURER_EXTENSION;
     return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
 }
@@ -969,6 +1030,8 @@ LinkDiagnosticFlowResult link_diagnostic_flow_resume_after_manufacturer(
         return LINK_DIAGNOSTIC_FLOW_RESULT_INVALID_STATE;
     }
 
+    flow->scheduled_manufacturer_job_active = false;
+    flow->active_manufacturer_job_token = 0U;
     if (flow->config.restore_adapter_after_manufacturer_extension) {
         link_elm327_init_begin(&flow->initialization);
         flow->stage = LINK_DIAGNOSTIC_FLOW_RESTORING_AFTER_MANUFACTURER;

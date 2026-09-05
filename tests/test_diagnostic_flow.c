@@ -708,6 +708,46 @@ static int test_readiness_and_freeze_context(void)
 }
 
 
+static int test_scheduled_manufacturer_job(void)
+{
+    LinkDiagnosticFlow flow;
+    LinkDiagnosticFlowConfig config = LINK_DIAGNOSTIC_FLOW_CONFIG_INIT;
+    LinkDiagnosticFlowAction action;
+
+    CHECK(link_diagnostic_flow_init(&flow, &config) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    flow.standard_diagnostic_context_complete = true;
+    flow.stage = LINK_DIAGNOSTIC_FLOW_LIVE;
+    CHECK(link_scheduler_add(
+              &flow.scheduler, UINT8_C(0x0c), 500U,
+              LINK_SCHEDULER_PRIORITY_CRITICAL, 100U) ==
+          LINK_SCHEDULER_RESULT_OK);
+    CHECK(link_diagnostic_flow_register_live_manufacturer_job(
+              &flow, UINT32_C(0x4d420001), 750U,
+              LINK_SCHEDULER_PRIORITY_HIGH, 50U) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+
+    CHECK(link_diagnostic_flow_next_action(&flow, 50U, &action) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(action.kind ==
+          LINK_DIAGNOSTIC_FLOW_ACTION_SCHEDULED_MANUFACTURER_JOB);
+    CHECK(action.manufacturer_job_token == UINT32_C(0x4d420001));
+    CHECK(flow.stage == LINK_DIAGNOSTIC_FLOW_MANUFACTURER_EXTENSION);
+    CHECK(flow.scheduled_manufacturer_job_active);
+
+    CHECK(link_diagnostic_flow_resume_after_manufacturer(&flow) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(flow.stage == LINK_DIAGNOSTIC_FLOW_LIVE);
+    CHECK(!flow.scheduled_manufacturer_job_active);
+
+    CHECK(link_diagnostic_flow_next_action(&flow, 100U, &action) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(action.kind == LINK_DIAGNOSTIC_FLOW_ACTION_SEND_COMMAND);
+    CHECK(strcmp(action.command, "010C") == 0);
+    return 0;
+}
+
+
 static int test_fault_scan_presentation_state(void)
 {
     CHECK(link_fault_scan_presentation_state(
@@ -737,6 +777,7 @@ static int test_fault_scan_presentation_state(void)
 
 int main(void)
 {
+    if (test_scheduled_manufacturer_job() != 0) return 1;
     if (test_fault_scan_presentation_state() != 0) return 1;
     if (test_standard_sequence() != 0) return 1;
     if (test_live_timeout_recovery() != 0) return 1;

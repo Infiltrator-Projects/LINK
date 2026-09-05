@@ -29,6 +29,8 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)linkDiagnosticsControllerBeginManufacturerExtension:
     (LinkDiagnosticsController *)controller;
 - (void)linkDiagnosticsController:(LinkDiagnosticsController *)controller
+  beginScheduledManufacturerJob:(uint32_t)token;
+- (void)linkDiagnosticsController:(LinkDiagnosticsController *)controller
   didReceiveManufacturerResponse:(const LinkElm327Response *)response;
 - (void)linkDiagnosticsController:(LinkDiagnosticsController *)controller
  manufacturerExtensionDidFailWithStatus:(NSString *)status;
@@ -105,6 +107,11 @@ NS_ASSUME_NONNULL_BEGIN
  * finish with completeManufacturerExtensionRestoringAdapter:.
  */
 - (BOOL)beginLiveManufacturerExtension;
+/** Register an opaque recurring manufacturer transaction on LINK's single wire queue. */
+- (BOOL)registerLiveManufacturerJobWithToken:(uint32_t)token
+                        intervalMilliseconds:(uint32_t)intervalMs
+                                    priority:(LinkSchedulerPriority)priority;
+- (BOOL)setLiveManufacturerJobEnabled:(BOOL)enabled token:(uint32_t)token;
 - (BOOL)beginManufacturerCommand:(const char *)command
                          timeout:(uint64_t)timeoutMs;
 - (BOOL)completeManufacturerExtensionRestoringAdapter:(BOOL)restore;

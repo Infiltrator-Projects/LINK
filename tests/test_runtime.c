@@ -147,6 +147,28 @@ int main(void)
     CHECK(link_parameter_store_record(&parameter_store, &parameter) == LINK_PARAMETER_STORE_OK);
     CHECK(link_parameter_store_total_sample_count(&parameter_store) == 1U);
 
+    {
+        LinkScheduler unified;
+        LinkSchedulerDispatch unified_dispatch;
+        link_scheduler_init(&unified);
+        CHECK(link_scheduler_add(&unified, 0x0cU, 250U,
+                  LINK_SCHEDULER_PRIORITY_CRITICAL, 100U) ==
+              LINK_SCHEDULER_RESULT_OK);
+        CHECK(link_scheduler_add_external(&unified, UINT32_C(0x4d420001),
+                  750U, LINK_SCHEDULER_PRIORITY_HIGH, 50U) ==
+              LINK_SCHEDULER_RESULT_OK);
+        CHECK(link_scheduler_next(&unified, 50U, &unified_dispatch) ==
+              LINK_SCHEDULER_NEXT_READY);
+        CHECK(unified_dispatch.kind == LINK_SCHEDULER_ITEM_EXTERNAL);
+        CHECK(unified_dispatch.external_token == UINT32_C(0x4d420001));
+        CHECK(link_scheduler_mark_dispatched(
+                  &unified, unified_dispatch.index, 50U) ==
+              LINK_SCHEDULER_RESULT_OK);
+        CHECK(link_scheduler_set_external_enabled(
+                  &unified, UINT32_C(0x4d420001), false) ==
+              LINK_SCHEDULER_RESULT_OK);
+    }
+
     link_scheduler_init(&scheduler);
     CHECK(link_scheduler_add(&scheduler, 0x0cU, 250U, LINK_SCHEDULER_PRIORITY_CRITICAL, 100U) == LINK_SCHEDULER_RESULT_OK);
     CHECK(link_scheduler_next(&scheduler, 100U, &dispatch) == LINK_SCHEDULER_NEXT_READY);
