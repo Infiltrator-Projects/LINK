@@ -591,6 +591,7 @@ static bool simulator_default_response(
         strcmp(command, "ATS0") == 0 || strcmp(command, "ATS1") == 0 ||
         strcmp(command, "ATSP0") == 0 || strcmp(command, "ATSP6") == 0 ||
         strcmp(command, "ATCAF1") == 0 || strcmp(command, "ATCFC1") == 0 ||
+        strcmp(command, "ATAR") == 0 ||
         strncmp(command, "ATSH", 4U) == 0 || strncmp(command, "ATCRA", 5U) == 0) {
         (void)snprintf(response, response_size, "OK"); return true;
     }

@@ -1431,6 +1431,7 @@ static bool drive_diagnostics(LinkGtkShell *shell)
         return true;
 
     case LINK_DIAGNOSTIC_FLOW_ACTION_MANUFACTURER_EXTENSION:
+    case LINK_DIAGNOSTIC_FLOW_ACTION_SCHEDULED_MANUFACTURER_JOB:
         if (!manufacturer_extension_available(shell)) {
             shell->manufacturer_extension_active = true;
             return finish_manufacturer_extension(shell, false);
