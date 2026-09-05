@@ -212,6 +212,25 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)saveProfile:(NSDictionary *)profile forVIN:(NSString *)vin;
 - (void)removeProfileForVIN:(NSString *)vin;
 
+
+/**
+ * Extract the cached standard Mode 01 PID set for one exact responder from a
+ * product profile. The profile dictionary may contain arbitrary manufacturer
+ * fields; LINK only owns the `liveResponders` standard-capability member.
+ */
+FOUNDATION_EXPORT NSArray<NSNumber *> *LinkVehicleProfileCachedPIDs(
+    NSDictionary * _Nullable profile,
+    uint32_t responderCANIdentifier,
+    BOOL extendedID);
+
+/** Merge standard responder/PID capability evidence while preserving product fields. */
+- (BOOL)mergeStandardCapabilitiesFromDiagnosticFlow:
+    (const LinkDiagnosticFlow *)flow
+                                             forVIN:(NSString *)vin;
+- (BOOL)mergeStandardCapabilitiesFromFlowEvent:
+    (const LinkDiagnosticFlowEvent *)event
+                                        forVIN:(NSString *)vin;
+
 @end
 
 NS_ASSUME_NONNULL_END

@@ -119,6 +119,7 @@ add_library(link-core STATIC
     src/core/parameter.c
     src/core/scheduler.c
     src/core/telemetry.c
+    src/core/session_trace.c
     src/core/transport.c
     src/core/mercedes_me_adapter.c
     src/core/mercedes_me_native_protocol.c
@@ -547,6 +548,8 @@ if(BUILD_TESTING AND PROJECT_IS_TOP_LEVEL)
 
     link_add_test(link-test-runtime tests/test_runtime.c link-runtime)
     link_add_test(link-test-units tests/test_units.c link-units)
+    link_add_test(link-test-session-trace tests/test_session_trace.c link-session-trace)
+    link_add_test(link-test-discover-targets tests/test_discover_targets.c link-discover-targets)
     link_add_test(link-test-elm327 tests/test_elm327.c link-elm327)
     link_add_test(link-test-elm-trace-replay tests/test_elm_trace_replay.c link-elm-trace-replay)
     link_add_test(link-test-elm327-session tests/test_elm327_session.c link-elm327-session)

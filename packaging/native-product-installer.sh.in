@@ -1,0 +1,188 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+set -Eeuo pipefail
+
+product_name="__LINK_NATIVE_PRODUCT_NAME__"
+product_slug="__LINK_NATIVE_PRODUCT_SLUG__"
+package_name="__LINK_NATIVE_PACKAGE_NAME__"
+version="__LINK_NATIVE_VERSION__"
+cmake_enable_option="__LINK_NATIVE_CMAKE_ENABLE_OPTION__"
+cmake_profile_option="__LINK_NATIVE_CMAKE_PROFILE_OPTION__"
+cmake_package_version_option="__LINK_NATIVE_CMAKE_PACKAGE_VERSION_OPTION__"
+legacy_cleanup_paths="__LINK_NATIVE_LEGACY_CLEANUP_PATHS__"
+native_version="${version}+native1"
+mode="install"
+extract_directory=""
+output_path=""
+jobs="$(getconf _NPROCESSORS_ONLN 2>/dev/null || printf '2')"
+
+usage()
+{
+    cat <<EOF
+${product_name} ${version} native Linux builder
+
+Usage: ${product_name}-${version}-linux-native.run [options]
+
+Without options, this checks and installs the required Debian/Ubuntu build
+packages when possible, extracts the bundled source, compiles ${product_name}
+for this machine, runs its test suite, creates the Debian-managed package
+${package_name} ${native_version}, and installs it through APT.
+
+Options:
+  --build-only        Build and verify the native Debian package without installing it
+  --output FILE       Native .deb destination for --build-only
+  --extract DIR       Extract the complete bundled source and stop
+  --jobs N            Parallel build jobs (default: detected CPU count)
+  -h, --help          Show this help
+EOF
+}
+
+while (($#)); do
+    case "$1" in
+        --build-only) mode="build-only"; shift ;;
+        --output)
+            [[ $# -ge 2 ]] || { echo '--output requires a file path.' >&2; exit 2; }
+            output_path="$2"; shift 2 ;;
+        --extract)
+            [[ $# -ge 2 ]] || { echo '--extract requires a directory.' >&2; exit 2; }
+            mode="extract"; extract_directory="$2"; shift 2 ;;
+        --jobs)
+            [[ $# -ge 2 ]] || { echo '--jobs requires a positive integer.' >&2; exit 2; }
+            jobs="$2"; shift 2 ;;
+        -h|--help) usage; exit 0 ;;
+        *) printf 'Unknown option: %s\n\n' "$1" >&2; usage >&2; exit 2 ;;
+    esac
+done
+
+[[ "$jobs" =~ ^[1-9][0-9]*$ ]] || { echo '--jobs must be a positive integer.' >&2; exit 2; }
+if [[ -n "$output_path" && "$mode" != "build-only" ]]; then
+    echo '--output is valid only with --build-only.' >&2
+    exit 2
+fi
+
+payload_line="$(awk '/^__LINK_NATIVE_PAYLOAD_BELOW__$/ { print NR + 1; exit }' "$0")"
+[[ -n "$payload_line" ]] || { echo "The embedded ${product_name} source payload is missing." >&2; exit 1; }
+
+extract_payload()
+{
+    local destination="$1"
+    mkdir -p -- "$destination"
+    tail -n +"$payload_line" "$0" | gzip -dc | tar -xf - -C "$destination"
+    test -f "$destination/CMakeLists.txt"
+    test -f "$destination/src/link/VERSION"
+    test -f "$destination/src/link/src/infiltratr-common/VERSION"
+}
+
+if [[ "$mode" == "extract" ]]; then
+    [[ -n "$extract_directory" ]] || { echo 'An extraction directory is required.' >&2; exit 2; }
+    if [[ -e "$extract_directory" && -n "$(find "$extract_directory" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]]; then
+        echo "Extraction directory is not empty: $extract_directory" >&2
+        exit 1
+    fi
+    extract_payload "$extract_directory"
+    printf '%s %s source extracted to %s\n' "$product_name" "$version" "$extract_directory"
+    exit 0
+fi
+
+prerequisites_ready()
+{
+    local command_name
+    for command_name in cmake cpack cc pkg-config glib-compile-resources dpkg dpkg-deb dpkg-query; do
+        command -v "$command_name" >/dev/null 2>&1 || return 1
+    done
+    pkg-config --atleast-version=4.6 gtk4 >/dev/null 2>&1 || return 1
+    pkg-config --exists bluez >/dev/null 2>&1 || return 1
+    pkg-config --exists libusb-1.0 >/dev/null 2>&1 || return 1
+    return 0
+}
+
+run_as_root()
+{
+    if [[ $EUID -eq 0 ]]; then "$@"
+    elif command -v sudo >/dev/null 2>&1; then sudo "$@"
+    else echo 'Administrator access is required and sudo is unavailable.' >&2; return 1
+    fi
+}
+
+install_build_dependencies()
+{
+    local -a packages=(build-essential cmake dpkg-dev pkg-config libgtk-4-dev libbluetooth-dev libusb-1.0-0-dev)
+    command -v apt-get >/dev/null 2>&1 || {
+        echo 'Required build prerequisites are missing and apt-get is unavailable.' >&2
+        return 1
+    }
+    echo "Installing ${product_name} native-build prerequisites..."
+    run_as_root env DEBIAN_FRONTEND=noninteractive apt-get update
+    run_as_root env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${packages[@]}"
+}
+
+if ! prerequisites_ready; then
+    echo "One or more ${product_name} native-build prerequisites are missing."
+    install_build_dependencies
+fi
+prerequisites_ready || {
+    echo "${product_name} prerequisites are still incomplete after the installation attempt." >&2
+    exit 1
+}
+
+work_directory="$(mktemp -d)"
+cleanup() { rm -rf -- "$work_directory"; }
+trap cleanup EXIT
+source_directory="$work_directory/source"
+build_directory="$work_directory/build"
+package_directory="$work_directory/package"
+extract_payload "$source_directory"
+
+cmake \
+    -S "$source_directory" \
+    -B "$build_directory" \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_INSTALL_PREFIX=/usr \
+    "-D${cmake_enable_option}=ON" \
+    "-D${cmake_profile_option}=native" \
+    "-D${cmake_package_version_option}=${native_version}" \
+    -DBUILD_TESTING=ON
+cmake --build "$build_directory" --parallel "$jobs"
+ctest --test-dir "$build_directory" --output-on-failure --parallel "$jobs"
+
+mkdir -p "$package_directory"
+cpack --config "$build_directory/CPackConfig.cmake" -G DEB -B "$package_directory"
+package_path="$(find "$package_directory" -maxdepth 1 -type f -name '*.deb' -print -quit)"
+[[ -n "$package_path" && -s "$package_path" ]] || { echo 'Native Debian package was not produced.' >&2; exit 1; }
+[[ "$(dpkg-deb -f "$package_path" Package)" == "$package_name" ]] || { echo 'Native package has the wrong package name.' >&2; exit 1; }
+[[ "$(dpkg-deb -f "$package_path" Version)" == "$native_version" ]] || { echo 'Native package has the wrong version.' >&2; exit 1; }
+[[ "$(dpkg-deb -f "$package_path" Architecture)" == "$(dpkg --print-architecture)" ]] || { echo 'Native package has the wrong architecture.' >&2; exit 1; }
+
+if [[ "$mode" == "build-only" ]]; then
+    if [[ -z "$output_path" ]]; then
+        output_path="$PWD/${package_name}_${native_version}_$(dpkg --print-architecture).deb"
+    fi
+    mkdir -p "$(dirname "$output_path")"
+    install -m 0644 "$package_path" "$output_path"
+    printf 'Native %s Debian package created: %s\n' "$product_name" "$output_path"
+    exit 0
+fi
+
+(
+    cd "$(dirname "$package_path")"
+    run_as_root apt-get install -y "./$(basename "$package_path")"
+)
+
+if [[ -n "$legacy_cleanup_paths" ]]; then
+    IFS=':' read -r -a cleanup_paths <<< "$legacy_cleanup_paths"
+    for old_path in "${cleanup_paths[@]}"; do
+        [[ -n "$old_path" ]] && run_as_root rm -rf -- "$old_path"
+    done
+fi
+
+installed_version="$(dpkg-query -W -f='${Version}' "$package_name" 2>/dev/null || true)"
+[[ "$installed_version" == "$native_version" ]] || {
+    printf 'Native package installation verification failed: expected %s, found %s\n' "$native_version" "$installed_version" >&2
+    exit 1
+}
+
+printf '%s %s was compiled locally, tested, packaged and installed as %s %s.\n' \
+    "$product_name" "$version" "$package_name" "$native_version"
+printf 'APT now owns the native installation and will offer only a genuinely newer release.\n'
+exit 0
+__LINK_NATIVE_PAYLOAD_BELOW__

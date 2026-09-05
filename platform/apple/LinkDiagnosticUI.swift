@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #if canImport(SwiftUI)
 import SwiftUI
+import Foundation
 import CoreBluetooth
 import UIKit
 
@@ -1027,6 +1028,265 @@ struct LinkDiagnosticAboutButton: View {
     }
 }
 
+
+
+// MARK: - Shared diagnostic presentation models
+
+struct LinkDiagnosticParameter: Identifiable {
+    let id: String
+    let protocolName: String
+    let moduleIdentifier: UInt32
+    let parameterIdentifier: UInt32
+    let shortName: String
+    let title: String
+    let suffix: String
+    let formattedValue: String
+    let value: Double?
+    let structuredValue: String?
+    let rawHex: String?
+    let vehicleSupported: Bool
+    let favourite: Bool
+    let pollingEnabled: Bool
+    let history: [Double]
+    let sourceLabel: String?
+    let qualityNote: String?
+
+    var isAvailable: Bool { value != nil || !(structuredValue ?? "").isEmpty }
+    var isSupported: Bool { vehicleSupported }
+    var presentationValue: String {
+        if value != nil {
+            return formattedValue == "N/A" ? "Decode error" : formattedValue
+        }
+        if let structuredValue, !structuredValue.isEmpty { return structuredValue }
+        if !vehicleSupported { return "Not advertised" }
+        if !pollingEnabled { return "Not polled" }
+        return "Waiting for sample"
+    }
+    var hasLiveValue: Bool { pollingEnabled && isAvailable }
+    var pidText: String {
+        let value = String(parameterIdentifier, radix: 16, uppercase: true)
+        return "0x" + (value.count < 2 ? "0\(value)" : value)
+    }
+    var sourceText: String {
+        protocolName.lowercased() == "obd2"
+            ? "SAE OBD-II · \(pidText)"
+            : "\(protocolName.uppercased()) · \(pidText)"
+    }
+}
+
+struct LinkDiagnosticModule: Identifiable {
+    let id: String
+    let name: String
+    let designation: String
+    let network: String
+    let kind: String
+    let protocolName: String
+    let requestCANIdentifier: UInt32
+    let responseCANIdentifier: UInt32
+    let extendedID: Bool
+    let identityText: String?
+    let partNumber: String?
+    let softwareNumber: String?
+    let hardwareNumber: String?
+    let faultStatus: String
+    let faultCount: Int
+    let faults: [String]
+    let evidenceDetails: [String]
+    let obdAdvertisedPIDCount: Int
+    let livePIDCount: Int
+
+    var addressText: String {
+        if extendedID {
+            return String(format: "0x%08X → 0x%08X",
+                          requestCANIdentifier, responseCANIdentifier)
+        }
+        return String(format: "0x%03X → 0x%03X",
+                      requestCANIdentifier, responseCANIdentifier)
+    }
+
+    var faultCountLabel: String {
+        if faultCount > 0 { return "\(faultCount) fault\(faultCount == 1 ? "" : "s")" }
+        if faultStatus == "Checked · no faults" { return "0 faults" }
+        return "faults unknown"
+    }
+}
+
+struct LinkPIDConfigurationItem: Identifiable {
+    let id: String
+    let pid: UInt8
+    let shortName: String
+    let title: String
+    let pollingEnabled: Bool
+    let favourite: Bool
+    let advertised: Bool
+}
+
+struct LinkSavedVehicleProfileSummary: Identifiable {
+    let id: String
+    let vin: String
+    let displayName: String
+    let moduleCount: Int
+    let responderCount: Int
+    let updatedAt: Date?
+}
+
+struct LinkDiagnosticFault: Identifiable {
+    let code: String
+    let title: String
+    let system: String
+    let category: String
+    let origin: String
+    let source: String
+    let state: String
+    let definitionKnown: Bool
+
+    var id: String { "\(state):\(code)" }
+    var displayText: String { "\(code) — \(title)" }
+}
+
+struct LinkVehicleFact: Identifiable {
+    let label: String
+    let value: String
+    var monospaced = false
+    var id: String { label }
+}
+
+struct LinkInfoRow: View {
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.linkDiagnosticTheme) private var theme
+
+    let label: String
+    let value: String
+    var monospaced = false
+
+    private var valueText: some View {
+        Text(LocalizedStringKey(value))
+            .font(monospaced ? theme.typography.subheadline : theme.typography.subheadlineBold)
+            .foregroundStyle(theme.primaryText)
+            .fixedSize(horizontal: false, vertical: true)
+            .textSelection(.enabled)
+    }
+
+    var body: some View {
+        Group {
+            if horizontalSizeClass == .compact {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(LocalizedStringKey(label))
+                        .font(theme.typography.captionBold)
+                        .foregroundStyle(theme.mutedText)
+                        .textCase(.uppercase)
+                        .tracking(0.45)
+                    valueText
+                        .multilineTextAlignment(.leading)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            } else {
+                HStack(alignment: .firstTextBaseline, spacing: 14) {
+                    Text(LocalizedStringKey(label))
+                        .font(theme.typography.subheadline)
+                        .foregroundStyle(theme.mutedText)
+                        .fixedSize(horizontal: true, vertical: false)
+                    Spacer(minLength: 16)
+                    valueText
+                        .multilineTextAlignment(.trailing)
+                        .frame(maxWidth: 420, alignment: .trailing)
+                }
+            }
+        }
+        .padding(.vertical, 6)
+    }
+}
+
+private struct LinkVehicleFactTile: View {
+    @Environment(\.linkDiagnosticTheme) private var theme
+    let fact: LinkVehicleFact
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(LocalizedStringKey(fact.label)).textCase(.uppercase)
+                .font(theme.typography.caption2Bold)
+                .tracking(0.8)
+                .foregroundStyle(theme.mutedText)
+            Text(fact.value)
+                .font(fact.monospaced ? theme.typography.subheadline : theme.typography.subheadlineBold)
+                .foregroundStyle(theme.primaryText)
+                .lineLimit(3)
+                .minimumScaleFactor(0.8)
+                .textSelection(.enabled)
+        }
+        .frame(maxWidth: .infinity, minHeight: 64, alignment: .topLeading)
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(theme.panelRaised))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(theme.border.opacity(0.75), lineWidth: 1))
+    }
+}
+
+struct LinkVehicleFactGrid: View {
+    let facts: [LinkVehicleFact]
+    private let columns = [
+        GridItem(.adaptive(minimum: 132, maximum: 260), spacing: 10)
+    ]
+
+    var body: some View {
+        LazyVGrid(columns: columns, alignment: .leading, spacing: 10) {
+            ForEach(facts) { fact in LinkVehicleFactTile(fact: fact) }
+        }
+    }
+}
+
+struct LinkMetricTile: View {
+    @Environment(\.linkDiagnosticTheme) private var theme
+    let parameter: LinkDiagnosticParameter
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack {
+                Text(LocalizedStringKey(parameter.shortName)).textCase(.uppercase)
+                    .font(theme.typography.caption2Bold)
+                    .tracking(0.7)
+                    .foregroundStyle(theme.secondaryText)
+                Spacer()
+                Text(parameter.pidText)
+                    .font(theme.typography.caption2)
+                    .foregroundStyle(theme.mutedText)
+            }
+            Text(parameter.presentationValue)
+                .font(theme.typography.title2)
+                .monospacedDigit()
+                .foregroundStyle(parameter.hasLiveValue ? theme.primaryText : theme.mutedText)
+                .minimumScaleFactor(0.65)
+                .lineLimit(1)
+            Text(LocalizedStringKey(parameter.title))
+                .font(theme.typography.caption)
+                .foregroundStyle(theme.mutedText)
+                .lineLimit(2)
+            if let source = parameter.sourceLabel {
+                Label(source, systemImage: "cpu")
+                    .font(theme.typography.caption2Bold)
+                    .foregroundStyle(theme.secondaryText)
+                    .lineLimit(2)
+            }
+            if let qualityNote = parameter.qualityNote {
+                Text(qualityNote)
+                    .font(theme.typography.caption2)
+                    .foregroundStyle(theme.warning)
+                    .lineLimit(2)
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: 132, alignment: .topLeading)
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(theme.panelRaised))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(theme.border, lineWidth: 1))
+    }
+}
 
 /**
  * LINK-owned connection source chooser shared by product faces.

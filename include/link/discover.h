@@ -112,6 +112,22 @@ typedef struct link_discover_sweep_plan {
     link_discover_sweep_target_probes_fn target_probes;
 } link_discover_sweep_plan;
 
+
+/*
+ * Standards-defined physical addressing helpers. Product plans remain free to
+ * add manufacturer-specific routes, but should not reimplement the eight
+ * legislated 11-bit OBD slots or ISO 15765 normal-fixed 29-bit UDS mapping.
+ */
+#define LINK_DISCOVER_STANDARD_OBD11_TARGET_COUNT 8U
+#define LINK_DISCOVER_STANDARD_UDS29_TARGET_COUNT 255U
+int link_discover_standard_obd11_target_at(
+    size_t index, uint32_t bitrate, link_discover_sweep_target *target);
+int link_discover_standard_uds29_target_at(
+    size_t index, uint32_t bitrate, link_discover_sweep_target *target);
+int link_discover_standard_uds29_target(
+    uint8_t diagnostic_target, uint32_t bitrate,
+    link_discover_sweep_target *target);
+
 int link_discover_sweep_target_is_valid(
     const link_discover_sweep_target *target);
 int link_discover_sweep_plan_is_valid(

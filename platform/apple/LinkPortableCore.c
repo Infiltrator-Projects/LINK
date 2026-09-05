@@ -16,6 +16,7 @@
 #include "../../src/core/parameter.c"
 #include "../../src/core/scheduler.c"
 #include "../../src/core/telemetry.c"
+#include "../../src/core/session_trace.c"
 #include "../../src/core/transport.c"
 
 #if LINK_ENABLE_MERCEDES_ME_NATIVE

@@ -2143,6 +2143,198 @@ static NSString * _Nullable LinkVehicleSessionValidAdapterIdentifier(
 @property(nonatomic, copy, nullable) NSString *legacyAdapterMappingKey;
 @end
 
+
+static NSMutableArray<NSMutableDictionary *> *
+LinkVehicleMutableResponders(NSDictionary *profile)
+{
+    NSMutableArray<NSMutableDictionary *> *responders =
+        [[NSMutableArray alloc] init];
+    NSArray *stored = [profile[@"liveResponders"] isKindOfClass:[NSArray class]]
+        ? profile[@"liveResponders"] : @[];
+    for (id value in stored) {
+        if ([value isKindOfClass:[NSDictionary class]])
+            [responders addObject:[(NSDictionary *)value mutableCopy]];
+    }
+    return responders;
+}
+
+static NSMutableDictionary *LinkVehicleResponderEntry(
+    NSMutableArray<NSMutableDictionary *> *responders,
+    uint32_t responder,
+    BOOL extended,
+    BOOL *created)
+{
+    for (NSMutableDictionary *candidate in responders) {
+        NSNumber *rx = candidate[@"rx"];
+        NSNumber *isExtended = candidate[@"extended"];
+        if ([rx isKindOfClass:[NSNumber class]] &&
+            [isExtended isKindOfClass:[NSNumber class]] &&
+            rx.unsignedIntValue == responder &&
+            isExtended.boolValue == extended) {
+            return candidate;
+        }
+    }
+    NSMutableDictionary *entry = [@{
+        @"rx": @(responder), @"extended": @(extended), @"pids": @[]
+    } mutableCopy];
+    [responders addObject:entry];
+    if (created != NULL) *created = YES;
+    return entry;
+}
+
+NSArray<NSNumber *> *LinkVehicleProfileCachedPIDs(
+    NSDictionary *profile,
+    uint32_t responderCANIdentifier,
+    BOOL extendedID)
+{
+    if (![profile isKindOfClass:[NSDictionary class]]) return @[];
+    const uint32_t maximum = extendedID
+        ? UINT32_C(0x1fffffff) : UINT32_C(0x7ff);
+    if (responderCANIdentifier > maximum) return @[];
+
+    NSArray *responders = [profile[@"liveResponders"] isKindOfClass:[NSArray class]]
+        ? profile[@"liveResponders"] : @[];
+    NSMutableOrderedSet<NSNumber *> *pids =
+        [[NSMutableOrderedSet alloc] init];
+    for (id value in responders) {
+        if (![value isKindOfClass:[NSDictionary class]]) continue;
+        NSDictionary *responder = (NSDictionary *)value;
+        NSNumber *rx = responder[@"rx"];
+        NSNumber *extended = responder[@"extended"];
+        if (![rx isKindOfClass:[NSNumber class]] ||
+            ![extended isKindOfClass:[NSNumber class]] ||
+            rx.unsignedIntValue != responderCANIdentifier ||
+            extended.boolValue != extendedID) {
+            continue;
+        }
+        NSArray *storedPIDs = [responder[@"pids"] isKindOfClass:[NSArray class]]
+            ? responder[@"pids"] : @[];
+        for (id pid in storedPIDs) {
+            if (![pid isKindOfClass:[NSNumber class]]) continue;
+            const unsigned int value = [pid unsignedIntValue];
+            if (value <= UINT8_MAX) [pids addObject:@(value)];
+        }
+    }
+    return [[pids array] sortedArrayUsingSelector:@selector(compare:)];
+}
+
+- (BOOL)mergeStandardCapabilitiesFromDiagnosticFlow:
+    (const LinkDiagnosticFlow *)flow
+                                             forVIN:(NSString *)vin
+{
+    if (flow == NULL || flow->supported_pid_responders.count == 0U ||
+        !LinkVehicleSessionValidVIN(vin)) {
+        return NO;
+    }
+    NSDictionary *existing = [self profileForVIN:vin];
+    if (existing == nil) return NO;
+
+    NSMutableDictionary *profile = [existing mutableCopy];
+    NSMutableArray<NSMutableDictionary *> *responders =
+        LinkVehicleMutableResponders(profile);
+    BOOL changed = NO;
+
+    for (size_t index = 0U;
+         index < flow->supported_pid_responders.count; ++index) {
+        const LinkObd2ResponderPidSet *set =
+            &flow->supported_pid_responders.entries[index];
+        BOOL created = NO;
+        NSMutableDictionary *match = LinkVehicleResponderEntry(
+            responders, set->responder_id, set->extended_id, &created);
+        if (created) changed = YES;
+
+        NSMutableArray<NSNumber *> *pids = [[NSMutableArray alloc] init];
+        for (unsigned int pid = 0U; pid <= UINT8_MAX; ++pid) {
+            if (link_obd2_pid_set_contains(
+                    &set->supported_pids, (uint8_t)pid)) {
+                [pids addObject:@(pid)];
+            }
+        }
+        NSArray *previous = [match[@"pids"] isKindOfClass:[NSArray class]]
+            ? match[@"pids"] : @[];
+        if (![previous isEqualToArray:pids]) {
+            match[@"pids"] = [pids copy];
+            changed = YES;
+        }
+    }
+
+    if (!changed) return NO;
+    profile[@"updatedAt"] = @([[NSDate date] timeIntervalSince1970]);
+    profile[@"liveResponders"] = [responders copy];
+    [self saveProfile:[profile copy] forVIN:vin];
+    return YES;
+}
+
+- (BOOL)mergeStandardCapabilitiesFromFlowEvent:
+    (const LinkDiagnosticFlowEvent *)event
+                                        forVIN:(NSString *)vin
+{
+    if (event == NULL ||
+        (event->kind != LINK_DIAGNOSTIC_FLOW_EVENT_LIVE_SAMPLE &&
+         event->kind != LINK_DIAGNOSTIC_FLOW_EVENT_LIVE_STRUCTURED) ||
+        (event->responder_samples.count == 0U &&
+         event->responder_decoded.count == 0U) ||
+        !LinkVehicleSessionValidVIN(vin)) {
+        return NO;
+    }
+    NSDictionary *existing = [self profileForVIN:vin];
+    if (existing == nil) return NO;
+
+    NSMutableDictionary *profile = [existing mutableCopy];
+    NSMutableArray<NSMutableDictionary *> *responders =
+        LinkVehicleMutableResponders(profile);
+    BOOL changed = NO;
+
+    for (size_t index = 0U; index < event->responder_samples.count; ++index) {
+        const LinkObd2ResponderSample *sample =
+            &event->responder_samples.samples[index];
+        if (!sample->responder_id_available) continue;
+        BOOL created = NO;
+        NSMutableDictionary *match = LinkVehicleResponderEntry(
+            responders, sample->responder_id, sample->extended_id, &created);
+        if (created) changed = YES;
+        NSMutableOrderedSet<NSNumber *> *pids =
+            [[NSMutableOrderedSet alloc] initWithArray:
+                [match[@"pids"] isKindOfClass:[NSArray class]]
+                    ? match[@"pids"] : @[]];
+        NSNumber *pid = @(sample->sample.pid);
+        if (![pids containsObject:pid]) {
+            [pids addObject:pid];
+            match[@"pids"] = [[pids array]
+                sortedArrayUsingSelector:@selector(compare:)];
+            changed = YES;
+        }
+    }
+
+    for (size_t index = 0U; index < event->responder_decoded.count; ++index) {
+        const LinkObd2ResponderDecodedPid *entry =
+            &event->responder_decoded.entries[index];
+        if (!entry->responder_id_available || entry->decoded.definition == NULL)
+            continue;
+        BOOL created = NO;
+        NSMutableDictionary *match = LinkVehicleResponderEntry(
+            responders, entry->responder_id, entry->extended_id, &created);
+        if (created) changed = YES;
+        NSMutableOrderedSet<NSNumber *> *pids =
+            [[NSMutableOrderedSet alloc] initWithArray:
+                [match[@"pids"] isKindOfClass:[NSArray class]]
+                    ? match[@"pids"] : @[]];
+        NSNumber *pid = @(entry->decoded.definition->pid);
+        if (![pids containsObject:pid]) {
+            [pids addObject:pid];
+            match[@"pids"] = [[pids array]
+                sortedArrayUsingSelector:@selector(compare:)];
+            changed = YES;
+        }
+    }
+
+    if (!changed) return NO;
+    profile[@"updatedAt"] = @([[NSDate date] timeIntervalSince1970]);
+    profile[@"liveResponders"] = [responders copy];
+    [self saveProfile:[profile copy] forVIN:vin];
+    return YES;
+}
+
 @implementation LinkVehicleProfileStore
 
 - (instancetype)initWithProductNamespace:(NSString *)productNamespace

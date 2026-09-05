@@ -3,6 +3,49 @@
 
 #include <string.h>
 
+
+int link_discover_standard_obd11_target_at(
+    size_t index, uint32_t bitrate, link_discover_sweep_target *target)
+{
+    if (target == NULL || bitrate == 0U ||
+        index >= LINK_DISCOVER_STANDARD_OBD11_TARGET_COUNT) {
+        return 0;
+    }
+    memset(target, 0, sizeof(*target));
+    target->tx_can_id = UINT32_C(0x7e0) + (uint32_t)index;
+    target->rx_can_id = UINT32_C(0x7e8) + (uint32_t)index;
+    target->bitrate = bitrate;
+    target->extended_id = false;
+    return 1;
+}
+
+int link_discover_standard_uds29_target(
+    uint8_t diagnostic_target, uint32_t bitrate,
+    link_discover_sweep_target *target)
+{
+    if (target == NULL || bitrate == 0U || diagnostic_target == UINT8_C(0xf1))
+        return 0;
+    memset(target, 0, sizeof(*target));
+    target->tx_can_id = UINT32_C(0x18da00f1) |
+        ((uint32_t)diagnostic_target << 8U);
+    target->rx_can_id = UINT32_C(0x18daf100) |
+        (uint32_t)diagnostic_target;
+    target->bitrate = bitrate;
+    target->extended_id = true;
+    return 1;
+}
+
+int link_discover_standard_uds29_target_at(
+    size_t index, uint32_t bitrate, link_discover_sweep_target *target)
+{
+    unsigned int diagnostic_target;
+    if (index >= LINK_DISCOVER_STANDARD_UDS29_TARGET_COUNT) return 0;
+    diagnostic_target = (unsigned int)index;
+    if (diagnostic_target >= 0xf1U) ++diagnostic_target;
+    return link_discover_standard_uds29_target(
+        (uint8_t)diagnostic_target, bitrate, target);
+}
+
 static int sweep_probe_is_valid(const link_discover_sweep_probe *probe)
 {
     link_safety_result safety;
