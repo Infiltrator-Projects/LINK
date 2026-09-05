@@ -38,10 +38,24 @@ typedef enum {
     LINK_SCHEDULER_NEXT_INVALID_ARGUMENT
 } LinkSchedulerNextResult;
 
+/**
+ * Kind of work owned by the one LINK live scheduler.
+ *
+ * Standard OBD-II work is decoded by LINK. External work is an opaque product
+ * transaction (Mercedes/Jaguar/etc.) whose semantics remain in the product
+ * layer; LINK owns only its cadence, fairness and adapter-wire slot.
+ */
+typedef enum {
+    LINK_SCHEDULER_ITEM_PARAMETER = 0,
+    LINK_SCHEDULER_ITEM_EXTERNAL
+} LinkSchedulerItemKind;
+
 typedef struct {
+    LinkSchedulerItemKind kind;
     LinkParameterKey key;
     uint8_t pid;
     bool pid_valid;
+    uint32_t external_token;
     uint32_t interval_ms;
     uint64_t next_due_ms;
     LinkSchedulerPriority priority;
@@ -57,9 +71,11 @@ typedef struct {
 
 typedef struct {
     size_t index;
+    LinkSchedulerItemKind kind;
     LinkParameterKey key;
     uint8_t pid;
     bool pid_valid;
+    uint32_t external_token;
     uint64_t due_ms;
     uint64_t wait_ms;
 } LinkSchedulerDispatch;
@@ -71,6 +87,22 @@ LinkSchedulerResult link_scheduler_add_parameter(LinkScheduler *scheduler, const
 LinkSchedulerResult link_scheduler_set_parameter_enabled(LinkScheduler *scheduler, const LinkParameterKey *key, bool enabled);
 LinkSchedulerResult link_scheduler_add(LinkScheduler *scheduler, uint8_t pid, uint32_t interval_ms, LinkSchedulerPriority priority, uint64_t first_due_ms);
 LinkSchedulerResult link_scheduler_set_enabled(LinkScheduler *scheduler, uint8_t pid, bool enabled);
+
+/**
+ * Register one opaque manufacturer/product live transaction with LINK's single
+ * scheduler. token must be non-zero and unique inside the scheduler.
+ */
+LinkSchedulerResult link_scheduler_add_external(
+    LinkScheduler *scheduler,
+    uint32_t token,
+    uint32_t interval_ms,
+    LinkSchedulerPriority priority,
+    uint64_t first_due_ms);
+LinkSchedulerResult link_scheduler_set_external_enabled(
+    LinkScheduler *scheduler,
+    uint32_t token,
+    bool enabled);
+
 LinkSchedulerResult link_scheduler_configure_standard_obd2_bits(LinkScheduler *scheduler, const uint8_t supported_bits[LINK_OBD2_PID_SET_BYTES], uint64_t first_due_ms);
 /** Configure the shared standard OBD-II cadence directly from LINK's PID set. */
 LinkSchedulerResult link_scheduler_configure_standard_obd2(
