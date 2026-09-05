@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   migrate:
-    if: github.event.head_commit.message == 'Add quick-five boundary migration helper'
+    if: github.event.head_commit.message == 'Fix quick-five boundary migration helper'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -23,231 +23,9 @@ jobs:
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          from pathlib import Path
-
-          def replace(path, old, new, count=1):
-              p = Path(path)
-              text = p.read_text()
-              if text.count(old) != count:
-                  raise SystemExit(f'{path}: expected {count} occurrence(s), found {text.count(old)} for replacement')
-              p.write_text(text.replace(old, new, count))
-
-          # 1) Expose a structured shared connection phase instead of making products parse status strings.
-          replace('platform/apple/LinkDiagnosticsController.h',
-                  '@class LinkDiagnosticsController;\n\n@protocol LinkDiagnosticsControllerDelegate <NSObject>',
-                  '''@class LinkDiagnosticsController;\n\ntypedef NS_ENUM(NSUInteger, LinkDiagnosticConnectionPhase) {\n    LinkDiagnosticConnectionPhaseIdle = 0,\n    LinkDiagnosticConnectionPhaseScanning,\n    LinkDiagnosticConnectionPhaseConnecting,\n    LinkDiagnosticConnectionPhaseInitializing,\n    LinkDiagnosticConnectionPhaseStandardDiagnostics,\n    LinkDiagnosticConnectionPhaseManufacturer,\n    LinkDiagnosticConnectionPhaseLive,\n    LinkDiagnosticConnectionPhaseFailed\n};\n\n@protocol LinkDiagnosticsControllerDelegate <NSObject>''')
-          replace('platform/apple/LinkDiagnosticsController.h',
-                  '@property(nonatomic, weak, nullable) id<LinkDiagnosticsControllerDelegate> delegate;\n\n@property(nonatomic, copy, readonly) NSString *statusText;',
-                  '@property(nonatomic, weak, nullable) id<LinkDiagnosticsControllerDelegate> delegate;\n\n@property(nonatomic, readonly) LinkDiagnosticConnectionPhase connectionPhase;\n@property(nonatomic, copy, readonly) NSString *statusText;')
-
-          phase_impl = r'''- (LinkDiagnosticConnectionPhase)connectionPhase
-{
-    if (_manufacturerExtensionActive || _manufacturerRecoveryActive)
-        return LinkDiagnosticConnectionPhaseManufacturer;
-    if (_flow.stage == LINK_DIAGNOSTIC_FLOW_FAILED ||
-        _provider.state == LinkBLETransportStateFailed)
-        return LinkDiagnosticConnectionPhaseFailed;
-
-    switch (_flow.stage) {
-    case LINK_DIAGNOSTIC_FLOW_INITIALIZING:
-        return LinkDiagnosticConnectionPhaseInitializing;
-    case LINK_DIAGNOSTIC_FLOW_DISCOVERING_PIDS:
-    case LINK_DIAGNOSTIC_FLOW_READING_STANDARD_VIN:
-    case LINK_DIAGNOSTIC_FLOW_SCANNING_STORED_DTCS:
-    case LINK_DIAGNOSTIC_FLOW_SCANNING_PENDING_DTCS:
-    case LINK_DIAGNOSTIC_FLOW_SCANNING_PERMANENT_DTCS:
-    case LINK_DIAGNOSTIC_FLOW_READING_READINESS:
-    case LINK_DIAGNOSTIC_FLOW_READING_FREEZE_FRAME:
-    case LINK_DIAGNOSTIC_FLOW_RESTORING_AFTER_MANUFACTURER:
-        return LinkDiagnosticConnectionPhaseStandardDiagnostics;
-    case LINK_DIAGNOSTIC_FLOW_LIVE:
-    case LINK_DIAGNOSTIC_FLOW_READING_LIVE:
-        return LinkDiagnosticConnectionPhaseLive;
-    default:
-        break;
-    }
-
-    switch (_provider.state) {
-    case LinkBLETransportStateWaitingForBluetooth:
-    case LinkBLETransportStateScanning:
-        return LinkDiagnosticConnectionPhaseScanning;
-    case LinkBLETransportStateConnecting:
-    case LinkBLETransportStateDiscovering:
-    case LinkBLETransportStateProbing:
-    case LinkBLETransportStateReady:
-        return LinkDiagnosticConnectionPhaseConnecting;
-    case LinkBLETransportStateFailed:
-        return LinkDiagnosticConnectionPhaseFailed;
-    case LinkBLETransportStateIdle:
-    case LinkBLETransportStateDisconnected:
-        break;
-    }
-    return self.active
-        ? LinkDiagnosticConnectionPhaseConnecting
-        : LinkDiagnosticConnectionPhaseIdle;
-}
-
-'''
-          replace('platform/apple/LinkDiagnosticsController.m',
-                  '- (instancetype)initWithProductSlug:(NSString *)productSlug\n',
-                  phase_impl + '- (instancetype)initWithProductSlug:(NSString *)productSlug\n')
-
-          # 2) LINK preserves LINK-owned responder capability when a product saves its fields.
-          replace('platform/apple/LinkDiagnosticsController.m',
-                  '''    NSMutableDictionary *stored = [profile mutableCopy];
-    stored[@"vin"] = vin;
-    if (![stored[@"updatedAt"] isKindOfClass:[NSNumber class]]) {
-        stored[@"updatedAt"] = @([[NSDate date] timeIntervalSince1970]);
-    }
-
-    NSString *identifier = [self associatedAdapterIdentifierForVIN:vin];''',
-                  '''    NSMutableDictionary *stored = [profile mutableCopy];
-    stored[@"vin"] = vin;
-    if (![stored[@"updatedAt"] isKindOfClass:[NSNumber class]]) {
-        stored[@"updatedAt"] = @([[NSDate date] timeIntervalSince1970]);
-    }
-
-    /* LINK-owned capability evidence survives product-owned profile rewrites. */
-    NSDictionary *existing = [self profileForVIN:vin];
-    NSArray *existingResponders =
-        [existing[@"liveResponders"] isKindOfClass:[NSArray class]]
-            ? existing[@"liveResponders"] : nil;
-    if (stored[@"liveResponders"] == nil && existingResponders != nil)
-        stored[@"liveResponders"] = existingResponders;
-
-    NSString *identifier = [self associatedAdapterIdentifierForVIN:vin];''')
-
-          # 3 + 4) Shared evidence-export plumbing and standard PID configuration helpers.
-          ui = Path('platform/apple/LinkDiagnosticUI.swift')
-          text = ui.read_text()
-          marker = '''struct LinkPIDConfigurationItem: Identifiable {
-    let id: String
-    let pid: UInt8
-    let shortName: String
-    let title: String
-    let pollingEnabled: Bool
-    let favourite: Bool
-    let advertised: Bool
-}
-'''
-          if text.count(marker) != 1:
-              raise SystemExit('LinkDiagnosticUI.swift: PID item marker mismatch')
-          addition = marker + r'''
-
-enum LinkStandardPIDConfiguration {
-    private static func text(_ value: UnsafePointer<CChar>?) -> String {
-        guard let value else { return "" }
-        return String(cString: value)
-    }
-
-    static func stableKey(for pid: UInt8) -> String {
-        if let scalar = link_parameter_obd2_definition(pid) {
-            let key = text(scalar.pointee.stable_key)
-            if !key.isEmpty { return key }
-        }
-        return String(format: "sae.obd2.mode01.%02X", pid)
-    }
-
-    static func pid(forStableKey stableKey: String) -> UInt8? {
-        if stableKey.hasPrefix("sae.obd2.mode01."),
-           let value = UInt8(stableKey.suffix(2), radix: 16) {
-            return value
-        }
-        return stableKey.withCString { key in
-            guard let definition =
-                link_parameter_obd2_definition_for_stable_key(key)
-            else { return nil }
-            return UInt8(exactly: definition.pointee.key.identifier)
-        }
-    }
-
-    static func items(
-        advertised: Set<UInt8>,
-        selected: Set<String>,
-        favourite: (UInt8) -> Bool
-    ) -> [LinkPIDConfigurationItem] {
-        guard !advertised.isEmpty else { return [] }
-        let count = link_obd2_pid_definition_count()
-        guard count > 0 else { return [] }
-        var result = [LinkPIDConfigurationItem]()
-        for index in 0..<count {
-            guard let definition = link_obd2_pid_definition_at(index) else {
-                continue
-            }
-            let metadata = definition.pointee
-            guard metadata.mode == 0x01 else { continue }
-            let pid = metadata.pid
-            guard (pid & 0x1F) != 0, advertised.contains(pid) else {
-                continue
-            }
-            let scalar = link_parameter_obd2_definition(pid)
-            let title = scalar.map { text($0.pointee.name) }
-                ?? text(metadata.name)
-            let shortName = scalar.map { text($0.pointee.short_name) }
-                ?? String(format: "PID %02X", pid)
-            let key = stableKey(for: pid)
-            result.append(LinkPIDConfigurationItem(
-                id: key,
-                pid: pid,
-                shortName: shortName,
-                title: title,
-                pollingEnabled: selected.contains(key),
-                favourite: favourite(pid),
-                advertised: true))
-        }
-        return result.sorted {
-            if $0.pid != $1.pid { return $0.pid < $1.pid }
-            return $0.title < $1.title
-        }
-    }
-}
-
-enum LinkEvidenceExport {
-    static func prepareTemporaryCSV(
-        _ data: Data,
-        productName: String
-    ) async throws -> URL {
-        let filename =
-            "\(productName)-diagnostic-evidence-\(UUID().uuidString).csv"
-        let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent(filename)
-        do {
-            try await Task.detached(priority: .utility) {
-                try data.write(to: url, options: .atomic)
-            }.value
-            return url
-        } catch {
-            try? FileManager.default.removeItem(at: url)
-            throw error
-        }
-    }
-
-    static func removeTemporaryFile(_ url: URL?) {
-        guard let url else { return }
-        try? FileManager.default.removeItem(at: url)
-    }
-}
-'''
-          ui.write_text(text.replace(marker, addition, 1))
-
-          # 5) LINK CI owns assertions about LINK internals.
-          replace('.github/workflows/ci.yml',
-                  '''          grep -Fq 'link_telemetry_recorder_begin(' platform/apple/LinkDiagnosticsController.m
-          grep -Fq '"BLE", stateName.UTF8String' platform/apple/LinkDiagnosticsController.m''',
-                  '''          grep -Fq 'link_telemetry_recorder_begin(' platform/apple/LinkDiagnosticsController.m
-          grep -Fq 'link_uds_standard_service_count' src/uds/uds_services.c
-          grep -Fq 'link_elm327_parser_feed' src/elm327/elm327.c
-          grep -Fq 'link_elm327_can_decode_pdu' src/elm327/can.c
-          grep -Fq 'link_elm327_session_begin' src/elm327/session.c
-          grep -Fq 'link_obd2_decode_live_pid' src/obd2/obd2.c
-          grep -Fq 'link_uds_decode_response' src/uds/uds.c
-          grep -Fq 'link_diagnostic_flow_next_action' src/core/diagnostic_flow.c
-          grep -Fq 'link_diagnostic_flow_accept_response' platform/apple/LinkDiagnosticsController.m
-          grep -Fq 'link_diagnostic_flow_resume_after_manufacturer' platform/apple/LinkDiagnosticsController.m
-          grep -Fq 'link_obd2_is_negative_response' src/core/diagnostic_flow.c
-          grep -Fq '"BLE", stateName.UTF8String' platform/apple/LinkDiagnosticsController.m''')
+          import base64
+          exec(base64.b64decode("CmZyb20gcGF0aGxpYiBpbXBvcnQgUGF0aAoKZGVmIHJlcGxhY2UocGF0aCwgb2xkLCBuZXcsIGNvdW50PTEpOgogICAgcCA9IFBhdGgocGF0aCkKICAgIHRleHQgPSBwLnJlYWRfdGV4dCgpCiAgICBhY3R1YWwgPSB0ZXh0LmNvdW50KG9sZCkKICAgIGlmIGFjdHVhbCAhPSBjb3VudDoKICAgICAgICByYWlzZSBTeXN0ZW1FeGl0KGYie3BhdGh9OiBleHBlY3RlZCB7Y291bnR9IG9jY3VycmVuY2UocyksIGZvdW5kIHthY3R1YWx9IikKICAgIHAud3JpdGVfdGV4dCh0ZXh0LnJlcGxhY2Uob2xkLCBuZXcsIGNvdW50KSkKCnJlcGxhY2UoCiAgICAicGxhdGZvcm0vYXBwbGUvTGlua0RpYWdub3N0aWNzQ29udHJvbGxlci5oIiwKICAgICJAY2xhc3MgTGlua0RpYWdub3N0aWNzQ29udHJvbGxlcjtcblxuQHByb3RvY29sIExpbmtEaWFnbm9zdGljc0NvbnRyb2xsZXJEZWxlZ2F0ZSA8TlNPYmplY3Q+IiwKICAgICJAY2xhc3MgTGlua0RpYWdub3N0aWNzQ29udHJvbGxlcjtcblxuIgogICAgInR5cGVkZWYgTlNfRU5VTShOU1VJbnRlZ2VyLCBMaW5rRGlhZ25vc3RpY0Nvbm5lY3Rpb25QaGFzZSkge1xuIgogICAgIiAgICBMaW5rRGlhZ25vc3RpY0Nvbm5lY3Rpb25QaGFzZUlkbGUgPSAwLFxuIgogICAgIiAgICBMaW5rRGlhZ25vc3RpY0Nvbm5lY3Rpb25QaGFzZVNjYW5uaW5nLFxuIgogICAgIiAgICBMaW5rRGlhZ25vc3RpY0Nvbm5lY3Rpb25QaGFzZUNvbm5lY3RpbmcsXG4iCiAgICAiICAgIExpbmtEaWFnbm9zdGljQ29ubmVjdGlvblBoYXNlSW5pdGlhbGl6aW5nLFxuIgogICAgIiAgICBMaW5rRGlhZ25vc3RpY0Nvbm5lY3Rpb25QaGFzZVN0YW5kYXJkRGlhZ25vc3RpY3MsXG4iCiAgICAiICAgIExpbmtEaWFnbm9zdGljQ29ubmVjdGlvblBoYXNlTWFudWZhY3R1cmVyLFxuIgogICAgIiAgICBMaW5rRGlhZ25vc3RpY0Nvbm5lY3Rpb25QaGFzZUxpdmUsXG4iCiAgICAiICAgIExpbmtEaWFnbm9zdGljQ29ubmVjdGlvblBoYXNlRmFpbGVkXG4iCiAgICAifTtcblxuIgogICAgIkBwcm90b2NvbCBMaW5rRGlhZ25vc3RpY3NDb250cm9sbGVyRGVsZWdhdGUgPE5TT2JqZWN0PiIKKQpyZXBsYWNlKAogICAgInBsYXRmb3JtL2FwcGxlL0xpbmtEaWFnbm9zdGljc0NvbnRyb2xsZXIuaCIsCiAgICAiQHByb3BlcnR5KG5vbmF0b21pYywgd2VhaywgbnVsbGFibGUpIGlkPExpbmtEaWFnbm9zdGljc0NvbnRyb2xsZXJEZWxlZ2F0ZT4gZGVsZWdhdGU7XG5cbiIKICAgICJAcHJvcGVydHkobm9uYXRvbWljLCBjb3B5LCByZWFkb25seSkgTlNTdHJpbmcgKnN0YXR1c1RleHQ7IiwKICAgICJAcHJvcGVydHkobm9uYXRvbWljLCB3ZWFrLCBudWxsYWJsZSkgaWQ8TGlua0RpYWdub3N0aWNzQ29udHJvbGxlckRlbGVnYXRlPiBkZWxlZ2F0ZTtcblxuIgogICAgIkBwcm9wZXJ0eShub25hdG9taWMsIHJlYWRvbmx5KSBMaW5rRGlhZ25vc3RpY0Nvbm5lY3Rpb25QaGFzZSBjb25uZWN0aW9uUGhhc2U7XG4iCiAgICAiQHByb3BlcnR5KG5vbmF0b21pYywgY29weSwgcmVhZG9ubHkpIE5TU3RyaW5nICpzdGF0dXNUZXh0OyIKKQoKcGhhc2VfaW1wbCA9ICgKIi0gKExpbmtEaWFnbm9zdGljQ29ubmVjdGlvblBoYXNlKWNvbm5lY3Rpb25QaGFzZVxuIgoie1xuIgoiICAgIGlmIChfbWFudWZhY3R1cmVyRXh0ZW5zaW9uQWN0aXZlIHx8IF9tYW51ZmFjdHVyZXJSZWNvdmVyeUFjdGl2ZSlcbiIKIiAgICAgICAgcmV0dXJuIExpbmtEaWFnbm9zdGljQ29ubmVjdGlvblBoYXNlTWFudWZhY3R1cmVyO1xuIgoiICAgIGlmIChfZmxvdy5zdGFnZSA9PSBMSU5LX0RJQUdOT1NUSUNfRkxPV19GQUlMRUQgfHxcbiIKIiAgICAgICAgX3Byb3ZpZGVyLnN0YXRlID09IExpbmtCTEVUcmFuc3BvcnRTdGF0ZUZhaWxlZClcbiIKIiAgICAgICAgcmV0dXJuIExpbmtEaWFnbm9zdGljQ29ubmVjdGlvblBoYXNlRmFpbGVkO1xuIgoiXG4iCiIgICAgc3dpdGNoIChfZmxvdy5zdGFnZSkge1xuIgoiICAgIGNhc2UgTElOS19ESUFHTk9TVElDX0ZMT1dfSU5JVElBTElaSU5HOlxuIgoiICAgICAgICByZXR1cm4gTGlua0RpYWdub3N0aWNDb25uZWN0aW9uUGhhc2VJbml0aWFsaXppbmc7XG4iCiIgICAgY2FzZSBMSU5LX0RJQUdOT1NUSUNfRkxPV19ESVNDT1ZFUklOR19QSURTOlxuIgoiICAgIGNhc2UgTElOS19ESUFHTk9TVElDX0ZMT1dfUkVBRElOR19TVEFOREFSRF9WSU46XG4iCiIgICAgY2FzZSBMSU5LX0RJQUdOT1NUSUNfRkxPV19TQ0FOTklOR19TVE9SRURfRFRDUzpcbiIKIiAgICBjYXNlIExJTktfRElBR05PU1RJQ19GTE9XX1NDQU5OSU5HX1BFTkRJTkdfRFRDUzpcbiIKIiAgICBjYXNlIExJTktfRElBR05PU1RJQ19GTE9XX1NDQU5OSU5HX1BFUk1BTkVOVF9EVENTOlxuIgoiICAgIGNhc2UgTElOS19ESUFHTk9TVElDX0ZMT1dfUkVBRElOR19SRUFESU5FU1M6XG4iCiIgICAgY2FzZSBMSU5LX0RJQUdOT1NUSUNfRkxPV19SRUFESU5HX0ZSRUVaRV9GUkFNRTpcbiIKIiAgICBjYXNlIExJTktfRElBR05PU1RJQ19GTE9XX1JFU1RPUklOR19BRlRFUl9NQU5VRkFDVFVSRVI6XG4iCiIgICAgICAgIHJldHVybiBMaW5rRGlhZ25vc3RpY0Nvbm5lY3Rpb25QaGFzZVN0YW5kYXJkRGlhZ25vc3RpY3M7XG4iCiIgICAgY2FzZSBMSU5LX0RJQUdOT1NUSUNfRkxPV19MSVZFOlxuIgoiICAgIGNhc2UgTElOS19ESUFHTk9TVElDX0ZMT1dfUkVBRElOR19MSVZFOlxuIgoiICAgICAgICByZXR1cm4gTGlua0RpYWdub3N0aWNDb25uZWN0aW9uUGhhc2VMaXZlO1xuIgoiICAgIGRlZmF1bHQ6XG4iCiIgICAgICAgIGJyZWFrO1xuIgoiICAgIH1cbiIKIlxuIgoiICAgIHN3aXRjaCAoX3Byb3ZpZGVyLnN0YXRlKSB7XG4iCiIgICAgY2FzZSBMaW5rQkxFVHJhbnNwb3J0U3RhdGVXYWl0aW5nRm9yQmx1ZXRvb3RoOlxuIgoiICAgIGNhc2UgTGlua0JMRVRyYW5zcG9ydFN0YXRlU2Nhbm5pbmc6XG4iCiIgICAgICAgIHJldHVybiBMaW5rRGlhZ25vc3RpY0Nvbm5lY3Rpb25QaGFzZVNjYW5uaW5nO1xuIgoiICAgIGNhc2UgTGlua0JMRVRyYW5zcG9ydFN0YXRlQ29ubmVjdGluZzpcbiIKIiAgICBjYXNlIExpbmtCTEVUcmFuc3BvcnRTdGF0ZURpc2NvdmVyaW5nOlxuIgoiICAgIGNhc2UgTGlua0JMRVRyYW5zcG9ydFN0YXRlUHJvYmluZzpcbiIKIiAgICBjYXNlIExpbmtCTEVUcmFuc3BvcnRTdGF0ZVJlYWR5OlxuIgoiICAgICAgICByZXR1cm4gTGlua0RpYWdub3N0aWNDb25uZWN0aW9uUGhhc2VDb25uZWN0aW5nO1xuIgoiICAgIGNhc2UgTGlua0JMRVRyYW5zcG9ydFN0YXRlRmFpbGVkOlxuIgoiICAgICAgICByZXR1cm4gTGlua0RpYWdub3N0aWNDb25uZWN0aW9uUGhhc2VGYWlsZWQ7XG4iCiIgICAgY2FzZSBMaW5rQkxFVHJhbnNwb3J0U3RhdGVJZGxlOlxuIgoiICAgIGNhc2UgTGlua0JMRVRyYW5zcG9ydFN0YXRlRGlzY29ubmVjdGVkOlxuIgoiICAgICAgICBicmVhaztcbiIKIiAgICB9XG4iCiIgICAgcmV0dXJuIHNlbGYuYWN0aXZlXG4iCiIgICAgICAgID8gTGlua0RpYWdub3N0aWNDb25uZWN0aW9uUGhhc2VDb25uZWN0aW5nXG4iCiIgICAgICAgIDogTGlua0RpYWdub3N0aWNDb25uZWN0aW9uUGhhc2VJZGxlO1xuIgoifVxuXG4iCikKcmVwbGFjZSgKICAgICJwbGF0Zm9ybS9hcHBsZS9MaW5rRGlhZ25vc3RpY3NDb250cm9sbGVyLm0iLAogICAgIi0gKGluc3RhbmNldHlwZSlpbml0V2l0aFByb2R1Y3RTbHVnOihOU1N0cmluZyAqKXByb2R1Y3RTbHVnXG4iLAogICAgcGhhc2VfaW1wbCArICItIChpbnN0YW5jZXR5cGUpaW5pdFdpdGhQcm9kdWN0U2x1ZzooTlNTdHJpbmcgKilwcm9kdWN0U2x1Z1xuIgopCgpyZXBsYWNlKAogICAgInBsYXRmb3JtL2FwcGxlL0xpbmtEaWFnbm9zdGljc0NvbnRyb2xsZXIubSIsCiAgICAnICAgIE5TTXV0YWJsZURpY3Rpb25hcnkgKnN0b3JlZCA9IFtwcm9maWxlIG11dGFibGVDb3B5XTtcbicKICAgICcgICAgc3RvcmVkW0AidmluIl0gPSB2aW47XG4nCiAgICAnICAgIGlmICghW3N0b3JlZFtAInVwZGF0ZWRBdCJdIGlzS2luZE9mQ2xhc3M6W05TTnVtYmVyIGNsYXNzXV0pIHtcbicKICAgICcgICAgICAgIHN0b3JlZFtAInVwZGF0ZWRBdCJdID0gQChbW05TRGF0ZSBkYXRlXSB0aW1lSW50ZXJ2YWxTaW5jZTE5NzBdKTtcbicKICAgICcgICAgfVxuJwogICAgJ1xuJwogICAgJyAgICBOU1N0cmluZyAqaWRlbnRpZmllciA9IFtzZWxmIGFzc29jaWF0ZWRBZGFwdGVySWRlbnRpZmllckZvclZJTjp2aW5dOycsCiAgICAnICAgIE5TTXV0YWJsZURpY3Rpb25hcnkgKnN0b3JlZCA9IFtwcm9maWxlIG11dGFibGVDb3B5XTtcbicKICAgICcgICAgc3RvcmVkW0AidmluIl0gPSB2aW47XG4nCiAgICAnICAgIGlmICghW3N0b3JlZFtAInVwZGF0ZWRBdCJdIGlzS2luZE9mQ2xhc3M6W05TTnVtYmVyIGNsYXNzXV0pIHtcbicKICAgICcgICAgICAgIHN0b3JlZFtAInVwZGF0ZWRBdCJdID0gQChbW05TRGF0ZSBkYXRlXSB0aW1lSW50ZXJ2YWxTaW5jZTE5NzBdKTtcbicKICAgICcgICAgfVxuJwogICAgJ1xuJwogICAgJyAgICAvKiBMSU5LLW93bmVkIGNhcGFiaWxpdHkgZXZpZGVuY2Ugc3Vydml2ZXMgcHJvZHVjdC1vd25lZCBwcm9maWxlIHJld3JpdGVzLiAqL1xuJwogICAgJyAgICBOU0RpY3Rpb25hcnkgKmV4aXN0aW5nID0gW3NlbGYgcHJvZmlsZUZvclZJTjp2aW5dO1xuJwogICAgJyAgICBOU0FycmF5ICpleGlzdGluZ1Jlc3BvbmRlcnMgPVxuJwogICAgJyAgICAgICAgW2V4aXN0aW5nW0AibGl2ZVJlc3BvbmRlcnMiXSBpc0tpbmRPZkNsYXNzOltOU0FycmF5IGNsYXNzXV1cbicKICAgICcgICAgICAgICAgICA/IGV4aXN0aW5nW0AibGl2ZVJlc3BvbmRlcnMiXSA6IG5pbDtcbicKICAgICcgICAgaWYgKHN0b3JlZFtAImxpdmVSZXNwb25kZXJzIl0gPT0gbmlsICYmIGV4aXN0aW5nUmVzcG9uZGVycyAhPSBuaWwpXG4nCiAgICAnICAgICAgICBzdG9yZWRbQCJsaXZlUmVzcG9uZGVycyJdID0gZXhpc3RpbmdSZXNwb25kZXJzO1xuJwogICAgJ1xuJwogICAgJyAgICBOU1N0cmluZyAqaWRlbnRpZmllciA9IFtzZWxmIGFzc29jaWF0ZWRBZGFwdGVySWRlbnRpZmllckZvclZJTjp2aW5dOycKKQoKdWkgPSBQYXRoKCJwbGF0Zm9ybS9hcHBsZS9MaW5rRGlhZ25vc3RpY1VJLnN3aWZ0IikKdGV4dCA9IHVpLnJlYWRfdGV4dCgpCm1hcmtlciA9ICgKInN0cnVjdCBMaW5rUElEQ29uZmlndXJhdGlvbkl0ZW06IElkZW50aWZpYWJsZSB7XG4iCiIgICAgbGV0IGlkOiBTdHJpbmdcbiIKIiAgICBsZXQgcGlkOiBVSW50OFxuIgoiICAgIGxldCBzaG9ydE5hbWU6IFN0cmluZ1xuIgoiICAgIGxldCB0aXRsZTogU3RyaW5nXG4iCiIgICAgbGV0IHBvbGxpbmdFbmFibGVkOiBCb29sXG4iCiIgICAgbGV0IGZhdm91cml0ZTogQm9vbFxuIgoiICAgIGxldCBhZHZlcnRpc2VkOiBCb29sXG4iCiJ9XG4iCkApCmlmIHRleHQuY291bnQobWFya2VyKSAhPSAxOgogICAgcmFpc2UgU3lzdGVtRXhpdCgiTGlua0RpYWdub3N0aWNVSS5zd2lmdDogUElEIG1hcmtlciBtaXNtYXRjaCIpCgphZGRpdGlvbiA9IG1hcmtlciArIHInJycKCmVudW0gTGlua1N0YW5kYXJkUElEQ29uZmlndXJhdGlvbiB7CiAgICBwcml2YXRlIHN0YXRpYyBmdW5jIHRleHQoXyB2YWx1ZTogVW5zYWZlUG9pbnRlcjxDQ2hhcj4/KSAtPiBTdHJpbmcgewogICAgICAgIGd1YXJkIGxldCB2YWx1ZSBlbHNlIHsgcmV0dXJuICIiIH0KICAgICAgICByZXR1cm4gU3RyaW5nKGNTdHJpbmc6IHZhbHVlKQogICAgfQoKICAgIHN0YXRpYyBmdW5jIHN0YWJsZUtleShmb3IgcGlkOiBVSW50OCkgLT4gU3RyaW5nIHsKICAgICAgICBpZiBsZXQgc2NhbGFyID0gbGlua19wYXJhbWV0ZXJfb2JkMl9kZWZpbml0aW9uKHBpZCkgewogICAgICAgICAgICBsZXQga2V5ID0gdGV4dChzY2FsYXIucG9pbnRlZS5zdGFibGVfa2V5KQogICAgICAgICAgICBpZiAha2V5LmlzRW1wdHkgeyByZXR1cm4ga2V5IH0KICAgICAgICB9CiAgICAgICAgcmV0dXJuIFN0cmluZyhmb3JtYXQ6ICJzYWUub2JkMi5tb2RlMDEuJTAyWCIsIHBpZCkKICAgIH0KCiAgICBzdGF0aWMgZnVuYyBwaWQoZm9yU3RhYmxlS2V5IHN0YWJsZUtleTogU3RyaW5nKSAtPiBVSW50OD8gewogICAgICAgIGlmIHN0YWJsZUtleS5oYXNQcmVmaXgoInNhZS5vYmQyLm1vZGUwMS4iKSwKICAgICAgICAgICBsZXQgdmFsdWUgPSBVSW50OChzdGFibGVLZXkuc3VmZml4KDIpLCByYWRpeDogMTYpIHsKICAgICAgICAgICAgcmV0dXJuIHZhbHVlCiAgICAgICAgfQogICAgICAgIHJldHVybiBzdGFibGVLZXkud2l0aENTdHJpbmcgeyBrZXkgaW4KICAgICAgICAgICAgZ3VhcmQgbGV0IGRlZmluaXRpb24gPQogICAgICAgICAgICAgICAgbGlua19wYXJhbWV0ZXJfb2JkMl9kZWZpbml0aW9uX2Zvcl9zdGFibGVfa2V5KGtleSkKICAgICAgICAgICAgZWxzZSB7IHJldHVybiBuaWwgfQogICAgICAgICAgICByZXR1cm4gVUludDgoZXhhY3RseTogZGVmaW5pdGlvbi5wb2ludGVlLmtleS5pZGVudGlmaWVyKQogICAgICAgIH0KICAgIH0KCiAgICBzdGF0aWMgZnVuYyBpdGVtcygKICAgICAgICBhZHZlcnRpc2VkOiBTZXQ8VUludDg+LAogICAgICAgIHNlbGVjdGVkOiBTZXQ8U3RyaW5nPiwKICAgICAgICBmYXZvdXJpdGU6IChVSW50OCkgLT4gQm9vbAogICAgKSAtPiBbTGlua1BJRENvbmZpZ3VyYXRpb25JdGVtXSB7CiAgICAgICAgZ3VhcmQgIWFkdmVydGlzZWQuaXNFbXB0eSBlbHNlIHsgcmV0dXJuIFtdIH0KICAgICAgICBsZXQgY291bnQgPSBsaW5rX29iZDJfcGlkX2RlZmluaXRpb25fY291bnQoKQogICAgICAgIGd1YXJkIGNvdW50ID4gMCBlbHNlIHsgcmV0dXJuIFtdIH0KCiAgICAgICAgdmFyIHJlc3VsdCA9IFtMaW5rUElEQ29uZmlndXJhdGlvbkl0ZW1dKCkKICAgICAgICBmb3IgaW5kZXggaW4gMC4uPGNvdW50IHsKICAgICAgICAgICAgZ3VhcmQgbGV0IGRlZmluaXRpb24gPSBsaW5rX29iZDJfcGlkX2RlZmluaXRpb25fYXQoaW5kZXgpIGVsc2UgewogICAgICAgICAgICAgICAgY29udGludWUKICAgICAgICAgICAgfQogICAgICAgICAgICBsZXQgbWV0YWRhdGEgPSBkZWZpbml0aW9uLnBvaW50ZWUKICAgICAgICAgICAgZ3VhcmQgbWV0YWRhdGEubW9kZSA9PSAweDAxIGVsc2UgeyBjb250aW51ZSB9CiAgICAgICAgICAgIGxldCBwaWQgPSBtZXRhZGF0YS5waWQKICAgICAgICAgICAgZ3VhcmQgKHBpZCAmIDB4MUYpICE9IDAsIGFkdmVydGlzZWQuY29udGFpbnMocGlkKSBlbHNlIHsKICAgICAgICAgICAgICAgIGNvbnRpbnVlCiAgICAgICAgICAgIH0KCiAgICAgICAgICAgIGxldCBzY2FsYXIgPSBsaW5rX3BhcmFtZXRlcl9vYmQyX2RlZmluaXRpb24ocGlkKQogICAgICAgICAgICBsZXQgdGl0bGUgPSBzY2FsYXIubWFwIHsgdGV4dCgkMC5wb2ludGVlLm5hbWUpIH0KICAgICAgICAgICAgICAgID8/IHRleHQobWV0YWRhdGEubmFtZSkKICAgICAgICAgICAgbGV0IHNob3J0TmFtZSA9IHNjYWxhci5tYXAgeyB0ZXh0KCQwLnBvaW50ZWUuc2hvcnRfbmFtZSkgfQogICAgICAgICAgICAgICAgPz8gU3RyaW5nKGZvcm1hdDogIlBJRCAlMDJYIiwgcGlkKQogICAgICAgICAgICBsZXQga2V5ID0gc3RhYmxlS2V5KGZvcjogcGlkKQogICAgICAgICAgICByZXN1bHQuYXBwZW5kKExpbmtQSURDb25maWd1cmF0aW9uSXRlbSgKICAgICAgICAgICAgICAgIGlkOiBrZXksCiAgICAgICAgICAgICAgICBwaWQ6IHBpZCwKICAgICAgICAgICAgICAgIHNob3J0TmFtZTogc2hvcnROYW1lLAogICAgICAgICAgICAgICAgdGl0bGU6IHRpdGxlLAogICAgICAgICAgICAgICAgcG9sbGluZ0VuYWJsZWQ6IHNlbGVjdGVkLmNvbnRhaW5zKGtleSksCiAgICAgICAgICAgICAgICBmYXZvdXJpdGU6IGZhdm91cml0ZShwaWQpLAogICAgICAgICAgICAgICAgYWR2ZXJ0aXNlZDogdHJ1ZSkpCiAgICAgICAgfQogICAgICAgIHJldHVybiByZXN1bHQuc29ydGVkIHsKICAgICAgICAgICAgaWYgJDAucGlkICE9ICQxLnBpZCB7IHJldHVybiAkMC5waWQgPCAkMS5waWQgfQogICAgICAgICAgICByZXR1cm4gJDAudGl0bGUgPCAkMS50aXRsZQogICAgICAgIH0KICAgIH0KfQoKZW51bSBMaW5rRXZpZGVuY2VFeHBvcnQgewogICAgc3RhdGljIGZ1bmMgcHJlcGFyZVRlbXBvcmFyeUNTVigKICAgICAgICBfIGRhdGE6IERhdGEsCiAgICAgICAgcHJvZHVjdE5hbWU6IFN0cmluZwogICAgKSBhc3luYyB0aHJvd3MgLT4gVVJMIHsKICAgICAgICBsZXQgZmlsZW5hbWUgPQogICAgICAgICAgICAiXChwcm9kdWN0TmFtZSktZGlhZ25vc3RpYy1ldmlkZW5jZS1cKFVVSUQoKS51dWlkU3RyaW5nKS5jc3YiCiAgICAgICAgbGV0IHVybCA9IEZpbGVNYW5hZ2VyLmRlZmF1bHQudGVtcG9yYXJ5RGlyZWN0b3J5CiAgICAgICAgICAgIC5hcHBlbmRpbmdQYXRoQ29tcG9uZW50KGZpbGVuYW1lKQogICAgICAgIGRvIHsKICAgICAgICAgICAgdHJ5IGF3YWl0IFRhc2suZGV0YWNoZWQocHJpb3JpdHk6IC51dGlsaXR5KSB7CiAgICAgICAgICAgICAgICB0cnkgZGF0YS53cml0ZSh0bzogdXJsLCBvcHRpb25zOiAuYXRvbWljKQogICAgICAgICAgICB9LnZhbHVlCiAgICAgICAgICAgIHJldHVybiB1cmwKICAgICAgICB9IGNhdGNoIHsKICAgICAgICAgICAgdHJ5PyBGaWxlTWFuYWdlci5kZWZhdWx0LnJlbW92ZUl0ZW0oYXQ6IHVybCkKICAgICAgICAgICAgdGhyb3cgZXJyb3IKICAgICAgICB9CiAgICB9CgogICAgc3RhdGljIGZ1bmMgcmVtb3ZlVGVtcG9yYXJ5RmlsZShfIHVybDogVVJMPSkgewogICAgICAgIGd1YXJkIGxldCB1cmwgZWxzZSB7IHJldHVybiB9CiAgICAgICAgdHJ5PyBGaWxlTWFuYWdlci5kZWZhdWx0LnJlbW92ZUl0ZW0oYXQ6IHVybCkKICAgIH0KfQonJycKdWkud3JpdGVfdGV4dCh0ZXh0LnJlcGxhY2UobWFya2VyLCBhZGRpdGlvbiwgMSkpCgpyZXBsYWNlKAogICAgIi5naXRodWIvd29ya2Zsb3dzL2NpLnltbCIsCiAgICAiICAgICAgICAgIGdyZXAgLUZxICdsaW5rX3RlbGVtZXRyeV9yZWNvcmRlcl9iZWdpbignIHBsYXRmb3JtL2FwcGxlL0xpbmtEaWFnbm9zdGljc0NvbnRyb2xsZXIubVxuIgogICAgIiAgICAgICAgICBncmVwIC1GcSAnXCJCTEVcIiwgc3RhdGVOYW1lLlVURjhTdHJpbmcnIHBsYXRmb3JtL2FwcGxlL0xpbmtEaWFnbm9zdGljc0NvbnRyb2xsZXIubSIsCiAgICAiICAgICAgICAgIGdyZXAgLUZxICdsaW5rX3RlbGVtZXRyeV9yZWNvcmRlcl9iZWdpbignIHBsYXRmb3JtL2FwcGxlL0xpbmtEaWFnbm9zdGljc0NvbnRyb2xsZXIubVxuIgogICAgIiAgICAgICAgICBncmVwIC1GcSAnbGlua191ZHNfc3RhbmRhcmRfc2VydmljZV9jb3VudCcgc3JjL3Vkcy91ZHNfc2VydmljZXMuY1xuIgogICAgIiAgICAgICAgICBncmVwIC1GcSAnbGlua19lbG0zMjdfcGFyc2VyX2ZlZWQnIHNyYy9lbG0zMjcvZWxtMzI3LmNcbiIKICAgICIgICAgICAgICAgZ3JlcCAtRnEgJ2xpbmtfZWxtMzI3X2Nhbl9kZWNvZGVfcGR1JyBzcmMvZWxtMzI3L2Nhbi5jXG4iCiAgICAiICAgICAgICAgIGdyZXAgLUZxICdsaW5rX2VsbTMyN19zZXNzaW9uX2JlZ2luJyBzcmMvZWxtMzI3L3Nlc3Npb24uY1xuIgogICAgIiAgICAgICAgICBncmVwIC1GcSAnbGlua19vYmQyX2RlY29kZV9saXZlX3BpZCcgc3JjL29iZDIvb2JkMi5jXG4iCiAgICAiICAgICAgICAgIGdyZXAgLUZxICdsaW5rX3Vkc19kZWNvZGVfcmVzcG9uc2UnIHNyYy91ZHMvdWRzLmNcbiIKICAgICIgICAgICAgICAgZ3JlcCAtRnEgJ2xpbmtfZGlhZ25vc3RpY19mbG93X25leHRfYWN0aW9uJyBzcmMvY29yZS9kaWFnbm9zdGljX2Zsb3cuY1xuIgogICAgIiAgICAgICAgICBncmVwIC1GcSAnbGlua19kaWFnbm9zdGljX2Zsb3dfYWNjZXB0X3Jlc3BvbnNlJyBwbGF0Zm9ybS9hcHBsZS9MaW5rRGlhZ25vc3RpY3NDb250cm9sbGVyLm1cbiIKICAgICIgICAgICAgICAgZ3JlcCAtRnEgJ2xpbmtfZGlhZ25vc3RpY19mbG93X3Jlc3VtZV9hZnRlcl9tYW51ZmFjdHVyZXInIHBsYXRmb3JtL2FwcGxlL0xpbmtEaWFnbm9zdGljc0NvbnRyb2xsZXIubVxuIgogICAgIiAgICAgICAgICBncmVwIC1GcSAnbGlua19vYmQyX2lzX25lZ2F0aXZlX3Jlc3BvbnNlJyBzcmMvY29yZS9kaWFnbm9zdGljX2Zsb3cuY1xuIgogICAgIiAgICAgICAgICBncmVwIC1GcSAnXCJCTEVcIiwgc3RhdGVOYW1lLlVURjhTdHJpbmcnIHBsYXRmb3JtL2FwcGxlL0xpbmtEaWFnbm9zdGljc0NvbnRyb2xsZXIubSIKKQo="))
           PY
-
           grep -Fq 'LinkDiagnosticConnectionPhase connectionPhase' platform/apple/LinkDiagnosticsController.h
           grep -Fq 'existing[@"liveResponders"]' platform/apple/LinkDiagnosticsController.m
           grep -Fq 'enum LinkStandardPIDConfiguration' platform/apple/LinkDiagnosticUI.swift
@@ -261,16 +39,11 @@ enum LinkEvidenceExport {
           ctest --test-dir build --output-on-failure
       - name: Commit migration and remove helper
         shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           git config user.name 'HAL migration'
           git config user.email 'actions@users.noreply.github.com'
           git rm .github/workflows/hal-quick5-boundary-migration.yml
-          git add platform/apple/LinkDiagnosticsController.h \
-                  platform/apple/LinkDiagnosticsController.m \
-                  platform/apple/LinkDiagnosticUI.swift \
-                  .github/workflows/ci.yml
+          git add platform/apple/LinkDiagnosticsController.h platform/apple/LinkDiagnosticsController.m platform/apple/LinkDiagnosticUI.swift .github/workflows/ci.yml
           git commit -m 'Move five small product boundaries into LINK'
           git push origin HEAD:main
