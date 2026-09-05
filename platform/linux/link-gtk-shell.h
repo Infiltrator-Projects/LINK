@@ -71,6 +71,12 @@ typedef struct LinkGtkShellDescriptor {
     const char *brand_subtitle;
     const char *version;
     const char *emblem_resource;
+    /*
+     * Optional product-owned icon for each LINK workspace destination.
+     * Return a GResource path for the section or NULL for text-only navigation.
+     * LINK owns layout/sizing; the product owns the artwork.
+     */
+    const char *(*navigation_icon_resource)(size_t section, void *context);
     const char *css;
     void (*render_section)(size_t section, GtkWidget *body, void *context);
     /*

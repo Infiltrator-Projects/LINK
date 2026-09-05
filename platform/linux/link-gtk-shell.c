@@ -83,6 +83,8 @@ static const char link_gtk_base_css[] =
     ".link-nav-scroll, .link-content-scroll { background: transparent; border: none; }"
     ".link-nav-list { background: transparent; padding: 2px 0; }"
     ".link-nav-row { margin: 3px 0; padding: 6px 8px; border-radius: 10px; border: 1px solid transparent; background: transparent; }"
+    ".link-nav-row-content { min-height: 42px; }"
+    ".link-nav-icon { min-width: 26px; min-height: 26px; }"
     ".link-nav-row:hover { background: rgba(255,255,255,0.055); border-color: rgba(255,255,255,0.10); }"
     ".link-nav-row:selected { background: rgba(255,255,255,0.105); border-color: rgba(255,255,255,0.24); }"
     ".link-about-button { margin-top: 6px; min-height: 34px; padding: 5px 14px; }"
@@ -1007,13 +1009,29 @@ static void rebuild_navigation(LinkGtkShell *shell)
         const LinkWorkspaceSectionDescriptor *section = link_workspace_section_at(index);
         GtkWidget *row;
         GtkWidget *box;
+        GtkWidget *row_content;
+        const char *icon_resource = NULL;
         if (section == NULL) continue;
         row = gtk_list_box_row_new();
+        row_content = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
         box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
         gtk_widget_add_css_class(row, "link-nav-row");
+        gtk_widget_add_css_class(row_content, "link-nav-row-content");
+        if (shell->descriptor->navigation_icon_resource != NULL)
+            icon_resource = shell->descriptor->navigation_icon_resource(
+                index, shell->descriptor->context);
+        if (icon_resource != NULL && icon_resource[0] != '\0') {
+            GtkWidget *icon = gtk_image_new_from_resource(icon_resource);
+            gtk_image_set_pixel_size(GTK_IMAGE(icon), 26);
+            gtk_widget_set_valign(icon, GTK_ALIGN_CENTER);
+            gtk_widget_add_css_class(icon, "link-nav-icon");
+            gtk_box_append(GTK_BOX(row_content), icon);
+        }
+        gtk_widget_set_hexpand(box, TRUE);
         gtk_box_append(GTK_BOX(box), left_label(section->title, "link-section-title"));
         gtk_box_append(GTK_BOX(box), left_label(section->summary, "link-section-summary"));
-        gtk_list_box_row_set_child(GTK_LIST_BOX_ROW(row), box);
+        gtk_box_append(GTK_BOX(row_content), box);
+        gtk_list_box_row_set_child(GTK_LIST_BOX_ROW(row), row_content);
         g_object_set_data(G_OBJECT(row), "link-section",
                           GUINT_TO_POINTER((unsigned int)index));
         gtk_list_box_append(GTK_LIST_BOX(shell->nav_list), row);
