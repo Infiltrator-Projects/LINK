@@ -2211,8 +2211,8 @@ NSArray<NSNumber *> *LinkVehicleProfileCachedPIDs(
             ? responder[@"pids"] : @[];
         for (id pid in storedPIDs) {
             if (![pid isKindOfClass:[NSNumber class]]) continue;
-            const unsigned int value = [pid unsignedIntValue];
-            if (value <= UINT8_MAX) [pids addObject:@(value)];
+            const unsigned int pidValue = [pid unsignedIntValue];
+            if (pidValue <= UINT8_MAX) [pids addObject:@(pidValue)];
         }
     }
     return [[pids array] sortedArrayUsingSelector:@selector(compare:)];
