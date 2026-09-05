@@ -1,0 +1,65 @@
+name: Repair Apple strict-build shadow warning
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/hal-fix-apple-shadow.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Rename shadowing PID scalar
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('platform/apple/LinkDiagnosticsController.m')
+          s = p.read_text()
+          old = '''        for (id pid in storedPIDs) {
+            if (![pid isKindOfClass:[NSNumber class]]) continue;
+            const unsigned int value = [pid unsignedIntValue];
+            if (value <= UINT8_MAX) [pids addObject:@(value)];
+        }
+'''
+          new = '''        for (id pid in storedPIDs) {
+            if (![pid isKindOfClass:[NSNumber class]]) continue;
+            const unsigned int pidValue = [pid unsignedIntValue];
+            if (pidValue <= UINT8_MAX) [pids addObject:@(pidValue)];
+        }
+'''
+          if s.count(old) != 1:
+              raise SystemExit(f'expected exactly one Apple PID shadow block, found {s.count(old)}')
+          p.write_text(s.replace(old, new))
+          PY
+          git diff --check
+          grep -F 'const unsigned int pidValue = [pid unsignedIntValue];' platform/apple/LinkDiagnosticsController.m
+          ! grep -F 'const unsigned int value = [pid unsignedIntValue];' platform/apple/LinkDiagnosticsController.m
+
+      - name: Build and test LINK
+        shell: bash
+        run: |
+          cmake -S . -B build-hal-apple-shadow -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
+          cmake --build build-hal-apple-shadow --parallel 2
+          ctest --test-dir build-hal-apple-shadow --output-on-failure
+
+      - name: Publish permanent source fix and remove helper
+        shell: bash
+        run: |
+          rm -rf build-hal-apple-shadow
+          rm -f .github/workflows/hal-fix-apple-shadow.yml
+          git config user.name 'Shannon Smith'
+          git config user.email 'infiltratr@yandex.com'
+          git add -A platform/apple/LinkDiagnosticsController.m .github/workflows/hal-fix-apple-shadow.yml
+          git diff --cached --check
+          git commit -m 'Fix Apple strict-build shadow warning'
+          git push origin HEAD:main
