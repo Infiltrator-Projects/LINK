@@ -1,0 +1,39 @@
+name: HAL repair five migration helper
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/hal-repair-five-helper.yml
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Repair helper and self-remove
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('.github/workflows/hal-migrate-five-easy.yml')
+          s = p.read_text()
+          old = "m = m.rstrip() + selection_impl + '\\n'"
+          new = "m = m.rstrip() + '\\n' + selection_impl.strip() + '\\n'"
+          if old not in s:
+              raise SystemExit('target helper line missing')
+          p.write_text(s.replace(old, new, 1))
+          PY
+          rm -f .github/workflows/hal-repair-five-helper.yml
+          git config user.name "Shannon Smith"
+          git config user.email "infiltratr@yandex.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "Repair five-migration helper hygiene"
+          git push origin HEAD:main
