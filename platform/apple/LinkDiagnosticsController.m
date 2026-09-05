@@ -2219,6 +2219,45 @@ NSArray<NSNumber *> *LinkVehicleProfileCachedPIDs(
 }
 
 
+@interface LinkVehicleProfileStandardResponder ()
+@property(nonatomic) uint32_t responderCANIdentifier;
+@property(nonatomic, getter=isExtendedID) BOOL extendedID;
+@property(nonatomic, copy) NSArray<NSNumber *> *pids;
+@end
+
+@implementation LinkVehicleProfileStandardResponder
+@end
+
+NSArray<LinkVehicleProfileStandardResponder *> *
+LinkVehicleProfileStandardResponders(NSDictionary *profile)
+{
+    if (![profile isKindOfClass:[NSDictionary class]]) return @[];
+    NSArray *responders = [profile[@"liveResponders"] isKindOfClass:[NSArray class]]
+        ? profile[@"liveResponders"] : @[];
+    NSMutableArray<LinkVehicleProfileStandardResponder *> *result =
+        [[NSMutableArray alloc] initWithCapacity:responders.count];
+    for (id raw in responders) {
+        if (![raw isKindOfClass:[NSDictionary class]]) continue;
+        NSDictionary *entry = (NSDictionary *)raw;
+        NSNumber *rx = [entry[@"rx"] isKindOfClass:[NSNumber class]]
+            ? entry[@"rx"] : nil;
+        if (rx == nil) continue;
+        BOOL extended = [entry[@"extended"] isKindOfClass:[NSNumber class]]
+            ? [entry[@"extended"] boolValue] : NO;
+        uint32_t responderID = rx.unsignedIntValue;
+        uint32_t maximum = extended ? UINT32_C(0x1fffffff) : UINT32_C(0x7ff);
+        if (responderID > maximum) continue;
+
+        LinkVehicleProfileStandardResponder *value =
+            [[LinkVehicleProfileStandardResponder alloc] init];
+        value.responderCANIdentifier = responderID;
+        value.extendedID = extended;
+        value.pids = LinkVehicleProfileCachedPIDs(profile, responderID, extended);
+        [result addObject:value];
+    }
+    return [result copy];
+}
+
 NSUInteger LinkVehicleProfileStandardResponderCount(NSDictionary *profile)
 {
     if (![profile isKindOfClass:[NSDictionary class]]) return 0U;

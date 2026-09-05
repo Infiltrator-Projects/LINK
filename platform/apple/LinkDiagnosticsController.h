@@ -223,6 +223,16 @@ FOUNDATION_EXPORT NSArray<NSNumber *> *LinkVehicleProfileCachedPIDs(
     uint32_t responderCANIdentifier,
     BOOL extendedID);
 
+/** Product-neutral cached standard OBD responder capability. */
+@interface LinkVehicleProfileStandardResponder : NSObject
+@property(nonatomic, readonly) uint32_t responderCANIdentifier;
+@property(nonatomic, readonly, getter=isExtendedID) BOOL extendedID;
+@property(nonatomic, copy, readonly) NSArray<NSNumber *> *pids;
+@end
+
+FOUNDATION_EXPORT NSArray<LinkVehicleProfileStandardResponder *> *
+LinkVehicleProfileStandardResponders(NSDictionary * _Nullable profile);
+
 /** Number of valid standard OBD responder records cached in a profile. */
 FOUNDATION_EXPORT NSUInteger LinkVehicleProfileStandardResponderCount(
     NSDictionary * _Nullable profile);
