@@ -28,9 +28,6 @@
 #undef read_u16_be
 #undef write_u16_be
 #include "../../src/core/mercedes_me_diagnostic.c"
-#include "../../src/core/mercedes_me_data_ids.c"
-#include "../../src/core/mercedes_me_diaglogic.c"
-#include "../../src/core/mercedes_me_whisper.c"
 #endif
 
 #include "../../src/elm327/elm327.c"
