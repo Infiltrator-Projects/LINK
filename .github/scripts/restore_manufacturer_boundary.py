@@ -1,0 +1,125 @@
+from pathlib import Path
+
+semantic_paths = [
+    Path('include/link/mercedes_me_data_ids.h'),
+    Path('include/link/mercedes_me_diaglogic.h'),
+    Path('include/link/mercedes_me_whisper.h'),
+    Path('src/core/mercedes_me_data_ids.c'),
+    Path('src/core/mercedes_me_diaglogic.c'),
+    Path('src/core/mercedes_me_whisper.c'),
+    Path('tests/test_mercedes_me_data_ids.c'),
+    Path('tests/test_mercedes_me_diaglogic.c'),
+    Path('tests/test_mercedes_me_whisper.c'),
+    Path('docs/MERCEDES-ME-DATA-IDS.md'),
+]
+for path in semantic_paths:
+    if not path.exists():
+        raise SystemExit(f'expected semantic file missing before migration: {path}')
+
+cmake = Path('CMakeLists.txt')
+text = cmake.read_text()
+for line in [
+    '    src/core/mercedes_me_data_ids.c\n',
+    '    src/core/mercedes_me_diaglogic.c\n',
+    '    src/core/mercedes_me_whisper.c\n',
+    '    link_add_test(link-test-mercedes-me-data-ids tests/test_mercedes_me_data_ids.c link-mercedes-me-data-ids)\n',
+    '    link_add_test(link-test-mercedes-me-diaglogic tests/test_mercedes_me_diaglogic.c link-mercedes-me-diaglogic)\n',
+    '    link_add_test(link-test-mercedes-me-whisper tests/test_mercedes_me_whisper.c link-mercedes-me-whisper)\n',
+]:
+    if line not in text:
+        raise SystemExit(f'CMake ownership anchor missing: {line.strip()}')
+    text = text.replace(line, '', 1)
+cmake.write_text(text)
+
+apple = Path('platform/apple/LinkPortableCore.c')
+text = apple.read_text()
+for line in [
+    '#include "../../src/core/mercedes_me_data_ids.c"\n',
+    '#include "../../src/core/mercedes_me_diaglogic.c"\n',
+    '#include "../../src/core/mercedes_me_whisper.c"\n',
+]:
+    if line not in text:
+        raise SystemExit(f'Apple ownership anchor missing: {line.strip()}')
+    text = text.replace(line, '', 1)
+apple.write_text(text)
+
+ci = Path('.github/workflows/ci.yml')
+text = ci.read_text()
+for line in [
+    "          grep -Fq 'link_mercedes_me_data_id_count' src/core/mercedes_me_data_ids.c\n",
+    "          grep -Fq 'link-test-mercedes-me-data-ids tests/test_mercedes_me_data_ids.c link-mercedes-me-data-ids' CMakeLists.txt\n",
+    "          grep -Fq 'link_mercedes_me_diaglogic_decode_vehicle_status' src/core/mercedes_me_diaglogic.c\n",
+    "          grep -Fq 'link-test-mercedes-me-diaglogic tests/test_mercedes_me_diaglogic.c link-mercedes-me-diaglogic' CMakeLists.txt\n",
+    "          grep -Fq '**194 exact static data-ID symbol/literal pairs**' docs/MERCEDES-ME-DATA-IDS.md\n",
+    "          grep -Fq 'link_mercedes_me_diaglogic_reference_policy' src/core/mercedes_me_diaglogic.c\n",
+    "          grep -Fq 'link-test-mercedes-me-whisper tests/test_mercedes_me_whisper.c link-mercedes-me-whisper' CMakeLists.txt\n",
+    "          grep -Fq 'SELECT_LOWEST_CANID_CACHED' src/core/mercedes_me_whisper.c\n",
+]:
+    if line not in text:
+        raise SystemExit(f'CI ownership anchor missing: {line.strip()}')
+    text = text.replace(line, '', 1)
+
+guard_anchor = "          grep -Fq 'link_mercedes_me_adapter_family_from_name' src/core/mercedes_me_adapter.c\n"
+guard = guard_anchor + '''          for path in \\
+            include/link/mercedes_me_data_ids.h \\
+            include/link/mercedes_me_diaglogic.h \\
+            include/link/mercedes_me_whisper.h \\
+            src/core/mercedes_me_data_ids.c \\
+            src/core/mercedes_me_diaglogic.c \\
+            src/core/mercedes_me_whisper.c \\
+            tests/test_mercedes_me_data_ids.c \\
+            tests/test_mercedes_me_diaglogic.c \\
+            tests/test_mercedes_me_whisper.c \\
+            docs/MERCEDES-ME-DATA-IDS.md; do
+            if [[ -e "$path" ]]; then
+              echo "Manufacturer-specific Mercedes me semantics must live in MBLINK, not LINK: $path" >&2
+              exit 1
+            fi
+          done
+'''
+if guard_anchor not in text:
+    raise SystemExit('CI adapter guard anchor missing')
+text = text.replace(guard_anchor, guard, 1)
+ci.write_text(text)
+
+readme = Path('README.md')
+text = readme.read_text()
+old = ('- [`docs/MERCEDES-ME-NATIVE-BINARIES.md`](docs/MERCEDES-ME-NATIVE-BINARIES.md) '
+       'records the clean-room native GDK/DiagLogic/Whisper protocol evidence, secure envelope and proved command builders.')
+new = ('- [`docs/MERCEDES-ME-NATIVE-BINARIES.md`](docs/MERCEDES-ME-NATIVE-BINARIES.md) '
+       'records the clean-room native adapter protocol evidence, secure envelope and proved command builders. '
+       'Mercedes application semantics recovered from DataIds, DiagLogic and Whisper are owned and compiled by MBLINK, not LINK.')
+if old not in text:
+    raise SystemExit('README Mercedes me evidence anchor missing')
+readme.write_text(text.replace(old, new, 1))
+
+faces = Path('docs/PRODUCT_FACES.md')
+text = faces.read_text()
+marker = ('Manufacturer repositories may contribute evidence-backed legacy protocols,\n'
+          'module scans, parameters, tests and service procedures, but must not fork the\n'
+          'shared task structure.\n')
+addition = marker + ('\nAdapter support does not transfer manufacturer application semantics into LINK. '
+                     'For example, LINK may own the Mercedes me Adapter transport and native byte/command framing, '
+                     'while Mercedes DataIds, DiagLogic schemas/reference policies and Whisper configuration vocabulary '
+                     'remain MBLINK-owned manufacturer knowledge.\n')
+if marker not in text:
+    raise SystemExit('PRODUCT_FACES manufacturer boundary anchor missing')
+if 'Mercedes DataIds, DiagLogic schemas/reference policies' not in text:
+    text = text.replace(marker, addition, 1)
+faces.write_text(text)
+
+for doc_name in ['docs/MERCEDES-ME-ADAPTER-INTEROP.md', 'docs/MERCEDES-ME-NATIVE-BINARIES.md']:
+    path = Path(doc_name)
+    text = path.read_text()
+    note = ('\n> **Repository boundary:** this document preserves adapter interoperability provenance. '
+            'Product-neutral connection, native wire framing and diagnostic transport belong in LINK. '
+            'Mercedes application semantics (DataIds, DiagLogic value/status interpretation and reference policies, '
+            'and Whisper configuration vocabulary) are implemented and maintained in MBLINK.\n\n')
+    if '**Repository boundary:**' not in text:
+        lines = text.splitlines(keepends=True)
+        insert_at = 1 if lines and lines[0].startswith('<!--') else 0
+        lines.insert(insert_at, note)
+        path.write_text(''.join(lines))
+
+for path in semantic_paths:
+    path.unlink()
