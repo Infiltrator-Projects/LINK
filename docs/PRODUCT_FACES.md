@@ -204,6 +204,22 @@ made in LINK first and consumed by each pinned product face. This makes visual
 and structural drift between MBLINK, JAGLINK, BMWLINK, AUDILINK, FORDLINK and future LINK products an
 explicit architectural regression rather than normal parallel development.
 
+### Shared Dashboard presentation
+
+Dashboard presentation is LINK behaviour. LINK exposes the three persistent
+operator modes `numbers`, `dials` and `combined` and owns gauge range/fraction
+semantics. Native faces draw the same instrument design using their platform
+toolkit; product repositories provide colours/fonts and manufacturer-specific
+parameter metadata only. A structured/text state without a meaningful numeric
+range remains a text tile even when Dials or Combined is selected.
+
+The existing Linux circular cockpit instrument is the visual reference: a
+270-degree sweep, dark radial face, restrained accent arc, exact live value in
+the centre and the parameter title beneath. Apple reproduces that geometry in
+SwiftUI. Windows and Android main diagnostic faces must consume the same core
+mode/range contract when those faces are present; they must not invent another
+mode enum or independent scaling rules.
+
 
 ### Apple language and units boundary
 

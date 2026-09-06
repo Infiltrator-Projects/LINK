@@ -1086,6 +1086,50 @@ struct LinkDiagnosticParameter: Identifiable {
     let history: [Double]
     let sourceLabel: String?
     let qualityNote: String?
+    let dashboardMinimum: Double?
+    let dashboardMaximum: Double?
+
+    init(
+        id: String,
+        protocolName: String,
+        moduleIdentifier: UInt32,
+        parameterIdentifier: UInt32,
+        shortName: String,
+        title: String,
+        suffix: String,
+        formattedValue: String,
+        value: Double?,
+        structuredValue: String?,
+        rawHex: String?,
+        vehicleSupported: Bool,
+        favourite: Bool,
+        pollingEnabled: Bool,
+        history: [Double],
+        sourceLabel: String?,
+        qualityNote: String?,
+        dashboardMinimum: Double? = nil,
+        dashboardMaximum: Double? = nil
+    ) {
+        self.id = id
+        self.protocolName = protocolName
+        self.moduleIdentifier = moduleIdentifier
+        self.parameterIdentifier = parameterIdentifier
+        self.shortName = shortName
+        self.title = title
+        self.suffix = suffix
+        self.formattedValue = formattedValue
+        self.value = value
+        self.structuredValue = structuredValue
+        self.rawHex = rawHex
+        self.vehicleSupported = vehicleSupported
+        self.favourite = favourite
+        self.pollingEnabled = pollingEnabled
+        self.history = history
+        self.sourceLabel = sourceLabel
+        self.qualityNote = qualityNote
+        self.dashboardMinimum = dashboardMinimum
+        self.dashboardMaximum = dashboardMaximum
+    }
 
     var isAvailable: Bool { value != nil || !(structuredValue ?? "").isEmpty }
     var isSupported: Bool { vehicleSupported }
@@ -1099,6 +1143,21 @@ struct LinkDiagnosticParameter: Identifiable {
         return "Waiting for sample"
     }
     var hasLiveValue: Bool { pollingEnabled && isAvailable }
+    var dashboardDialSupported: Bool {
+        guard structuredValue == nil,
+              let minimum = dashboardMinimum,
+              let maximum = dashboardMaximum,
+              minimum.isFinite, maximum.isFinite, maximum > minimum else {
+            return false
+        }
+        return true
+    }
+    var dashboardFraction: Double? {
+        guard let value, dashboardDialSupported,
+              let minimum = dashboardMinimum,
+              let maximum = dashboardMaximum else { return nil }
+        return min(1.0, max(0.0, (value - minimum) / (maximum - minimum)))
+    }
     var pidText: String {
         let value = String(parameterIdentifier, radix: 16, uppercase: true)
         return "0x" + (value.count < 2 ? "0\(value)" : value)
@@ -1327,6 +1386,145 @@ struct LinkVehicleFactGrid: View {
     var body: some View {
         LazyVGrid(columns: columns, alignment: .leading, spacing: 10) {
             ForEach(facts) { fact in LinkVehicleFactTile(fact: fact) }
+        }
+    }
+}
+
+enum LinkDashboardPresentationMode: String, CaseIterable, Identifiable {
+    case numbers
+    case dials
+    case combined
+
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .numbers: return "Numbers"
+        case .dials: return "Dials"
+        case .combined: return "Combined"
+        }
+    }
+}
+
+struct LinkDashboardModePicker: View {
+    @Binding var selection: LinkDashboardPresentationMode
+
+    var body: some View {
+        Picker("Dashboard display", selection: $selection) {
+            ForEach(LinkDashboardPresentationMode.allCases) { mode in
+                Text(LocalizedStringKey(mode.title)).tag(mode)
+            }
+        }
+        .pickerStyle(.segmented)
+        .accessibilityLabel("Dashboard display")
+    }
+}
+
+private struct LinkDashboardGaugeTile: View {
+    @Environment(\.linkDiagnosticTheme) private var theme
+    let parameter: LinkDiagnosticParameter
+    let showDetails: Bool
+
+    private var fraction: Double { parameter.dashboardFraction ?? 0.0 }
+
+    var body: some View {
+        VStack(spacing: 8) {
+            ZStack {
+                Circle()
+                    .fill(
+                        RadialGradient(
+                            colors: [theme.panelRaised, theme.panel, Color.black.opacity(0.78)],
+                            center: .topLeading,
+                            startRadius: 4,
+                            endRadius: 86))
+                Circle()
+                    .stroke(theme.border.opacity(0.82), lineWidth: 1)
+                    .padding(10)
+                Circle()
+                    .trim(from: 0.0, to: 0.75)
+                    .stroke(
+                        theme.border.opacity(0.9),
+                        style: StrokeStyle(lineWidth: 7, lineCap: .round))
+                    .rotationEffect(.degrees(135))
+                    .padding(4)
+                Circle()
+                    .trim(from: 0.0, to: 0.75 * fraction)
+                    .stroke(
+                        parameter.hasLiveValue ? theme.accent : theme.mutedText,
+                        style: StrokeStyle(lineWidth: 7, lineCap: .round))
+                    .rotationEffect(.degrees(135))
+                    .padding(4)
+
+                VStack(spacing: 2) {
+                    Text(parameter.presentationValue)
+                        .font(theme.typography.title2)
+                        .monospacedDigit()
+                        .foregroundStyle(
+                            parameter.hasLiveValue
+                                ? theme.primaryText : theme.mutedText)
+                        .minimumScaleFactor(0.55)
+                        .lineLimit(1)
+                    Text(parameter.pidText)
+                        .font(theme.typography.caption2)
+                        .foregroundStyle(theme.mutedText)
+                }
+                .padding(.horizontal, 18)
+            }
+            .aspectRatio(1, contentMode: .fit)
+            .frame(maxWidth: 164)
+
+            Text(LocalizedStringKey(parameter.title))
+                .font(theme.typography.captionBold)
+                .foregroundStyle(theme.secondaryText)
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+
+            if showDetails {
+                if let source = parameter.sourceLabel {
+                    Label(source, systemImage: "cpu")
+                        .font(theme.typography.caption2)
+                        .foregroundStyle(theme.mutedText)
+                        .lineLimit(2)
+                }
+                if let qualityNote = parameter.qualityNote {
+                    Text(qualityNote)
+                        .font(theme.typography.caption2)
+                        .foregroundStyle(theme.warning)
+                        .lineLimit(2)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: showDetails ? 218 : 194)
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(theme.panelRaised))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(theme.border, lineWidth: 1))
+    }
+}
+
+struct LinkDashboardMetric: View {
+    let parameter: LinkDiagnosticParameter
+    let mode: LinkDashboardPresentationMode
+
+    @ViewBuilder
+    var body: some View {
+        switch mode {
+        case .numbers:
+            LinkMetricTile(parameter: parameter)
+        case .dials:
+            if parameter.dashboardDialSupported {
+                LinkDashboardGaugeTile(parameter: parameter, showDetails: false)
+            } else {
+                LinkMetricTile(parameter: parameter)
+            }
+        case .combined:
+            if parameter.dashboardDialSupported {
+                LinkDashboardGaugeTile(parameter: parameter, showDetails: true)
+            } else {
+                LinkMetricTile(parameter: parameter)
+            }
         }
     }
 }

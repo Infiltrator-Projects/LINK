@@ -117,6 +117,7 @@ add_library(link-core STATIC
     src/core/diagnostic_capability.c
     src/core/isotp.c
     src/core/parameter.c
+    src/core/dashboard.c
     src/core/scheduler.c
     src/core/telemetry.c
     src/core/session_trace.c
@@ -452,6 +453,7 @@ if(BUILD_TESTING AND PROJECT_IS_TOP_LEVEL)
     link_add_test(link-test-i18n tests/test_i18n.c link-i18n)
     link_add_test(link-test-fuel-economy tests/test_fuel_economy.c link-fuel-economy)
     link_add_test(link-test-parameter-observation tests/test_parameter_observation.c link-parameter-observation)
+    link_add_test(link-test-dashboard tests/test_dashboard.c link-dashboard)
     link_add_test(link-test-mercedes-me-adapter tests/test_mercedes_me_adapter.c link-mercedes-me-adapter)
     link_add_test(link-test-mercedes-me-native-protocol tests/test_mercedes_me_native_protocol.c link-mercedes-me-native-protocol)
     link_add_test(link-test-mercedes-me-diagnostic tests/test_mercedes_me_diagnostic.c link-mercedes-me-diagnostic)
