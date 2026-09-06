@@ -200,6 +200,10 @@ static void datacopy(PASSTHRU_MSG *dest, const int8_t *src,
 		s_end - d_pos > PM_DATA_LEN - dest->DataSize)
 		return;
 	memcpy(dest->Data + dest->DataSize, src + s_start + d_pos, s_end - d_pos);
+	if (write_log) {
+		for (uint32_t i = d_pos; i < s_end; ++i) writeloghex(src[s_start + i]);
+		writelog("\n");
+	}
 }
 
 /*
@@ -1193,6 +1197,13 @@ int32_t PassThruReadMsgs(const unsigned long ChannelID, PASSTHRU_MSG *pMsg,
 						}
 					}
 
+					/* An acknowledgement is not a queued vehicle message. */
+					while (bytes_read - bytes_processed >= 5 &&
+						memcmp(data + bytes_processed, "aro\r\n", 5U) == 0) {
+						bytes_processed += 5;
+						pos = (uint32_t)bytes_processed + 5U;
+						len = (uint32_t)bytes_processed + 3U;
+					}
 					// Check if we have read msg_cnt messages,
 					// if so, pMsg array is full, try to queue the message
 					if (bytes_processed < bytes_read && rx_buf_idx >= msg_cnt)

@@ -5,6 +5,7 @@
 
 static unsigned char input[PM_DATA_LEN];
 static int input_size, input_used, writes, closes, releases, exits;
+static int input_copies = 1;
 static int initialization, initialization_reads, fail_initialization_read;
 static struct libusb_device_handle handle;
 static libusb_device device;
@@ -39,7 +40,7 @@ int libusb_bulk_transfer(struct libusb_device_handle *p, unsigned char ep,
         REQUIRE((int)strlen(reply) <= capacity);
         memcpy(data, reply, strlen(reply)); *transferred=(int)strlen(reply); return 0;
     }
-    if (input_used++) return LIBUSB_ERROR_TIMEOUT;
+    if (input_used++ >= input_copies) return LIBUSB_ERROR_TIMEOUT;
     REQUIRE(input_size <= capacity);
     memcpy(data, input, (size_t)input_size); *transferred=input_size; return 0;
 }
@@ -67,6 +68,24 @@ int main(void)
         REQUIRE(n == 9 ? result == J2534_NOERROR : result == J2534_ERR_INVALID_MSG);
     }
     packet[3]=9;
+    unsigned char acknowledged[31];
+    memcpy(acknowledged, packet, 13);
+    memcpy(acknowledged+13, "aro\r\n", 5);
+    REQUIRE(read_packet(acknowledged, 18, &msg)==J2534_NOERROR);
+    REQUIRE(msg.DataSize==4 && fifo_head==NULL);
+    memcpy(acknowledged+18, packet, 13);
+    REQUIRE(read_packet(acknowledged, sizeof(acknowledged), &msg)==J2534_NOERROR);
+    REQUIRE(msg.DataSize==4 && fifo_head!=NULL);
+    count=1;
+    REQUIRE(PassThruReadMsgs(5, &msg, &count, 1)==J2534_NOERROR);
+    REQUIRE(count==1 && msg.DataSize==4 && fifo_head==NULL);
+    /* Repeated ISO-TP chunks must not overrun the destination accumulator. */
+    memset(input, 0, 250); input[0]=0x61; input[1]=0x72;
+    input[2]=ISO15765; input[3]=246;
+    input_size=250; input_used=0; input_copies=18;
+    con->channel=ISO15765; con->protocol_id=6; count=1;
+    REQUIRE(PassThruReadMsgs(6, &msg, &count, 1)==J2534_ERR_INVALID_MSG);
+    REQUIRE(count==0 && fifo_head==NULL); input_copies=1;
     /* Exact USB-buffer boundary: no speculative read after the final record. */
     unsigned char full[PM_DATA_LEN];
     size_t offset=0;
