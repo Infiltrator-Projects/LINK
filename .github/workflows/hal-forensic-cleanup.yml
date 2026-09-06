@@ -1,0 +1,97 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: HAL forensic cleanup
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/hal-forensic-cleanup.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: hal-link-forensic-cleanup
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Apply forensic cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              if old not in text:
+                  raise SystemExit(f"expected text not found in {path}: {old[:100]!r}")
+              p.write_text(text.replace(old, new, 1))
+
+          Path('VERSION').write_text('0.15.3\n')
+          replace('include/link/version.h', '#define LINK_VERSION_STRING "0.15.2"', '#define LINK_VERSION_STRING "0.15.3"')
+
+          ignore = Path('.gitignore').read_text()
+          for item in ('__pycache__/\n', '*.py[cod]\n'):
+              if item not in ignore:
+                  ignore += item
+          Path('.gitignore').write_text(ignore)
+
+          replace(
+              'README.md',
+              'A configuration that enables both extension positions is rejected rather than silently running manufacturer discovery twice. MBLINK deliberately uses the late hook so standard fault evidence completes before a potentially long Mercedes module scan. JAGLINK currently skips the manufacturer hook. Manufacturer logic therefore stays above LINK while generic sequencing remains shared.',
+              'A configuration that enables more than one manufacturer-extension position is rejected rather than silently running manufacturer discovery twice. Each product chooses the one insertion point that matches its vehicle workflow. MBLINK currently uses the post-VIN hook so the authoritative vehicle profile is selected or created before the remaining standard fault/live work; manufacturer logic stays above LINK while generic sequencing remains shared.'
+          )
+          replace(
+              'README.md',
+              'Every push to `main` runs LINK CI. Ordinary commits do not publish. A commit is release-eligible only when its subject begins with the exact source version as `Release <version>` and the complete LINK CI run succeeds.',
+              'Every external or user-authored push to `main` runs LINK CI. Ordinary commits do not publish. Automation that writes `main` with GitHub Actions credentials must run the equivalent build/tests before its push because GitHub deliberately does not recursively trigger workflows from that token. A commit is release-eligible only when its subject begins with the exact source version as `Release <version>` and the complete LINK CI run succeeds.'
+          )
+          replace(
+              'README.md',
+              'The next diagnostic completion work is to connect the existing OBD freeze-frame/readiness primitives to the same resolved fault-record path and continue broadening the shared deep-reader mechanics only where a product can supply evidence-backed targets. LINK now provides prompt-safe ELM resynchronisation after an interrupted manufacturer extension and header-aware broad CAN route discovery for native OpenPort 2.0; product repositories decide when those mechanisms are appropriate for a verified vehicle family. The generic DTC catalogue is complete for the pinned OBDex snapshot and should be refreshed reproducibly when its upstream source changes. Remaining consolidation work includes packaging/CI helper convergence without pulling product branding into LINK.',
+              'Readiness, freeze-frame context and resolved generic fault records are integrated into the shared diagnostic flow. Current shared-engine work is therefore consolidation rather than missing fault plumbing: keep vehicle/profile reuse product-neutral, broaden deep-reader/research mechanics only where a product supplies evidence-backed targets, preserve prompt-safe ELM recovery and responder attribution, and converge packaging/CI helpers without pulling product branding or manufacturer semantics into LINK. The generic DTC catalogue remains reproducibly refreshable from its pinned source snapshot.'
+          )
+
+          replace(
+              'docs/LOCALISATION.md',
+              "Visible reusable text must be referenced by semantic keys through `link_i18n_tr()` or `link_i18n_format()`. Linux, Windows Discover and Apple faces should initialise the catalogue from the operating system's preferred locale and may expose an explicit override. Product-specific catalogues use the same Infiltratr Common engine rather than forking LINK's tables.",
+              "Visible reusable text must be referenced by semantic keys through `link_i18n_tr()` or `link_i18n_format()`. Linux and Windows faces may initialise from the operating system's preferred locale. Apple product faces intentionally retain MBLINK's established `en-AU` default until the user selects an explicit language, and persist that selection. Product-specific catalogues use the same Infiltratr Common engine rather than forking LINK's tables."
+          )
+          PY
+
+          rm -rf .github/__pycache__
+          rm -f .github/workflows/hal-fix-profile-header.yml
+          git diff --check
+
+      - name: Build and test portable core
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --parallel
+          ctest --test-dir build --output-on-failure
+          cmake -S . -B build-sanitized -DCMAKE_BUILD_TYPE=Debug -DLINK_ENABLE_SANITIZERS=ON
+          cmake --build build-sanitized --parallel
+          ctest --test-dir build-sanitized --output-on-failure
+
+      - name: Commit tested cleanup to main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add -A
+          git diff --cached --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Prepare LINK 0.15.3 forensic cleanup"
+          git push origin HEAD:main
