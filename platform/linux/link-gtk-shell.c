@@ -120,7 +120,9 @@ static const char link_gtk_base_css[] =
     ".link-card-kicker { font-size: 10px; font-weight: 800; letter-spacing: 2px; }"
     ".link-card-title { font-size: 20px; font-weight: 800; }"
     ".link-status-chip { padding: 7px 11px; border-radius: 999px; border: 1px solid transparent; font-weight: 700; }"
-    ".link-card-note { margin-top: 4px; font-size: 12px; }";
+    ".link-card-note { margin-top: 4px; font-size: 12px; }"
+    ".link-about-dialog stackswitcher { margin: 6px 12px 8px 12px; }"
+    ".link-about-dialog scrolledwindow { min-width: 500px; min-height: 300px; }";
 
 static uint64_t monotonic_ms(void)
 {
