@@ -192,13 +192,7 @@ jobs:
           fi
 
       - name: Configure
-        shell: bash
-        run: |
-          extra=()
-          if [[ "${{ runner.os }}" == "Windows" ]]; then
-            extra+=( -DLINK_BUILD_REFERENCE_PRODUCT_FACES=ON )
-          fi
-          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release "${extra[@]}"
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 
       - name: Build
         run: cmake --build build --config Release --parallel
@@ -218,18 +212,15 @@ jobs:
           cmake --build package-consumer --parallel
           ./package-consumer/link-package-consumer
 
-      - name: Verify one shared scanner implementation produces both product faces
+      - name: Verify the neutral shared scanner implementation
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $mb = Get-ChildItem -Path build -Recurse -Filter mblink-discover.exe | Select-Object -First 1
-          $jag = Get-ChildItem -Path build -Recurse -Filter jaglink-discover.exe | Select-Object -First 1
-          if (-not $mb) { throw 'mblink-discover.exe was not produced by LINK' }
-          if (-not $jag) { throw 'jaglink-discover.exe was not produced by LINK' }
+          $link = Get-ChildItem -Path build -Recurse -Filter link-discover.exe | Select-Object -First 1
+          if (-not $link) { throw 'link-discover.exe was not produced by LINK' }
           if (-not (Test-Path platform/windows/link-discover.c)) { throw 'shared scanner backend is missing' }
           if (-not (Test-Path platform/windows/link-discover-ui.c)) { throw 'shared scanner UI shell is missing' }
-          Write-Host "MBLINK face: $($mb.FullName)"
-          Write-Host "JAGLINK face: $($jag.FullName)"
+          Write-Host "LINK scanner: $($link.FullName)"
 
   linux-native-adapters:
     name: Ubuntu / native Linux adapter providers
