@@ -93,7 +93,7 @@ ELM init
   → live PID decode
 ```
 
-A configuration that enables both extension positions is rejected rather than silently running manufacturer discovery twice. MBLINK deliberately uses the late hook so standard fault evidence completes before a potentially long Mercedes module scan. JAGLINK currently skips the manufacturer hook. Manufacturer logic therefore stays above LINK while generic sequencing remains shared.
+A configuration that enables more than one manufacturer-extension position is rejected rather than silently running manufacturer discovery twice. Each product chooses the one insertion point that matches its vehicle workflow. MBLINK currently uses the post-VIN hook so the authoritative vehicle profile is selected or created before the remaining standard fault/live work; manufacturer logic stays above LINK while generic sequencing remains shared.
 
 An optional stored, pending or permanent DTC mode may return ELM `NO DATA` or
 an ISO-style `7F <service> <NRC>` response on a vehicle that does not make that
@@ -186,7 +186,7 @@ LINK is a shared engine rather than an end-user application, so product installe
 
 This repository uses `main` as its working branch. Development changes are made directly on `main`; the normal project workflow does not depend on PR, feature or release branches.
 
-Every push to `main` runs LINK CI. Ordinary commits do not publish. A commit is release-eligible only when its subject begins with the exact source version as `Release <version>` and the complete LINK CI run succeeds.
+Every external or user-authored push to `main` runs LINK CI. Ordinary commits do not publish. Automation that writes `main` with GitHub Actions credentials must run the equivalent build/tests before its push because GitHub deliberately does not recursively trigger workflows from that token. A commit is release-eligible only when its subject begins with the exact source version as `Release <version>` and the complete LINK CI run succeeds.
 
 The publisher checks out the exact tested commit, verifies it is still current `main`, builds the source release and checksum, then creates the version tag and GitHub release. Existing version tags and published releases are immutable and are never moved, replaced or edited in place.
 
@@ -204,7 +204,7 @@ Manually runnable build/test helpers, where present, are diagnostic tools only a
 
 ## Roadmap
 
-The next diagnostic completion work is to connect the existing OBD freeze-frame/readiness primitives to the same resolved fault-record path and continue broadening the shared deep-reader mechanics only where a product can supply evidence-backed targets. LINK now provides prompt-safe ELM resynchronisation after an interrupted manufacturer extension and header-aware broad CAN route discovery for native OpenPort 2.0; product repositories decide when those mechanisms are appropriate for a verified vehicle family. The generic DTC catalogue is complete for the pinned OBDex snapshot and should be refreshed reproducibly when its upstream source changes. Remaining consolidation work includes packaging/CI helper convergence without pulling product branding into LINK.
+Readiness, freeze-frame context and resolved generic fault records are integrated into the shared diagnostic flow. Current shared-engine work is therefore consolidation rather than missing fault plumbing: keep vehicle/profile reuse product-neutral, broaden deep-reader/research mechanics only where a product supplies evidence-backed targets, preserve prompt-safe ELM recovery and responder attribution, and converge packaging/CI helpers without pulling product branding or manufacturer semantics into LINK. The generic DTC catalogue remains reproducibly refreshable from its pinned source snapshot.
 
 ## Licence
 

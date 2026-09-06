@@ -4,7 +4,7 @@ LINK owns reusable automotive and shared application-shell language. Infiltratr 
 
 The initial built-in locales are `en-AU`, `en-US`, `de-DE`, `fr-FR`, `es-ES` and `it-IT`, with `en-AU` as the canonical complete fallback. Technical identifiers such as DTC codes, CAN IDs, UDS services, DIDs, baud rates and ECU part numbers are never translated.
 
-Visible reusable text must be referenced by semantic keys through `link_i18n_tr()` or `link_i18n_format()`. Linux, Windows Discover and Apple faces should initialise the catalogue from the operating system's preferred locale and may expose an explicit override. Product-specific catalogues use the same Infiltratr Common engine rather than forking LINK's tables.
+Visible reusable text must be referenced by semantic keys through `link_i18n_tr()` or `link_i18n_format()`. Linux and Windows faces may initialise from the operating system's preferred locale. Apple product faces intentionally retain MBLINK's established `en-AU` default until the user selects an explicit language, and persist that selection. Product-specific catalogues use the same Infiltratr Common engine rather than forking LINK's tables.
 
 
 ## Apple language and measurement preferences
