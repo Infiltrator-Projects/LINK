@@ -2,12 +2,13 @@
 
 # UDS service coverage
 
-LINK owns the product-neutral ISO 14229 request/response layer shared by MBLINK
-and JAGLINK. `include/link/uds.h` retains the typed core client, session,
-TesterPresent and ReadDataByIdentifier APIs. `include/link/uds_dtc.h` provides
-the read-only ReadDTCInformation helper. `include/link/uds_services.h` declares
-the complete standard service catalogue and bounded codec API; the implementation
-is compiled once in `src/uds/uds_services.c` as part of `LINK::Core`.
+LINK owns the product-neutral ISO 14229 request/response layer shared by all
+LINK-family products. `include/link/uds.h` retains the typed core client,
+session, TesterPresent and ReadDataByIdentifier APIs. `include/link/uds_dtc.h`
+provides the read-only ReadDTCInformation helper. `include/link/uds_services.h`
+declares the complete standard service catalogue and bounded codec API; the
+implementation is compiled once in `src/uds/uds_services.c` as part of
+`LINK::Core`.
 
 The codec layer only serializes or validates diagnostic PDUs. It does not send
 them. Complex records whose meaning is ECU- or application-specific remain raw
