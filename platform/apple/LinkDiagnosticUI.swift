@@ -1218,7 +1218,7 @@ struct LinkSavedVehicleProfileSummary: Identifiable {
             vin: vin,
             displayName: displayName,
             moduleCount: moduleCount,
-            responderCount: Int(LinkVehicleProfileStandardResponderCount(profile as! [AnyHashable: Any])),
+            responderCount: Int(LinkVehicleProfileStandardResponderCount(profile as? [AnyHashable: Any])),
             updatedAt: timestamp.map { Date(timeIntervalSince1970: $0) })
     }
 }
