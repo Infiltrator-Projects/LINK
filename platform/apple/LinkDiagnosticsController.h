@@ -41,6 +41,8 @@ NS_ASSUME_NONNULL_BEGIN
 
 @property(nonatomic, weak, nullable) id<LinkDiagnosticsControllerDelegate> delegate;
 
+/** Exact LINK release version compiled into the shared Apple controller. */
+@property(nonatomic, copy, readonly) NSString *linkVersionText;
 @property(nonatomic, copy, readonly) NSString *statusText;
 @property(nonatomic, copy, readonly, nullable) NSString *peripheralName;
 @property(nonatomic, copy, readonly, nullable) NSString *adapterIdentifier;

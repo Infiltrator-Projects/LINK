@@ -11,6 +11,7 @@
 #import "link/obd2.h"
 #import "link/telemetry.h"
 #import "link/transport.h"
+#import "link/version.h"
 
 #include <stdint.h>
 
@@ -276,6 +277,11 @@ static void LinkAppleSessionEvent(
     } else if (!_simulated) {
         [_provider disconnect];
     }
+}
+
+- (NSString *)linkVersionText
+{
+    return @LINK_VERSION_STRING;
 }
 
 - (NSArray<NSString *> *)availableLanguageTags

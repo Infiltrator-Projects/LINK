@@ -146,6 +146,8 @@ jobs:
           grep -Fq 'linkDiagnosticLocalization' platform/apple/LinkDiagnosticUI.swift
           grep -Fq 'setSelectedLanguageTag' platform/apple/LinkDiagnosticsController.m
           grep -Fq 'setSelectedMeasurementSystemKey' platform/apple/LinkDiagnosticsController.m
+          grep -Fq '@property(nonatomic, copy, readonly) NSString *linkVersionText;' platform/apple/LinkDiagnosticsController.h
+          grep -Fq 'return @LINK_VERSION_STRING;' platform/apple/LinkDiagnosticsController.m
           ! grep -Fq 'LinkDiagnosticSettingsView' platform/apple/LinkDiagnosticUI.swift
           ! grep -Fq 'preferFavouriteSignals' platform/apple/LinkDiagnosticsController.h
           ! grep -Fq 'showUnavailableParameters' platform/apple/LinkDiagnosticsController.h
