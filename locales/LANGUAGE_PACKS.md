@@ -1,8 +1,9 @@
 # LINK language packs
 
 LINK-family applications support discoverable, Amiga-style, data-only language packs.
-A translator can add a language without recompiling MBLINK, JAGLINK or LINK: place a
-UTF-8 `.lang` file in a scanned `Languages` directory and restart the application.
+A translator can add a language without recompiling LINK or any manufacturer product:
+place a UTF-8 `.lang` file in a scanned `Languages` directory and restart the
+application.
 
 ## Format
 
