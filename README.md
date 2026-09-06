@@ -58,8 +58,7 @@ LINK currently owns:
   separate responder-attributed history that leaves the legacy one-value-per-PID
   interface intact; streaming CSV schema v2 records the responder CAN ID and
   addressing width on every attributed sample;
-- diagnostic workspace model, including a LINK-owned OBD workspace shared by
-  every manufacturer face;
+- the shared operator-task diagnostic workspace and information architecture used by every manufacturer face, with protocols such as OBD-II, OBDonUDS, UDS and manufacturer legacy diagnostics treated as data sources beneath the interface rather than competing top-level navigation destinations;
 - evidence-based diagnostic-generation classification for legacy/OBD-I-era,
   transitional/"OBD1.5" and standard OBD-II/EOBD surfaces, without inferring
   capability from model year or connector shape;
@@ -126,10 +125,9 @@ diagnostic-generation boundaries.
 
 LINK records the ELM-selected active OBD transport after the first real OBD exchange (for example ISO 9141-2 or ISO 15765-4 CAN). Transport selection/framing remains LINK-owned; manufacturer-specific diagnostics remain product-owned.
 
-
 Portable diagnostic behaviour is C11. C++ is used only where it materially improves a design. Platform-required languages remain narrow presentation or interop edges and must not become alternate protocol implementations.
 
-Shared protocol state machines, diagnostic sequencing, safety policy, generic diagnostic knowledge and transport-independent decisions belong in LINK rather than Swift, Objective-C, GTK callbacks or Win32 message handlers.
+Shared protocol state machines, diagnostic sequencing, safety policy, generic diagnostic knowledge, operator-task information architecture, common application behaviour and transport-independent decisions belong in LINK rather than Swift, Objective-C, GTK callbacks or Win32 message handlers.
 
 Standard OBD knowledge follows the same rule. Product repositories must not grow private SAE PID tables. LINK's generated Mode 01/09 catalogue and `link/j1979da.h` are the shared source of truth for compiled public metadata and formulas. LINK separately records the current targets J1979_202505, J1979DA_202607, J1978-1_202604 and J1979-2_202604. Because the current J1979 Digital Annex is licensed and is not redistributed here, the compiled semantic baseline is labelled `J1979DA_201110+verified-public-updates`; unverified current rows remain raw rather than being guessed. Manufacturer UDS/KWP definitions are layered above that shared standards engine.
 
