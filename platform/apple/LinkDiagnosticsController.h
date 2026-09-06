@@ -15,6 +15,7 @@
 #import "link/diagnostic_flow.h"
 #import "link/elm327_session.h"
 #import "link/elm327_simulator.h"
+#import "link/i18n.h"
 #import "link/units.h"
 
 NS_ASSUME_NONNULL_BEGIN
