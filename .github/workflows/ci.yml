@@ -128,6 +128,12 @@ jobs:
           grep -Fq 'struct LinkDiagnosticAboutInfo' platform/apple/LinkDiagnosticUI.swift
           grep -Fq 'struct LinkDiagnosticAboutView' platform/apple/LinkDiagnosticUI.swift
           grep -Fq 'struct LinkDiagnosticAboutButton' platform/apple/LinkDiagnosticUI.swift
+          grep -Fq 'class LinkStandardProductViewModel' platform/apple/LinkDiagnosticUI.swift
+          grep -Fq 'struct LinkStandardProductAppearance' platform/apple/LinkDiagnosticUI.swift
+          grep -Fq 'struct LinkStandardProductContentView' platform/apple/LinkDiagnosticUI.swift
+          grep -Fq 'enum LinkConnectionPresentation' platform/apple/LinkDiagnosticUI.swift
+          grep -Fq '@interface LinkProductDiagnosticsController' platform/apple/LinkDiagnosticsController.h
+          grep -Fq '@implementation LinkProductDiagnosticsController' platform/apple/LinkDiagnosticsController.m
           grep -Fq 'bool use_client_side_titlebar;' platform/linux/link-gtk-shell.h
           if grep -Fq 'adapter_combo_width' platform/linux/link-gtk-shell.h; then
             echo 'Adapter-selector geometry must be LINK-owned, not product-configurable.' >&2

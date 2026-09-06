@@ -1854,4 +1854,1189 @@ final class LinkConnectionPickerViewController: UITableViewController,
     }
 }
 
+// MARK: - Shared standard-product application model
+
+struct LinkStandardProductConfiguration {
+    let productName: String
+    let productNamespace: String
+    let manufacturerName: String
+    let vehicleName: String
+    let versionText: String
+    let legacyProfileKey: String?
+    let legacySelectedVINKey: String?
+    let legacyAdapterMappingKey: String?
+
+    init(
+        productName: String,
+        productNamespace: String,
+        manufacturerName: String,
+        vehicleName: String,
+        versionText: String,
+        legacyProfileKey: String? = nil,
+        legacySelectedVINKey: String? = nil,
+        legacyAdapterMappingKey: String? = nil
+    ) {
+        self.productName = productName
+        self.productNamespace = productNamespace
+        self.manufacturerName = manufacturerName
+        self.vehicleName = vehicleName
+        self.versionText = versionText
+        self.legacyProfileKey = legacyProfileKey
+        self.legacySelectedVINKey = legacySelectedVINKey
+        self.legacyAdapterMappingKey = legacyAdapterMappingKey
+    }
+}
+
+/**
+ * Complete product-neutral Swift application model for a standard LINK face.
+ *
+ * A branded repository supplies one configured controller, identity metadata,
+ * theme and manufacturer screens. LINK owns connection selection, generic
+ * vehicle persistence, SAE capability caching, polling policy, dashboard
+ * selection, evidence export and presentation snapshots.
+ */
+@MainActor
+class LinkStandardProductViewModel: NSObject, ObservableObject {
+    @Published private(set) var statusText = "Idle"
+    @Published private(set) var peripheralName = "No adapter"
+    @Published private(set) var adapterIdentifier = "Unknown"
+    @Published private(set) var obdProtocolText = "OBD-II protocol not identified"
+    @Published private(set) var vehicleVINText = "No vehicle loaded"
+    @Published private(set) var faultScanStatusText = "Not scanned"
+    @Published private(set) var storedDTCs = [String]()
+    @Published private(set) var pendingDTCs = [String]()
+    @Published private(set) var permanentDTCs = [String]()
+    @Published private(set) var readinessStatusText = "Not read"
+    @Published private(set) var readinessMonitorStatus = [String]()
+    @Published private(set) var freezeFrameContext = [String]()
+    @Published private(set) var diagnosticCapabilityText = "Unknown / probing"
+    @Published private(set) var diagnosticCapabilityDetailText = ""
+    @Published private(set) var standardResponderSummary = "0 physical responders"
+    @Published private(set) var supportedPIDSummary = "0 advertised PIDs"
+    @Published private(set) var standardLiveRows = [String]()
+    @Published private(set) var diagnosticParameters = [LinkDiagnosticParameter]()
+    @Published private(set) var dashboardParameters = [LinkDiagnosticParameter]()
+    @Published private(set) var savedVehicleProfiles = [LinkSavedVehicleProfileSummary]()
+    @Published private(set) var selectedVehicleVIN: String?
+    @Published private(set) var isActive = false
+    @Published private(set) var isReady = false
+    @Published private(set) var isSimulationActive = false
+    @Published private(set) var recordedSampleCount = 0
+    @Published private(set) var versionText: String
+    @Published private(set) var linkVersionText = "Unknown"
+    @Published private(set) var csvExportURL: URL?
+    @Published private(set) var isPreparingCSV = false
+    @Published private(set) var languageTags = [String]()
+    @Published private(set) var languageNames = [String]()
+    @Published private(set) var selectedLanguageID = "en-AU"
+    @Published private(set) var measurementKeys = [String]()
+    @Published private(set) var measurementNames = [String]()
+    @Published private(set) var selectedMeasurementID = "metric"
+
+    let productController: LinkProductDiagnosticsController
+    let configuration: LinkStandardProductConfiguration
+    let vehicleProfileStore: LinkVehicleProfileStore
+    let dashboardSelectionStore: LinkPIDSelectionStore
+    let pollingSelectionStore: LinkPIDSelectionStore
+    private var lastPersistedLiveVIN: String?
+    private var lastCapabilityMergeVIN: String?
+
+    var interfaceLocaleIdentifier: String { selectedLanguageID }
+
+    var selectedVehicleDisplayName: String {
+        guard let selectedVehicleVIN else { return "No vehicle loaded" }
+        return savedVehicleProfiles.first(where: {
+            $0.vin == selectedVehicleVIN
+        })?.displayName ?? configuration.vehicleName
+    }
+
+    init(
+        controller: LinkProductDiagnosticsController,
+        configuration: LinkStandardProductConfiguration
+    ) {
+        self.productController = controller
+        self.configuration = configuration
+        self.versionText = configuration.versionText
+        self.vehicleProfileStore = LinkVehicleProfileStore(
+            productNamespace: configuration.productNamespace,
+            legacyProfileKey: configuration.legacyProfileKey,
+            legacySelectedVINKey: configuration.legacySelectedVINKey,
+            legacyAdapterMappingKey: configuration.legacyAdapterMappingKey)
+        self.dashboardSelectionStore = LinkPIDSelectionStore(
+            productNamespace: configuration.productNamespace,
+            legacyGlobalKey: nil,
+            legacyVehicleKey: nil)
+        self.pollingSelectionStore = LinkPIDSelectionStore(
+            productNamespace: configuration.productNamespace + "-polling",
+            legacyGlobalKey: nil,
+            legacyVehicleKey: nil)
+        super.init()
+
+        selectedVehicleVIN = vehicleProfileStore.selectedVehicleVIN
+        seedDefaultPollingSelection()
+        applyStoredPollingPolicy()
+        refreshStandardState()
+    }
+
+    func connect() {
+        clearPreparedExport()
+        guard !isActive else { return }
+        let currentVehicleText = selectedVehicleVIN.map {
+            "\(selectedVehicleDisplayName) · \($0)"
+        } ?? "No saved vehicle loaded"
+        let knownAdapter = selectedVehicleVIN.flatMap {
+            vehicleProfileStore.associatedAdapterIdentifier(forVIN: $0)
+        }
+        LinkConnectionPresentation.presentPicker(
+            vehicleText: currentVehicleText,
+            knownAdapterIdentifier: knownAdapter) { [weak self] source in
+                self?.beginConnection(source)
+            }
+    }
+
+    private func beginConnection(_ source: LinkConnectionSource) {
+        guard !isActive else { return }
+        lastPersistedLiveVIN = nil
+        lastCapabilityMergeVIN = nil
+        switch source {
+        case .automatic:
+            isSimulationActive = false
+            productController.start()
+        case .simulated:
+            isSimulationActive = true
+            productController.startSimulated()
+        case .peripheral(let identifier):
+            isSimulationActive = false
+            productController.start(withPeripheralIdentifier: identifier)
+        }
+    }
+
+    func disconnect() {
+        productController.disconnect()
+        isSimulationActive = false
+    }
+
+    func selectSavedVehicle(vin: String) {
+        guard !isActive,
+              vehicleProfileStore.selectOfflineVehicle(withVIN: vin) else {
+            return
+        }
+        selectedVehicleVIN = vin
+        refreshStandardState()
+    }
+
+    func localizedText(_ key: String) -> String {
+        productController.localizedText(forKey: key)
+    }
+
+    func selectLanguage(_ id: String) {
+        productController.setSelectedLanguageTag(id)
+        refreshStandardState()
+    }
+
+    func selectMeasurementSystem(_ id: String) {
+        productController.setSelectedMeasurementSystemKey(id)
+        refreshStandardState()
+    }
+
+    func toggleFavourite(_ parameter: LinkDiagnosticParameter) {
+        guard let pid = UInt8(exactly: parameter.parameterIdentifier) else { return }
+        productController.setFavourite(
+            !productController.favourite(forPID: pid), forPID: pid)
+        refreshStandardState()
+    }
+
+    func togglePolling(_ parameter: LinkDiagnosticParameter) {
+        guard let pid = UInt8(exactly: parameter.parameterIdentifier) else { return }
+        let enabled = !productController.pollingEnabled(forPID: pid)
+        var enabledKeys = Set(pollingSelectionStore.globalStableKeys)
+        if enabled { enabledKeys.insert(parameter.id) }
+        else { enabledKeys.remove(parameter.id) }
+        pollingSelectionStore.setGlobalStableKeys(Array(enabledKeys).sorted())
+        productController.setPollingEnabled(enabled, forPID: pid)
+        refreshStandardState()
+    }
+
+    func prepareCSVExport() {
+        guard !isPreparingCSV,
+              let snapshot = productController.csvDataSnapshot() else { return }
+        clearPreparedExport()
+        isPreparingCSV = true
+        let data = snapshot as Data
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                let url = try await LinkEvidenceExport.prepareTemporaryCSV(
+                    data, productName: configuration.productName)
+                self.csvExportURL = url
+            } catch {
+                self.csvExportURL = nil
+            }
+            self.isPreparingCSV = false
+        }
+    }
+
+    func refreshStandardState() {
+        refreshSavedVehicleProfiles()
+        statusText = productController.statusText
+        peripheralName = productController.peripheralName ?? "No adapter"
+        adapterIdentifier = productController.adapterIdentifier ?? "Unknown"
+        obdProtocolText = productController.obdProtocolText
+        let active = productController.isActive
+        let liveVIN = productController.standardVINText
+        let validLiveVIN = liveVIN.count == 17 ? liveVIN : nil
+        vehicleVINText = active
+            ? (validLiveVIN ?? "Waiting for standard VIN")
+            : (selectedVehicleVIN ?? "No vehicle loaded")
+
+        if active, let validLiveVIN,
+           lastPersistedLiveVIN != validLiveVIN {
+            vehicleProfileStore.recordLiveVIN(validLiveVIN)
+            selectedVehicleVIN = validLiveVIN
+            saveVehicleProfile(vin: validLiveVIN)
+            lastPersistedLiveVIN = validLiveVIN
+            refreshSavedVehicleProfiles()
+        }
+        if active, let validLiveVIN {
+            mergeStandardCapabilitiesIfReady(vin: validLiveVIN)
+        }
+
+        faultScanStatusText = productController.faultScanStatusText
+        storedDTCs = productController.storedDTCs
+        pendingDTCs = productController.pendingDTCs
+        permanentDTCs = productController.permanentDTCs
+        readinessStatusText = productController.readinessStatusText
+        readinessMonitorStatus = productController.readinessMonitorStatus
+        freezeFrameContext = productController.freezeFrameContext
+        diagnosticCapabilityText = productController.diagnosticCapabilityText
+        diagnosticCapabilityDetailText = productController.diagnosticCapabilityDetailText
+        standardResponderSummary = productController.standardResponderSummary
+        supportedPIDSummary = productController.supportedPIDSummary
+        standardLiveRows = productController.standardLiveValueRows
+        languageTags = productController.availableLanguageTags
+        languageNames = productController.availableLanguageNames
+        selectedLanguageID = productController.selectedLanguageTag
+        measurementKeys = productController.availableMeasurementSystemKeys
+        measurementNames = productController.availableMeasurementSystemNames
+        selectedMeasurementID = productController.selectedMeasurementSystemKey
+        linkVersionText = productController.linkVersionText
+        isActive = active
+        isReady = productController.isReady
+        diagnosticParameters = loadDiagnosticParameters()
+        refreshDashboardSelection()
+        recordedSampleCount = Int(clamping: productController.recordedSampleCount)
+    }
+
+    private func refreshSavedVehicleProfiles() {
+        savedVehicleProfiles = vehicleProfileStore.savedProfiles.compactMap { profile in
+            LinkSavedVehicleProfileSummary(
+                profile: profile as NSDictionary,
+                moduleCount: 0,
+                fallbackDisplayName: configuration.vehicleName)
+        }
+        selectedVehicleVIN = vehicleProfileStore.selectedVehicleVIN
+    }
+
+    private func saveVehicleProfile(vin: String) {
+        var profile = vehicleProfileStore.profile(forVIN: vin) ?? [:]
+        if profile["displayName"] == nil {
+            profile["displayName"] = "\(configuration.vehicleName) · \(vin)"
+        }
+        profile["manufacturer"] = configuration.manufacturerName
+        profile["obdProtocolText"] = productController.obdProtocolText
+        profile["diagnosticCapabilityText"] =
+            productController.diagnosticCapabilityText
+        vehicleProfileStore.saveProfile(profile, forVIN: vin)
+    }
+
+    private func mergeStandardCapabilitiesIfReady(vin: String) {
+        guard productController.isReady,
+              lastCapabilityMergeVIN != vin,
+              let flow = productController.diagnosticFlow() else { return }
+        _ = vehicleProfileStore.mergeStandardCapabilities(
+            fromDiagnosticFlow: flow, forVIN: vin)
+        lastCapabilityMergeVIN = vin
+    }
+
+    private func loadDiagnosticParameters() -> [LinkDiagnosticParameter] {
+        let count = Int(link_obd2_pid_definition_count())
+        var result = [LinkDiagnosticParameter]()
+        result.reserveCapacity(count)
+        for index in 0..<count {
+            guard let definition = link_obd2_pid_definition_at(index) else { continue }
+            let metadata = definition.pointee
+            guard metadata.mode == 0x01, let name = metadata.name else { continue }
+            let pid = metadata.pid
+            let supported = productController.supportsPID(pid)
+            let pollingEnabled = productController.pollingEnabled(forPID: pid)
+            let history = productController.displayRecentValues(
+                forPID: pid, limit: 60).map(\.doubleValue)
+            let value = history.last
+            let unit = productController.displayUnit(forPID: pid)
+            let range = productController.displayRange(forPID: pid)
+            let minimum = range.count >= 2 ? range[0].doubleValue : nil
+            let maximum = range.count >= 2 ? range[1].doubleValue : nil
+            let suffix = unit.isEmpty ? "" : " \(unit)"
+            result.append(LinkDiagnosticParameter(
+                id: String(format: "obd2-01-%02X", pid),
+                protocolName: "OBD2",
+                moduleIdentifier: 0,
+                parameterIdentifier: UInt32(pid),
+                shortName: String(format: "PID %02X", pid),
+                title: String(cString: name),
+                suffix: unit,
+                formattedValue: value.map {
+                    String(format: "%.1f%@", $0, suffix)
+                } ?? "N/A",
+                value: value,
+                structuredValue: nil,
+                rawHex: nil,
+                vehicleSupported: supported,
+                favourite: productController.favourite(forPID: pid),
+                pollingEnabled: pollingEnabled,
+                history: history,
+                sourceLabel: "SAE OBD-II",
+                qualityNote: supported && !pollingEnabled
+                    ? "Polling disabled" : nil,
+                dashboardMinimum: minimum,
+                dashboardMaximum: maximum))
+        }
+        return result
+    }
+
+    private func refreshDashboardSelection() {
+        let supported = diagnosticParameters.filter(\.vehicleSupported)
+        if !dashboardSelectionStore.hasGlobalSelection {
+            let preferredPIDs: [UInt32] = [0x0C, 0x0D, 0x05, 0x11, 0x04, 0x0F]
+            let preferred = preferredPIDs.compactMap { pid in
+                supported.first(where: {
+                    $0.parameterIdentifier == pid
+                })?.id
+            }
+            let defaults = preferred.isEmpty
+                ? Array(supported.prefix(6).map(\.id)) : preferred
+            if !defaults.isEmpty {
+                dashboardSelectionStore.setGlobalStableKeys(defaults)
+            }
+        }
+        let selected = Set(dashboardSelectionStore.globalStableKeys)
+        let chosen = diagnosticParameters.filter {
+            selected.contains($0.id) && $0.vehicleSupported
+        }
+        dashboardParameters = chosen.isEmpty
+            ? Array(supported.prefix(6)) : chosen
+    }
+
+    private func allStandardPollingKeys() -> [String] {
+        let count = Int(link_obd2_pid_definition_count())
+        return (0..<count).compactMap { index in
+            guard let definition = link_obd2_pid_definition_at(index) else {
+                return nil
+            }
+            let metadata = definition.pointee
+            guard metadata.mode == 0x01, (metadata.pid & 0x1F) != 0 else {
+                return nil
+            }
+            return String(format: "obd2-01-%02X", metadata.pid)
+        }
+    }
+
+    private func seedDefaultPollingSelection() {
+        guard !pollingSelectionStore.hasGlobalSelection else { return }
+        pollingSelectionStore.setGlobalStableKeys(allStandardPollingKeys())
+    }
+
+    private func applyStoredPollingPolicy() {
+        let enabledKeys = Set(pollingSelectionStore.globalStableKeys)
+        let count = Int(link_obd2_pid_definition_count())
+        for index in 0..<count {
+            guard let definition = link_obd2_pid_definition_at(index) else { continue }
+            let metadata = definition.pointee
+            guard metadata.mode == 0x01, (metadata.pid & 0x1F) != 0 else { continue }
+            let key = String(format: "obd2-01-%02X", metadata.pid)
+            productController.setPollingEnabled(
+                enabledKeys.contains(key), forPID: metadata.pid)
+        }
+    }
+
+    private func clearPreparedExport() {
+        LinkEvidenceExport.removeTemporaryFile(csvExportURL)
+        csvExportURL = nil
+    }
+}
+
+@MainActor
+enum LinkConnectionPresentation {
+    static func presentPicker(
+        vehicleText: String,
+        knownAdapterIdentifier: String?,
+        selection: @escaping (LinkConnectionSource) -> Void
+    ) {
+        guard let presenter = presentingViewController() else {
+            selection(.automatic)
+            return
+        }
+        let picker = LinkConnectionPickerViewController(
+            vehicleText: vehicleText,
+            knownAdapterIdentifier: knownAdapterIdentifier) { source in
+                Task { @MainActor in selection(source) }
+            }
+        let navigation = UINavigationController(rootViewController: picker)
+        navigation.modalPresentationStyle = .pageSheet
+        presenter.present(navigation, animated: true)
+    }
+
+    private static func presentingViewController() -> UIViewController? {
+        guard let scene = UIApplication.shared.connectedScenes
+            .compactMap({ $0 as? UIWindowScene })
+            .first(where: { $0.activationState == .foregroundActive }),
+              let root = scene.windows.first(where: \.isKeyWindow)?.rootViewController else {
+            return nil
+        }
+        return topViewController(root)
+    }
+
+    private static func topViewController(
+        _ controller: UIViewController
+    ) -> UIViewController {
+        if let presented = controller.presentedViewController {
+            return topViewController(presented)
+        }
+        if let navigation = controller as? UINavigationController,
+           let visible = navigation.visibleViewController {
+            return topViewController(visible)
+        }
+        if let tabs = controller as? UITabBarController,
+           let selected = tabs.selectedViewController {
+            return topViewController(selected)
+        }
+        return controller
+    }
+}
+
+// MARK: - Shared standard-product SwiftUI face
+
+/**
+ * Branding and product-owned wording for LINK's standard diagnostic face.
+ *
+ * Geometry, navigation and standard OBD presentation remain in LINK. Product
+ * repositories supply only identity, artwork, colour and truthful boundary
+ * wording.
+ */
+struct LinkStandardProductAppearance {
+    let productName: String
+    let manufacturerName: String
+    let subtitle: String
+    let emblemAssetName: String
+    let theme: LinkDiagnosticTheme
+    let summary: String
+    let authors: [String]
+    let copyrightShort: String
+    let copyrightFull: String
+    let website: URL?
+    let licenseName: String
+    let licenseText: String
+    let credits: [String]
+
+    init(
+        productName: String,
+        manufacturerName: String,
+        subtitle: String,
+        emblemAssetName: String,
+        theme: LinkDiagnosticTheme,
+        summary: String,
+        authors: [String],
+        copyrightShort: String,
+        copyrightFull: String,
+        website: URL?,
+        licenseName: String,
+        licenseText: String,
+        credits: [String]
+    ) {
+        self.productName = productName
+        self.manufacturerName = manufacturerName
+        self.subtitle = subtitle
+        self.emblemAssetName = emblemAssetName
+        self.theme = theme
+        self.summary = summary
+        self.authors = authors
+        self.copyrightShort = copyrightShort
+        self.copyrightFull = copyrightFull
+        self.website = website
+        self.licenseName = licenseName
+        self.licenseText = licenseText
+        self.credits = credits
+    }
+}
+
+/** Complete LINK-owned standard diagnostic application surface. */
+struct LinkStandardProductContentView: View {
+    @ObservedObject var model: LinkStandardProductViewModel
+    let appearance: LinkStandardProductAppearance
+    @State private var showingAbout = false
+
+    var body: some View {
+        LinkCommandCentreShell(
+            showProgress: model.isActive && !model.isReady,
+            header: { header },
+            progress: { connectionProgress },
+            connection: { connectionCard },
+            primary: { primaryGrid },
+            tools: { EmptyView() })
+            .linkDiagnosticTheme(appearance.theme)
+            .linkDiagnosticLocalization { model.localizedText($0) }
+            .environment(
+                \.locale,
+                Locale(identifier: model.interfaceLocaleIdentifier))
+            .environment(
+                \.layoutDirection,
+                model.interfaceLocaleIdentifier.hasPrefix("ar")
+                    ? .rightToLeft : .leftToRight)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                LinkDiagnosticAboutButton(
+                    productName: appearance.productName,
+                    copyright: appearance.copyrightShort) {
+                        showingAbout = true
+                    }
+                    .linkDiagnosticTheme(appearance.theme)
+            }
+            .sheet(isPresented: $showingAbout) {
+                LinkDiagnosticAboutView(
+                    info: aboutInfo,
+                    onClose: { showingAbout = false }) {
+                        emblem(size: 82)
+                    }
+                    .linkDiagnosticTheme(appearance.theme)
+                    .preferredColorScheme(.dark)
+                    .tint(appearance.theme.accent)
+            }
+    }
+
+    private var aboutInfo: LinkDiagnosticAboutInfo {
+        LinkDiagnosticAboutInfo(
+            productName: appearance.productName,
+            subtitle: appearance.subtitle,
+            version: model.versionText,
+            summary: appearance.summary,
+            authors: appearance.authors,
+            copyright: appearance.copyrightFull,
+            website: appearance.website,
+            licenseName: appearance.licenseName,
+            licenseText: appearance.licenseText,
+            credits: appearance.credits)
+    }
+
+    private func emblem(size: CGFloat) -> some View {
+        Image(appearance.emblemAssetName)
+            .resizable()
+            .scaledToFit()
+            .frame(width: size, height: size)
+            .shadow(color: .black.opacity(0.28), radius: 7, x: 0, y: 4)
+            .accessibilityHidden(true)
+    }
+
+    private var header: some View {
+        LinkBrandHeader {
+            HStack(spacing: 14) {
+                emblem(size: 56)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(appearance.productName)
+                        .font(.system(size: 29, weight: .bold))
+                        .tracking(1.2)
+                        .foregroundStyle(appearance.theme.primaryText)
+                    Text(appearance.subtitle)
+                        .font(.caption2.bold())
+                        .tracking(1.2)
+                        .foregroundStyle(appearance.theme.accent)
+                    Text(
+                        "LINK shared engine · \(appearance.manufacturerName)-specific knowledge layered above")
+                        .font(.caption)
+                        .foregroundStyle(appearance.theme.secondaryText)
+                        .lineLimit(1)
+                }
+            }
+        } status: {
+            LinkStatusPill(text: model.statusText, active: model.isReady)
+        }
+    }
+
+    private var connectionCard: some View {
+        LinkPanel {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .firstTextBaseline) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(model.isActive
+                             ? "Diagnostic session" : "Vehicle connection")
+                            .font(.headline)
+                            .foregroundStyle(appearance.theme.primaryText)
+                        Text(model.isActive
+                             ? model.statusText : model.selectedVehicleDisplayName)
+                            .font(.caption)
+                            .foregroundStyle(appearance.theme.secondaryText)
+                    }
+                    Spacer(minLength: 12)
+                    Image(systemName: model.isReady
+                          ? "checkmark.circle.fill"
+                          : model.isActive
+                            ? "dot.radiowaves.left.and.right"
+                            : "cable.connector")
+                        .foregroundStyle(model.isReady
+                            ? appearance.theme.success : appearance.theme.accent)
+                }
+                Button {
+                    model.isActive ? model.disconnect() : model.connect()
+                } label: {
+                    Label(
+                        model.isActive ? "Disconnect" : "Connect to vehicle",
+                        systemImage: model.isActive
+                            ? "cable.connector.slash" : "cable.connector")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(appearance.theme.primaryText)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 11)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(appearance.theme.accent))
+                }
+                .buttonStyle(.plain)
+                if model.isReady {
+                    Text("\(model.vehicleVINText) · \(model.diagnosticCapabilityText)")
+                        .font(.caption2.monospaced())
+                        .foregroundStyle(appearance.theme.secondaryText)
+                }
+            }
+        }
+    }
+
+    private var connectionProgress: some View {
+        LinkPanel {
+            VStack(alignment: .leading, spacing: 7) {
+                Label(
+                    "Connecting to vehicle",
+                    systemImage: "dot.radiowaves.left.and.right")
+                    .font(.headline)
+                    .foregroundStyle(appearance.theme.primaryText)
+                Text(model.statusText)
+                    .font(.subheadline)
+                    .foregroundStyle(appearance.theme.secondaryText)
+                if model.peripheralName != "No adapter" {
+                    Text(model.peripheralName)
+                        .font(.caption)
+                        .foregroundStyle(appearance.theme.secondaryText)
+                }
+            }
+        }
+    }
+
+    private var primaryGrid: some View {
+        LinkDiagnosticGrid {
+            LinkTaskTile(.vehicle) {
+                LinkStandardVehicleView(model: model, appearance: appearance)
+            }
+            LinkTaskTile(.log) { LinkStandardEvidenceView(model: model) }
+            LinkTaskTile(.errors) { LinkStandardFaultsView(model: model) }
+            LinkTaskTile(.dashboard) { LinkStandardDashboardView(model: model) }
+            LinkTaskTile(.table) { LinkStandardTableView(model: model) }
+            LinkTaskTile(.graph) { LinkStandardGraphView(model: model) }
+            LinkTaskTile(.tests) { LinkStandardTestsView(model: model) }
+            LinkTaskTile(.services) {
+                LinkStandardServicesView(model: model, appearance: appearance)
+            }
+            LinkTaskTile(.settings) {
+                LinkStandardSettingsView(model: model, appearance: appearance)
+            }
+        }
+    }
+}
+
+private struct LinkStandardVehicleView: View {
+    @Environment(\.linkDiagnosticTheme) private var theme
+    @ObservedObject var model: LinkStandardProductViewModel
+    let appearance: LinkStandardProductAppearance
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 15) {
+                LinkLabeledPanel(title: "Vehicle", systemImage: "car.side.fill") {
+                    LinkStandardValueRow(
+                        label: "VIN", value: model.vehicleVINText, icon: "number")
+                    Divider()
+                    LinkStandardValueRow(
+                        label: "Diagnostic generation",
+                        value: model.diagnosticCapabilityText,
+                        icon: "cpu")
+                    Divider()
+                    LinkStandardValueRow(
+                        label: "OBD protocol",
+                        value: model.obdProtocolText,
+                        icon: "cable.connector")
+                }
+                LinkLabeledPanel(title: "Saved vehicles", systemImage: "car.2.fill") {
+                    if model.savedVehicleProfiles.isEmpty {
+                        Text(
+                            "No saved \(appearance.manufacturerName) vehicles yet. A successful live VIN creates the profile automatically.")
+                            .font(.subheadline)
+                            .foregroundStyle(theme.secondaryText)
+                    } else {
+                        ForEach(model.savedVehicleProfiles) { profile in
+                            Button {
+                                model.selectSavedVehicle(vin: profile.vin)
+                            } label: {
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(profile.displayName)
+                                            .font(.subheadline.bold())
+                                            .foregroundStyle(theme.primaryText)
+                                        Text(profile.vin)
+                                            .font(.caption2.monospaced())
+                                            .foregroundStyle(theme.secondaryText)
+                                    }
+                                    Spacer()
+                                    if profile.vin == model.selectedVehicleVIN {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .foregroundStyle(theme.accent)
+                                    }
+                                }
+                            }
+                            .buttonStyle(.plain)
+                            if profile.id != model.savedVehicleProfiles.last?.id {
+                                Divider()
+                            }
+                        }
+                    }
+                }
+                LinkLabeledPanel(
+                    title: "Control units",
+                    systemImage: "square.stack.3d.up.fill") {
+                        NavigationLink {
+                            LinkStandardModulesView(model: model)
+                        } label: {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text("Responder and module inventory")
+                                        .font(.headline)
+                                        .foregroundStyle(theme.primaryText)
+                                    Text(
+                                        "LINK standard responders now; \(appearance.manufacturerName)-specific module knowledge remains product-owned.")
+                                        .font(.caption)
+                                        .foregroundStyle(theme.secondaryText)
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .foregroundStyle(theme.accent)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+            }
+            .padding(16)
+        }
+        .linkDiagnosticScreen("Vehicle")
+    }
+}
+
+private struct LinkStandardModulesView: View {
+    @ObservedObject var model: LinkStandardProductViewModel
+
+    var body: some View {
+        ScrollView {
+            LinkLabeledPanel(
+                title: "Standard responders",
+                systemImage: "square.stack.3d.up.fill") {
+                    LinkStandardValueRow(
+                        label: "Physical responders",
+                        value: model.standardResponderSummary,
+                        icon: "point.3.connected.trianglepath.dotted")
+                    Divider()
+                    LinkStandardValueRow(
+                        label: "Advertised parameters",
+                        value: model.supportedPIDSummary,
+                        icon: "waveform.path.ecg")
+                    Divider()
+                    LinkStandardValueRow(
+                        label: "Capability",
+                        value: model.diagnosticCapabilityText,
+                        icon: "cpu")
+                }
+                .padding(16)
+        }
+        .linkDiagnosticScreen("Modules")
+    }
+}
+
+private struct LinkStandardFaultsView: View {
+    @ObservedObject var model: LinkStandardProductViewModel
+    private var total: Int {
+        model.storedDTCs.count + model.pendingDTCs.count
+            + model.permanentDTCs.count
+    }
+
+    var body: some View {
+        ScrollView {
+            LinkLabeledPanel(
+                title: "Errors",
+                systemImage: "exclamationmark.triangle.fill") {
+                    LinkStandardValueRow(
+                        label: "Scan state",
+                        value: model.faultScanStatusText,
+                        icon: "waveform.path.ecg")
+                    LinkStandardValueRow(
+                        label: "Fault records",
+                        value: "\(total)",
+                        icon: "exclamationmark.triangle")
+                    LinkStandardFaultGroup(title: "Stored", values: model.storedDTCs)
+                    LinkStandardFaultGroup(title: "Pending", values: model.pendingDTCs)
+                    LinkStandardFaultGroup(
+                        title: "Permanent", values: model.permanentDTCs)
+                }
+                .padding(16)
+        }
+        .linkDiagnosticScreen("Errors")
+    }
+}
+
+private struct LinkStandardTableView: View {
+    @Environment(\.linkDiagnosticTheme) private var theme
+    @ObservedObject var model: LinkStandardProductViewModel
+    private var parameters: [LinkDiagnosticParameter] {
+        model.diagnosticParameters.filter(\.vehicleSupported)
+    }
+
+    var body: some View {
+        ScrollView {
+            LinkLabeledPanel(title: "Table", systemImage: "tablecells") {
+                if parameters.isEmpty {
+                    Text(model.isActive
+                         ? "Waiting for advertised standard parameters."
+                         : "Connect to populate supported standard live data.")
+                        .font(.subheadline)
+                        .foregroundStyle(theme.secondaryText)
+                } else {
+                    ForEach(parameters) { parameter in
+                        HStack(alignment: .top, spacing: 10) {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(parameter.title)
+                                    .font(.subheadline.bold())
+                                    .foregroundStyle(theme.primaryText)
+                                Text(
+                                    "\(parameter.presentationValue) · \(parameter.sourceText)")
+                                    .font(.caption.monospacedDigit())
+                                    .foregroundStyle(theme.secondaryText)
+                            }
+                            Spacer()
+                            Button { model.toggleFavourite(parameter) } label: {
+                                Image(systemName: parameter.favourite
+                                      ? "star.fill" : "star")
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(theme.accent)
+                            Button { model.togglePolling(parameter) } label: {
+                                Image(systemName: parameter.pollingEnabled
+                                      ? "waveform.path.ecg" : "pause.circle")
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(parameter.pollingEnabled
+                                ? theme.success : theme.warning)
+                        }
+                        Divider()
+                    }
+                }
+            }
+            .padding(16)
+        }
+        .linkDiagnosticScreen("Table")
+    }
+}
+
+private struct LinkStandardDashboardView: View {
+    @Environment(\.linkDiagnosticTheme) private var theme
+    @ObservedObject var model: LinkStandardProductViewModel
+    @AppStorage("link.dashboard.presentationMode")
+    private var dashboardModeKey = LinkDashboardPresentationMode.combined.rawValue
+    private var mode: Binding<LinkDashboardPresentationMode> {
+        Binding(
+            get: {
+                LinkDashboardPresentationMode(rawValue: dashboardModeKey)
+                    ?? .combined
+            },
+            set: { dashboardModeKey = $0.rawValue })
+    }
+
+    var body: some View {
+        ScrollView {
+            LinkLabeledPanel(
+                title: "Dashboard",
+                systemImage: "gauge.with.dots.needle.67percent") {
+                    LinkDashboardModePicker(selection: mode)
+                    if model.dashboardParameters.isEmpty {
+                        Text(
+                            "No supported live measurements are available for the dashboard yet.")
+                            .font(.subheadline)
+                            .foregroundStyle(theme.secondaryText)
+                    } else {
+                        LazyVGrid(
+                            columns: [GridItem(.adaptive(minimum: 150), spacing: 12)],
+                            spacing: 12) {
+                                ForEach(model.dashboardParameters) { parameter in
+                                    LinkDashboardMetric(
+                                        parameter: parameter,
+                                        mode: mode.wrappedValue)
+                                }
+                            }
+                    }
+                }
+                .padding(16)
+        }
+        .linkDiagnosticScreen("Dashboard")
+    }
+}
+
+private struct LinkStandardEvidenceView: View {
+    @Environment(\.linkDiagnosticTheme) private var theme
+    @ObservedObject var model: LinkStandardProductViewModel
+
+    var body: some View {
+        ScrollView {
+            LinkLabeledPanel(
+                title: "Diagnostic evidence",
+                systemImage: "doc.text.magnifyingglass") {
+                    LinkStandardValueRow(
+                        label: "Recorded samples",
+                        value: "\(model.recordedSampleCount)",
+                        icon: "waveform")
+                    Button { model.prepareCSVExport() } label: {
+                        Label(
+                            model.isPreparingCSV ? "Preparing…" : "Prepare evidence CSV",
+                            systemImage: "doc.badge.plus")
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(theme.accent)
+                    .disabled(model.isPreparingCSV)
+                    if let url = model.csvExportURL {
+                        ShareLink(item: url) {
+                            Label("Share CSV", systemImage: "square.and.arrow.up")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(theme.accent)
+                    }
+                }
+                .padding(16)
+        }
+        .linkDiagnosticScreen("Log")
+    }
+}
+
+private struct LinkStandardGraphView: View {
+    @Environment(\.linkDiagnosticTheme) private var theme
+    @ObservedObject var model: LinkStandardProductViewModel
+    private var graphable: [LinkDiagnosticParameter] {
+        model.diagnosticParameters.filter {
+            $0.vehicleSupported && $0.history.count > 1
+        }
+    }
+
+    var body: some View {
+        ScrollView {
+            LinkLabeledPanel(title: "Graph", systemImage: "chart.xyaxis.line") {
+                if graphable.isEmpty {
+                    Text("Collect live samples to populate graphable parameters.")
+                        .foregroundStyle(theme.secondaryText)
+                } else {
+                    ForEach(graphable.prefix(8)) { parameter in
+                        LinkStandardValueRow(
+                            label: parameter.title,
+                            value: "\(parameter.history.count) samples · latest \(parameter.presentationValue)",
+                            icon: "waveform")
+                        Divider()
+                    }
+                }
+                Text(
+                    "LINK telemetry history is retained without inventing synthetic samples.")
+                    .font(.caption)
+                    .foregroundStyle(theme.secondaryText)
+            }
+            .padding(16)
+        }
+        .linkDiagnosticScreen("Graph")
+    }
+}
+
+private struct LinkStandardTestsView: View {
+    @Environment(\.linkDiagnosticTheme) private var theme
+    @ObservedObject var model: LinkStandardProductViewModel
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 15) {
+                LinkLabeledPanel(
+                    title: "Readiness",
+                    systemImage: "checkmark.square.fill") {
+                        LinkStandardValueRow(
+                            label: "Status",
+                            value: model.readinessStatusText,
+                            icon: "checklist")
+                        ForEach(model.readinessMonitorStatus, id: \.self) {
+                            Text($0)
+                                .font(.subheadline)
+                                .foregroundStyle(theme.primaryText)
+                        }
+                    }
+                LinkLabeledPanel(
+                    title: "Freeze-frame context",
+                    systemImage: "camera.metering.matrix") {
+                        if model.freezeFrameContext.isEmpty {
+                            Text("No standard freeze-frame context captured.")
+                                .foregroundStyle(theme.secondaryText)
+                        } else {
+                            ForEach(model.freezeFrameContext, id: \.self) {
+                                Text($0)
+                                    .font(.subheadline)
+                                    .foregroundStyle(theme.primaryText)
+                            }
+                        }
+                    }
+            }
+            .padding(16)
+        }
+        .linkDiagnosticScreen("Tests")
+    }
+}
+
+private struct LinkStandardServicesView: View {
+    @Environment(\.linkDiagnosticTheme) private var theme
+    @ObservedObject var model: LinkStandardProductViewModel
+    let appearance: LinkStandardProductAppearance
+
+    var body: some View {
+        ScrollView {
+            LinkLabeledPanel(
+                title: "Services",
+                systemImage: "wrench.and.screwdriver.fill") {
+                    Text(model.isActive
+                         ? "No verified \(appearance.manufacturerName)-specific service procedure is enabled for this session."
+                         : "Connect to evaluate supported service procedures.")
+                        .font(.headline)
+                        .foregroundStyle(theme.primaryText)
+                    Text(
+                        "Manufacturer procedures stay in \(appearance.productName); reusable execution and safety machinery stays in LINK.")
+                        .font(.caption)
+                        .foregroundStyle(theme.secondaryText)
+                }
+                .padding(16)
+        }
+        .linkDiagnosticScreen("Services")
+    }
+}
+
+private struct LinkStandardSettingsView: View {
+    @ObservedObject var model: LinkStandardProductViewModel
+    let appearance: LinkStandardProductAppearance
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 15) {
+                LinkLabeledPanel(
+                    title: appearance.productName,
+                    systemImage: "gearshape.fill") {
+                        LinkStandardValueRow(
+                            label: "Version",
+                            value: model.versionText,
+                            icon: "number.circle")
+                        LinkStandardValueRow(
+                            label: "Shared engine",
+                            value: "LINK \(model.linkVersionText)",
+                            icon: "square.stack.3d.up")
+                    }
+                LinkLabeledPanel(title: "Language", systemImage: "globe") {
+                    Picker(
+                        "Language",
+                        selection: Binding(
+                            get: { model.selectedLanguageID },
+                            set: { model.selectLanguage($0) })) {
+                                ForEach(Array(model.languageTags.indices), id: \.self) {
+                                    index in
+                                    Text(index < model.languageNames.count
+                                         ? model.languageNames[index]
+                                         : model.languageTags[index])
+                                        .tag(model.languageTags[index])
+                                }
+                            }
+                            .pickerStyle(.menu)
+                }
+                LinkLabeledPanel(title: "Unit system", systemImage: "ruler") {
+                    Picker(
+                        "Unit system",
+                        selection: Binding(
+                            get: { model.selectedMeasurementID },
+                            set: { model.selectMeasurementSystem($0) })) {
+                                ForEach(
+                                    Array(model.measurementKeys.indices), id: \.self) {
+                                        index in
+                                        Text(index < model.measurementNames.count
+                                             ? model.measurementNames[index]
+                                             : model.measurementKeys[index])
+                                            .tag(model.measurementKeys[index])
+                                    }
+                            }
+                            .pickerStyle(.segmented)
+                }
+            }
+            .padding(16)
+        }
+        .linkDiagnosticScreen("Settings")
+    }
+}
+
+private struct LinkStandardValueRow: View {
+    @Environment(\.linkDiagnosticTheme) private var theme
+    let label: String
+    let value: String
+    let icon: String
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Image(systemName: icon)
+                .foregroundStyle(theme.accent)
+                .frame(width: 18)
+            Text(label)
+                .font(.caption.bold())
+                .foregroundStyle(theme.secondaryText)
+            Spacer(minLength: 12)
+            Text(value)
+                .font(.subheadline)
+                .foregroundStyle(theme.primaryText)
+                .multilineTextAlignment(.trailing)
+        }
+    }
+}
+
+private struct LinkStandardFaultGroup: View {
+    @Environment(\.linkDiagnosticTheme) private var theme
+    let title: String
+    let values: [String]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(title)
+                .font(.caption.bold())
+                .foregroundStyle(theme.secondaryText)
+            if values.isEmpty {
+                Text("None reported")
+                    .font(.subheadline)
+                    .foregroundStyle(theme.secondaryText)
+            } else {
+                ForEach(values, id: \.self) {
+                    Text($0)
+                        .font(.body.monospaced())
+                        .foregroundStyle(theme.primaryText)
+                }
+            }
+        }
+        .padding(.top, 4)
+    }
+}
+
 #endif

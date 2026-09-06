@@ -183,6 +183,88 @@ NS_ASSUME_NONNULL_BEGIN
 @end
 
 /**
+ * Product-neutral façade used by branded Apple applications.
+ *
+ * Manufacturer controllers subclass this type and add only their vehicle
+ * knowledge and extension flow.  LINK owns the standard controller plumbing,
+ * simulation entry point and forwarding API so product faces do not each carry
+ * another copy of the same Objective-C bridge.
+ */
+@interface LinkProductDiagnosticsController : NSObject
+    <LinkDiagnosticsControllerDelegate> {
+@protected
+    LinkDiagnosticsController *_shared;
+}
+
+@property(nonatomic, strong, readonly) LinkDiagnosticsController *sharedController;
+@property(nonatomic, copy, readonly) NSString *linkVersionText;
+@property(nonatomic, copy, readonly) NSString *statusText;
+@property(nonatomic, copy, readonly, nullable) NSString *peripheralName;
+@property(nonatomic, copy, readonly, nullable) NSString *adapterIdentifier;
+@property(nonatomic, copy, readonly) NSString *obdProtocolText;
+@property(nonatomic, copy, readonly) NSString *faultScanStatusText;
+@property(nonatomic, copy, readonly) NSArray<NSString *> *storedDTCs;
+@property(nonatomic, copy, readonly) NSArray<NSString *> *pendingDTCs;
+@property(nonatomic, copy, readonly) NSArray<NSString *> *permanentDTCs;
+@property(nonatomic, copy, readonly) NSString *readinessStatusText;
+@property(nonatomic, copy, readonly) NSArray<NSString *> *readinessMonitorStatus;
+@property(nonatomic, copy, readonly) NSArray<NSString *> *freezeFrameContext;
+@property(nonatomic, copy, readonly) NSString *diagnosticCapabilityText;
+@property(nonatomic, copy, readonly) NSString *diagnosticCapabilityDetailText;
+@property(nonatomic, copy, readonly) NSString *standardResponderSummary;
+@property(nonatomic, copy, readonly) NSString *supportedPIDSummary;
+@property(nonatomic, copy, readonly) NSString *standardVINText;
+@property(nonatomic, copy, readonly) NSArray<NSString *> *standardLiveValueRows;
+@property(nonatomic, readonly, getter=isActive) BOOL active;
+@property(nonatomic, readonly, getter=isReady) BOOL ready;
+@property(nonatomic, readonly) NSUInteger recordedSampleCount;
+@property(nonatomic, copy, readonly) NSArray<NSString *> *availableLanguageTags;
+@property(nonatomic, copy, readonly) NSArray<NSString *> *availableLanguageNames;
+@property(nonatomic, copy, readonly) NSString *selectedLanguageTag;
+@property(nonatomic, copy, readonly) NSArray<NSString *> *availableMeasurementSystemKeys;
+@property(nonatomic, copy, readonly) NSArray<NSString *> *availableMeasurementSystemNames;
+@property(nonatomic, copy, readonly) NSString *selectedMeasurementSystemKey;
+
+- (instancetype)initWithProductSlug:(NSString *)productSlug
+                         flowConfig:(LinkDiagnosticFlowConfig)flowConfig
+                     liveStatusText:(NSString *)liveStatusText
+            simulatedLiveStatusText:(NSString *)simulatedLiveStatusText
+              standardVINStatusText:(NSString *)standardVINStatusText
+         simulatedAdapterIdentifier:(NSString * _Nullable)simulatedAdapterIdentifier
+                       simulatedVIN:(NSString * _Nullable)simulatedVIN
+    NS_DESIGNATED_INITIALIZER;
+- (instancetype)init NS_UNAVAILABLE;
+
+- (void)start;
+- (void)startWithPeripheralIdentifier:(NSString *)peripheralIdentifier;
+- (void)startSimulated;
+- (void)disconnect;
+- (NSString *)localizedTextForKey:(NSString *)key;
+- (void)setSelectedLanguageTag:(NSString *)tag;
+- (void)setSelectedMeasurementSystemKey:(NSString *)key;
+- (NSArray<NSNumber *> *)recentValuesForPID:(uint8_t)pid limit:(NSUInteger)limit;
+- (double)displayValueForPID:(uint8_t)pid canonicalValue:(double)value;
+- (double)displayTemperatureCelsius:(double)celsius;
+- (NSString *)displayTemperatureUnit;
+- (NSArray<NSNumber *> *)displayRecentValuesForPID:(uint8_t)pid limit:(NSUInteger)limit;
+- (NSString *)displayUnitForPID:(uint8_t)pid;
+- (NSArray<NSNumber *> *)displayRangeForPID:(uint8_t)pid;
+- (NSString *)dtcDisplayTextForCode:(NSString *)code;
+- (BOOL)supportsPID:(uint8_t)pid;
+- (BOOL)favouriteForPID:(uint8_t)pid;
+- (void)setFavourite:(BOOL)favourite forPID:(uint8_t)pid;
+- (BOOL)pollingEnabledForPID:(uint8_t)pid;
+- (void)setPollingEnabled:(BOOL)enabled forPID:(uint8_t)pid;
+- (nullable NSData *)csvDataSnapshot;
+- (nullable NSString *)csvSnapshot;
+- (const LinkDiagnosticFlow * _Nullable)diagnosticFlow;
+
+/** Subclass hook invoked after LINK publishes a standard-session update. */
+- (void)productDiagnosticsDidUpdate;
+
+@end
+
+/**
  * Shared persistent vehicle-profile/session store for Apple product faces.
  *
  * LINK owns the generic persistence and VIN/adapter association rules. Product

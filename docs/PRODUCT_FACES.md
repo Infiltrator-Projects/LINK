@@ -54,8 +54,10 @@ module scans, parameters, tests and service procedures, but must not fork the
 shared task structure.
 
 Language selection and measurement conversion are shared capabilities in LINK.
-Each manufacturer application owns the composition and appearance of its own
-Settings page and calls those shared capabilities where appropriate.
+Manufacturer-rich applications own the composition and appearance of their
+Settings page and call those shared capabilities where appropriate. Standard
+faces use LINK's standard Settings composition and supply only product identity
+and theme.
 
 About is a shared LINK capability and, unlike Settings, is a complete standard
 surface. LINK owns the Linux, Windows and iPhone About renderers and their
@@ -193,6 +195,19 @@ manufacturer-owned copy. `platform/apple/LinkDiagnosticUI.swift` owns the
 shared screen geometry and information architecture: command-centre shell,
 header behaviour, connection/progress placement, primary diagnostic grid,
 secondary tools, panel/tile shapes, corner radii, padding and spacing.
+
+The same file also owns `LinkStandardProductViewModel`, the complete standard
+application model used by product faces that do not yet add a manufacturer
+extension, and `LinkStandardProductContentView`, the matching complete standard
+task surface. `LinkStandardProductAppearance` is the face parameter containing
+the product's name, emblem, theme and About metadata.
+`LinkProductDiagnosticsController` owns the corresponding Objective-C
+forwarding boundary. A standard-only product supplies identity, version,
+simulation identity, appearance and its typed delegate; it must not copy the
+connection/profile/PID/dashboard/evidence orchestration or standard task views
+into its repository. Manufacturer-rich products may retain a specialised view
+model and task screens, but must use the LINK connection presenter and shared
+controller façade rather than copying those generic mechanisms.
 
 Manufacturer products inject a `LinkDiagnosticTheme` plus their logo,
 wording and manufacturer-specific content. They may add manufacturer-specific

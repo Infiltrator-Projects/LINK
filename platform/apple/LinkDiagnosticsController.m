@@ -2157,6 +2157,186 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
 @end
 
 
+#pragma mark - Shared branded-product controller facade
+
+@interface LinkProductDiagnosticsController ()
+@property(nonatomic, copy, nullable) NSString *simulatedAdapterIdentifier;
+@property(nonatomic, copy, nullable) NSString *simulatedVIN;
+@end
+
+@implementation LinkProductDiagnosticsController
+
+- (instancetype)initWithProductSlug:(NSString *)productSlug
+                         flowConfig:(LinkDiagnosticFlowConfig)flowConfig
+                     liveStatusText:(NSString *)liveStatusText
+            simulatedLiveStatusText:(NSString *)simulatedLiveStatusText
+              standardVINStatusText:(NSString *)standardVINStatusText
+         simulatedAdapterIdentifier:(NSString * _Nullable)simulatedAdapterIdentifier
+                       simulatedVIN:(NSString * _Nullable)simulatedVIN
+{
+    self = [super init];
+    if (self == nil) return nil;
+
+    _shared = [[LinkDiagnosticsController alloc]
+        initWithProductSlug:productSlug
+        flowConfig:flowConfig
+        liveStatusText:liveStatusText
+        simulatedLiveStatusText:simulatedLiveStatusText
+        standardVINStatusText:standardVINStatusText];
+    _shared.delegate = self;
+    self.simulatedAdapterIdentifier = simulatedAdapterIdentifier;
+    self.simulatedVIN = simulatedVIN;
+    return self;
+}
+
+- (void)dealloc
+{
+    _shared.delegate = nil;
+}
+
+- (LinkDiagnosticsController *)sharedController { return _shared; }
+- (NSString *)linkVersionText { return _shared.linkVersionText; }
+- (NSString *)statusText { return _shared.statusText; }
+- (nullable NSString *)peripheralName { return _shared.peripheralName; }
+- (nullable NSString *)adapterIdentifier { return _shared.adapterIdentifier; }
+- (NSString *)obdProtocolText { return _shared.obdProtocolText; }
+- (NSString *)faultScanStatusText { return _shared.faultScanStatusText; }
+- (NSArray<NSString *> *)storedDTCs { return _shared.storedDTCs; }
+- (NSArray<NSString *> *)pendingDTCs { return _shared.pendingDTCs; }
+- (NSArray<NSString *> *)permanentDTCs { return _shared.permanentDTCs; }
+- (NSString *)readinessStatusText { return _shared.readinessStatusText; }
+- (NSArray<NSString *> *)readinessMonitorStatus
+{
+    return _shared.readinessMonitorStatus;
+}
+- (NSArray<NSString *> *)freezeFrameContext { return _shared.freezeFrameContext; }
+- (NSString *)diagnosticCapabilityText { return _shared.diagnosticCapabilityText; }
+- (NSString *)diagnosticCapabilityDetailText
+{
+    return _shared.diagnosticCapabilityDetailText;
+}
+- (NSString *)standardResponderSummary { return _shared.standardResponderSummary; }
+- (NSString *)supportedPIDSummary { return _shared.supportedPIDSummary; }
+- (NSString *)standardVINText { return _shared.standardVINText; }
+- (NSArray<NSString *> *)standardLiveValueRows
+{
+    return _shared.standardLiveValueRows;
+}
+- (BOOL)isActive { return _shared.isActive; }
+- (BOOL)isReady { return _shared.isReady; }
+- (NSUInteger)recordedSampleCount { return _shared.recordedSampleCount; }
+- (NSArray<NSString *> *)availableLanguageTags { return _shared.availableLanguageTags; }
+- (NSArray<NSString *> *)availableLanguageNames { return _shared.availableLanguageNames; }
+- (NSString *)selectedLanguageTag { return _shared.selectedLanguageTag; }
+- (NSArray<NSString *> *)availableMeasurementSystemKeys
+{
+    return _shared.availableMeasurementSystemKeys;
+}
+- (NSArray<NSString *> *)availableMeasurementSystemNames
+{
+    return _shared.availableMeasurementSystemNames;
+}
+- (NSString *)selectedMeasurementSystemKey
+{
+    return _shared.selectedMeasurementSystemKey;
+}
+
+- (void)start { [_shared start]; }
+- (void)startWithPeripheralIdentifier:(NSString *)peripheralIdentifier
+{
+    [_shared startWithPeripheralIdentifier:peripheralIdentifier];
+}
+- (void)startSimulated
+{
+    if (self.simulatedAdapterIdentifier.length == 0U ||
+        self.simulatedVIN.length == 0U) {
+        [_shared failWithStatus:@"Simulated product identity is not configured"];
+        return;
+    }
+    [_shared
+        startSimulatedWithAdapterIdentifier:self.simulatedAdapterIdentifier.UTF8String
+        vin:self.simulatedVIN.UTF8String
+        customResponder:NULL
+        context:NULL];
+}
+- (void)disconnect { [_shared disconnect]; }
+- (NSString *)localizedTextForKey:(NSString *)key
+{
+    return [_shared localizedTextForKey:key];
+}
+- (void)setSelectedLanguageTag:(NSString *)tag
+{
+    [_shared setSelectedLanguageTag:tag];
+}
+- (void)setSelectedMeasurementSystemKey:(NSString *)key
+{
+    [_shared setSelectedMeasurementSystemKey:key];
+}
+- (NSArray<NSNumber *> *)recentValuesForPID:(uint8_t)pid limit:(NSUInteger)limit
+{
+    return [_shared recentValuesForPID:pid limit:limit];
+}
+- (double)displayValueForPID:(uint8_t)pid canonicalValue:(double)value
+{
+    return [_shared displayValueForPID:pid canonicalValue:value];
+}
+- (double)displayTemperatureCelsius:(double)celsius
+{
+    return [_shared displayTemperatureCelsius:celsius];
+}
+- (NSString *)displayTemperatureUnit { return _shared.displayTemperatureUnit; }
+- (NSArray<NSNumber *> *)displayRecentValuesForPID:(uint8_t)pid
+                                              limit:(NSUInteger)limit
+{
+    return [_shared displayRecentValuesForPID:pid limit:limit];
+}
+- (NSString *)displayUnitForPID:(uint8_t)pid
+{
+    return [_shared displayUnitForPID:pid];
+}
+- (NSArray<NSNumber *> *)displayRangeForPID:(uint8_t)pid
+{
+    return [_shared displayRangeForPID:pid];
+}
+- (NSString *)dtcDisplayTextForCode:(NSString *)code
+{
+    return [_shared dtcDisplayTextForCode:code];
+}
+- (BOOL)supportsPID:(uint8_t)pid { return [_shared supportsPID:pid]; }
+- (BOOL)favouriteForPID:(uint8_t)pid { return [_shared favouriteForPID:pid]; }
+- (void)setFavourite:(BOOL)favourite forPID:(uint8_t)pid
+{
+    [_shared setFavourite:favourite forPID:pid];
+}
+- (BOOL)pollingEnabledForPID:(uint8_t)pid
+{
+    return [_shared pollingEnabledForPID:pid];
+}
+- (void)setPollingEnabled:(BOOL)enabled forPID:(uint8_t)pid
+{
+    [_shared setPollingEnabled:enabled forPID:pid];
+}
+- (nullable NSData *)csvDataSnapshot { return [_shared csvDataSnapshot]; }
+- (nullable NSString *)csvSnapshot { return [_shared csvSnapshot]; }
+- (const LinkDiagnosticFlow * _Nullable)diagnosticFlow
+{
+    return [_shared diagnosticFlow];
+}
+
+- (void)linkDiagnosticsControllerDidUpdate:(LinkDiagnosticsController *)controller
+{
+    (void)controller;
+    [self productDiagnosticsDidUpdate];
+}
+
+- (void)productDiagnosticsDidUpdate
+{
+    /* Manufacturer subclasses notify their own typed delegates here. */
+}
+
+@end
+
+
 #pragma mark - Shared vehicle-profile/session persistence
 
 static NSString * const LinkVehicleKnownPeripheralDefaultsKey =
