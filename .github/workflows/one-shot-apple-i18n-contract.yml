@@ -1,0 +1,42 @@
+name: One-shot Apple i18n contract
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Expose LINK i18n through Apple public header
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('platform/apple/LinkDiagnosticsController.h')
+          text = path.read_text()
+          needle = '#import "link/elm327_simulator.h"\n#import "link/units.h"\n'
+          replacement = '#import "link/elm327_simulator.h"\n#import "link/i18n.h"\n#import "link/units.h"\n'
+          if replacement not in text:
+              if needle not in text:
+                  raise SystemExit('expected Apple public-header include block not found')
+              text = text.replace(needle, replacement, 1)
+              path.write_text(text)
+          PY
+      - name: Commit source change if needed
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo 'Already fixed.'
+            exit 0
+          fi
+          git config user.name 'Shannon Smith'
+          git config user.email 'infiltratr@yandex.com'
+          git add platform/apple/LinkDiagnosticsController.h
+          git commit -m 'Expose i18n through LINK Apple public API'
+          git push origin HEAD:main
