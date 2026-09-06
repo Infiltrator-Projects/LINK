@@ -175,7 +175,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (nullable NSData *)csvDataSnapshot;
 - (nullable NSString *)csvSnapshot;
 
-- (const LinkDiagnosticFlow *)diagnosticFlow;
+- (const LinkDiagnosticFlow * _Nullable)diagnosticFlow;
 
 @end
 
@@ -220,7 +220,8 @@ NS_ASSUME_NONNULL_BEGIN
 /** Merge standard responder/PID capability evidence while preserving product fields. */
 - (BOOL)mergeStandardCapabilitiesFromDiagnosticFlow:
     (const LinkDiagnosticFlow *)flow
-                                             forVIN:(NSString *)vin;
+                                             forVIN:(NSString *)vin
+    NS_SWIFT_NAME(mergeStandardCapabilities(fromDiagnosticFlow:forVIN:));
 - (BOOL)mergeStandardCapabilitiesFromFlowEvent:
     (const LinkDiagnosticFlowEvent *)event
                                         forVIN:(NSString *)vin;
