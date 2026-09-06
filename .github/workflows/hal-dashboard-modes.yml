@@ -31,7 +31,9 @@ jobs:
           sudo apt-get install -y --no-install-recommends cmake ninja-build
 
       - name: Apply shared dashboard presentation model
-        run: python3 .github/hal_dashboard_migrate.py
+        run: |
+          python3 .github/hal_dashboard_migrate.py
+          python3 .github/hal_dashboard_range_fix.py
 
       - name: Validate and test shared core
         shell: bash
