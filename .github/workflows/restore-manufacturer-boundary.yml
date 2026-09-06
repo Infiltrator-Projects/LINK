@@ -44,14 +44,12 @@ jobs:
           test ! -e docs/MERCEDES-ME-DATA-IDS.md
           grep -Fq 'Mercedes application semantics recovered from DataIds, DiagLogic and Whisper are owned and compiled by MBLINK, not LINK.' README.md
 
-      - name: Commit boundary restoration
+      - name: Publish tested boundary restoration
         shell: bash
         run: |
           set -euo pipefail
           git config user.name "Shannon Smith"
           git config user.email "infiltratr@yandex.com"
-          git rm .github/workflows/restore-manufacturer-boundary.yml
-          git rm .github/scripts/restore_manufacturer_boundary.py
           git add -A
           git commit -m "Restore LINK manufacturer boundary"
           git push origin HEAD:main
