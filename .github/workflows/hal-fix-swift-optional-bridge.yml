@@ -1,0 +1,47 @@
+name: HAL fix Swift optional bridge
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/hal-fix-swift-optional-bridge.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fix Swift NSDictionary optional bridge
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('platform/apple/LinkDiagnosticUI.swift')
+          s = p.read_text()
+          old = 'LinkVehicleProfileStandardResponderCount(profile as! [AnyHashable: Any])'
+          new = 'LinkVehicleProfileStandardResponderCount(profile as? [AnyHashable: Any])'
+          if s.count(old) != 1:
+              raise SystemExit(f'expected exactly one forced bridge, found {s.count(old)}')
+          p.write_text(s.replace(old, new, 1))
+          PY
+          git diff --check
+          grep -Fq 'LinkVehicleProfileStandardResponderCount(profile as? [AnyHashable: Any])' platform/apple/LinkDiagnosticUI.swift
+
+      - name: Publish source fix and remove helper
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "Shannon Smith"
+          git config user.email "infiltratr@yandex.com"
+          git add platform/apple/LinkDiagnosticUI.swift
+          git rm .github/workflows/hal-fix-swift-optional-bridge.yml
+          git diff --cached --check
+          git commit -m "Fix Apple vehicle profile optional Swift bridge"
+          git push origin HEAD:main
