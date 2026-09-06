@@ -305,6 +305,9 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)recordLiveVIN:(NSString *)vin;
 
 - (void)saveProfile:(NSDictionary *)profile forVIN:(NSString *)vin;
+/** Apply owned fields without discarding another layer's saved evidence. */
+- (void)mergeProfileFields:(NSDictionary *)fields forVIN:(NSString *)vin
+    NS_SWIFT_NAME(mergeProfileFields(_:forVIN:));
 - (void)removeProfileForVIN:(NSString *)vin;
 
 

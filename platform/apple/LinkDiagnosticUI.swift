@@ -2160,7 +2160,11 @@ class LinkStandardProductViewModel: NSObject, ObservableObject {
             ? (validLiveVIN ?? "Waiting for standard VIN")
             : (selectedVehicleVIN ?? "No vehicle loaded")
 
-        if active, let validLiveVIN,
+        if active, isSimulationActive {
+            // Presentation may use the demo VIN; never select it in the real store.
+            selectedVehicleVIN = validLiveVIN
+        }
+        if active, !isSimulationActive, let validLiveVIN,
            lastPersistedLiveVIN != validLiveVIN {
             vehicleProfileStore.recordLiveVIN(validLiveVIN)
             selectedVehicleVIN = validLiveVIN
@@ -2168,7 +2172,7 @@ class LinkStandardProductViewModel: NSObject, ObservableObject {
             lastPersistedLiveVIN = validLiveVIN
             refreshSavedVehicleProfiles()
         }
-        if active, let validLiveVIN {
+        if active, !isSimulationActive, let validLiveVIN {
             mergeStandardCapabilitiesIfReady(vin: validLiveVIN)
         }
 
@@ -2193,7 +2197,7 @@ class LinkStandardProductViewModel: NSObject, ObservableObject {
         isActive = active
         isReady = productController.isReady
         if productHooksEnabled { productDidRefreshStandardState() }
-        if active, isReady, let validLiveVIN,
+        if active, !isSimulationActive, isReady, let validLiveVIN,
            lastPersistedReadyVIN != validLiveVIN {
             saveVehicleProfile(vin: validLiveVIN, includeDiagnosticSnapshot: true)
             lastPersistedReadyVIN = validLiveVIN
@@ -2221,6 +2225,7 @@ class LinkStandardProductViewModel: NSObject, ObservableObject {
         vin: String,
         includeDiagnosticSnapshot: Bool = false
     ) {
+        guard !isSimulationActive else { return }
         var profile = vehicleProfileStore.profile(forVIN: vin) ?? [:]
         if profile["displayName"] == nil {
             profile["displayName"] = "\(configuration.vehicleName) · \(vin)"

@@ -2849,6 +2849,17 @@ NSUInteger LinkVehicleProfileStandardResponderCount(NSDictionary *profile)
     [self storeProfiles:profiles];
 }
 
+- (void)mergeProfileFields:(NSDictionary *)fields forVIN:(NSString *)vin
+{
+    if (![fields isKindOfClass:[NSDictionary class]] ||
+        !LinkVehicleSessionValidVIN(vin)) return;
+    NSMutableDictionary *profile = [[self profileForVIN:vin] mutableCopy];
+    if (profile == nil) profile = [[NSMutableDictionary alloc] init];
+    [profile addEntriesFromDictionary:fields];
+    profile[@"updatedAt"] = @([[NSDate date] timeIntervalSince1970]);
+    [self saveProfile:profile forVIN:vin];
+}
+
 - (void)saveProfile:(NSDictionary *)profile forVIN:(NSString *)vin
 {
     if (![profile isKindOfClass:[NSDictionary class]] ||

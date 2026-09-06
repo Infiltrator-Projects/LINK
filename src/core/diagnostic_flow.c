@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "link/diagnostic_flow.h"
+#include "link/diagnostic_request.h"
 
 #include "infiltratr/core.h"
 
@@ -726,6 +727,8 @@ static LinkDiagnosticFlowResult flow_accept_live_sample(
     LinkObd2Result result;
     LinkObd2ResponderSampleList responders;
     LinkObd2ResponderDecodedPidList decoded_responders;
+    size_t primary = 0U;
+    size_t index;
     flow->stage = LINK_DIAGNOSTIC_FLOW_LIVE;
     if (response->result == LINK_ELM327_RESULT_NO_DATA) {
         event->kind = LINK_DIAGNOSTIC_FLOW_EVENT_LIVE_NO_DATA;
@@ -741,8 +744,22 @@ static LinkDiagnosticFlowResult flow_accept_live_sample(
     }
     if (result != LINK_OBD2_RESULT_OK || decoded_responders.count == 0U)
         return flow_fail_obd2(flow, result != LINK_OBD2_RESULT_OK ? result : LINK_OBD2_RESULT_UNEXPECTED_RESPONSE);
+    /* Arrival order is not an ECU identity. Use the same generic route
+     * preference as other LINK consumers: 7E8, then lowest standard/extended
+     * address. Preserve every attributed response for module-specific views. */
+    for (index = 1U; index < decoded_responders.count; ++index) {
+        const LinkObd2ResponderDecodedPid *candidate = &decoded_responders.entries[index];
+        const LinkObd2ResponderDecodedPid *current = &decoded_responders.entries[primary];
+        if (candidate->responder_id_available &&
+            link_diagnostic_response_route_preferred(
+                candidate->responder_id, candidate->extended_id,
+                current->responder_id_available, current->responder_id,
+                current->extended_id, UINT32_C(0x7e8), false)) {
+            primary = index;
+        }
+    }
     event->responder_decoded = decoded_responders;
-    event->decoded = decoded_responders.entries[0].decoded;
+    event->decoded = decoded_responders.entries[primary].decoded;
     event->sample.pid = flow->active_pid;
     result = link_obd2_decode_live_pid_responders(response, flow->active_pid, &responders);
     if (result == LINK_OBD2_RESULT_UNSUPPORTED_PID) {
@@ -752,7 +769,19 @@ static LinkDiagnosticFlowResult flow_accept_live_sample(
     if (result != LINK_OBD2_RESULT_OK) return flow_fail_obd2(flow, result);
     event->kind = LINK_DIAGNOSTIC_FLOW_EVENT_LIVE_SAMPLE;
     event->responder_samples = responders;
-    event->sample = responders.samples[0].sample;
+    for (index = 0U; index < responders.count; ++index) {
+        const LinkObd2ResponderSample *sample = &responders.samples[index];
+        const LinkObd2ResponderDecodedPid *selected = &decoded_responders.entries[primary];
+        if (sample->responder_id_available == selected->responder_id_available &&
+            (!selected->responder_id_available ||
+             (sample->responder_id == selected->responder_id &&
+              sample->extended_id == selected->extended_id))) {
+            event->sample = sample->sample;
+            return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
+        }
+    }
+    // Never substitute a different ECU when the selected payload is structured.
+    event->kind = LINK_DIAGNOSTIC_FLOW_EVENT_LIVE_STRUCTURED;
     return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
 }
 

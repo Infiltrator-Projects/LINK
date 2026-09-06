@@ -281,6 +281,32 @@ static int test_standard_sequence(void)
     return 0;
 }
 
+static int test_live_responder_order(void)
+{
+    static const char *const replies[] = {
+        "7E9 04 41 0C 1F 40\n7E8 04 41 0C 0F A0",
+        "7E8 04 41 0C 0F A0\n7E9 04 41 0C 1F 40"
+    };
+    for (size_t i = 0U; i < 2U; ++i) {
+        LinkDiagnosticFlow flow;
+        LinkDiagnosticFlowConfig config = LINK_DIAGNOSTIC_FLOW_CONFIG_INIT;
+        LinkDiagnosticFlowAction action;
+        LinkDiagnosticFlowEvent event;
+        LinkElm327Response response = response_ok(replies[i], false);
+        CHECK(link_diagnostic_flow_init(&flow, &config) == LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+        CHECK(link_scheduler_add(&flow.scheduler, 0x0cU, 500U,
+            LINK_SCHEDULER_PRIORITY_CRITICAL, 100U) == LINK_SCHEDULER_RESULT_OK);
+        flow.stage = LINK_DIAGNOSTIC_FLOW_LIVE;
+        CHECK(link_diagnostic_flow_next_action(&flow, 100U, &action) == LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+        CHECK(link_diagnostic_flow_accept_response(&flow, &response, 101U, &event) == LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+        CHECK(event.kind == LINK_DIAGNOSTIC_FLOW_EVENT_LIVE_SAMPLE);
+        CHECK(event.responder_samples.count == 2U);
+        CHECK(near_value(event.sample.value, 1000.0, 0.001));
+        CHECK(near_value(event.decoded.signals[0].value, 1000.0, 0.001));
+    }
+    return 0;
+}
+
 static int test_live_timeout_recovery(void)
 {
     LinkDiagnosticFlow flow;
@@ -841,6 +867,7 @@ int main(void)
     if (test_protocol_reporting() != 0) return 1;
     if (test_standard_sequence() != 0) return 1;
     if (test_live_timeout_recovery() != 0) return 1;
+    if (test_live_responder_order() != 0) return 1;
     if (test_readiness_and_freeze_context() != 0) return 1;
     if (test_manufacturer_extension_restore() != 0) return 1;
     if (test_manufacturer_extension_after_standard_vin() != 0) return 1;

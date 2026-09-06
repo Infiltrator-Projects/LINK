@@ -200,6 +200,10 @@ jobs:
       - name: Test
         run: ctest --test-dir build --build-config Release --output-on-failure
 
+      - name: Exercise Apple profile persistence and simulation isolation
+        if: runner.os == 'macOS'
+        run: bash tests/apple/run-regressions.sh
+
       - name: Verify installed CMake package from an external consumer
         if: runner.os == 'Linux'
         shell: bash

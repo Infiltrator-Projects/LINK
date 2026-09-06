@@ -194,35 +194,12 @@ static uint32_t parse_ts(const void *data)
 static void datacopy(PASSTHRU_MSG *dest, const int8_t *src,
 	const uint32_t d_pos, const uint32_t s_start, const uint32_t s_end)
 {
-	uint32_t i = d_pos;
-	uint32_t dest_idx = dest->DataSize;
-	uint32_t idx = dest_idx - d_pos;
-	uint32_t limit = PM_DATA_LEN - dest_idx;
-	uint32_t x2_end = s_end - 1;
-	uint32_t x2_limit = limit - 1;
-
-	if (write_log) writelog("\t\t\t  ");
-
-	// Copy 2 bytes per iteration
-	// check if at x2_end of src or dest->Data is almost full
-	for (; (i < x2_end) && (i < x2_limit); i += 2)
-	{
-		dest->Data[idx + i] = src[s_start + i];
-		dest->Data[idx + i + 1] = src[s_start + i + 1];
-		if (write_log)
-		{
-			writeloghex(src[s_start + i]);
-			writeloghex(src[s_start + i + 1]);
-		}
-	}
-	// Copy last byte if any
-	// check end of src or dest->Data is full
-	for (; (i < s_end) && (i < limit); i++)
-	{
-		dest->Data[idx + i] = src[s_start + i];
-		if (write_log) writeloghex(src[s_start + i]);
-	}
-	if (write_log) writelog("\n");
+	/* The receive loop validates the complete wire record before calling us. */
+	if (s_end < d_pos || s_start > PM_DATA_LEN ||
+		s_end > PM_DATA_LEN - s_start || dest->DataSize > PM_DATA_LEN ||
+		s_end - d_pos > PM_DATA_LEN - dest->DataSize)
+		return;
+	memcpy(dest->Data + dest->DataSize, src + s_start + d_pos, s_end - d_pos);
 }
 
 /*
@@ -469,7 +446,7 @@ static int usb_send_expect(uint8_t *data, const size_t len,
 	int bytes_written = 0, r = LIBUSB_SUCCESS;
 	int receive_capacity = 0;
 
-	if (data == NULL || capacity <= 1)
+	if (data == NULL || capacity <= 1 || len > (size_t)capacity)
 	{
 		snprintf(LAST_ERROR, LE_LEN, "USB data buffer is invalid or too small");
 		return LIBUSB_ERROR_INVALID_PARAM;
@@ -714,17 +691,28 @@ int32_t PassThruOpen(const void *pName, unsigned long *pDeviceID)
 
 	// expect ari with FW version
 	r = usb_send_expect(data, strlen(data), MAX_LEN, 2000, "ari ");
-	if (r == LIBUSB_SUCCESS)
-		snprintf(fw_version, sizeof(fw_version), "%s", (char *)data);
+	if (r != LIBUSB_SUCCESS) goto init_failed;
+	snprintf(fw_version, sizeof(fw_version), "%s", (char *)data);
 
 	// open the device
 	strcpy(data, "ata\r\n");
 	r = usb_send_expect(data, strlen(data), MAX_LEN, 2000, NULL);
+	if (r != LIBUSB_SUCCESS) goto init_failed;
 
 	if (write_log && r == LIBUSB_SUCCESS)
 		writelog("\tInit acknowledged\nInterface Opened\n");
 	LAST_ERROR[0] = '\0';
 	return J2534_NOERROR;
+
+init_failed:
+	(void)libusb_release_interface(con->dev_handle, endpoint->intf_num);
+	libusb_close(con->dev_handle);
+	libusb_exit(con->ctx);
+	con->dev_handle = NULL;
+	con->ctx = NULL;
+	*pDeviceID = 0;
+	if (write_log) { fclose(logfile); logfile = NULL; write_log = FALSE; }
+	return error_map(r);
 }
 
 /*
@@ -852,7 +840,7 @@ int32_t PassThruDisconnect(const unsigned long ChannelID)
 int32_t PassThruReadMsgs(const unsigned long ChannelID, PASSTHRU_MSG *pMsg,
 	unsigned long *pNumMsgs, const unsigned long Timeout)
 {
-	if (pMsg == NULL)
+	if (pMsg == NULL || pNumMsgs == NULL)
 	{
 		snprintf(LAST_ERROR, LE_LEN, "Error: *pMsg must not be NULL");
 		return J2534_ERR_NULL_PARAMETER;
@@ -944,9 +932,11 @@ int32_t PassThruReadMsgs(const unsigned long ChannelID, PASSTHRU_MSG *pMsg,
 				writelog("\n");
 			}
 
+			if (bytes_read <= 0 || bytes_read > PM_DATA_LEN)
+				goto malformed_receive;
 			if (bytes_read > 0 && bytes_read <= PM_DATA_LEN)
 			{
-				if (write_log)
+				if (write_log && bytes_read >= 5)
 				{
 					snprintf(log_msg, LM_LEN,
 						"\t\t=== %02X | %02X | %02X <> %02X | %02X ===\n",
@@ -957,12 +947,28 @@ int32_t PassThruReadMsgs(const unsigned long ChannelID, PASSTHRU_MSG *pMsg,
 				}
 
 				// Process an expected data packet
-				while (bytes_processed < bytes_read
-					&& data[bytes_processed + 0] == 0x61		// A
-					&& data[bytes_processed + 1] == 0x72		// R
-					&& (data[bytes_processed + 2] == channel
-						|| data[bytes_processed + 2] == 0x6F))	// O
+				while (bytes_processed < bytes_read)
 				{
+					/* Never inspect or copy a partial/device-declared record. */
+					const size_t remaining = (size_t)(bytes_read - bytes_processed);
+					if (remaining < 5U || data[bytes_processed] != 0x61 ||
+						data[bytes_processed + 1] != 0x72)
+						goto malformed_receive;
+					if (data[bytes_processed + 2] == channel) {
+						const unsigned int wire_length = data[bytes_processed + 3];
+						const unsigned int type = data[bytes_processed + 4];
+						const unsigned int prefix =
+							(channel == ISO9141 || channel == ISO14230) &&
+							(type == NORM_MSG || type == TX_LB_MSG) ? 1U : 5U;
+						if (wire_length < prefix || wire_length + 4U > remaining ||
+							msgBuf->DataSize > PM_DATA_LEN ||
+							wire_length - prefix > PM_DATA_LEN - msgBuf->DataSize)
+							goto malformed_receive;
+					} else if (data[bytes_processed + 2] != 0x6f ||
+						data[bytes_processed + 3] != '\r' ||
+						data[bytes_processed + 4] != '\n') {
+						goto malformed_receive;
+					}
 					// If third byte equals the channel #, then this is Message data
 					if (data[bytes_processed + 2] == channel)
 					{
@@ -1173,7 +1179,7 @@ int32_t PassThruReadMsgs(const unsigned long ChannelID, PASSTHRU_MSG *pMsg,
 					}	// End of the AR channel# packet
 
 					// If third byte equals 'O', then this is Acknowledgement data
-					if (data[bytes_processed + 2] == 0x6F)	// O
+					else if (data[bytes_processed + 2] == 0x6F)	// O
 					{
 						bytes_processed = bytes_processed + 5;
 						pos = bytes_processed + 5;
@@ -1245,6 +1251,12 @@ int32_t PassThruReadMsgs(const unsigned long ChannelID, PASSTHRU_MSG *pMsg,
 		return J2534_ERR_BUFFER_OVERFLOW;
 	}
 	return J2534_NOERROR;
+
+malformed_receive:
+	flush_queue();
+	*pNumMsgs = 0;
+	snprintf(LAST_ERROR, LE_LEN, "Malformed or oversized OpenPort receive record");
+	return J2534_ERR_INVALID_MSG;
 }
 
 /*
@@ -1253,6 +1265,7 @@ int32_t PassThruReadMsgs(const unsigned long ChannelID, PASSTHRU_MSG *pMsg,
 int32_t PassThruWriteMsgs(const unsigned long ChannelID, const PASSTHRU_MSG *pMsg,
 	unsigned long *pNumMsgs, const unsigned long timeInterval)
 {
+	if (pMsg == NULL || pNumMsgs == NULL) return J2534_ERR_NULL_PARAMETER;
 	if (write_log)
 	{
 		snprintf(log_msg, LM_LEN,
@@ -1280,6 +1293,10 @@ int32_t PassThruWriteMsgs(const unsigned long ChannelID, const PASSTHRU_MSG *pMs
 			snprintf(data, PM_DATA_LEN, "att%lu %lu %lu\r\n", ChannelID, pMsg[i].DataSize, pMsg[i].TxFlags);
 
 			strln = strlen(data);
+			if (msg_data_size > sizeof(data) - strln) {
+				snprintf(LAST_ERROR, LE_LEN, "OpenPort command and payload exceed USB buffer");
+				return J2534_ERR_INVALID_MSG;
+			}
 			uint32_t j = 0;
 			while (j < msg_data_size)
 				data[strln++] = pMsg[i].Data[j++];
