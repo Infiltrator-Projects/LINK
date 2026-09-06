@@ -55,9 +55,6 @@ include(CMakePackageConfigHelpers)
 
 option(LINK_ENABLE_SANITIZERS "Enable AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
 option(LINK_BUILD_LINUX_PROVIDER_SMOKE "Compile native Linux adapter providers as an ownership smoke target" OFF)
-option(LINK_BUILD_REFERENCE_PRODUCT_FACES
-    "Build MBLINK and JAGLINK reference Windows Discover faces when LINK is top-level"
-    OFF)
 option(LINK_ENABLE_INSTALL
     "Install LINK headers, library and CMake package when LINK is top-level"
     ${PROJECT_IS_TOP_LEVEL})
@@ -205,14 +202,14 @@ function(link_enable_linux_gtk_shell target)
         "${link_gtk_shell_source}")
     set_source_files_properties("${link_gtk_shell_source}" PROPERTIES
         COMPILE_OPTIONS "-include;${link_gtk_i18n_header}")
-    # The BSD backend is vendored protocol code. Keep LINK's strict warnings on
-    # the integration layer while insulating the imported implementation from
-    # product-level -Werror policies.
+    # Keep diagnostics visible for the imported J2534 implementation. Its
+    # historical signed-byte API and K&R prototypes are non-fatal, while
+    # bounds, format, conversion and other safety warnings remain errors.
     if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
         set_source_files_properties("${link_openport_j2534_source}" PROPERTIES
-            COMPILE_OPTIONS "-w")
+            COMPILE_OPTIONS
+                "-Wno-error=pointer-sign;-Wno-error=strict-prototypes;-Wno-error=shadow;-Wno-error=unused-parameter")
     endif()
-
     target_include_directories(${target} PRIVATE
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platform/linux")
 
@@ -391,16 +388,6 @@ if(WIN32 AND PROJECT_IS_TOP_LEVEL)
         PRODUCT_WEBSITE "https://github.com/Infiltrator-Projects/LINK"
         PRODUCT_LICENSE_NAME "GPL-3.0-or-later"
         PRODUCT_ICON_PNG "${CMAKE_CURRENT_SOURCE_DIR}/assets/branding/link-obd-icon-base.png")
-    if(LINK_BUILD_REFERENCE_PRODUCT_FACES)
-        link_add_windows_discover(mblink-discover PRODUCT_NAME "MBLINK" PRODUCT_SLUG "mblink"
-            WINDOW_CLASS "MBLINKDiscoverWindow" PRODUCT_VERSION "${PROJECT_VERSION}"
-            PRODUCT_COPYRIGHT "Copyright (C) 2026 Shannon Smith" PRODUCT_SUBTITLE "Mercedes-Benz Diagnostics"
-            PRODUCT_WEBSITE "https://github.com/Infiltrator-Projects/MBLINK")
-        link_add_windows_discover(jaglink-discover PRODUCT_NAME "JAGLINK" PRODUCT_SLUG "jaglink"
-            WINDOW_CLASS "JAGLINKDiscoverWindow" PRODUCT_VERSION "${PROJECT_VERSION}"
-            PRODUCT_COPYRIGHT "Copyright (C) 2026 Xavier Wheaton and Shannon Smith" PRODUCT_SUBTITLE "Jaguar X400 Diagnostics"
-            PRODUCT_WEBSITE "https://github.com/Infiltrator-Projects/Jaglink")
-    endif()
 endif()
 
 
@@ -425,7 +412,10 @@ if(LINK_BUILD_LINUX_PROVIDER_SMOKE)
         PkgConfig::LINK_PROVIDER_GIO)
     if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
         target_compile_options(link-linux-provider-smoke PRIVATE ${LINK_WARNING_FLAGS})
-        set_source_files_properties("${CMAKE_CURRENT_SOURCE_DIR}/third_party/openport2-j2534/j2534.c" PROPERTIES COMPILE_OPTIONS "-w")
+        set_source_files_properties(
+            "${CMAKE_CURRENT_SOURCE_DIR}/third_party/openport2-j2534/j2534.c"
+            PROPERTIES COMPILE_OPTIONS
+                "-Wno-error=pointer-sign;-Wno-error=strict-prototypes;-Wno-error=shadow;-Wno-error=unused-parameter")
     endif()
 endif()
 

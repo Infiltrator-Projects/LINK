@@ -32,6 +32,9 @@ typedef NS_ENUM(NSInteger, LinkBLETransportState) {
 
 @interface LinkBLETransport : NSObject
 
+/** Return whether a Bluetooth name matches a transport LINK can probe. */
++ (BOOL)isCompatiblePeripheralName:(NSString *)name;
+
 @property(nonatomic, weak, nullable) id<LinkBLETransportDelegate> delegate;
 @property(nonatomic, readonly) LinkBLETransportState state;
 @property(nonatomic, copy, readonly) NSString *statusText;

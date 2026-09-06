@@ -140,6 +140,10 @@ NS_ASSUME_NONNULL_BEGIN
                                              limit:(NSUInteger)limit;
 - (NSString *)displayUnitForPID:(uint8_t)pid;
 - (NSArray<NSNumber *> *)displayRangeForPID:(uint8_t)pid;
+/** Latest lossless multi-signal/text presentation for a structured SAE PID. */
+- (nullable NSString *)structuredDisplayValueForPID:(uint8_t)pid;
+/** Complete raw payload for the latest structured SAE PID sample. */
+- (nullable NSString *)structuredRawHexForPID:(uint8_t)pid;
 
 /**
  * Format one raw five-character SAE-style DTC for presentation without
@@ -249,6 +253,8 @@ NS_ASSUME_NONNULL_BEGIN
 - (NSArray<NSNumber *> *)displayRecentValuesForPID:(uint8_t)pid limit:(NSUInteger)limit;
 - (NSString *)displayUnitForPID:(uint8_t)pid;
 - (NSArray<NSNumber *> *)displayRangeForPID:(uint8_t)pid;
+- (nullable NSString *)structuredDisplayValueForPID:(uint8_t)pid;
+- (nullable NSString *)structuredRawHexForPID:(uint8_t)pid;
 - (NSString *)dtcDisplayTextForCode:(NSString *)code;
 - (BOOL)supportsPID:(uint8_t)pid;
 - (BOOL)favouriteForPID:(uint8_t)pid;

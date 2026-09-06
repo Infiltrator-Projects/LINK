@@ -413,7 +413,7 @@ next_line:
     return LINK_OBD2_RESULT_UNEXPECTED_RESPONSE;
 }
 
-static bool obd2_unit_from_catalogue(
+bool link_obd2_unit_from_name(
     const char *unit,
     LinkObd2Unit *decoded_unit)
 {
@@ -464,7 +464,7 @@ static LinkObd2Result obd2_decode_sample_data(
      * products keep working while new products can use LinkObd2DecodedPid.
      */
     if (decoded.signal_count == 0U ||
-        !obd2_unit_from_catalogue(decoded.signals[0].unit, &unit)) {
+        !link_obd2_unit_from_name(decoded.signals[0].unit, &unit)) {
         return LINK_OBD2_RESULT_UNSUPPORTED_PID;
     }
 
@@ -1132,7 +1132,7 @@ LinkObd2Result link_obd2_decode_live_pid(
         response, pid, &decoded);
     if (result != LINK_OBD2_RESULT_OK) return result;
     if (decoded.signal_count == 0U ||
-        !obd2_unit_from_catalogue(decoded.signals[0].unit, &unit)) {
+        !link_obd2_unit_from_name(decoded.signals[0].unit, &unit)) {
         return LINK_OBD2_RESULT_UNSUPPORTED_PID;
     }
     sample->pid = pid;
@@ -1163,7 +1163,7 @@ LinkObd2Result link_obd2_decode_live_pid_responders(
         LinkObd2Unit unit;
 
         if (source->decoded.signal_count == 0U ||
-            !obd2_unit_from_catalogue(
+            !link_obd2_unit_from_name(
                 source->decoded.signals[0].unit, &unit)) {
             if (first_decode_error == LINK_OBD2_RESULT_OK)
                 first_decode_error = LINK_OBD2_RESULT_UNSUPPORTED_PID;

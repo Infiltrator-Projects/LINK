@@ -196,6 +196,11 @@ static BOOL LinkRemainingBytesAreWhitespace(const uint8_t *bytes,
     void *_Nullable _receiverContext;
 }
 
++ (BOOL)isCompatiblePeripheralName:(NSString *)name
+{
+    return LinkPeripheralNameLooksLikeAdapter(name);
+}
+
 - (instancetype)init
 {
     self = [super init];

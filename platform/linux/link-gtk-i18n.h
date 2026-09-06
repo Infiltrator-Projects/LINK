@@ -4,6 +4,12 @@
 
 #include <gtk/gtk.h>
 
+typedef const char *(*LinkGtkProductTranslationFn)(
+    const char *text, void *context);
+
+void link_gtk_i18n_set_product_translator(
+    LinkGtkProductTranslationFn translator, void *context);
+
 /* Translate one human-readable screen string for the selected UI language. */
 const char *link_gtk_i18n_translate_text(const char *text);
 

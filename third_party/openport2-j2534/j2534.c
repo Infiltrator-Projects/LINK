@@ -129,7 +129,7 @@ static void writelogpassthrumsg(const PASSTHRU_MSG *msg)
 		"\t\tDataSize:\t%lu\n"
 		"\t\tExtraData:\t%lu\n"
 		"\t\tData:\n\t\t\t",
-		msg, msg->ProtocolID, msg->RxStatus, msg->TxFlags, msg->Timestamp,
+		(const void *)msg, msg->ProtocolID, msg->RxStatus, msg->TxFlags, msg->Timestamp,
 		msg->Timestamp, msg->DataSize, msg->ExtraDataIndex);
 	writelogmsg(msg->Data, 0, msg->DataSize);
 	fprintf(logfile, "\n");
@@ -467,6 +467,21 @@ static int usb_send_expect(uint8_t *data, const size_t len,
 	const int capacity, const uint32_t timeout, const uint8_t *expect)
 {
 	int bytes_written = 0, r = LIBUSB_SUCCESS;
+	int receive_capacity = 0;
+
+	if (data == NULL || capacity <= 1)
+	{
+		snprintf(LAST_ERROR, LE_LEN, "USB data buffer is invalid or too small");
+		return LIBUSB_ERROR_INVALID_PARAM;
+	}
+
+	/*
+	 * Replies handled by this helper are textual adapter acknowledgements.
+	 * Always reserve one byte for a terminator so a device-controlled reply
+	 * that fills the USB transfer cannot escape the caller's buffer when it is
+	 * subsequently parsed as a C string.
+	 */
+	receive_capacity = capacity - 1;
 
 	// send data only if there is more than 0 bytes to send
 	if (len > 0 && len <= (size_t)capacity)
@@ -511,8 +526,8 @@ static int usb_send_expect(uint8_t *data, const size_t len,
 			while (get_next)
 			{
 				r = libusb_bulk_transfer(con->dev_handle, endpoint->addr_in,
-					data, capacity, &bytes_read, timeout);
-				if (bytes_read < capacity)
+					data, receive_capacity, &bytes_read, timeout);
+				if (bytes_read >= 0 && bytes_read <= receive_capacity)
 					data[bytes_read] = '\0';
 
 				if (r != LIBUSB_SUCCESS)
@@ -536,7 +551,7 @@ static int usb_send_expect(uint8_t *data, const size_t len,
 					writelog("\n");
 				}
 
-				if (data[2] == 0x65)	// e
+				if (bytes_read >= 5 && data[2] == 0x65)	// e
 				{
 					unsigned long errnum = strtoul(data + 4, NULL, 10);
 					if (is_valid(errnum))
@@ -700,7 +715,7 @@ int32_t PassThruOpen(const void *pName, unsigned long *pDeviceID)
 	// expect ari with FW version
 	r = usb_send_expect(data, strlen(data), MAX_LEN, 2000, "ari ");
 	if (r == LIBUSB_SUCCESS)
-		memcpy(fw_version, data, 80);
+		snprintf(fw_version, sizeof(fw_version), "%s", (char *)data);
 
 	// open the device
 	strcpy(data, "ata\r\n");
@@ -1567,9 +1582,9 @@ int32_t PassThruIoctl(const unsigned long ChannelID, const unsigned long ioctlID
 		writelog(log_msg);
 	}
 	uint8_t data[MAX_LEN];
-	ssize_t bytes_written = 0;
 	size_t strln = 0;
-	uint32_t i = 0, par_cnt = 0, bytes_read = 0;
+	uint32_t i = 0, par_cnt = 0;
+	int bytes_read = 0;
 	int r = LIBUSB_ERROR_NOT_SUPPORTED;
 	if (ioctlID == J2534_GET_CONFIG)
 	{
@@ -1768,6 +1783,14 @@ int32_t PassThruIoctl(const unsigned long ChannelID, const unsigned long ioctlID
 			{
 				snprintf(LAST_ERROR, LE_LEN, "Error: failed to read timing: %s",
 					libusb_error_name(r));
+				goto EXIT_IOCTL;
+			}
+			if (bytes_read < 0 || len > (unsigned long)bytes_read ||
+				len > MAX_LEN)
+			{
+				snprintf(LAST_ERROR, LE_LEN,
+					"Error: timing reply shorter than declared length");
+				r = J2534_ERR_FAILED;
 				goto EXIT_IOCTL;
 			}
 

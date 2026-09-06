@@ -80,6 +80,8 @@ jobs:
           grep -Fq '_recoveryAttempt > LinkRecoveryAttemptLimit' platform/apple/LinkBLETransport.m
           grep -Fq 'retry limit reached' platform/apple/LinkBLETransport.m
           grep -Fq 'LinkScanAttemptLimit = 4U' platform/apple/LinkBLETransport.m
+          grep -Fq 'isCompatiblePeripheralName' platform/apple/LinkBLETransport.m
+          grep -Fq 'guard LinkBLETransport.isCompatiblePeripheralName(displayName)' platform/apple/LinkDiagnosticUI.swift
           grep -Fq 'LinkKnownPeripheralConnectTimeoutSeconds = 3.0' platform/apple/LinkBLETransport.m
           grep -Fq 'Saved BLE adapter did not answer yet; scanning' platform/apple/LinkBLETransport.m
           grep -Fq 'retrievePeripheralsWithIdentifiers' platform/apple/LinkBLETransport.m
@@ -131,6 +133,7 @@ jobs:
           grep -Fq 'class LinkStandardProductViewModel' platform/apple/LinkDiagnosticUI.swift
           grep -Fq 'struct LinkStandardProductAppearance' platform/apple/LinkDiagnosticUI.swift
           grep -Fq 'struct LinkStandardProductContentView' platform/apple/LinkDiagnosticUI.swift
+          grep -Fq 'Dashboard measurements' platform/apple/LinkDiagnosticUI.swift
           grep -Fq 'enum LinkConnectionPresentation' platform/apple/LinkDiagnosticUI.swift
           grep -Fq '@interface LinkProductDiagnosticsController' platform/apple/LinkDiagnosticsController.h
           grep -Fq '@implementation LinkProductDiagnosticsController' platform/apple/LinkDiagnosticsController.m
@@ -154,6 +157,15 @@ jobs:
           grep -Fq 'setSelectedMeasurementSystemKey' platform/apple/LinkDiagnosticsController.m
           grep -Fq '@property(nonatomic, copy, readonly) NSString *linkVersionText;' platform/apple/LinkDiagnosticsController.h
           grep -Fq 'return @LINK_VERSION_STRING;' platform/apple/LinkDiagnosticsController.m
+          grep -Fq 'structuredDisplayValueForPID' platform/apple/LinkDiagnosticsController.m
+          if grep -Eqi 'Mercedes|Jaguar|MBLINK|JAGLINK' \
+              platform/linux/link-gtk-i18n.c \
+              platform/windows/link-discover-i18n.c \
+              src/core/telemetry.c; then
+            echo 'Generic presentation and telemetry code must not branch on product identity.' >&2
+            exit 1
+          fi
+          ! grep -Fq 'LINK_BUILD_REFERENCE_PRODUCT_FACES' CMakeLists.txt
           ! grep -Fq 'LinkDiagnosticSettingsView' platform/apple/LinkDiagnosticUI.swift
           ! grep -Fq 'preferFavouriteSignals' platform/apple/LinkDiagnosticsController.h
           ! grep -Fq 'showUnavailableParameters' platform/apple/LinkDiagnosticsController.h

@@ -1244,6 +1244,7 @@ struct LinkSavedVehicleProfileSummary: Identifiable {
     let moduleCount: Int
     let responderCount: Int
     let updatedAt: Date?
+    let adapterIdentifier: String?
 
     init(
         id: String,
@@ -1251,7 +1252,8 @@ struct LinkSavedVehicleProfileSummary: Identifiable {
         displayName: String,
         moduleCount: Int,
         responderCount: Int,
-        updatedAt: Date?
+        updatedAt: Date?,
+        adapterIdentifier: String? = nil
     ) {
         self.id = id
         self.vin = vin
@@ -1259,6 +1261,7 @@ struct LinkSavedVehicleProfileSummary: Identifiable {
         self.moduleCount = moduleCount
         self.responderCount = responderCount
         self.updatedAt = updatedAt
+        self.adapterIdentifier = adapterIdentifier
     }
 
     init?(
@@ -1278,7 +1281,8 @@ struct LinkSavedVehicleProfileSummary: Identifiable {
             displayName: displayName,
             moduleCount: moduleCount,
             responderCount: Int(LinkVehicleProfileStandardResponderCount(profile as? [AnyHashable: Any])),
-            updatedAt: timestamp.map { Date(timeIntervalSince1970: $0) })
+            updatedAt: timestamp.map { Date(timeIntervalSince1970: $0) },
+            adapterIdentifier: profile["adapterIdentifier"] as? String)
     }
 }
 
@@ -1825,6 +1829,9 @@ final class LinkConnectionPickerViewController: UITableViewController,
             ? name!
             : (!(peripheralName ?? "").isEmpty
                ? peripheralName! : "Unnamed Bluetooth device")
+        guard LinkBLETransport.isCompatiblePeripheralName(displayName) else {
+            return
+        }
         adaptersByIdentifier[identifier] = LinkNearbyAdapter(
             identifier: identifier,
             name: displayName,
@@ -1865,6 +1872,14 @@ struct LinkStandardProductConfiguration {
     let legacyProfileKey: String?
     let legacySelectedVINKey: String?
     let legacyAdapterMappingKey: String?
+    let dashboardSelectionNamespace: String
+    let pollingSelectionNamespace: String
+    let legacyPollingGlobalKey: String?
+    let legacyPollingVehicleKey: String?
+    let seedDefaultPollingSelection: Bool
+    let defaultPollingPIDs: [UInt8]
+    let defaultDashboardStableKeys: [String]
+    let standardPIDStableKey: (UInt8) -> String
 
     init(
         productName: String,
@@ -1874,7 +1889,19 @@ struct LinkStandardProductConfiguration {
         versionText: String,
         legacyProfileKey: String? = nil,
         legacySelectedVINKey: String? = nil,
-        legacyAdapterMappingKey: String? = nil
+        legacyAdapterMappingKey: String? = nil,
+        dashboardSelectionNamespace: String? = nil,
+        pollingSelectionNamespace: String? = nil,
+        legacyPollingGlobalKey: String? = nil,
+        legacyPollingVehicleKey: String? = nil,
+        seedDefaultPollingSelection: Bool = true,
+        defaultPollingPIDs: [UInt8] = [
+            0x0C, 0x0D, 0x05, 0x11, 0x04, 0x0F, 0x10, 0x42
+        ],
+        defaultDashboardStableKeys: [String] = [],
+        standardPIDStableKey: @escaping (UInt8) -> String = {
+            String(format: "obd2-01-%02X", $0)
+        }
     ) {
         self.productName = productName
         self.productNamespace = productNamespace
@@ -1884,6 +1911,16 @@ struct LinkStandardProductConfiguration {
         self.legacyProfileKey = legacyProfileKey
         self.legacySelectedVINKey = legacySelectedVINKey
         self.legacyAdapterMappingKey = legacyAdapterMappingKey
+        self.dashboardSelectionNamespace =
+            dashboardSelectionNamespace ?? productNamespace
+        self.pollingSelectionNamespace =
+            pollingSelectionNamespace ?? productNamespace + "-polling"
+        self.legacyPollingGlobalKey = legacyPollingGlobalKey
+        self.legacyPollingVehicleKey = legacyPollingVehicleKey
+        self.seedDefaultPollingSelection = seedDefaultPollingSelection
+        self.defaultPollingPIDs = defaultPollingPIDs
+        self.defaultDashboardStableKeys = defaultDashboardStableKeys
+        self.standardPIDStableKey = standardPIDStableKey
     }
 }
 
@@ -1939,7 +1976,9 @@ class LinkStandardProductViewModel: NSObject, ObservableObject {
     let dashboardSelectionStore: LinkPIDSelectionStore
     let pollingSelectionStore: LinkPIDSelectionStore
     private var lastPersistedLiveVIN: String?
+    private var lastPersistedReadyVIN: String?
     private var lastCapabilityMergeVIN: String?
+    private var productHooksEnabled = false
 
     var interfaceLocaleIdentifier: String { selectedLanguageID }
 
@@ -1963,19 +2002,20 @@ class LinkStandardProductViewModel: NSObject, ObservableObject {
             legacySelectedVINKey: configuration.legacySelectedVINKey,
             legacyAdapterMappingKey: configuration.legacyAdapterMappingKey)
         self.dashboardSelectionStore = LinkPIDSelectionStore(
-            productNamespace: configuration.productNamespace,
+            productNamespace: configuration.dashboardSelectionNamespace,
             legacyGlobalKey: nil,
             legacyVehicleKey: nil)
         self.pollingSelectionStore = LinkPIDSelectionStore(
-            productNamespace: configuration.productNamespace + "-polling",
-            legacyGlobalKey: nil,
-            legacyVehicleKey: nil)
+            productNamespace: configuration.pollingSelectionNamespace,
+            legacyGlobalKey: configuration.legacyPollingGlobalKey,
+            legacyVehicleKey: configuration.legacyPollingVehicleKey)
         super.init()
 
         selectedVehicleVIN = vehicleProfileStore.selectedVehicleVIN
         seedDefaultPollingSelection()
         applyStoredPollingPolicy()
         refreshStandardState()
+        productHooksEnabled = true
     }
 
     func connect() {
@@ -1997,6 +2037,7 @@ class LinkStandardProductViewModel: NSObject, ObservableObject {
     private func beginConnection(_ source: LinkConnectionSource) {
         guard !isActive else { return }
         lastPersistedLiveVIN = nil
+        lastPersistedReadyVIN = nil
         lastCapabilityMergeVIN = nil
         switch source {
         case .automatic:
@@ -2014,6 +2055,15 @@ class LinkStandardProductViewModel: NSObject, ObservableObject {
     func disconnect() {
         productController.disconnect()
         isSimulationActive = false
+    }
+
+    func startSimulatedDiagnostics() {
+        guard !isActive else { return }
+        lastPersistedLiveVIN = nil
+        lastPersistedReadyVIN = nil
+        lastCapabilityMergeVIN = nil
+        isSimulationActive = true
+        productController.startSimulated()
     }
 
     func selectSavedVehicle(vin: String) {
@@ -2046,6 +2096,13 @@ class LinkStandardProductViewModel: NSObject, ObservableObject {
         refreshStandardState()
     }
 
+    func toggleFavourite(stableKey: String) {
+        guard let parameter = diagnosticParameters.first(where: {
+            $0.id == stableKey
+        }) else { return }
+        toggleFavourite(parameter)
+    }
+
     func togglePolling(_ parameter: LinkDiagnosticParameter) {
         guard let pid = UInt8(exactly: parameter.parameterIdentifier) else { return }
         let enabled = !productController.pollingEnabled(forPID: pid)
@@ -2055,6 +2112,20 @@ class LinkStandardProductViewModel: NSObject, ObservableObject {
         pollingSelectionStore.setGlobalStableKeys(Array(enabledKeys).sorted())
         productController.setPollingEnabled(enabled, forPID: pid)
         refreshStandardState()
+    }
+
+    func dashboardSelected(_ parameter: LinkDiagnosticParameter) -> Bool {
+        dashboardSelectionStore.globalStableKeys.contains(parameter.id)
+    }
+
+    func toggleDashboard(_ parameter: LinkDiagnosticParameter) {
+        var selected = Set(dashboardSelectionStore.globalStableKeys)
+        if selected.contains(parameter.id) { selected.remove(parameter.id) }
+        else { selected.insert(parameter.id) }
+        dashboardSelectionStore.setGlobalStableKeys(Array(selected).sorted())
+        refreshDashboardSelection()
+        dashboardParameters = productDashboardParameters(
+            standard: dashboardParameters)
     }
 
     func prepareCSVExport() {
@@ -2101,6 +2172,85 @@ class LinkStandardProductViewModel: NSObject, ObservableObject {
             mergeStandardCapabilitiesIfReady(vin: validLiveVIN)
         }
 
+        if active {
+            restoreLiveDiagnosticSnapshot()
+        } else if let vin = selectedVehicleVIN,
+                  let profile = vehicleProfileStore.profile(forVIN: vin) {
+            restoreSavedDiagnosticSnapshot(profile)
+            if productHooksEnabled {
+                productDidRestoreVehicleProfile(profile, vin: vin)
+            }
+        } else {
+            resetOfflineDiagnosticSnapshot()
+        }
+        languageTags = productController.availableLanguageTags
+        languageNames = productController.availableLanguageNames
+        selectedLanguageID = productController.selectedLanguageTag
+        measurementKeys = productController.availableMeasurementSystemKeys
+        measurementNames = productController.availableMeasurementSystemNames
+        selectedMeasurementID = productController.selectedMeasurementSystemKey
+        linkVersionText = productController.linkVersionText
+        isActive = active
+        isReady = productController.isReady
+        if productHooksEnabled { productDidRefreshStandardState() }
+        if active, isReady, let validLiveVIN,
+           lastPersistedReadyVIN != validLiveVIN {
+            saveVehicleProfile(vin: validLiveVIN, includeDiagnosticSnapshot: true)
+            lastPersistedReadyVIN = validLiveVIN
+            refreshSavedVehicleProfiles()
+        }
+        diagnosticParameters = productDiagnosticParameters(
+            standard: loadDiagnosticParameters())
+        refreshDashboardSelection()
+        dashboardParameters = productDashboardParameters(
+            standard: dashboardParameters)
+        recordedSampleCount = Int(clamping: productController.recordedSampleCount)
+    }
+
+    private func refreshSavedVehicleProfiles() {
+        savedVehicleProfiles = vehicleProfileStore.savedProfiles.compactMap { profile in
+            LinkSavedVehicleProfileSummary(
+                profile: profile as NSDictionary,
+                moduleCount: productModuleCountForVehicleProfile(profile),
+                fallbackDisplayName: configuration.vehicleName)
+        }
+        selectedVehicleVIN = vehicleProfileStore.selectedVehicleVIN
+    }
+
+    private func saveVehicleProfile(
+        vin: String,
+        includeDiagnosticSnapshot: Bool = false
+    ) {
+        var profile = vehicleProfileStore.profile(forVIN: vin) ?? [:]
+        if profile["displayName"] == nil {
+            profile["displayName"] = "\(configuration.vehicleName) · \(vin)"
+        }
+        profile["manufacturer"] = configuration.manufacturerName
+        profile["obdProtocolText"] = productController.obdProtocolText
+        profile["diagnosticCapabilityText"] =
+            productController.diagnosticCapabilityText
+        if includeDiagnosticSnapshot {
+            profile["standardResponderSummary"] =
+                productController.standardResponderSummary
+            profile["supportedPIDSummary"] = productController.supportedPIDSummary
+            profile["standardVINText"] = productController.standardVINText
+            profile["standardLiveValueRows"] = productController.standardLiveValueRows
+            profile["diagnosticCapabilityDetailText"] =
+                productController.diagnosticCapabilityDetailText
+            profile["faultScanStatusText"] = productController.faultScanStatusText
+            profile["storedDTCs"] = productController.storedDTCs
+            profile["pendingDTCs"] = productController.pendingDTCs
+            profile["permanentDTCs"] = productController.permanentDTCs
+            profile["readinessStatusText"] = productController.readinessStatusText
+            profile["readinessMonitorStatus"] =
+                productController.readinessMonitorStatus
+            profile["freezeFrameContext"] = productController.freezeFrameContext
+        }
+        productWillSaveVehicleProfile(&profile, vin: vin)
+        vehicleProfileStore.saveProfile(profile, forVIN: vin)
+    }
+
+    private func restoreLiveDiagnosticSnapshot() {
         faultScanStatusText = productController.faultScanStatusText
         storedDTCs = productController.storedDTCs
         pendingDTCs = productController.pendingDTCs
@@ -2113,41 +2263,81 @@ class LinkStandardProductViewModel: NSObject, ObservableObject {
         standardResponderSummary = productController.standardResponderSummary
         supportedPIDSummary = productController.supportedPIDSummary
         standardLiveRows = productController.standardLiveValueRows
-        languageTags = productController.availableLanguageTags
-        languageNames = productController.availableLanguageNames
-        selectedLanguageID = productController.selectedLanguageTag
-        measurementKeys = productController.availableMeasurementSystemKeys
-        measurementNames = productController.availableMeasurementSystemNames
-        selectedMeasurementID = productController.selectedMeasurementSystemKey
-        linkVersionText = productController.linkVersionText
-        isActive = active
-        isReady = productController.isReady
-        diagnosticParameters = loadDiagnosticParameters()
-        refreshDashboardSelection()
-        recordedSampleCount = Int(clamping: productController.recordedSampleCount)
     }
 
-    private func refreshSavedVehicleProfiles() {
-        savedVehicleProfiles = vehicleProfileStore.savedProfiles.compactMap { profile in
-            LinkSavedVehicleProfileSummary(
-                profile: profile as NSDictionary,
-                moduleCount: 0,
-                fallbackDisplayName: configuration.vehicleName)
-        }
-        selectedVehicleVIN = vehicleProfileStore.selectedVehicleVIN
+    private func restoreSavedDiagnosticSnapshot(_ profile: [AnyHashable: Any]) {
+        obdProtocolText = (profile["obdProtocolText"] as? String)
+            ?? "Saved OBD-II protocol unavailable"
+        faultScanStatusText = (profile["faultScanStatusText"] as? String)
+            ?? "Saved diagnostic state"
+        storedDTCs = (profile["storedDTCs"] as? [String]) ?? []
+        pendingDTCs = (profile["pendingDTCs"] as? [String]) ?? []
+        permanentDTCs = (profile["permanentDTCs"] as? [String]) ?? []
+        readinessStatusText = (profile["readinessStatusText"] as? String)
+            ?? "Saved readiness state"
+        readinessMonitorStatus =
+            (profile["readinessMonitorStatus"] as? [String]) ?? []
+        freezeFrameContext = (profile["freezeFrameContext"] as? [String]) ?? []
+        diagnosticCapabilityText =
+            (profile["diagnosticCapabilityText"] as? String)
+            ?? "Saved diagnostic capability"
+        diagnosticCapabilityDetailText =
+            (profile["diagnosticCapabilityDetailText"] as? String) ?? ""
+        standardResponderSummary =
+            (profile["standardResponderSummary"] as? String)
+            ?? "Saved standard responder information"
+        supportedPIDSummary = (profile["supportedPIDSummary"] as? String)
+            ?? "Saved standard PID information"
+        standardLiveRows =
+            (profile["standardLiveValueRows"] as? [String])
+            ?? (profile["standardLiveRows"] as? [String]) ?? []
     }
 
-    private func saveVehicleProfile(vin: String) {
-        var profile = vehicleProfileStore.profile(forVIN: vin) ?? [:]
-        if profile["displayName"] == nil {
-            profile["displayName"] = "\(configuration.vehicleName) · \(vin)"
-        }
-        profile["manufacturer"] = configuration.manufacturerName
-        profile["obdProtocolText"] = productController.obdProtocolText
-        profile["diagnosticCapabilityText"] =
-            productController.diagnosticCapabilityText
-        vehicleProfileStore.saveProfile(profile, forVIN: vin)
+    private func resetOfflineDiagnosticSnapshot() {
+        obdProtocolText = "OBD-II protocol not identified"
+        faultScanStatusText = "Not scanned"
+        storedDTCs = []
+        pendingDTCs = []
+        permanentDTCs = []
+        readinessStatusText = "Not read"
+        readinessMonitorStatus = []
+        freezeFrameContext = []
+        diagnosticCapabilityText = "Unknown / probing"
+        diagnosticCapabilityDetailText = ""
+        standardResponderSummary = "0 physical responders"
+        supportedPIDSummary = "0 advertised PIDs"
+        standardLiveRows = []
     }
+
+    /** Manufacturer-only profile fields; generic persistence remains in LINK. */
+    func productWillSaveVehicleProfile(
+        _ profile: inout [AnyHashable: Any],
+        vin: String
+    ) {}
+
+    /** Restore manufacturer-only fields after LINK restores its snapshot. */
+    func productDidRestoreVehicleProfile(
+        _ profile: [AnyHashable: Any],
+        vin: String
+    ) {}
+
+    /** Refresh manufacturer-only presentation after the shared state changes. */
+    func productDidRefreshStandardState() {}
+
+    /** Product-specific live values may extend or replace the standard table. */
+    func productDiagnosticParameters(
+        standard: [LinkDiagnosticParameter]
+    ) -> [LinkDiagnosticParameter] { standard }
+
+    /** Product-specific dashboard values may extend the standard selection. */
+    func productDashboardParameters(
+        standard: [LinkDiagnosticParameter]
+    ) -> [LinkDiagnosticParameter] { standard }
+
+    /** Product profiles may report a manufacturer controller inventory. */
+    func productModuleCountForVehicleProfile(
+        _ profile: [AnyHashable: Any]
+    ) -> Int { 0 }
 
     private func mergeStandardCapabilitiesIfReady(vin: String) {
         guard productController.isReady,
@@ -2173,12 +2363,16 @@ class LinkStandardProductViewModel: NSObject, ObservableObject {
                 forPID: pid, limit: 60).map(\.doubleValue)
             let value = history.last
             let unit = productController.displayUnit(forPID: pid)
+            let structuredValue = productController.structuredDisplayValue(forPID: pid)
+            let rawHex = productController.structuredRawHex(forPID: pid)
             let range = productController.displayRange(forPID: pid)
             let minimum = range.count >= 2 ? range[0].doubleValue : nil
             let maximum = range.count >= 2 ? range[1].doubleValue : nil
             let suffix = unit.isEmpty ? "" : " \(unit)"
+            let precision = link_parameter_obd2_definition(pid)
+                .map { Int32(min(Int($0.pointee.decimal_places), 9)) } ?? 1
             result.append(LinkDiagnosticParameter(
-                id: String(format: "obd2-01-%02X", pid),
+                id: configuration.standardPIDStableKey(pid),
                 protocolName: "OBD2",
                 moduleIdentifier: 0,
                 parameterIdentifier: UInt32(pid),
@@ -2186,11 +2380,11 @@ class LinkStandardProductViewModel: NSObject, ObservableObject {
                 title: String(cString: name),
                 suffix: unit,
                 formattedValue: value.map {
-                    String(format: "%.1f%@", $0, suffix)
+                    String(format: "%.*f%@", precision, $0, suffix)
                 } ?? "N/A",
                 value: value,
-                structuredValue: nil,
-                rawHex: nil,
+                structuredValue: structuredValue,
+                rawHex: rawHex,
                 vehicleSupported: supported,
                 favourite: productController.favourite(forPID: pid),
                 pollingEnabled: pollingEnabled,
@@ -2207,12 +2401,20 @@ class LinkStandardProductViewModel: NSObject, ObservableObject {
     private func refreshDashboardSelection() {
         let supported = diagnosticParameters.filter(\.vehicleSupported)
         if !dashboardSelectionStore.hasGlobalSelection {
-            let preferredPIDs: [UInt32] = [0x0C, 0x0D, 0x05, 0x11, 0x04, 0x0F]
-            let preferred = preferredPIDs.compactMap { pid in
-                supported.first(where: {
-                    $0.parameterIdentifier == pid
-                })?.id
+            let configured = Set(configuration.defaultDashboardStableKeys)
+            let configuredDefaults = supported.compactMap { parameter in
+                configured.contains(parameter.id) ? parameter.id : nil
             }
+            let preferredPIDs: [UInt32] = [
+                0x0C, 0x0D, 0x05, 0x11, 0x04, 0x0F
+            ]
+            let preferred = configuredDefaults.isEmpty
+                ? preferredPIDs.compactMap { pid in
+                    supported.first(where: {
+                        $0.parameterIdentifier == pid
+                    })?.id
+                }
+                : configuredDefaults
             let defaults = preferred.isEmpty
                 ? Array(supported.prefix(6).map(\.id)) : preferred
             if !defaults.isEmpty {
@@ -2223,27 +2425,22 @@ class LinkStandardProductViewModel: NSObject, ObservableObject {
         let chosen = diagnosticParameters.filter {
             selected.contains($0.id) && $0.vehicleSupported
         }
-        dashboardParameters = chosen.isEmpty
-            ? Array(supported.prefix(6)) : chosen
+        dashboardParameters = dashboardSelectionStore.hasGlobalSelection
+            ? chosen : Array(supported.prefix(6))
     }
 
-    private func allStandardPollingKeys() -> [String] {
-        let count = Int(link_obd2_pid_definition_count())
-        return (0..<count).compactMap { index in
-            guard let definition = link_obd2_pid_definition_at(index) else {
-                return nil
-            }
-            let metadata = definition.pointee
-            guard metadata.mode == 0x01, (metadata.pid & 0x1F) != 0 else {
-                return nil
-            }
-            return String(format: "obd2-01-%02X", metadata.pid)
+    private func defaultStandardPollingKeys() -> [String] {
+        configuration.defaultPollingPIDs.compactMap { pid in
+            guard let definition = link_obd2_pid_definition(0x01, pid),
+                  (definition.pointee.pid & 0x1F) != 0 else { return nil }
+            return configuration.standardPIDStableKey(pid)
         }
     }
 
     private func seedDefaultPollingSelection() {
-        guard !pollingSelectionStore.hasGlobalSelection else { return }
-        pollingSelectionStore.setGlobalStableKeys(allStandardPollingKeys())
+        guard configuration.seedDefaultPollingSelection,
+              !pollingSelectionStore.hasGlobalSelection else { return }
+        pollingSelectionStore.setGlobalStableKeys(defaultStandardPollingKeys())
     }
 
     private func applyStoredPollingPolicy() {
@@ -2253,7 +2450,7 @@ class LinkStandardProductViewModel: NSObject, ObservableObject {
             guard let definition = link_obd2_pid_definition_at(index) else { continue }
             let metadata = definition.pointee
             guard metadata.mode == 0x01, (metadata.pid & 0x1F) != 0 else { continue }
-            let key = String(format: "obd2-01-%02X", metadata.pid)
+            let key = configuration.standardPIDStableKey(metadata.pid)
             productController.setPollingEnabled(
                 enabledKeys.contains(key), forPID: metadata.pid)
         }
@@ -2983,6 +3180,42 @@ private struct LinkStandardSettingsView: View {
                             }
                             .pickerStyle(.segmented)
                 }
+                LinkLabeledPanel(
+                    title: "Dashboard measurements",
+                    systemImage: "gauge.with.dots.needle.67percent") {
+                        let supported = model.diagnosticParameters.filter(
+                            \.vehicleSupported)
+                        if supported.isEmpty {
+                            Text("Connect once to choose supported dashboard measurements.")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            ForEach(supported) { parameter in
+                                Button {
+                                    model.toggleDashboard(parameter)
+                                } label: {
+                                    HStack {
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(parameter.title)
+                                                .foregroundStyle(.primary)
+                                            Text(parameter.shortName)
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                        }
+                                        Spacer()
+                                        Image(systemName:
+                                            model.dashboardSelected(parameter)
+                                                ? "checkmark.circle.fill"
+                                                : "circle")
+                                    }
+                                }
+                                .buttonStyle(.plain)
+                                if parameter.id != supported.last?.id {
+                                    Divider()
+                                }
+                            }
+                        }
+                    }
             }
             .padding(16)
         }

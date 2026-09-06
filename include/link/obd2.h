@@ -215,6 +215,8 @@ typedef struct {
 
 const char *link_obd2_result_name(LinkObd2Result result);
 const char *link_obd2_unit_name(LinkObd2Unit unit);
+/** Resolve a standards-catalogue unit label to LINK's canonical unit enum. */
+bool link_obd2_unit_from_name(const char *name, LinkObd2Unit *unit);
 const char *link_obd2_pid_name(uint8_t pid);
 
 /** Generic SAE service catalogue for modes 01 through 0A. */

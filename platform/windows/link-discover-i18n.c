@@ -254,20 +254,7 @@ static int locale_is(const char *language)
 
 static const char *product_subtitle(void)
 {
-    const int mercedes = strcmp(LINK_PRODUCT_SUBTITLE, "Mercedes-Benz Diagnostics") == 0;
-    const int jaguar = strcmp(LINK_PRODUCT_SUBTITLE, "Jaguar X400 Diagnostics") == 0;
-    if (locale_is("de")) return mercedes ? "Mercedes-Benz-Diagnose" : jaguar ? "Jaguar-X400-Diagnose" : "Fahrzeugdiagnose";
-    if (locale_is("fr")) return mercedes ? "Diagnostic Mercedes-Benz" : jaguar ? "Diagnostic Jaguar X400" : "Diagnostic du véhicule";
-    if (locale_is("es")) return mercedes ? "Diagnóstico Mercedes-Benz" : jaguar ? "Diagnóstico Jaguar X400" : "Diagnóstico del vehículo";
-    if (locale_is("it")) return mercedes ? "Diagnostica Mercedes-Benz" : jaguar ? "Diagnostica Jaguar X400" : "Diagnostica del veicolo";
-    if (locale_is("pl")) return mercedes ? "Diagnostyka Mercedes-Benz" : jaguar ? "Diagnostyka Jaguar X400" : "Diagnostyka pojazdu";
-    if (locale_is("pt")) return mercedes ? "Diagnóstico Mercedes-Benz" : jaguar ? "Diagnóstico Jaguar X400" : "Diagnóstico do veículo";
-    if (locale_is("zh")) return mercedes ? "梅赛德斯-奔驰诊断" : jaguar ? "Jaguar X400 诊断" : "车辆诊断";
-    if (locale_is("hi")) return mercedes ? "Mercedes-Benz निदान" : jaguar ? "Jaguar X400 निदान" : "वाहन निदान";
-    if (locale_is("ar")) return mercedes ? "تشخيص Mercedes-Benz" : jaguar ? "تشخيص Jaguar X400" : "تشخيص المركبة";
-    if (locale_is("ja")) return mercedes ? "Mercedes-Benz診断" : jaguar ? "Jaguar X400診断" : "車両診断";
-    if (locale_is("ko")) return mercedes ? "Mercedes-Benz 진단" : jaguar ? "Jaguar X400 진단" : "차량 진단";
-    if (locale_is("id")) return mercedes ? "Diagnostik Mercedes-Benz" : jaguar ? "Diagnostik Jaguar X400" : "Diagnostik kendaraan";
+    /* Product-owned wording must remain opaque to the shared UI engine. */
     return LINK_PRODUCT_SUBTITLE;
 }
 

@@ -47,6 +47,7 @@ static void test_catalogue(void)
 {
     const LinkObd2PidDefinition *definition;
     LinkObd2DecodedPid decoded;
+    LinkObd2Unit unit = LINK_OBD2_UNIT_NONE;
     static const uint8_t odometer_payload[] = {0x00U, 0x01U, 0x86U, 0xa0U};
     static const uint8_t o2_payload[] = {0x40U, 0x00U, 0x20U, 0x00U};
     static const uint8_t vin_payload[] = {
@@ -118,6 +119,15 @@ static void test_catalogue(void)
     static const uint8_t map_payload[] = {
         0x03U, 0x00U, 0x20U, 0x00U, 0x40U
     };
+
+    check(link_obd2_unit_from_name("°C", &unit) &&
+              unit == LINK_OBD2_UNIT_CELSIUS,
+          "resolve catalogue temperature unit");
+    check(link_obd2_unit_from_name("kg/h", &unit) &&
+              unit == LINK_OBD2_UNIT_KILOGRAMS_PER_HOUR,
+          "resolve catalogue mass-flow unit");
+    check(!link_obd2_unit_from_name("not-a-unit", &unit),
+          "reject unknown catalogue unit");
     static const uint8_t aftertreatment_payload[] = {
         0x7fU, 0x0fU, 0x80U, 0x00U, 0x0aU, 0x00U, 0x14U
     };

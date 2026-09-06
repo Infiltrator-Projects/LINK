@@ -12,26 +12,9 @@
 /*
  * Product faces compile the shared telemetry implementation either through
  * LINK::Core or directly into their Apple target.  Normalize the product
- * build identity here so MBLINK and JAGLINK evidence receive the same fields.
+ * build identity here without teaching LINK any product name. A product may
+ * define the neutral LINK_TELEMETRY_PRODUCT_* values in its own build.
  */
-#if defined(MBLINK_VERSION)
-#define LINK_TELEMETRY_PRODUCT_VERSION MBLINK_VERSION
-#elif defined(JAGLINK_VERSION)
-#define LINK_TELEMETRY_PRODUCT_VERSION JAGLINK_VERSION
-#endif
-
-#if defined(MBLINK_BUILD_PROFILE)
-#define LINK_TELEMETRY_PRODUCT_BUILD_PROFILE MBLINK_BUILD_PROFILE
-#elif defined(JAGLINK_BUILD_PROFILE)
-#define LINK_TELEMETRY_PRODUCT_BUILD_PROFILE JAGLINK_BUILD_PROFILE
-#endif
-
-#if defined(MBLINK_BUILD_REVISION)
-#define LINK_TELEMETRY_PRODUCT_BUILD_REVISION MBLINK_BUILD_REVISION
-#elif defined(JAGLINK_BUILD_REVISION)
-#define LINK_TELEMETRY_PRODUCT_BUILD_REVISION JAGLINK_BUILD_REVISION
-#endif
-
 #ifndef LINK_TELEMETRY_BUILD_ID
 #define LINK_TELEMETRY_BUILD_ID __DATE__ " " __TIME__
 #endif

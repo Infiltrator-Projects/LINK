@@ -6,6 +6,7 @@
 #include "link/diagnostic_capability.h"
 #include "link/diagnostic_flow.h"
 #include "link/transport.h"
+#include "link-gtk-i18n.h"
 #include <gtk/gtk.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -78,6 +79,8 @@ typedef struct LinkGtkShellDescriptor {
      */
     const char *(*navigation_icon_resource)(size_t section, void *context);
     const char *css;
+    /* Optional product-owned translations for manufacturer-specific text. */
+    LinkGtkProductTranslationFn translate_text;
     void (*render_section)(size_t section, GtkWidget *body, void *context);
     /*
      * Standard LINK-owned About metadata. Product code supplies identity;

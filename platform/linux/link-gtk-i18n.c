@@ -8,6 +8,8 @@
 #include <string.h>
 
 static int link_gtk_i18n_initialised;
+static LinkGtkProductTranslationFn product_translator;
+static void *product_translation_context;
 
 typedef struct LinkGtkLiteralTranslation {
     const char *english;
@@ -34,18 +36,9 @@ static const LinkGtkLiteralTranslation literal_translations[] = {
     {"LINK carries the Linux connection directly into ELM initialisation, supported-PID discovery, stored/pending/permanent OBD-II fault inventory and live polling.",
      "LINK führt die Linux-Verbindung direkt zur ELM-Initialisierung, Erkennung unterstützter PIDs, zum Lesen gespeicherter/anstehender/permanenter OBD-II-Fehler und zur Live-Abfrage.",
      "LINK prowadzi połączenie Linux bezpośrednio do inicjalizacji ELM, wykrywania obsługiwanych PID-ów, odczytu zapisanych/oczekujących/trwałych usterek OBD-II oraz odpytywania na żywo."},
-    {"Jaguar-specific topology remains in JAGLINK while the standard transport, fault and live-data engine is shared through LINK.",
-     "Die Jaguar-spezifische Topologie bleibt in JAGLINK, während Standardtransport, Fehler- und Live-Daten-Engine über LINK gemeinsam genutzt werden.",
-     "Topologia specyficzna dla Jaguara pozostaje w JAGLINK, a standardowy transport, obsługa usterek i dane na żywo są współdzielone przez LINK."},
     {"Standards-based powertrain DTC decoding is provided by LINK and remains read-only.",
      "Die standardbasierte Antriebsstrang-DTC-Decodierung wird von LINK bereitgestellt und bleibt schreibgeschützt.",
      "Oparte na standardach dekodowanie kodów DTC układu napędowego zapewnia LINK i pozostaje tylko do odczytu."},
-    {"Jaguar-specific module acquisition remains gated by verified X400 module addresses and safe read-only requests.",
-     "Die Jaguar-spezifische Modulerfassung bleibt auf verifizierte X400-Moduladressen und sichere Nur-Lese-Anfragen beschränkt.",
-     "Odczyt modułów specyficznych dla Jaguara pozostaje ograniczony do zweryfikowanych adresów modułów X400 i bezpiecznych żądań tylko do odczytu."},
-    {"LINK prefers a verified Jaguar factory value when available, otherwise uses measured SAE PID 0x5E fuel rate with PID 0x0D vehicle speed. Estimates are never presented as measured data.",
-     "LINK bevorzugt einen verifizierten Jaguar-Werkswert; andernfalls werden die gemessene SAE-Kraftstoffrate PID 0x5E und die Fahrzeuggeschwindigkeit PID 0x0D verwendet. Schätzwerte werden nie als Messwerte dargestellt.",
-     "LINK preferuje zweryfikowaną wartość fabryczną Jaguara; w przeciwnym razie używa zmierzonego przepływu paliwa SAE PID 0x5E z prędkością pojazdu PID 0x0D. Wartości szacowane nigdy nie są przedstawiane jako pomiary."},
     {"Time-series traces receive real LINK telemetry samples from the active Linux diagnostic flow.",
      "Zeitreihen erhalten reale LINK-Telemetriemesswerte aus dem aktiven Linux-Diagnoseablauf.",
      "Wykresy czasowe otrzymują rzeczywiste próbki telemetrii LINK z aktywnego przebiegu diagnostyki Linux."},
@@ -70,10 +63,8 @@ static const LinkGtkLiteralTranslation literal_translations[] = {
     {"VEHICLE PROFILE", "FAHRZEUGPROFIL", "PROFIL POJAZDU"},
     {"CONNECTION", "VERBINDUNG", "POŁĄCZENIE"},
     {"Linux diagnostic link", "Linux-Diagnoseverbindung", "Połączenie diagnostyczne Linux"},
-    {"MERCEDES PROFILE", "MERCEDES-PROFIL", "PROFIL MERCEDES"},
     {"Known ECU endpoints", "Bekannte ECU-Endpunkte", "Znane punkty końcowe ECU"},
     {"NO ENDPOINT DEFINITIONS", "KEINE ENDPUNKTDEFINITIONEN", "BRAK DEFINICJI PUNKTÓW KOŃCOWYCH"},
-    {"MERCEDES ENGINE", "MERCEDES-MOTOR", "SILNIK MERCEDES"},
     {"Manufacturer profile status", "Status des Herstellerprofils", "Stan profilu producenta"},
     {"STANDARD OBD-II", "STANDARD OBD-II", "STANDARD OBD-II"},
     {"Stored, pending and permanent faults", "Gespeicherte, anstehende und permanente Fehler", "Usterki zapisane, oczekujące i trwałe"},
@@ -104,19 +95,10 @@ static const LinkGtkLiteralTranslation literal_translations[] = {
     {"Fuel rate", "Kraftstoffrate", "Przepływ paliwa"},
     {"Trip", "Fahrt", "Podróż"},
     {"Current source", "Aktuelle Quelle", "Bieżące źródło"},
-    {"Mercedes factory direct", "Mercedes-Werkswert direkt", "Bezpośrednia wartość fabryczna Mercedes"},
-    {"Mercedes factory counters", "Mercedes-Werkszähler", "Fabryczne liczniki Mercedes"},
-    {"Mercedes factory fuel rate", "Mercedes-Werks-Kraftstoffrate", "Fabryczny przepływ paliwa Mercedes"},
-    {"Mercedes factory source", "Mercedes-Werksquelle", "Fabryczne źródło Mercedes"},
-    {"Jaguar factory direct", "Jaguar-Werkswert direkt", "Bezpośrednia wartość fabryczna Jaguar"},
-    {"Jaguar factory counters", "Jaguar-Werkszähler", "Fabryczne liczniki Jaguar"},
-    {"Jaguar factory fuel rate", "Jaguar-Werks-Kraftstoffrate", "Fabryczny przepływ paliwa Jaguar"},
-    {"X400 factory signal", "X400-Werkssignal", "Sygnał fabryczny X400"},
     {"decoder verified", "Decoder bestätigt", "dekoder zweryfikowany"},
     {"decoder not yet vehicle-verified", "Decoder noch nicht am Fahrzeug bestätigt", "dekoder niezweryfikowany jeszcze w pojeździe"},
     {"AT-A-GLANCE", "AUF EINEN BLICK", "W SKRÓCIE"},
     {"Powertrain dashboard", "Antriebsstrang-Übersicht", "Panel układu napędowego"},
-    {"Jaguar powertrain dashboard", "Jaguar-Antriebsstrang-Übersicht", "Panel układu napędowego Jaguar"},
     {"LIVE SAMPLES", "LIVE-MESSWERTE", "PRÓBKI NA ŻYWO"},
     {"INSTRUMENT TRACES", "INSTRUMENTENVERLÄUFE", "PRZEBIEGI WSKAŹNIKÓW"},
     {"Signal history", "Signalverlauf", "Historia sygnału"},
@@ -131,21 +113,14 @@ static const LinkGtkLiteralTranslation literal_translations[] = {
     {"Linux transport", "Linux-Transport", "Transport Linux"},
     {"Linux diagnostic flow", "Linux-Diagnoseablauf", "Przebieg diagnostyki Linux"},
     {"Fuel economy", "Kraftstoffverbrauch", "Zużycie paliwa"},
-    {"Mercedes-Benz diagnostics", "Mercedes-Benz-Diagnose", "Diagnostyka Mercedes-Benz"},
-    {"Jaguar X-Type X400 diagnostics", "Jaguar-X-Type-X400-Diagnose", "Diagnostyka Jaguar X-Type X400"},
     {"LINK serial ELM327 provider", "LINK serieller ELM327-Anbieter", "Dostawca szeregowy ELM327 LINK"},
     {"Automatic PID + DTC + live polling", "Automatische PID- + DTC- + Live-Abfrage", "Automatyczne PID + DTC + odpytywanie na żywo"},
     {"Factory-priority + SAE measured fallback", "Werkswert-Priorität + gemessener SAE-Fallback", "Priorytet fabryczny + mierzony fallback SAE"},
-    {"X400 NETWORK TOPOLOGY", "X400-NETZWERKTOPOLOGIE", "TOPOLOGIA SIECI X400"},
     {"Diagnostic networks and module paths", "Diagnosenetzwerke und Modulpfade", "Sieci diagnostyczne i ścieżki modułów"},
     {"NO NETWORK DEFINITIONS", "KEINE NETZWERKDEFINITIONEN", "BRAK DEFINICJI SIECI"},
-    {"JAGUAR MODULES", "JAGUAR-MODULE", "MODUŁY JAGUAR"},
-    {"X400 PROFILE READY", "X400-PROFIL BEREIT", "PROFIL X400 GOTOWY"},
     {"Refresh", "Aktualisieren", "Odśwież"},
     {"Disconnected", "Getrennt", "Rozłączono"},
-    {"About", "Info", "O programie"},
-    {"MERCEDES-BENZ · C207 / OM651", "MERCEDES-BENZ · C207 / OM651", "MERCEDES-BENZ · C207 / OM651"},
-    {"JAGUAR X-TYPE · X400", "JAGUAR X-TYPE · X400", "JAGUAR X-TYPE · X400"}
+    {"About", "Info", "O programie"}
 };
 
 static void ensure_locale(void)
@@ -195,8 +170,6 @@ static const char *translation_key(const char *text)
         {"Diagnostic flow", "linux.label.diagnostic_flow"},
         {"LINK carries the Linux connection directly into ELM initialisation, supported-PID discovery, stored/pending/permanent OBD-II fault inventory and live polling.", "linux.connection.description"},
         {"source-corroborated", "linux.value.source_corroborated"},
-        {"Mercedes-Benz Diagnostics", "linux.title.mercedes"},
-        {"Jaguar X400 Diagnostics", "linux.title.jaguar"},
         {"About", "common.about"},
         {"No ELM327 serial device detected", "connection.no_device"},
         {"Invalid adapter configuration", "connection.invalid_config"},
@@ -239,6 +212,13 @@ static const char *literal_translate(const char *text)
     return text;
 }
 
+void link_gtk_i18n_set_product_translator(
+    LinkGtkProductTranslationFn translator, void *context)
+{
+    product_translator = translator;
+    product_translation_context = context;
+}
+
 const char *link_gtk_i18n_translate_text(const char *text)
 {
     const char *key;
@@ -263,6 +243,11 @@ const char *link_gtk_i18n_translate_text(const char *text)
 
 translated = literal_translate(text);
 if (translated != text) return translated;
+
+if (product_translator != NULL) {
+    translated = product_translator(text, product_translation_context);
+    if (translated != NULL && strcmp(translated, text) != 0) return translated;
+}
 
 /* Compact parameter-table rows keep the technical PID while
    replacing the English short label with the selected-language full name. */

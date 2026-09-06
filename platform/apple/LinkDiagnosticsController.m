@@ -495,6 +495,69 @@ static void LinkAppleSessionEvent(
     return @[@(minimum), @(maximum)];
 }
 
+- (BOOL)latestStructuredSampleForPID:(uint8_t)pid
+                              sample:(LinkStructuredTelemetrySample *)sample
+{
+    const size_t count =
+        link_structured_telemetry_store_history_count(&_structuredTelemetry);
+    if (sample == NULL) return NO;
+    for (size_t index = count; index != 0U; --index) {
+        LinkStructuredTelemetrySample candidate;
+        if (link_structured_telemetry_store_history_at(
+                &_structuredTelemetry, index - 1U, &candidate) &&
+            candidate.decoded.definition != NULL &&
+            candidate.decoded.definition->pid == pid) {
+            *sample = candidate;
+            return YES;
+        }
+    }
+    return NO;
+}
+
+- (nullable NSString *)structuredDisplayValueForPID:(uint8_t)pid
+{
+    LinkStructuredTelemetrySample sample;
+    if (![self latestStructuredSampleForPID:pid sample:&sample]) return nil;
+    if (sample.decoded.text_available && sample.decoded.text[0] != '\0')
+        return [NSString stringWithUTF8String:sample.decoded.text];
+
+    NSMutableArray<NSString *> *parts = [NSMutableArray array];
+    const LinkMeasurementSystem system = [self resolvedMeasurementSystem];
+    for (size_t index = 0U; index < sample.decoded.signal_count; ++index) {
+        const LinkObd2DecodedSignal *signal = &sample.decoded.signals[index];
+        double display = signal->value;
+        const char *unit = signal->unit != NULL ? signal->unit : "";
+        const char *displayUnit = unit;
+        LinkObd2Unit decodedUnit = LINK_OBD2_UNIT_NONE;
+        if (link_obd2_unit_from_name(unit, &decodedUnit)) {
+            (void)link_units_convert_obd2(
+                decodedUnit, signal->value, system, &display, &displayUnit);
+        }
+        [parts addObject:[NSString stringWithFormat:@"%s: %.6g%s%s",
+            signal->label != NULL ? signal->label : "Value",
+            display,
+            displayUnit != NULL && displayUnit[0] != '\0' ? " " : "",
+            displayUnit != NULL ? displayUnit : ""]];
+    }
+    if (parts.count != 0U) return [parts componentsJoinedByString:@" · "];
+
+    NSString *raw = [self structuredRawHexForPID:pid];
+    return raw.length != 0U ? [@"RAW " stringByAppendingString:raw] : nil;
+}
+
+- (nullable NSString *)structuredRawHexForPID:(uint8_t)pid
+{
+    LinkStructuredTelemetrySample sample;
+    if (![self latestStructuredSampleForPID:pid sample:&sample] ||
+        sample.decoded.raw_length == 0U) return nil;
+    NSMutableString *raw = [NSMutableString string];
+    for (size_t index = 0U; index < sample.decoded.raw_length; ++index) {
+        [raw appendFormat:index == 0U ? @"%02X" : @" %02X",
+            sample.decoded.raw[index]];
+    }
+    return [raw copy];
+}
+
 static void LinkAppleAppendReadinessMonitor(
     NSMutableArray<NSString *> *rows,
     const char *name,
@@ -2297,6 +2360,14 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
 - (NSArray<NSNumber *> *)displayRangeForPID:(uint8_t)pid
 {
     return [_shared displayRangeForPID:pid];
+}
+- (nullable NSString *)structuredDisplayValueForPID:(uint8_t)pid
+{
+    return [_shared structuredDisplayValueForPID:pid];
+}
+- (nullable NSString *)structuredRawHexForPID:(uint8_t)pid
+{
+    return [_shared structuredRawHexForPID:pid];
 }
 - (NSString *)dtcDisplayTextForCode:(NSString *)code
 {

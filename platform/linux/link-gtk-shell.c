@@ -2161,6 +2161,8 @@ int link_gtk_shell_run(int argc, char **argv,
     int argument_index;
     if (descriptor == NULL || descriptor->app_id == NULL) return 2;
     shell.descriptor = descriptor;
+    link_gtk_i18n_set_product_translator(
+        descriptor->translate_text, descriptor->context);
 
     for (argument_index = 1; argument_index < argc; ++argument_index) {
         if (strcmp(argv[argument_index], "--ui-navigation-stress") == 0) {
