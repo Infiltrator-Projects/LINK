@@ -14,6 +14,7 @@
 #include "../../src/core/diagnostic_capability.c"
 #include "../../src/core/isotp.c"
 #include "../../src/core/parameter.c"
+#include "../../src/core/dashboard.c"
 #include "../../src/core/scheduler.c"
 #include "../../src/core/telemetry.c"
 #include "../../src/core/session_trace.c"
