@@ -129,6 +129,13 @@ typedef struct LinkGtkShellDescriptor {
     const char *diagnostic_restart_action_label;
     void (*diagnostic_restart_action)(void *context);
     const LinkGtkManufacturerExtension *manufacturer_extension;
+    /*
+     * Run the product manufacturer extension immediately after the standard
+     * VIN has been read. Products that must identify the VIN-scoped module map
+     * before SAE capability/fault acquisition opt in here. A false value keeps
+     * the historical post-DTC extension point for existing LINK consumers.
+     */
+    bool manufacturer_extension_after_standard_vin;
     const LinkGtkTransportProvider *transport_provider;
     void *transport_provider_context;
     /*

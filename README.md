@@ -79,20 +79,32 @@ The DTC knowledge API is presentation-neutral and deliberately preserves the raw
 
 The catalogue is generated deterministically by `scripts/import-obdex-dtcs.py`. The generator validates exact family counts and a total of 9,533 unique generic definitions before producing the vendored normalized snapshot and compiled C lookup. The resolver uses that compiled table directly, so product builds require no network access or runtime data files.
 
-The shared diagnostic-flow controller owns the product-neutral sequence and supports exactly one manufacturer-extension insertion point per session:
+The shared diagnostic-flow controller owns the product-neutral sequence and supports exactly one manufacturer-extension insertion point per session. Its default sequence is:
 
 ```text
 ELM init
   → standard OBD-II PID discovery
   → standard VIN
-  → [optional early manufacturer extension + optional ELM restore]
   → stored / pending / permanent DTC inventory
   → [optional late manufacturer extension + optional ELM restore]
   → live-data scheduler
   → live PID decode
 ```
 
-A configuration that enables more than one manufacturer-extension position is rejected rather than silently running manufacturer discovery twice. Each product chooses the one insertion point that matches its vehicle workflow. MBLINK currently uses the post-VIN hook so the authoritative vehicle profile is selected or created before the remaining standard fault/live work; manufacturer logic stays above LINK while generic sequencing remains shared.
+When a product selects the vehicle-first post-VIN hook, LINK instead runs:
+
+```text
+ELM init
+  → standard VIN
+  → adapter protocol identification
+  → manufacturer extension + optional ELM restore
+  → standard OBD-II PID discovery
+  → stored / pending / permanent DTC inventory
+  → live-data scheduler
+  → live PID decode
+```
+
+A configuration that enables more than one manufacturer-extension position is rejected rather than silently running manufacturer discovery twice. Each product chooses the one insertion point that matches its vehicle workflow. MBLINK uses the vehicle-first post-VIN hook so the authoritative vehicle profile and module map are selected or created before standard capability, fault and live-data work; manufacturer logic stays above LINK while generic sequencing remains shared.
 
 An optional stored, pending or permanent DTC mode may return ELM `NO DATA` or
 an ISO-style `7F <service> <NRC>` response on a vehicle that does not make that
