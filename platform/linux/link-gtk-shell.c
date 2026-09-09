@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 22702)
-Total output lines: 2203
-
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "link-gtk-shell.h"
 #include "link/linux_serial.h"
@@ -1025,7 +1022,241 @@ static void rebuild_navigation(LinkGtkShell *shell)
         if (shell->descriptor->navigation_icon_resource != NULL)
             icon_resource = shell->descriptor->navigation_icon_resource(
                 index, shell->descriptor->context);
-        if (icon_resource != NULL && icon_reso…2702 tokens truncated…((size_t)selected >= link_i18n_installed_locale_count()) return;
+        if (icon_resource != NULL && icon_resource[0] != '\0') {
+            GtkWidget *icon = gtk_image_new_from_resource(icon_resource);
+            gtk_image_set_pixel_size(GTK_IMAGE(icon), 26);
+            gtk_widget_set_valign(icon, GTK_ALIGN_CENTER);
+            gtk_widget_add_css_class(icon, "link-nav-icon");
+            gtk_box_append(GTK_BOX(row_content), icon);
+        }
+        gtk_widget_set_hexpand(box, TRUE);
+        gtk_box_append(GTK_BOX(box), left_label(section->title, "link-section-title"));
+        gtk_box_append(GTK_BOX(box), left_label(section->summary, "link-section-summary"));
+        gtk_box_append(GTK_BOX(row_content), box);
+        gtk_list_box_row_set_child(GTK_LIST_BOX_ROW(row), row_content);
+        g_object_set_data(G_OBJECT(row), "link-section",
+                          GUINT_TO_POINTER((unsigned int)index));
+        gtk_list_box_append(GTK_LIST_BOX(shell->nav_list), row);
+        if (index == shell->current_section)
+            gtk_list_box_select_row(GTK_LIST_BOX(shell->nav_list), GTK_LIST_BOX_ROW(row));
+    }
+}
+
+static void refresh_devices(LinkGtkShell *shell)
+{
+    char paths[32][256];
+    size_t count;
+    size_t index;
+    GtkStringList *model = gtk_string_list_new(NULL);
+    const LinkGtkTransportProvider *provider =
+        shell != NULL && shell->descriptor != NULL
+            ? shell->descriptor->transport_provider : NULL;
+    if (provider != NULL && provider->discover != NULL) {
+        count = provider->discover(
+            paths, 32U, shell->descriptor->transport_provider_context);
+    } else {
+        count = link_linux_serial_discover(paths, 32U);
+    }
+    for (index = 0U; index < count; ++index) gtk_string_list_append(model, paths[index]);
+    if (count == 0U)
+        gtk_string_list_append(model, link_gtk_i18n_translate_text("No adapter"));
+    gtk_drop_down_set_model(GTK_DROP_DOWN(shell->device_combo), G_LIST_MODEL(model));
+    gtk_drop_down_set_selected(GTK_DROP_DOWN(shell->device_combo), 0U);
+    g_object_unref(model);
+}
+
+static const char *selected_device(LinkGtkShell *shell)
+{
+    GObject *item = gtk_drop_down_get_selected_item(GTK_DROP_DOWN(shell->device_combo));
+    const char *value = item != NULL ? gtk_string_object_get_string(GTK_STRING_OBJECT(item)) : NULL;
+    const char *placeholder = link_gtk_i18n_translate_text("No adapter");
+    if (value == NULL || (placeholder != NULL && strcmp(value, placeholder) == 0)) return NULL;
+    return value;
+}
+
+static void notify_connection(LinkGtkShell *shell, bool connected, const char *identity)
+{
+    invalidate_section_cache(shell);
+    if (shell->descriptor->connection_changed != NULL) {
+        shell->descriptor->connection_changed(&shell->transport,
+                                              connected,
+                                              identity,
+                                              shell->descriptor->context);
+    }
+}
+
+static void notify_diagnostic(LinkGtkShell *shell,
+                              const LinkDiagnosticFlowEvent *event)
+{
+    invalidate_section_cache(shell);
+    if (shell->descriptor->diagnostic_changed != NULL) {
+        shell->descriptor->diagnostic_changed(
+            shell->diagnostics_active ? &shell->flow : NULL,
+            event,
+            shell->diagnostics_active,
+            shell->diagnostics_ready,
+            shell->descriptor->context);
+    }
+    queue_current_section_render(shell);
+}
+
+static void set_connection_state(LinkGtkShell *shell, bool connected, const char *message)
+{
+    gtk_label_set_text(GTK_LABEL(shell->status), message);
+    gtk_widget_remove_css_class(
+        shell->status, connected ? "link-status-offline" : "link-status-online");
+    gtk_widget_add_css_class(
+        shell->status, connected ? "link-status-online" : "link-status-offline");
+    gtk_button_set_label(GTK_BUTTON(shell->link_button), connected ? "LINK DOWN" : "LINK UP");
+    gtk_widget_set_sensitive(shell->device_combo, !connected);
+    if (shell->diagnostic_restart_button != NULL)
+        gtk_widget_set_sensitive(
+            shell->diagnostic_restart_button,
+            connected && shell->diagnostics_ready &&
+            !shell->manufacturer_extension_active &&
+            !shell->diagnostic_restart_pending);
+    if (shell->save_session_button != NULL) {
+        const char *label = shell->native_adapter_mode
+            ? "SAVE NATIVE SESSION" : "SAVE SESSION";
+        if (!shell->native_adapter_mode &&
+            connected && shell->flow.stage == LINK_DIAGNOSTIC_FLOW_FAILED)
+            label = "SAVE FAILED SESSION";
+        else if (!shell->native_adapter_mode &&
+                 connected && !shell->diagnostics_ready)
+            label = "SAVE PARTIAL SESSION";
+        gtk_button_set_label(GTK_BUTTON(shell->save_session_button), label);
+    }
+}
+
+static bool manufacturer_extension_available(const LinkGtkShell *shell)
+{
+    const LinkGtkManufacturerExtension *extension;
+    if (shell == NULL || shell->descriptor == NULL) return false;
+    extension = shell->descriptor->manufacturer_extension;
+    return extension != NULL && extension->begin != NULL &&
+           extension->next_command != NULL && extension->accept_response != NULL;
+}
+
+static const char *diagnostic_stage_message(const LinkGtkShell *shell)
+{
+    if (shell == NULL) return "Diagnostic state unavailable";
+    if (shell->native_adapter_mode)
+        return "Linked · Mercedes me Adapter · native protocol capture";
+    switch (shell->flow.stage) {
+    case LINK_DIAGNOSTIC_FLOW_IDLE:
+        return "Linked · diagnostic session idle";
+    case LINK_DIAGNOSTIC_FLOW_INITIALIZING:
+        return "Linked · initialising ELM327 adapter";
+    case LINK_DIAGNOSTIC_FLOW_CONFIGURING_PID_DISCOVERY_HEADERS:
+        return "Linked · enabling CAN headers for OBD capability discovery";
+    case LINK_DIAGNOSTIC_FLOW_DISCOVERING_PIDS:
+        return "Linked · discovering supported OBD-II PIDs by responder";
+    case LINK_DIAGNOSTIC_FLOW_RESTORING_PID_DISCOVERY_HEADERS:
+        return "Linked · restoring standard OBD-II response format";
+    case LINK_DIAGNOSTIC_FLOW_READING_STANDARD_VIN:
+        return "Linked · reading standard vehicle VIN";
+    case LINK_DIAGNOSTIC_FLOW_MANUFACTURER_EXTENSION:
+        return shell->manufacturer_extension_active
+            ? "Linked · running factory diagnostic extension"
+            : "Linked · manufacturer extension pending";
+    case LINK_DIAGNOSTIC_FLOW_RESTORING_AFTER_MANUFACTURER:
+        return "Linked · restoring standard OBD-II channel";
+    case LINK_DIAGNOSTIC_FLOW_SCANNING_STORED_DTCS:
+        return "Linked · scanning stored OBD-II faults";
+    case LINK_DIAGNOSTIC_FLOW_SCANNING_PENDING_DTCS:
+        return "Linked · scanning pending OBD-II faults";
+    case LINK_DIAGNOSTIC_FLOW_SCANNING_PERMANENT_DTCS:
+        return "Linked · scanning permanent OBD-II faults";
+    case LINK_DIAGNOSTIC_FLOW_READING_READINESS:
+        return "Linked · reading emissions readiness context";
+    case LINK_DIAGNOSTIC_FLOW_READING_FREEZE_FRAME:
+        return "Linked · reading stored-fault freeze-frame context";
+    case LINK_DIAGNOSTIC_FLOW_CONFIGURING_LIVE_HEADERS:
+        return "Linked · enabling CAN responder headers";
+    case LINK_DIAGNOSTIC_FLOW_LIVE:
+    case LINK_DIAGNOSTIC_FLOW_READING_LIVE:
+        return "Linked · live OBD-II polling active";
+    case LINK_DIAGNOSTIC_FLOW_FAILED:
+        return "Linked · diagnostic session failed · LINK DOWN / LINK UP to retry";
+    }
+    return "Linked · diagnostics active";
+}
+
+static void refresh_visible_language(LinkGtkShell *shell)
+{
+    const bool connected = shell != NULL &&
+        shell->transport.is_connected != NULL &&
+        shell->transport.is_connected(shell->transport.context);
+    if (shell == NULL) return;
+
+    if (shell->window != NULL)
+        gtk_window_set_title(shell->window,
+            link_gtk_i18n_translate_text(shell->descriptor->window_title));
+    if (shell->titlebar_label != NULL)
+        gtk_label_set_text(GTK_LABEL(shell->titlebar_label),
+            link_gtk_i18n_translate_text(shell->descriptor->window_title));
+    if (shell->brand_subtitle != NULL)
+        gtk_label_set_text(GTK_LABEL(shell->brand_subtitle), shell->descriptor->brand_subtitle);
+    if (shell->language_label != NULL)
+        gtk_label_set_text(GTK_LABEL(shell->language_label), "🌐");
+    if (shell->adapter_label != NULL)
+        gtk_label_set_text(GTK_LABEL(shell->adapter_label), "Adapter");
+    if (shell->refresh_button != NULL)
+        gtk_button_set_label(GTK_BUTTON(shell->refresh_button), "Refresh");
+    if (shell->about_button != NULL)
+        gtk_button_set_label(GTK_BUTTON(shell->about_button), "About");
+    if (shell->save_session_button != NULL)
+        gtk_button_set_label(GTK_BUTTON(shell->save_session_button), "SAVE SESSION");
+    if (shell->diagnostic_restart_button != NULL &&
+        shell->descriptor->diagnostic_restart_action_label != NULL)
+        gtk_button_set_label(
+            GTK_BUTTON(shell->diagnostic_restart_button),
+            shell->descriptor->diagnostic_restart_action_label);
+
+    refresh_devices(shell);
+    rebuild_navigation(shell);
+    invalidate_section_cache(shell);
+    if (shell->status != NULL && shell->link_button != NULL) {
+        if (connected)
+            set_connection_state(shell, true,
+                shell->native_adapter_mode
+                    ? diagnostic_stage_message(shell)
+                    : ((shell->diagnostics_active || shell->diagnostics_ready ||
+                        shell->flow.stage == LINK_DIAGNOSTIC_FLOW_FAILED)
+                        ? diagnostic_stage_message(shell)
+                        : "Linked · diagnostic session idle"));
+        else
+            set_connection_state(shell, false, "Disconnected");
+    }
+    /*
+     * The language selector now lives inside Settings. Rebuilding that page
+     * synchronously from its own notify signal would destroy the active GTK
+     * control mid-callback. Keep the current Settings subtree alive; all other
+     * pages can refresh immediately.
+     */
+    if (shell->current_section != LINK_WORKSPACE_SETTINGS)
+        render_navigation_selection(shell);
+    else {
+        const LinkWorkspaceSectionDescriptor *section =
+            link_workspace_section_at(shell->current_section);
+        if (section != NULL) {
+            if (shell->title != NULL)
+                gtk_label_set_text(GTK_LABEL(shell->title), section->title);
+            if (shell->summary != NULL)
+                gtk_label_set_text(GTK_LABEL(shell->summary), section->summary);
+        }
+    }
+}
+
+static void language_changed(GObject *object, GParamSpec *spec, gpointer user_data)
+{
+    LinkGtkShell *shell = user_data;
+    guint selected;
+    const char *locale;
+    (void)spec;
+    if (shell == NULL || object == NULL) return;
+    selected = gtk_drop_down_get_selected(GTK_DROP_DOWN(object));
+    if ((size_t)selected >= link_i18n_installed_locale_count()) return;
     locale = link_i18n_installed_locale((size_t)selected);
     if (locale == NULL || !link_i18n_select_locale(locale)) return;
     save_selected_locale(locale);
@@ -1314,7 +1545,7 @@ static bool start_diagnostics(LinkGtkShell *shell)
     if (shell == NULL) return false;
 
     if (manufacturer_extension_available(shell)) {
-        if (shell->descriptor.manufacturer_extension_after_standard_vin) {
+        if (shell->descriptor->manufacturer_extension_after_standard_vin) {
             config.manufacturer_extension_after_standard_vin = true;
         } else {
             config.manufacturer_extension_after_standard_dtcs = true;

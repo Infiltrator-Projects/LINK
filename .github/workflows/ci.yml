@@ -244,7 +244,7 @@ jobs:
         if: runner.environment == 'github-hosted'
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libbluetooth-dev libglib2.0-dev libusb-1.0-0-dev pkg-config
+          sudo apt-get install -y --no-install-recommends libbluetooth-dev libglib2.0-dev libusb-1.0-0-dev libgtk-4-dev pkg-config
       - name: Bootstrap libusb development files for self-hosted Linux
         if: runner.environment == 'self-hosted'
         shell: bash
@@ -275,6 +275,16 @@ jobs:
         run: cmake -S . -B build-linux-providers -DCMAKE_BUILD_TYPE=Release -DLINK_BUILD_LINUX_PROVIDER_SMOKE=ON -DBUILD_TESTING=ON
       - name: Compile native providers
         run: cmake --build build-linux-providers --target link-linux-provider-smoke link-test-linux-openport2-status --parallel
+      - name: Compile the shared GTK presentation sources
+        shell: bash
+        run: |
+          cc -std=c11 -fsyntax-only -Werror=implicit-function-declaration \
+            $(pkg-config --cflags gtk4) \
+            -Iinclude -Isrc/infiltratr-common/include -Iplatform/linux \
+            -include platform/linux/link-gtk-i18n.h \
+            platform/linux/link-gtk-shell.c \
+            platform/linux/link-gtk-about.c \
+            platform/linux/link-gtk-i18n.c
       - name: Verify OpenPort receive-status regression
         run: ctest --test-dir build-linux-providers -R '^link-linux-openport2-status$' --output-on-failure
 
