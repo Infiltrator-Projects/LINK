@@ -1614,7 +1614,6 @@ final class LinkConnectionPickerViewController: UITableViewController,
 
     private var nearbyAdapters: [LinkNearbyAdapter] {
         adaptersByIdentifier.values
-            .filter { $0.identifier != knownAdapterIdentifier }
             .sorted {
                 if $0.rssi != $1.rssi { return $0.rssi > $1.rssi }
                 if $0.name != $1.name { return $0.name < $1.name }
@@ -1829,9 +1828,9 @@ final class LinkConnectionPickerViewController: UITableViewController,
             ? name!
             : (!(peripheralName ?? "").isEmpty
                ? peripheralName! : "Unnamed Bluetooth device")
-        guard LinkBLETransport.isCompatiblePeripheralName(displayName) else {
-            return
-        }
+        // The picker shows every peripheral iOS reports, including unnamed
+        // devices and the saved adapter. Adapter-name hints belong to automatic
+        // connection selection; they must not hide devices from manual choice.
         adaptersByIdentifier[identifier] = LinkNearbyAdapter(
             identifier: identifier,
             name: displayName,
@@ -1845,7 +1844,7 @@ final class LinkConnectionPickerViewController: UITableViewController,
         central.stopScan()
         central.scanForPeripherals(
             withServices: nil,
-            options: [CBCentralManagerScanOptionAllowDuplicatesKey: false])
+            options: [CBCentralManagerScanOptionAllowDuplicatesKey: true])
     }
 
     @objc private func scanAgain() {

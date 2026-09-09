@@ -10,6 +10,12 @@ The LINK-owned Apple amalgamation entry points are:
 
 Product repositories should consume these LINK files rather than creating product-owned translation units that directly include generic LINK implementation `.c` files.
 
+## Manual Bluetooth device list
+
+Connect opens the device picker before any adapter connection or vehicle diagnostic request. The nearby list displays every peripheral delivered by iOS discovery, including unfamiliar names, unnamed devices and the saved adapter when it is discovered. A saved identifier alone is not evidence that the device is nearby. Device-name recognition must not filter this manual list.
+
+Scan Again clears the previous discovery results and restarts discovery. Repeated advertisements update the same device row by identifier, allowing a later advertisement to supply its name. The user selects which device to connect to; appearing in the list does not certify diagnostic compatibility. Automatic adapter selection can use compatibility hints separately. This list contains devices exposed by the iOS discovery API, not a copy of the system Bluetooth Settings list.
+
 ## Adapter backends are not vehicle-brand policy
 
 Mercedes me native-adapter support is a LINK adapter/transport capability. The name identifies the hardware family that the backend speaks to; it does not restrict that hardware to Mercedes-Benz vehicles. If the adapter can carry the CAN/ISO-TP traffic required by a Ford, BMW, Audi, Jaguar or another supported vehicle family, the corresponding LINK product may use it.

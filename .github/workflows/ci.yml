@@ -83,7 +83,12 @@ jobs:
           grep -Fq 'retry limit reached' platform/apple/LinkBLETransport.m
           grep -Fq 'LinkScanAttemptLimit = 4U' platform/apple/LinkBLETransport.m
           grep -Fq 'isCompatiblePeripheralName' platform/apple/LinkBLETransport.m
-          grep -Fq 'guard LinkBLETransport.isCompatiblePeripheralName(displayName)' platform/apple/LinkDiagnosticUI.swift
+          if grep -Fq 'guard LinkBLETransport.isCompatiblePeripheralName(displayName)' platform/apple/LinkDiagnosticUI.swift || \
+             grep -Fq '.filter { $0.identifier != knownAdapterIdentifier }' platform/apple/LinkDiagnosticUI.swift; then
+            echo 'The manual connection picker must show every discovered device, including the saved adapter.' >&2
+            exit 1
+          fi
+          grep -Fq 'CBCentralManagerScanOptionAllowDuplicatesKey: true' platform/apple/LinkDiagnosticUI.swift
           grep -Fq 'LinkKnownPeripheralConnectTimeoutSeconds = 3.0' platform/apple/LinkBLETransport.m
           grep -Fq 'Saved BLE adapter did not answer yet; scanning' platform/apple/LinkBLETransport.m
           grep -Fq 'retrievePeripheralsWithIdentifiers' platform/apple/LinkBLETransport.m
