@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   patch:
-    if: github.event.head_commit.message == 'Add one-shot Apple picker presentation fix'
+    if: github.event.head_commit.message == 'Retry one-shot Apple picker presentation fix'
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
@@ -21,20 +21,21 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD^)" = "3a60c45415273c8e91c7a5a887bb04ad787c80f6"
+          test "$(git rev-parse HEAD^)" = "541b0503cd1537c59c548a1ae21fab19c11458f2"
+          test "$(git rev-parse HEAD~2)" = "3a60c45415273c8e91c7a5a887bb04ad787c80f6"
           python3 - <<'PY'
           from pathlib import Path
 
           ui = Path('platform/apple/LinkDiagnosticUI.swift')
           text = ui.read_text()
 
-          old_connect = '''        LinkConnectionPresentation.presentPicker(
+          old_connect = '''LinkConnectionPresentation.presentPicker(
               vehicleText: currentVehicleText,
               knownAdapterIdentifier: knownAdapter) { [weak self] source in
                   self?.beginConnection(source)
               }
           '''
-          new_connect = '''        LinkConnectionPresentation.presentPicker(
+          new_connect = '''LinkConnectionPresentation.presentPicker(
               vehicleText: currentVehicleText,
               knownAdapterIdentifier: knownAdapter,
               unavailable: { [weak self] in
