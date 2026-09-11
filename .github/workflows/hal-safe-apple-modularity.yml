@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   migrate:
-    if: github.event.head_commit.message == 'Retry safe Apple modularity migration'
+    if: github.event.head_commit.message == 'Retry safe Apple modularity migration after Apple harness fix'
     runs-on: macos-latest
     timeout-minutes: 30
     steps:
@@ -46,7 +46,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          tests/apple/run-regressions.sh
+          bash tests/apple/run-regressions.sh
 
       - name: Commit tested release and remove migration helpers
         shell: bash
