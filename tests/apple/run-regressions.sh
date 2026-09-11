@@ -16,7 +16,13 @@ grep -Fq 'const BOOL explicitlySelected =' "$ble"
 grep -Fq '!explicitlySelected &&' "$ble"
 controller=platform/apple/LinkDiagnosticsController.m
 grep -Fq 'Connected · polling idle · no PIDs selected' "$controller"
-grep -Fq 'if (item->pid_valid && item->enabled) ++enabledPollingCount;' "$controller"
+grep -Fq 'LinkPollingPolicy _pollingPolicy;' "$controller"
+grep -Fq 'link_polling_policy_apply_to_scheduler(' "$controller"
+if grep -Fq '_pidPollingEnabled' "$controller"; then
+    echo 'Apple controller must not own a second PID polling-policy array.' >&2
+    exit 1
+fi
+grep -Fq 'link_scheduler_enabled_standard_count(&_flow.scheduler)' "$controller"
 grep -Fq 'completedStage == LINK_DIAGNOSTIC_FLOW_CONFIGURING_LIVE_HEADERS' "$controller"
 grep -Fq '[self applyPollingPreferencesToScheduler];' "$controller"
 grep -Fq 'private var adapterDiscoveryOrder = [String]()' "$ui"

@@ -14,6 +14,7 @@ extern "C" {
 
 #define LINK_SCHEDULER_MAX_ITEMS 256U
 #define LINK_OBD2_PID_SET_BYTES 32U
+#define LINK_OBD2_PID_COUNT 256U
 
 typedef enum {
     LINK_SCHEDULER_PRIORITY_LOW = 0,
@@ -69,6 +70,11 @@ typedef struct {
     uint64_t pause_started_ms;
 } LinkScheduler;
 
+/** Retained user policy for standard OBD-II PID polling. */
+typedef struct {
+    bool pid_enabled[LINK_OBD2_PID_COUNT];
+} LinkPollingPolicy;
+
 typedef struct {
     size_t index;
     LinkSchedulerItemKind kind;
@@ -87,6 +93,17 @@ LinkSchedulerResult link_scheduler_add_parameter(LinkScheduler *scheduler, const
 LinkSchedulerResult link_scheduler_set_parameter_enabled(LinkScheduler *scheduler, const LinkParameterKey *key, bool enabled);
 LinkSchedulerResult link_scheduler_add(LinkScheduler *scheduler, uint8_t pid, uint32_t interval_ms, LinkSchedulerPriority priority, uint64_t first_due_ms);
 LinkSchedulerResult link_scheduler_set_enabled(LinkScheduler *scheduler, uint8_t pid, bool enabled);
+
+/**
+ * Retain standard PID choices independently of scheduler construction. A
+ * product may set choices before discovery; applying the policy later changes
+ * only standard OBD-II scheduler items and never touches external/OEM jobs.
+ */
+void link_polling_policy_init(LinkPollingPolicy *policy, bool enabled_by_default);
+bool link_polling_policy_is_enabled(const LinkPollingPolicy *policy, uint8_t pid);
+void link_polling_policy_set_enabled(LinkPollingPolicy *policy, uint8_t pid, bool enabled);
+size_t link_polling_policy_apply_to_scheduler(const LinkPollingPolicy *policy, LinkScheduler *scheduler);
+size_t link_scheduler_enabled_standard_count(const LinkScheduler *scheduler);
 
 /**
  * Register one opaque manufacturer/product live transaction with LINK's single

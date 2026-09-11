@@ -125,6 +125,58 @@ LinkSchedulerResult link_scheduler_set_enabled(LinkScheduler *scheduler, uint8_t
     return link_scheduler_set_parameter_enabled(scheduler, &key, enabled);
 }
 
+void link_polling_policy_init(LinkPollingPolicy *policy, bool enabled_by_default)
+{
+    size_t pid;
+    if (policy == NULL) return;
+    for (pid = 0U; pid < LINK_OBD2_PID_COUNT; ++pid)
+        policy->pid_enabled[pid] = enabled_by_default;
+}
+
+bool link_polling_policy_is_enabled(const LinkPollingPolicy *policy, uint8_t pid)
+{
+    return policy != NULL && policy->pid_enabled[pid];
+}
+
+void link_polling_policy_set_enabled(
+    LinkPollingPolicy *policy, uint8_t pid, bool enabled)
+{
+    if (policy == NULL) return;
+    policy->pid_enabled[pid] = enabled;
+}
+
+size_t link_polling_policy_apply_to_scheduler(
+    const LinkPollingPolicy *policy, LinkScheduler *scheduler)
+{
+    size_t index;
+    size_t enabled_count = 0U;
+    if (policy == NULL || scheduler == NULL) return 0U;
+
+    for (index = 0U; index < scheduler->count; ++index) {
+        LinkSchedulerItem *item = &scheduler->items[index];
+        if (item->kind != LINK_SCHEDULER_ITEM_PARAMETER || !item->pid_valid)
+            continue;
+        item->enabled = policy->pid_enabled[item->pid];
+        if (item->enabled) ++enabled_count;
+    }
+    return enabled_count;
+}
+
+size_t link_scheduler_enabled_standard_count(const LinkScheduler *scheduler)
+{
+    size_t index;
+    size_t enabled_count = 0U;
+    if (scheduler == NULL) return 0U;
+    for (index = 0U; index < scheduler->count; ++index) {
+        const LinkSchedulerItem *item = &scheduler->items[index];
+        if (item->kind == LINK_SCHEDULER_ITEM_PARAMETER &&
+            item->pid_valid && item->enabled) {
+            ++enabled_count;
+        }
+    }
+    return enabled_count;
+}
+
 LinkSchedulerResult link_scheduler_add_external(
     LinkScheduler *scheduler,
     uint32_t token,

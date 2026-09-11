@@ -68,6 +68,21 @@ struct ProfileRegression {
         precondition(saved["readinessStatusText"] as? String == "captured")
         precondition(saved["freezeFrameContext"] as? [String] == ["snapshot"])
         precondition(saved["modules"] != nil)
-        print("LINK Apple simulation isolation and profile-patch regressions passed")
+
+        // Retained polling choices are controller policy, not scheduler lifetime.
+        let pollingController = LinkDiagnosticsController(
+            productSlug: namespace + "-polling", flowConfig: flow,
+            liveStatusText: "live", simulatedLiveStatusText: "simulated",
+            standardVINStatusText: "VIN")
+        precondition(pollingController.pollingEnabled(forPID: 0x0C))
+        precondition(pollingController.pollingEnabled(forPID: 0x0D))
+        pollingController.setPollingEnabled(false, forPID: 0x0C)
+        precondition(!pollingController.pollingEnabled(forPID: 0x0C))
+        precondition(pollingController.pollingEnabled(forPID: 0x0D),
+                     "Changing one PID must not mutate another PID choice")
+        pollingController.setPollingEnabled(true, forPID: 0x0C)
+        precondition(pollingController.pollingEnabled(forPID: 0x0C))
+
+        print("LINK Apple simulation, profile-patch and polling-policy regressions passed")
     }
 }

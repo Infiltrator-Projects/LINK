@@ -91,7 +91,7 @@
     NSString *_simulatedLiveStatusText;
     NSString *_standardVINStatusText;
     NSString *_lastRecordedTransportStatus;
-    BOOL _pidPollingEnabled[256];
+    LinkPollingPolicy _pollingPolicy;
     BOOL _legacyDiagnosticResponseObserved;
     NSString *_selectedLanguageTag;
     NSString *_selectedMeasurementSystemKey;
@@ -244,8 +244,7 @@ static void LinkAppleSessionEvent(
     _pendingDTCs = @[];
     _permanentDTCs = @[];
 
-    for (NSUInteger pid = 0U; pid < 256U; ++pid)
-        _pidPollingEnabled[pid] = YES;
+    link_polling_policy_init(&_pollingPolicy, true);
 
     (void)link_diagnostic_flow_init(&_flow, &_flowConfig);
     link_telemetry_store_init(&_telemetry);
@@ -1966,11 +1965,8 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
     }
 
     case LINK_DIAGNOSTIC_FLOW_ACTION_READY: {
-        size_t enabledPollingCount = 0U;
-        for (size_t index = 0U; index < _flow.scheduler.count; ++index) {
-            const LinkSchedulerItem *item = &_flow.scheduler.items[index];
-            if (item->pid_valid && item->enabled) ++enabledPollingCount;
-        }
+        const size_t enabledPollingCount =
+            link_scheduler_enabled_standard_count(&_flow.scheduler);
         self.ready = YES;
         [self setSharedStatus:
             _flow.scheduler.count == 0U
@@ -2187,12 +2183,13 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
 
 - (BOOL)pollingEnabledForPID:(uint8_t)pid
 {
-    return _pidPollingEnabled[pid];
+    return link_polling_policy_is_enabled(&_pollingPolicy, pid) ? YES : NO;
 }
 
 - (void)setPollingEnabled:(BOOL)enabled forPID:(uint8_t)pid
 {
-    _pidPollingEnabled[pid] = enabled;
+    link_polling_policy_set_enabled(
+        &_pollingPolicy, pid, enabled ? true : false);
 
     /*
      * NOT_FOUND simply means capability discovery has not built this PID into
@@ -2214,11 +2211,8 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
         if (enabled) {
             [self driveDiagnosticFlow];
         } else {
-            size_t enabledPollingCount = 0U;
-            for (size_t index = 0U; index < _flow.scheduler.count; ++index) {
-                const LinkSchedulerItem *item = &_flow.scheduler.items[index];
-                if (item->pid_valid && item->enabled) ++enabledPollingCount;
-            }
+            const size_t enabledPollingCount =
+                link_scheduler_enabled_standard_count(&_flow.scheduler);
             if (enabledPollingCount == 0U) {
                 [self setSharedStatus:
                     @"Connected · polling idle · no PIDs selected"];
@@ -2229,12 +2223,8 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
 
 - (void)applyPollingPreferencesToScheduler
 {
-    for (size_t index = 0U; index < _flow.scheduler.count; ++index) {
-        const LinkSchedulerItem *item = &_flow.scheduler.items[index];
-        if (!item->pid_valid) continue;
-        (void)link_scheduler_set_enabled(
-            &_flow.scheduler, item->pid, _pidPollingEnabled[item->pid]);
-    }
+    (void)link_polling_policy_apply_to_scheduler(
+        &_pollingPolicy, &_flow.scheduler);
 }
 
 - (nullable NSData *)csvDataSnapshot
