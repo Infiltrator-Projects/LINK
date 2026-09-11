@@ -2,6 +2,19 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 set -euo pipefail
 cd "$(dirname "$0")/../.."
+
+ui=platform/apple/LinkDiagnosticUI.swift
+ble=platform/apple/LinkBLETransport.m
+grep -Fq 'remainingPresentationAttempts: 3' "$ui"
+grep -Fq 'unavailable: @escaping () -> Void' "$ui"
+grep -Fq 'Unable to open adapter picker · try Connect again' "$ui"
+if grep -Fq 'selection(.automatic)' "$ui"; then
+    echo 'Apple Connect must not silently switch to automatic scan when the picker cannot be presented.' >&2
+    exit 1
+fi
+grep -Fq 'const BOOL explicitlySelected =' "$ble"
+grep -Fq '!explicitlySelected &&' "$ble"
+
 build_dir=$(mktemp -d "${TMPDIR:-/tmp}/link-apple-regression.XXXXXX")
 sdk=$(xcrun --sdk iphonesimulator --show-sdk-path)
 arch=$(uname -m)
