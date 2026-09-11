@@ -1,0 +1,513 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: HAL safe Apple modularity migration
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  migrate:
+    if: github.event.head_commit.message == 'Stage safe Apple modularity migration'
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Extract low-risk Apple ownership boundaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_exact(path, old, new, count=1):
+              p = Path(path)
+              text = p.read_text()
+              actual = text.count(old)
+              if actual != count:
+                  raise SystemExit(f'{path}: expected {count} occurrence(s), found {actual}')
+              p.write_text(text.replace(old, new, count))
+
+          controller_h = Path('platform/apple/LinkDiagnosticsController.h')
+          controller_m = Path('platform/apple/LinkDiagnosticsController.m')
+
+          # 1) Physically separate the public vehicle-profile API while preserving
+          # every public symbol and caller import through LinkDiagnosticsController.h.
+          h = controller_h.read_text()
+          profile_marker = '/**\n * Shared persistent vehicle-profile/session store for Apple product faces.'
+          if h.count(profile_marker) != 1:
+              raise SystemExit('vehicle-profile declaration marker mismatch')
+          profile_start = h.index(profile_marker)
+          ns_end = '\nNS_ASSUME_NONNULL_END'
+          if h.count(ns_end) != 1:
+              raise SystemExit('unexpected NS_ASSUME_NONNULL_END count')
+          profile_end = h.index(ns_end)
+          if profile_end <= profile_start:
+              raise SystemExit('vehicle-profile declarations are not at expected tail')
+          profile_declarations = h[profile_start:profile_end].rstrip() + '\n'
+          for required in (
+              '@interface LinkVehicleProfileStore',
+              '@interface LinkVehicleProfileStandardResponder',
+              'LinkVehicleProfileCachedPIDs',
+              'LinkVehicleProfileStandardResponders'):
+              if required not in profile_declarations:
+                  raise SystemExit(f'missing profile declaration {required}')
+
+          profile_header = '''// SPDX-License-Identifier: GPL-3.0-or-later
+/**
+ * @file LinkVehicleProfileStore.h
+ * @brief LINK-owned Apple vehicle/profile persistence and standard OBD capability cache.
+ *
+ * Kept separate from the live diagnostic controller so persistence, VIN selection,
+ * adapter association and cached responder capability have one clear owner.
+ */
+#import <Foundation/Foundation.h>
+#import "link/diagnostic_flow.h"
+
+NS_ASSUME_NONNULL_BEGIN
+
+''' + profile_declarations + '''
+NS_ASSUME_NONNULL_END
+'''
+          Path('platform/apple/LinkVehicleProfileStore.h').write_text(profile_header)
+
+          h = h[:profile_start].rstrip() + '\n\nNS_ASSUME_NONNULL_END\n'
+          import_anchor = '#import "LinkBLETransport.h"\n'
+          if h.count(import_anchor) != 1:
+              raise SystemExit('LinkBLETransport import anchor mismatch')
+          h = h.replace(import_anchor,
+                        import_anchor + '#import "LinkVehicleProfileStore.h"\n', 1)
+          controller_h.write_text(h)
+
+          # Move the profile implementation tail into an internal include. This
+          # deliberately keeps the existing single Objective-C translation-unit
+          # contract, so every current product consumer continues to build without
+          # needing an Xcode source-list migration in the same release.
+          m = controller_m.read_text()
+          profile_impl_marker = 'static NSString * const LinkVehicleKnownPeripheralDefaultsKey ='
+          if m.count(profile_impl_marker) != 1:
+              raise SystemExit('vehicle-profile implementation marker mismatch')
+          impl_start = m.index(profile_impl_marker)
+          profile_impl = m[impl_start:].lstrip()
+          if '@implementation LinkVehicleProfileStore' not in profile_impl:
+              raise SystemExit('vehicle-profile implementation not found in extracted tail')
+          if not profile_impl.rstrip().endswith('@end'):
+              raise SystemExit('vehicle-profile implementation is not the controller tail')
+          Path('platform/apple/LinkVehicleProfileStore.inc').write_text(
+              '// SPDX-License-Identifier: GPL-3.0-or-later\n'
+              '/* Internal implementation include; compiled through LinkDiagnosticsController.m. */\n\n'
+              + profile_impl)
+          m = m[:impl_start].rstrip() + '\n\n#include "LinkVehicleProfileStore.inc"\n'
+          controller_m.write_text(m)
+
+          # 2) Give Apple language/unit persistence one owner. The controller keeps
+          # its exact public API and notification behaviour, but no longer knows
+          # UserDefaults keys or stores duplicate preference state.
+          settings_header = '''// SPDX-License-Identifier: GPL-3.0-or-later
+#import <Foundation/Foundation.h>
+#import "link/units.h"
+
+NS_ASSUME_NONNULL_BEGIN
+
+@interface LinkAppleSettingsStore : NSObject
+@property(nonatomic, copy, readonly) NSString *selectedLanguageTag;
+@property(nonatomic, copy, readonly) NSString *selectedMeasurementSystemKey;
+- (BOOL)setSelectedLanguageTag:(NSString *)tag persist:(BOOL)persist;
+- (BOOL)setSelectedMeasurementSystemKey:(NSString *)key persist:(BOOL)persist;
+- (LinkMeasurementSystem)resolvedMeasurementSystem;
+@end
+
+NS_ASSUME_NONNULL_END
+'''
+          Path('platform/apple/LinkAppleSettings.h').write_text(settings_header)
+
+          settings_impl = '''// SPDX-License-Identifier: GPL-3.0-or-later
+/* Internal implementation include; compiled through LinkDiagnosticsController.m. */
+
+static NSString *const LinkAppleLanguageDefaultsKey = @"link.displayLanguage";
+static NSString *const LinkAppleMeasurementDefaultsKey = @"link.measurementSystem";
+
+@interface LinkAppleSettingsStore ()
+@property(nonatomic, copy, readwrite, nullable) NSString *storedLanguageTag;
+@property(nonatomic, copy, readwrite, nullable) NSString *storedMeasurementSystemKey;
+@end
+
+@implementation LinkAppleSettingsStore
+
+- (instancetype)init
+{
+    self = [super init];
+    if (self == nil) return nil;
+    NSString *savedLanguage = [[NSUserDefaults standardUserDefaults]
+        stringForKey:LinkAppleLanguageDefaultsKey];
+    NSString *savedMeasurement = [[NSUserDefaults standardUserDefaults]
+        stringForKey:LinkAppleMeasurementDefaultsKey];
+    (void)[self setSelectedLanguageTag:
+        savedLanguage.length != 0U ? savedLanguage : @"en-AU" persist:NO];
+    (void)[self setSelectedMeasurementSystemKey:
+        savedMeasurement.length != 0U ? savedMeasurement : @"metric" persist:NO];
+    return self;
+}
+
+- (NSString *)selectedLanguageTag
+{
+    return self.storedLanguageTag != nil ? self.storedLanguageTag : @"en-AU";
+}
+
+- (NSString *)selectedMeasurementSystemKey
+{
+    return self.storedMeasurementSystemKey != nil
+        ? self.storedMeasurementSystemKey : @"metric";
+}
+
+- (BOOL)setSelectedLanguageTag:(NSString *)tag persist:(BOOL)persist
+{
+    NSString *candidate = tag.length != 0U ? tag : @"en-AU";
+    if (!link_i18n_select_locale(candidate.UTF8String)) return NO;
+    self.storedLanguageTag = [candidate copy];
+    if (persist) {
+        [[NSUserDefaults standardUserDefaults]
+            setObject:self.storedLanguageTag forKey:LinkAppleLanguageDefaultsKey];
+    }
+    return YES;
+}
+
+- (BOOL)setSelectedMeasurementSystemKey:(NSString *)key persist:(BOOL)persist
+{
+    LinkMeasurementSystem system;
+    NSString *candidate = key.length != 0U ? key : @"metric";
+    if (!link_measurement_system_from_key(candidate.UTF8String, &system)) return NO;
+    self.storedMeasurementSystemKey =
+        [NSString stringWithUTF8String:link_measurement_system_key(system)];
+    if (persist) {
+        [[NSUserDefaults standardUserDefaults]
+            setObject:self.storedMeasurementSystemKey
+               forKey:LinkAppleMeasurementDefaultsKey];
+    }
+    return YES;
+}
+
+- (LinkMeasurementSystem)resolvedMeasurementSystem
+{
+    LinkMeasurementSystem system = LINK_MEASUREMENT_SYSTEM_METRIC;
+    (void)link_measurement_system_from_key(
+        self.selectedMeasurementSystemKey.UTF8String, &system);
+    return system;
+}
+
+@end
+'''
+          Path('platform/apple/LinkAppleSettings.inc').write_text(settings_impl)
+
+          m = controller_m.read_text()
+          import_anchor = '#import "LinkDiagnosticsController.h"\n'
+          if m.count(import_anchor) != 1:
+              raise SystemExit('controller import anchor mismatch')
+          m = m.replace(import_anchor,
+                        import_anchor + '#import "LinkAppleSettings.h"\n', 1)
+          m = m.replace(
+              '    NSString *_selectedLanguageTag;\n    NSString *_selectedMeasurementSystemKey;\n',
+              '    LinkAppleSettingsStore *_settings;\n', 1)
+          m = m.replace(
+              'static NSString *const LinkAppleLanguageDefaultsKey = @"link.displayLanguage";\n'
+              'static NSString *const LinkAppleMeasurementDefaultsKey = @"link.measurementSystem";\n\n',
+              '', 1)
+          m = m.replace(
+              '- (void)applyLanguagePreference:(NSString *)tag\n'
+              '                        persist:(BOOL)persist\n'
+              '                         notify:(BOOL)notify;\n'
+              '- (void)applyMeasurementPreference:(NSString *)key\n'
+              '                           persist:(BOOL)persist\n'
+              '                            notify:(BOOL)notify;\n',
+              '', 1)
+
+          old_init = '''    link_i18n_init();
+    NSString *savedLanguage =
+        [[NSUserDefaults standardUserDefaults] stringForKey:LinkAppleLanguageDefaultsKey];
+    NSString *savedMeasurement =
+        [[NSUserDefaults standardUserDefaults] stringForKey:LinkAppleMeasurementDefaultsKey];
+    [self applyLanguagePreference:
+        savedLanguage.length != 0U ? savedLanguage : @"en-AU"
+        persist:NO notify:NO];
+    [self applyMeasurementPreference:
+        savedMeasurement.length != 0U ? savedMeasurement : @"metric"
+        persist:NO notify:NO];
+'''
+          new_init = '''    link_i18n_init();
+    _settings = [[LinkAppleSettingsStore alloc] init];
+'''
+          if m.count(old_init) != 1:
+              raise SystemExit('settings init block mismatch')
+          m = m.replace(old_init, new_init, 1)
+
+          old_settings_methods = '''- (NSString *)selectedLanguageTag
+{
+    return _selectedLanguageTag != nil ? _selectedLanguageTag : @"en-AU";
+}
+
+- (NSString *)effectiveLanguageTag
+{
+    return self.selectedLanguageTag;
+}
+
+- (NSArray<NSString *> *)availableMeasurementSystemKeys
+{
+    return @[@"metric", @"us-customary"];
+}
+
+- (NSArray<NSString *> *)availableMeasurementSystemNames
+{
+    return @[
+        [self localizedTextForKey:@"units.metric"],
+        [self localizedTextForKey:@"units.us_customary"]
+    ];
+}
+
+- (NSString *)selectedMeasurementSystemKey
+{
+    return _selectedMeasurementSystemKey != nil
+        ? _selectedMeasurementSystemKey : @"metric";
+}
+'''
+          new_settings_methods = '''- (NSString *)selectedLanguageTag
+{
+    return _settings.selectedLanguageTag;
+}
+
+- (NSString *)effectiveLanguageTag
+{
+    return self.selectedLanguageTag;
+}
+
+- (NSArray<NSString *> *)availableMeasurementSystemKeys
+{
+    return @[@"metric", @"us-customary"];
+}
+
+- (NSArray<NSString *> *)availableMeasurementSystemNames
+{
+    return @[
+        [self localizedTextForKey:@"units.metric"],
+        [self localizedTextForKey:@"units.us_customary"]
+    ];
+}
+
+- (NSString *)selectedMeasurementSystemKey
+{
+    return _settings.selectedMeasurementSystemKey;
+}
+'''
+          if m.count(old_settings_methods) != 1:
+              raise SystemExit('settings getter block mismatch')
+          m = m.replace(old_settings_methods, new_settings_methods, 1)
+
+          old_apply = '''- (void)applyLanguagePreference:(NSString *)tag
+                        persist:(BOOL)persist
+                         notify:(BOOL)notify
+{
+    NSString *candidate = tag.length != 0U ? tag : @"en-AU";
+    if (!link_i18n_select_locale(candidate.UTF8String)) return;
+    _selectedLanguageTag = [candidate copy];
+    if (persist)
+        [[NSUserDefaults standardUserDefaults]
+            setObject:_selectedLanguageTag forKey:LinkAppleLanguageDefaultsKey];
+    if (notify) [self notifyDelegate];
+}
+
+- (void)setSelectedLanguageTag:(NSString *)tag
+{
+    [self applyLanguagePreference:tag persist:YES notify:YES];
+}
+
+- (void)applyMeasurementPreference:(NSString *)key
+                           persist:(BOOL)persist
+                            notify:(BOOL)notify
+{
+    LinkMeasurementSystem system;
+    NSString *candidate = key.length != 0U ? key : @"metric";
+    if (!link_measurement_system_from_key(candidate.UTF8String, &system)) return;
+    _selectedMeasurementSystemKey =
+        [NSString stringWithUTF8String:link_measurement_system_key(system)];
+    if (persist)
+        [[NSUserDefaults standardUserDefaults]
+            setObject:_selectedMeasurementSystemKey
+               forKey:LinkAppleMeasurementDefaultsKey];
+    if (notify) [self notifyDelegate];
+}
+
+- (void)setSelectedMeasurementSystemKey:(NSString *)key
+{
+    [self applyMeasurementPreference:key persist:YES notify:YES];
+}
+
+- (LinkMeasurementSystem)resolvedMeasurementSystem
+{
+    LinkMeasurementSystem system = LINK_MEASUREMENT_SYSTEM_METRIC;
+    (void)link_measurement_system_from_key(
+        self.selectedMeasurementSystemKey.UTF8String, &system);
+    return system;
+}
+'''
+          new_apply = '''- (void)setSelectedLanguageTag:(NSString *)tag
+{
+    if ([_settings setSelectedLanguageTag:tag persist:YES])
+        [self notifyDelegate];
+}
+
+- (void)setSelectedMeasurementSystemKey:(NSString *)key
+{
+    if ([_settings setSelectedMeasurementSystemKey:key persist:YES])
+        [self notifyDelegate];
+}
+
+- (LinkMeasurementSystem)resolvedMeasurementSystem
+{
+    return [_settings resolvedMeasurementSystem];
+}
+'''
+          if m.count(old_apply) != 1:
+              raise SystemExit('settings mutation block mismatch')
+          m = m.replace(old_apply, new_apply, 1)
+
+          include_anchor = '#include "LinkVehicleProfileStore.inc"\n'
+          if m.count(include_anchor) != 1:
+              raise SystemExit('profile include anchor mismatch')
+          m = m.replace(include_anchor,
+                        '#include "LinkAppleSettings.inc"\n' + include_anchor, 1)
+          controller_m.write_text(m)
+
+          # Strengthen Apple characterization around the extracted settings owner.
+          regression = Path('tests/apple/ProfileRegression.swift')
+          r = regression.read_text()
+          marker = '''        pollingController.setPollingEnabled(true, forPID: 0x0C)
+        precondition(pollingController.pollingEnabled(forPID: 0x0C))
+
+        print("LINK Apple simulation, profile-patch and polling-policy regressions passed")
+'''
+          addition = '''        pollingController.setPollingEnabled(true, forPID: 0x0C)
+        precondition(pollingController.pollingEnabled(forPID: 0x0C))
+
+        // Apple settings persistence has one owner and preserves controller API.
+        pollingController.setSelectedMeasurementSystemKey("us-customary")
+        precondition(pollingController.selectedMeasurementSystemKey == "us-customary")
+        pollingController.setSelectedLanguageTag("en-US")
+        precondition(pollingController.selectedLanguageTag == "en-US")
+        let settingsReload = LinkDiagnosticsController(
+            productSlug: namespace + "-settings", flowConfig: flow,
+            liveStatusText: "live", simulatedLiveStatusText: "simulated",
+            standardVINStatusText: "VIN")
+        precondition(settingsReload.selectedMeasurementSystemKey == "us-customary")
+        precondition(settingsReload.selectedLanguageTag == "en-US")
+        settingsReload.setSelectedMeasurementSystemKey("metric")
+        settingsReload.setSelectedLanguageTag("en-AU")
+
+        print("LINK Apple simulation, profile-patch, polling-policy and settings regressions passed")
+'''
+          if r.count(marker) != 1:
+              raise SystemExit('ProfileRegression insertion marker mismatch')
+          regression.write_text(r.replace(marker, addition, 1))
+
+          # Update source guards to protect the newly explicit ownership boundaries.
+          runner = Path('tests/apple/run-regressions.sh')
+          t = runner.read_text()
+          anchor = 'controller=platform/apple/LinkDiagnosticsController.m\n'
+          guard = '''controller=platform/apple/LinkDiagnosticsController.m
++profile_store=platform/apple/LinkVehicleProfileStore.inc
++settings_store=platform/apple/LinkAppleSettings.inc
++test -s "$profile_store"
++test -s "$settings_store"
++grep -Fq '@implementation LinkVehicleProfileStore' "$profile_store"
++grep -Fq '@implementation LinkAppleSettingsStore' "$settings_store"
++if grep -Fq '@implementation LinkVehicleProfileStore' "$controller"; then
++    echo 'Apple diagnostic controller must not own vehicle-profile persistence.' >&2
++    exit 1
++fi
++if grep -Fq 'LinkAppleLanguageDefaultsKey' "$controller"; then
++    echo 'Apple diagnostic controller must not own settings persistence keys.' >&2
++    exit 1
++fi
+'''.replace('+','')
+          if t.count(anchor) != 1:
+              raise SystemExit('Apple regression controller anchor mismatch')
+          runner.write_text(t.replace(anchor, guard, 1))
+
+          # Record the completed physical boundaries in the ownership document.
+          docs = Path('docs/APPLE-PROVIDER-BOUNDARY.md')
+          d = docs.read_text()
+          doc_anchor = '- `LinkDiagnosticsController`: thin facade and coordinator over the above pieces.\n'
+          doc_add = doc_anchor + '''
+Current Apple source ownership also keeps vehicle/profile persistence in
+`LinkVehicleProfileStore.h` / `LinkVehicleProfileStore.inc` and preference
+persistence in `LinkAppleSettings.h` / `LinkAppleSettings.inc`. The `.inc`
+implementation files are intentionally compiled through the existing controller
+translation unit so pinned product Xcode projects do not need a source-list
+migration merely to consume this behaviour-preserving refactor.
+'''
+          if d.count(doc_anchor) != 1:
+              raise SystemExit('ownership documentation anchor mismatch')
+          docs.write_text(d.replace(doc_anchor, doc_add, 1))
+
+          # Release metadata is part of the same tested atomic commit.
+          Path('VERSION').write_text('0.15.18\n')
+          version_h = Path('include/link/version.h')
+          vh = version_h.read_text()
+          if vh.count('#define LINK_VERSION_STRING "0.15.17"') != 1:
+              raise SystemExit('version header baseline mismatch')
+          version_h.write_text(vh.replace(
+              '#define LINK_VERSION_STRING "0.15.17"',
+              '#define LINK_VERSION_STRING "0.15.18"', 1))
+          PY
+
+          test -s platform/apple/LinkVehicleProfileStore.h
+          test -s platform/apple/LinkVehicleProfileStore.inc
+          test -s platform/apple/LinkAppleSettings.h
+          test -s platform/apple/LinkAppleSettings.inc
+          ! grep -Fq '@implementation LinkVehicleProfileStore' platform/apple/LinkDiagnosticsController.m
+          ! grep -Fq 'LinkAppleLanguageDefaultsKey' platform/apple/LinkDiagnosticsController.m
+          grep -Fq '#include "LinkAppleSettings.inc"' platform/apple/LinkDiagnosticsController.m
+          grep -Fq '#include "LinkVehicleProfileStore.inc"' platform/apple/LinkDiagnosticsController.m
+          git diff --check
+
+      - name: Validate portable LINK core
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S . -B build-safe-modularity -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-safe-modularity --parallel
+          ctest --test-dir build-safe-modularity --output-on-failure
+
+      - name: Validate real Apple regression binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          tests/apple/run-regressions.sh
+
+      - name: Commit tested release and remove helper
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git config user.name 'HAL modularity migration'
+          git config user.email 'actions@users.noreply.github.com'
+          git rm .github/workflows/hal-safe-apple-modularity.yml
+          git add VERSION include/link/version.h \
+              platform/apple/LinkDiagnosticsController.h \
+              platform/apple/LinkDiagnosticsController.m \
+              platform/apple/LinkVehicleProfileStore.h \
+              platform/apple/LinkVehicleProfileStore.inc \
+              platform/apple/LinkAppleSettings.h \
+              platform/apple/LinkAppleSettings.inc \
+              tests/apple/ProfileRegression.swift \
+              tests/apple/run-regressions.sh \
+              docs/APPLE-PROVIDER-BOUNDARY.md
+          git diff --cached --check
+          git commit -m 'Release 0.15.18: isolate Apple profile and settings ownership' \
+              -m 'Move vehicle/profile persistence and Apple language/unit persistence out of the live diagnostic controller while preserving public APIs, storage keys, compile topology, polling behaviour and product source lists. Add simulator regressions for settings persistence and source-ownership guards.'
+          git push origin HEAD:main
