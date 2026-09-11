@@ -37,6 +37,21 @@ jobs:
           payload = ''.join(part.read_text(encoding='utf-8').strip() for part in parts)
           target = pathlib.Path('${{ runner.temp }}/hal_finish_apple_modularity.py')
           target.write_bytes(gzip.decompress(base64.b64decode(payload)))
+          text = target.read_text(encoding='utf-8')
+          old = '''    # remove stale call inserted above; runner owns timer now
+              controller = replace_once(controller, '    [self stopTickTimer];\\n', '', 'dealloc timer removal')
+          '''
+          if text.count(old) != 1:
+              raise SystemExit(f'session timer migration patch expected one match, found {text.count(old)}')
+          text = text.replace(old, '', 1)
+          old = '''    _sessionRunner.delegate = nil;\\n    [self stopTickTimer];\\n    if (_recorder.started'''
+          if text.count(old) != 1:
+              raise SystemExit(f'session dealloc timer patch expected one match, found {text.count(old)}')
+          text = text.replace(
+              old,
+              '''    _sessionRunner.delegate = nil;\\n    if (_recorder.started''',
+              1)
+          target.write_text(text, encoding='utf-8')
           PY
           python3 -m py_compile "${{ runner.temp }}/hal_finish_apple_modularity.py"
 
