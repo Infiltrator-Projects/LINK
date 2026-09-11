@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #import "LinkDiagnosticsController.h"
 #import "LinkAppleSettings.h"
+#import "LinkAppleSessionRunner.h"
 #import "LinkApplePollingCoordinator.h"
 
 #import "link/diagnostic_capability.h"
@@ -17,7 +18,7 @@
 
 #include <stdint.h>
 
-@interface LinkDiagnosticsController () <LinkBLETransportDelegate>
+@interface LinkDiagnosticsController () <LinkBLETransportDelegate, LinkAppleSessionRunnerDelegate>
 @property(nonatomic, copy, readwrite) NSString *statusText;
 @property(nonatomic, copy, readwrite, nullable) NSString *peripheralName;
 @property(nonatomic, copy, readwrite, nullable) NSString *adapterIdentifier;
@@ -40,15 +41,13 @@
 - (void)recordNativeStreamEvent:(LinkMercedesMeStreamEventKind)kind
                           bytes:(const uint8_t *)bytes
                            size:(size_t)size;
-- (void)startTickTimer;
-- (void)stopTickTimer;
 - (BOOL)beginCommand:(const char *)command timeout:(uint64_t)timeoutMs;
 - (void)notifyManufacturerFailure:(NSString *)status;
 - (void)recoverManufacturerExtensionAfterFailure:(NSString *)status;
 - (void)finishManufacturerRecovery;
 - (void)beginLiveRecovery;
 - (void)finishLiveRecovery;
-- (void)handleSessionEvent:(const LinkElm327Session *)session;
+- (void)beginDiagnosticFlowAfterSessionStart;
 - (void)processCompletedResponse;
 - (BOOL)applyFlowEvent:(const LinkDiagnosticFlowEvent *)event;
 - (void)applyPollingPreferencesToScheduler;
@@ -59,14 +58,12 @@
 @implementation LinkDiagnosticsController {
     LinkBLETransport *_provider;
     LinkApplePollingCoordinator *_pollingCoordinator;
-    LinkElm327Session _session;
-    BOOL _sessionInitialized;
+    LinkAppleSessionRunner *_sessionRunner;
     BOOL _simulated;
     BOOL _manufacturerExtensionActive;
     BOOL _manufacturerRecoveryActive;
     BOOL _liveRecoveryActive;
     NSUInteger _consecutiveLiveTimeouts;
-    LinkElm327Simulator _simulator;
     LinkDiagnosticFlow _flow;
     LinkDiagnosticFlowConfig _flowConfig;
 
@@ -79,7 +76,6 @@
     NSMutableData *_sessionCSV;
     NSUInteger _currentSessionCSVStart;
 
-    dispatch_source_t _tickTimer;
     NSUInteger _pollGeneration;
     uint64_t _sessionMonotonicStartMs;
 
@@ -190,15 +186,6 @@ static void LinkAppleNativeStreamEvent(
     [controller recordNativeStreamEvent:kind bytes:bytes size:size];
 }
 
-static void LinkAppleSessionEvent(
-    void *context,
-    const LinkElm327Session *session)
-{
-    LinkDiagnosticsController *controller =
-        (__bridge LinkDiagnosticsController *)context;
-    if (controller == nil || session == NULL) return;
-    [controller handleSessionEvent:session];
-}
 
 - (instancetype)initWithProductSlug:(NSString *)productSlug
                          flowConfig:(LinkDiagnosticFlowConfig)flowConfig
@@ -220,6 +207,8 @@ static void LinkAppleSessionEvent(
 
     _provider = [[LinkBLETransport alloc] init];
     _provider.delegate = self;
+    _sessionRunner = [[LinkAppleSessionRunner alloc] initWithProvider:_provider];
+    _sessionRunner.delegate = self;
     _pollingCoordinator = [[LinkApplePollingCoordinator alloc] init];
 
     _statusText = @"Idle";
@@ -246,15 +235,13 @@ static void LinkAppleSessionEvent(
 - (void)dealloc
 {
     _provider.delegate = nil;
-    [self stopTickTimer];
+    _sessionRunner.delegate = nil;
     if (_recorder.started && !_recorder.finished)
         (void)link_telemetry_recorder_finish(
             &_recorder, LinkAppleEpochMilliseconds());
 
-    if (_sessionInitialized) {
-        _sessionInitialized = NO;
-        link_elm327_session_disconnect(&_session);
-        link_elm327_session_deinit(&_session);
+    if (_sessionRunner.isInitialized) {
+        [_sessionRunner disconnect];
     } else if (!_simulated) {
         [_provider disconnect];
     }
@@ -934,14 +921,15 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
     }
     self.peripheralName = @"Simulated ELM327";
 
-    LinkElm327SimulatorConfig config = LINK_ELM327_SIMULATOR_CONFIG_INIT;
-    config.adapter_identifier = adapterIdentifier;
-    config.vin = vin;
-    config.custom_responder = responder;
-    config.custom_context = context;
-    link_elm327_simulator_init(&_simulator, &config);
     [self notifyDelegate];
-    [self beginPortableSession];
+    if (![_sessionRunner startSimulatedWithAdapterIdentifier:adapterIdentifier
+                                                        vin:vin
+                                            customResponder:responder
+                                                    context:context]) {
+        [self failWithStatus:@"Failed to connect simulated ELM327 transport"];
+        return;
+    }
+    [self beginDiagnosticFlowAfterSessionStart];
 }
 
 - (void)disconnect
@@ -952,11 +940,8 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
     }
 
     _pollGeneration++;
-    [self stopTickTimer];
-    if (_sessionInitialized) {
-        _sessionInitialized = NO;
-        link_elm327_session_disconnect(&_session);
-        link_elm327_session_deinit(&_session);
+    if (_sessionRunner.isInitialized) {
+        [_sessionRunner disconnect];
     } else if (!_simulated) {
         [_provider disconnect];
     }
@@ -1006,7 +991,7 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
     }
 
     if (transport.isReady && transport.isNativeAdapter &&
-        !_sessionInitialized) {
+        !_sessionRunner.isInitialized) {
         if (!self.nativeAdapterConnected) {
             LinkTransport native = LinkBLETransportMakeCTransport(_provider);
             if (link_transport_is_valid(&native) &&
@@ -1025,7 +1010,7 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
         return;
     }
 
-    if (transport.isReady && !_sessionInitialized &&
+    if (transport.isReady && !_sessionRunner.isInitialized &&
         !transport.isNativeAdapter) {
         [self beginPortableSession];
         return;
@@ -1041,12 +1026,10 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
     }
 
     if (!transport.isReady &&
-        _sessionInitialized &&
+        _sessionRunner.isInitialized &&
         transport.state != LinkBLETransportStateProbing) {
         _pollGeneration++;
-        [self stopTickTimer];
-        _sessionInitialized = NO;
-        link_elm327_session_deinit(&_session);
+        [_sessionRunner invalidate];
         link_diagnostic_flow_fail(
             &_flow, LINK_DIAGNOSTIC_FLOW_RESULT_ELM_ERROR);
         if (_manufacturerExtensionActive)
@@ -1056,7 +1039,7 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
         self.ready = NO;
     }
 
-    if (!_sessionInitialized) self.statusText = transport.statusText;
+    if (!_sessionRunner.isInitialized) self.statusText = transport.statusText;
     if (transport.state == LinkBLETransportStateFailed) {
         const uint64_t endedEpochMs = LinkAppleEpochMilliseconds();
         link_telemetry_session_metadata_finish(&_sessionMetadata, endedEpochMs);
@@ -1125,76 +1108,33 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
 
 - (void)beginPortableSession
 {
-    LinkTransport transport = _simulated
-        ? link_elm327_simulator_transport(&_simulator)
-        : LinkBLETransportMakeCTransport(_provider);
-
-    if (!link_transport_is_valid(&transport) ||
-        !link_elm327_session_init(
-            &_session, &transport, LinkAppleSessionEvent,
-            (__bridge void *)self)) {
+    if (![_sessionRunner startReal]) {
         [self failWithStatus:@"Failed to initialise portable diagnostic session"];
         return;
     }
+    [self beginDiagnosticFlowAfterSessionStart];
+}
 
-    _sessionInitialized = YES;
-    if (_simulated &&
-        link_elm327_session_connect(&_session) != LINK_TRANSPORT_OK) {
-        _sessionInitialized = NO;
-        link_elm327_session_deinit(&_session);
-        [self failWithStatus:@"Failed to connect simulated ELM327 transport"];
-        return;
-    }
-
+- (void)beginDiagnosticFlowAfterSessionStart
+{
     (void)link_diagnostic_flow_init(&_flow, &_flowConfig);
-    if (link_diagnostic_flow_start(&_flow) !=
-        LINK_DIAGNOSTIC_FLOW_RESULT_OK) {
+    if (link_diagnostic_flow_start(&_flow) != LINK_DIAGNOSTIC_FLOW_RESULT_OK) {
         [self failWithStatus:@"Could not start shared diagnostic flow"];
         return;
     }
 
-    [self startTickTimer];
     [self setSharedStatus:_simulated
         ? @"Initialising simulated ELM327 adapter"
         : @"Initialising ELM327 adapter"];
     [self driveDiagnosticFlow];
 }
 
-- (void)startTickTimer
-{
-    [self stopTickTimer];
-    _tickTimer = dispatch_source_create(
-        DISPATCH_SOURCE_TYPE_TIMER, 0U, 0U, dispatch_get_main_queue());
-    dispatch_source_set_timer(
-        _tickTimer,
-        dispatch_time(DISPATCH_TIME_NOW, 100 * NSEC_PER_MSEC),
-        100 * NSEC_PER_MSEC,
-        20 * NSEC_PER_MSEC);
-
-    __weak LinkDiagnosticsController *weakSelf = self;
-    dispatch_source_set_event_handler(_tickTimer, ^{
-        LinkDiagnosticsController *strongSelf = weakSelf;
-        if (strongSelf == nil || !strongSelf->_sessionInitialized) return;
-        (void)link_elm327_session_tick(
-            &strongSelf->_session, LinkAppleMonotonicMilliseconds());
-    });
-    dispatch_resume(_tickTimer);
-}
-
-- (void)stopTickTimer
-{
-    if (_tickTimer != nil) {
-        dispatch_source_cancel(_tickTimer);
-        _tickTimer = nil;
-    }
-}
-
 - (BOOL)beginCommand:(const char *)command timeout:(uint64_t)timeoutMs
 {
-    if (!_sessionInitialized || command == NULL) return NO;
+    if (!_sessionRunner.isInitialized || command == NULL) return NO;
 
-    LinkElm327SessionOpResult result = link_elm327_session_begin(
-        &_session, command, LinkAppleMonotonicMilliseconds(), timeoutMs);
+    LinkElm327SessionOpResult result = [_sessionRunner
+        beginCommand:command now:LinkAppleMonotonicMilliseconds() timeout:timeoutMs];
     if (result != LINK_ELM327_SESSION_OP_OK) {
         NSString *reason = LinkAppleStringFromCString(
             link_elm327_session_op_result_name(result));
@@ -1209,7 +1149,7 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
 
 - (BOOL)beginLiveManufacturerExtension
 {
-    if (!_sessionInitialized || !self.active ||
+    if (!_sessionRunner.isInitialized || !self.active ||
         _manufacturerExtensionActive || _manufacturerRecoveryActive ||
         _flow.awaiting_response) {
         return NO;
@@ -1235,7 +1175,7 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
                         intervalMilliseconds:(uint32_t)intervalMs
                                     priority:(LinkSchedulerPriority)priority
 {
-    if (!_sessionInitialized || !self.active || token == 0U || intervalMs == 0U)
+    if (!_sessionRunner.isInitialized || !self.active || token == 0U || intervalMs == 0U)
         return NO;
     const LinkDiagnosticFlowResult result =
         link_diagnostic_flow_register_live_manufacturer_job(
@@ -1280,7 +1220,7 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
 
 - (void)recoverManufacturerExtensionAfterFailure:(NSString *)status
 {
-    if (!_manufacturerExtensionActive || !_sessionInitialized) return;
+    if (!_manufacturerExtensionActive || !_sessionRunner.isInitialized) return;
 
     [self notifyManufacturerFailure:status];
     _manufacturerExtensionActive = NO;
@@ -1297,8 +1237,8 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
     }
 
     LinkElm327SessionOpResult sessionResult =
-        link_elm327_session_begin_resynchronization(
-            &_session, LinkAppleMonotonicMilliseconds(), UINT64_C(2500));
+        [_sessionRunner beginResynchronizationAt:LinkAppleMonotonicMilliseconds()
+                                               timeout:UINT64_C(2500)];
     if (sessionResult != LINK_ELM327_SESSION_OP_OK) {
         _manufacturerRecoveryActive = NO;
         link_diagnostic_flow_fail(
@@ -1326,7 +1266,7 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
 {
     LinkElm327SessionOpResult sessionResult;
 
-    if (_liveRecoveryActive || !_sessionInitialized ||
+    if (_liveRecoveryActive || !_sessionRunner.isInitialized ||
         _flow.stage != LINK_DIAGNOSTIC_FLOW_READING_LIVE) {
         return;
     }
@@ -1344,8 +1284,9 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
 
     _liveRecoveryActive = YES;
     self.ready = NO;
-    sessionResult = link_elm327_session_begin_resynchronization(
-        &_session, LinkAppleMonotonicMilliseconds(), UINT64_C(2500));
+    sessionResult = [_sessionRunner
+        beginResynchronizationAt:LinkAppleMonotonicMilliseconds()
+                             timeout:UINT64_C(2500)];
     if (sessionResult != LINK_ELM327_SESSION_OP_OK) {
         _liveRecoveryActive = NO;
         link_diagnostic_flow_fail(
@@ -1381,17 +1322,17 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
     [self driveDiagnosticFlow];
 }
 
-- (void)handleSessionEvent:(const LinkElm327Session *)session
+- (void)linkAppleSessionRunnerDidUpdate:(LinkAppleSessionRunner *)runner
 {
-    if (session == NULL) return;
+    if (runner == nil) return;
 
-    if (session->status == LINK_ELM327_SESSION_COMPLETE) {
+    if (runner.status == LINK_ELM327_SESSION_COMPLETE) {
         dispatch_async(
             dispatch_get_main_queue(), ^{ [self processCompletedResponse]; });
         return;
     }
 
-    if (session->status == LINK_ELM327_SESSION_RESYNCHRONIZED) {
+    if (runner.status == LINK_ELM327_SESSION_RESYNCHRONIZED) {
         if (_manufacturerRecoveryActive) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 [self finishManufacturerRecovery];
@@ -1404,7 +1345,7 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
         return;
     }
 
-    if (session->status == LINK_ELM327_SESSION_TIMED_OUT) {
+    if (runner.status == LINK_ELM327_SESSION_TIMED_OUT) {
         if (_manufacturerExtensionActive) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 [self recoverManufacturerExtensionAfterFailure:
@@ -1414,7 +1355,7 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
         }
         if (_manufacturerRecoveryActive) {
             _manufacturerRecoveryActive = NO;
-            _flow.elm_failure = session->elm_result;
+            _flow.elm_failure = runner.elmResult;
             link_diagnostic_flow_fail(
                 &_flow, LINK_DIAGNOSTIC_FLOW_RESULT_ELM_ERROR);
             [self setSharedStatus:
@@ -1431,7 +1372,7 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
             self.faultScanStatusText =
                 @"Fault scan timed out; reconnect required";
         self.ready = NO;
-        _flow.elm_failure = session->elm_result;
+        _flow.elm_failure = runner.elmResult;
         link_diagnostic_flow_fail(
             &_flow, LINK_DIAGNOSTIC_FLOW_RESULT_ELM_ERROR);
         [self setSharedStatus:
@@ -1439,10 +1380,10 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
         return;
     }
 
-    if (session->status == LINK_ELM327_SESSION_FAILED) {
+    if (runner.status == LINK_ELM327_SESSION_FAILED) {
         NSString *reason = LinkAppleStringFromCString(
-            link_elm327_result_name(session->elm_result));
-        if (_manufacturerExtensionActive && session->needs_resync) {
+            link_elm327_result_name(runner.elmResult));
+        if (_manufacturerExtensionActive && runner.needsResync) {
             NSString *status = [NSString stringWithFormat:
                 @"Manufacturer diagnostic adapter error: %@", reason];
             dispatch_async(dispatch_get_main_queue(), ^{
@@ -1455,7 +1396,7 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
             self.faultScanStatusText = [NSString stringWithFormat:
                 @"Fault scan adapter error: %@", reason];
         }
-        _flow.elm_failure = session->elm_result;
+        _flow.elm_failure = runner.elmResult;
         link_diagnostic_flow_fail(
             &_flow, LINK_DIAGNOSTIC_FLOW_RESULT_ELM_ERROR);
         if (_manufacturerExtensionActive) {
@@ -1468,7 +1409,7 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
         return;
     }
 
-    if (session->status == LINK_ELM327_SESSION_CANCELLED) {
+    if (runner.status == LINK_ELM327_SESSION_CANCELLED) {
         (void)link_diagnostic_flow_init(&_flow, &_flowConfig);
         if (_manufacturerExtensionActive)
             [self notifyManufacturerFailure:
@@ -1481,8 +1422,7 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
 
 - (void)processCompletedResponse
 {
-    const LinkElm327Response *response =
-        link_elm327_session_response(&_session);
+    const LinkElm327Response *response = [_sessionRunner response];
     if (response == NULL) {
         [self failWithStatus:@"Diagnostic response was unavailable"];
         return;
@@ -1491,12 +1431,12 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
     const uint64_t elapsed =
         LinkAppleElapsedMilliseconds(_sessionMonotonicStartMs);
     (void)link_telemetry_store_record_transcript(
-        &_telemetry, elapsed, _session.parser.command,
+        &_telemetry, elapsed, [_sessionRunner currentCommand],
         (uint32_t)response->result, response->text);
 
     if (_recorder.started && !_recorder.finished &&
         !link_telemetry_recorder_record_response_named(
-            &_recorder, elapsed, _session.parser.command,
+            &_recorder, elapsed, [_sessionRunner currentCommand],
             link_elm327_result_name(response->result), response->text)) {
         [self failWithStatus:@"Could not append diagnostic transcript"];
         return;
@@ -1796,11 +1736,10 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
 - (void)driveDiagnosticFlow
 {
     const BOOL transportReady = _simulated
-        ? (_sessionInitialized &&
-           link_elm327_session_is_connected(&_session))
+        ? _sessionRunner.isConnected
         : _provider.isReady;
 
-    if (!_sessionInitialized || !transportReady ||
+    if (!_sessionRunner.isInitialized || !transportReady ||
         _flow.stage == LINK_DIAGNOSTIC_FLOW_FAILED ||
         _manufacturerExtensionActive) {
         return;
@@ -2364,6 +2303,7 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
 
 #pragma mark - Shared vehicle-profile/session persistence
 
+#include "LinkAppleSessionRunner.inc"
 #include "LinkApplePollingCoordinator.inc"
 #include "LinkAppleSettings.inc"
 #include "LinkVehicleProfileStore.inc"
