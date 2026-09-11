@@ -17,6 +17,14 @@ grep -Fq '!explicitlySelected &&' "$ble"
 controller=platform/apple/LinkDiagnosticsController.m
 grep -Fq 'Connected · polling idle · no PIDs selected' "$controller"
 grep -Fq 'if (item->pid_valid && item->enabled) ++enabledPollingCount;' "$controller"
+grep -Fq 'private var adapterDiscoveryOrder = [String]()' "$ui"
+grep -Fq 'adapterDiscoveryOrder.compactMap { adaptersByIdentifier[$0] }' "$ui"
+grep -Fq 'adapterDiscoveryOrder.append(identifier)' "$ui"
+grep -Fq 'adapterDiscoveryOrder.removeAll()' "$ui"
+if grep -Fq 'if $0.rssi != $1.rssi' "$ui"; then
+    echo 'Apple picker must not reorder rows by live RSSI.' >&2
+    exit 1
+fi
 
 build_dir=$(mktemp -d "${TMPDIR:-/tmp}/link-apple-regression.XXXXXX")
 sdk=$(xcrun --sdk iphonesimulator --show-sdk-path)

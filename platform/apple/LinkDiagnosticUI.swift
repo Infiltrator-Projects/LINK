@@ -1611,14 +1611,10 @@ final class LinkConnectionPickerViewController: UITableViewController,
     private let onSelection: (LinkConnectionSource) -> Void
     private var central: CBCentralManager?
     private var adaptersByIdentifier = [String: LinkNearbyAdapter]()
+    private var adapterDiscoveryOrder = [String]()
 
     private var nearbyAdapters: [LinkNearbyAdapter] {
-        adaptersByIdentifier.values
-            .sorted {
-                if $0.rssi != $1.rssi { return $0.rssi > $1.rssi }
-                if $0.name != $1.name { return $0.name < $1.name }
-                return $0.identifier < $1.identifier
-            }
+        adapterDiscoveryOrder.compactMap { adaptersByIdentifier[$0] }
     }
 
     init(
@@ -1831,6 +1827,11 @@ final class LinkConnectionPickerViewController: UITableViewController,
         // The picker shows every peripheral iOS reports, including unnamed
         // devices and the saved adapter. Adapter-name hints belong to automatic
         // connection selection; they must not hide devices from manual choice.
+        // Freeze row order on first discovery. RSSI may update continuously,
+        // but a user must never have a row move underneath their finger.
+        if adaptersByIdentifier[identifier] == nil {
+            adapterDiscoveryOrder.append(identifier)
+        }
         adaptersByIdentifier[identifier] = LinkNearbyAdapter(
             identifier: identifier,
             name: displayName,
@@ -1849,6 +1850,7 @@ final class LinkConnectionPickerViewController: UITableViewController,
 
     @objc private func scanAgain() {
         adaptersByIdentifier.removeAll()
+        adapterDiscoveryOrder.removeAll()
         tableView.reloadSections(
             IndexSet(integer: nearbySection), with: .automatic)
         startScan()
