@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   patch:
-    if: github.event.head_commit.message == 'Retry one-shot Apple picker presentation fix'
+    if: github.event.head_commit.message == 'Use robust picker patch guards'
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
@@ -21,104 +21,108 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD^)" = "541b0503cd1537c59c548a1ae21fab19c11458f2"
-          test "$(git rev-parse HEAD~2)" = "3a60c45415273c8e91c7a5a887bb04ad787c80f6"
+          test "$(git rev-parse HEAD^)" = "04ac6a2c6214b30e4a03300238f649852fba153b"
+          test "$(git rev-parse HEAD~3)" = "3a60c45415273c8e91c7a5a887bb04ad787c80f6"
           python3 - <<'PY'
           from pathlib import Path
 
           ui = Path('platform/apple/LinkDiagnosticUI.swift')
           text = ui.read_text()
 
-          old_connect = '''LinkConnectionPresentation.presentPicker(
-              vehicleText: currentVehicleText,
-              knownAdapterIdentifier: knownAdapter) { [weak self] source in
-                  self?.beginConnection(source)
-              }
-          '''
-          new_connect = '''LinkConnectionPresentation.presentPicker(
-              vehicleText: currentVehicleText,
-              knownAdapterIdentifier: knownAdapter,
-              unavailable: { [weak self] in
-                  self?.statusText =
-                      "Unable to open adapter picker · try Connect again"
-              }) { [weak self] source in
-                  self?.beginConnection(source)
-              }
-          '''
+          old_connect = "\n".join([
+              "        LinkConnectionPresentation.presentPicker(",
+              "            vehicleText: currentVehicleText,",
+              "            knownAdapterIdentifier: knownAdapter) { [weak self] source in",
+              "                self?.beginConnection(source)",
+              "            }",
+          ]) + "\n"
+          new_connect = "\n".join([
+              "        LinkConnectionPresentation.presentPicker(",
+              "            vehicleText: currentVehicleText,",
+              "            knownAdapterIdentifier: knownAdapter,",
+              "            unavailable: { [weak self] in",
+              "                self?.statusText =",
+              "                    \"Unable to open adapter picker · try Connect again\"",
+              "            }) { [weak self] source in",
+              "                self?.beginConnection(source)",
+              "            }",
+          ]) + "\n"
           if text.count(old_connect) != 1:
               raise SystemExit(f'connect picker call guard failed: {text.count(old_connect)} matches')
           text = text.replace(old_connect, new_connect)
 
-          old_presentation = '''enum LinkConnectionPresentation {
-              static func presentPicker(
-                  vehicleText: String,
-                  knownAdapterIdentifier: String?,
-                  selection: @escaping (LinkConnectionSource) -> Void
-              ) {
-                  guard let presenter = presentingViewController() else {
-                      selection(.automatic)
-                      return
-                  }
-                  let picker = LinkConnectionPickerViewController(
-                      vehicleText: vehicleText,
-                      knownAdapterIdentifier: knownAdapterIdentifier) { source in
-                          Task { @MainActor in selection(source) }
-                      }
-                  let navigation = UINavigationController(rootViewController: picker)
-                  navigation.modalPresentationStyle = .pageSheet
-                  presenter.present(navigation, animated: true)
-              }
-          '''
-          new_presentation = '''enum LinkConnectionPresentation {
-              static func presentPicker(
-                  vehicleText: String,
-                  knownAdapterIdentifier: String?,
-                  unavailable: @escaping () -> Void,
-                  selection: @escaping (LinkConnectionSource) -> Void
-              ) {
-                  presentPicker(
-                      vehicleText: vehicleText,
-                      knownAdapterIdentifier: knownAdapterIdentifier,
-                      remainingPresentationAttempts: 3,
-                      unavailable: unavailable,
-                      selection: selection)
-              }
-
-              private static func presentPicker(
-                  vehicleText: String,
-                  knownAdapterIdentifier: String?,
-                  remainingPresentationAttempts: Int,
-                  unavailable: @escaping () -> Void,
-                  selection: @escaping (LinkConnectionSource) -> Void
-              ) {
-                  guard let presenter = presentingViewController() else {
-                      guard remainingPresentationAttempts > 0 else {
-                          unavailable()
-                          return
-                      }
-                      Task { @MainActor in
-                          try? await Task<Never, Never>.sleep(
-                              nanoseconds: 100_000_000)
-                          presentPicker(
-                              vehicleText: vehicleText,
-                              knownAdapterIdentifier: knownAdapterIdentifier,
-                              remainingPresentationAttempts:
-                                  remainingPresentationAttempts - 1,
-                              unavailable: unavailable,
-                              selection: selection)
-                      }
-                      return
-                  }
-                  let picker = LinkConnectionPickerViewController(
-                      vehicleText: vehicleText,
-                      knownAdapterIdentifier: knownAdapterIdentifier) { source in
-                          Task { @MainActor in selection(source) }
-                      }
-                  let navigation = UINavigationController(rootViewController: picker)
-                  navigation.modalPresentationStyle = .pageSheet
-                  presenter.present(navigation, animated: true)
-              }
-          '''
+          old_presentation = "\n".join([
+              "enum LinkConnectionPresentation {",
+              "    static func presentPicker(",
+              "        vehicleText: String,",
+              "        knownAdapterIdentifier: String?,",
+              "        selection: @escaping (LinkConnectionSource) -> Void",
+              "    ) {",
+              "        guard let presenter = presentingViewController() else {",
+              "            selection(.automatic)",
+              "            return",
+              "        }",
+              "        let picker = LinkConnectionPickerViewController(",
+              "            vehicleText: vehicleText,",
+              "            knownAdapterIdentifier: knownAdapterIdentifier) { source in",
+              "                Task { @MainActor in selection(source) }",
+              "            }",
+              "        let navigation = UINavigationController(rootViewController: picker)",
+              "        navigation.modalPresentationStyle = .pageSheet",
+              "        presenter.present(navigation, animated: true)",
+              "    }",
+          ]) + "\n"
+          new_presentation = "\n".join([
+              "enum LinkConnectionPresentation {",
+              "    static func presentPicker(",
+              "        vehicleText: String,",
+              "        knownAdapterIdentifier: String?,",
+              "        unavailable: @escaping () -> Void,",
+              "        selection: @escaping (LinkConnectionSource) -> Void",
+              "    ) {",
+              "        presentPicker(",
+              "            vehicleText: vehicleText,",
+              "            knownAdapterIdentifier: knownAdapterIdentifier,",
+              "            remainingPresentationAttempts: 3,",
+              "            unavailable: unavailable,",
+              "            selection: selection)",
+              "    }",
+              "",
+              "    private static func presentPicker(",
+              "        vehicleText: String,",
+              "        knownAdapterIdentifier: String?,",
+              "        remainingPresentationAttempts: Int,",
+              "        unavailable: @escaping () -> Void,",
+              "        selection: @escaping (LinkConnectionSource) -> Void",
+              "    ) {",
+              "        guard let presenter = presentingViewController() else {",
+              "            guard remainingPresentationAttempts > 0 else {",
+              "                unavailable()",
+              "                return",
+              "            }",
+              "            Task { @MainActor in",
+              "                try? await Task<Never, Never>.sleep(",
+              "                    nanoseconds: 100_000_000)",
+              "                presentPicker(",
+              "                    vehicleText: vehicleText,",
+              "                    knownAdapterIdentifier: knownAdapterIdentifier,",
+              "                    remainingPresentationAttempts:",
+              "                        remainingPresentationAttempts - 1,",
+              "                    unavailable: unavailable,",
+              "                    selection: selection)",
+              "            }",
+              "            return",
+              "        }",
+              "        let picker = LinkConnectionPickerViewController(",
+              "            vehicleText: vehicleText,",
+              "            knownAdapterIdentifier: knownAdapterIdentifier) { source in",
+              "                Task { @MainActor in selection(source) }",
+              "            }",
+              "        let navigation = UINavigationController(rootViewController: picker)",
+              "        navigation.modalPresentationStyle = .pageSheet",
+              "        presenter.present(navigation, animated: true)",
+              "    }",
+          ]) + "\n"
           if text.count(old_presentation) != 1:
               raise SystemExit(f'presentation guard failed: {text.count(old_presentation)} matches')
           text = text.replace(old_presentation, new_presentation)
@@ -147,7 +151,6 @@ jobs:
           PY
 
           rm .github/workflows/hal-picker-presentation-fix.yml
-
           git config user.name "Shannon Smith"
           git config user.email "infiltratr@yandex.com"
           git add -A
