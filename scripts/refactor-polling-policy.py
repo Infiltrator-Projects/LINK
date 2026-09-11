@@ -79,6 +79,11 @@ replace_once(
 
 replace_once(
     "tests/apple/run-regressions.sh",
+    "grep -Fq 'if (item->pid_valid && item->enabled) ++enabledPollingCount;' \"$controller\"\n",
+    "grep -Fq 'link_scheduler_enabled_standard_count(&_flow.scheduler)' \"$controller\"\n",
+)
+replace_once(
+    "tests/apple/run-regressions.sh",
     "controller=platform/apple/LinkDiagnosticsController.m\ngrep -Fq 'Connected · polling idle · no PIDs selected' \"$controller\"\n",
     "controller=platform/apple/LinkDiagnosticsController.m\ngrep -Fq 'Connected · polling idle · no PIDs selected' \"$controller\"\ngrep -Fq 'LinkPollingPolicy _pollingPolicy;' \"$controller\"\ngrep -Fq 'link_polling_policy_apply_to_scheduler(' \"$controller\"\nif grep -Fq '_pidPollingEnabled' \"$controller\"; then\n    echo 'Apple controller must not own a second PID polling-policy array.' >&2\n    exit 1\nfi\n",
 )
