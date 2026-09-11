@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #import "LinkDiagnosticsController.h"
 #import "LinkAppleSettings.h"
+#import "LinkApplePollingCoordinator.h"
 
 #import "link/diagnostic_capability.h"
 #import "link/dtc_knowledge.h"
@@ -57,6 +58,7 @@
 
 @implementation LinkDiagnosticsController {
     LinkBLETransport *_provider;
+    LinkApplePollingCoordinator *_pollingCoordinator;
     LinkElm327Session _session;
     BOOL _sessionInitialized;
     BOOL _simulated;
@@ -86,7 +88,6 @@
     NSString *_simulatedLiveStatusText;
     NSString *_standardVINStatusText;
     NSString *_lastRecordedTransportStatus;
-    LinkPollingPolicy _pollingPolicy;
     BOOL _legacyDiagnosticResponseObserved;
     LinkAppleSettingsStore *_settings;
 }
@@ -219,14 +220,13 @@ static void LinkAppleSessionEvent(
 
     _provider = [[LinkBLETransport alloc] init];
     _provider.delegate = self;
+    _pollingCoordinator = [[LinkApplePollingCoordinator alloc] init];
 
     _statusText = @"Idle";
     _faultScanStatusText = @"Not scanned";
     _storedDTCs = @[];
     _pendingDTCs = @[];
     _permanentDTCs = @[];
-
-    link_polling_policy_init(&_pollingPolicy, true);
 
     (void)link_diagnostic_flow_init(&_flow, &_flowConfig);
     link_telemetry_store_init(&_telemetry);
@@ -2134,48 +2134,26 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
 
 - (BOOL)pollingEnabledForPID:(uint8_t)pid
 {
-    return link_polling_policy_is_enabled(&_pollingPolicy, pid) ? YES : NO;
+    return [_pollingCoordinator isEnabledForPID:pid];
 }
 
 - (void)setPollingEnabled:(BOOL)enabled forPID:(uint8_t)pid
 {
-    link_polling_policy_set_enabled(
-        &_pollingPolicy, pid, enabled ? true : false);
-
-    /*
-     * NOT_FOUND simply means capability discovery has not built this PID into
-     * the current schedule (yet, or at all). The preference is still retained
-     * and will be applied when a future schedule contains the PID.
-     */
-    (void)link_scheduler_set_enabled(&_flow.scheduler, pid, enabled);
+    LinkApplePollingUpdateDisposition disposition = [_pollingCoordinator
+        setEnabled:enabled forPID:pid flow:&_flow active:self.active
+        manufacturerExtensionActive:_manufacturerExtensionActive];
     [self notifyDelegate];
 
-    /*
-     * If every PID was disabled the flow may have settled in READY with no
-     * timer outstanding. Enabling one again should restart polling immediately,
-     * but never race an in-flight ELM or manufacturer request.
-     */
-    if (self.active && !_flow.awaiting_response &&
-        !_manufacturerExtensionActive &&
-        (_flow.stage == LINK_DIAGNOSTIC_FLOW_LIVE ||
-         _flow.stage == LINK_DIAGNOSTIC_FLOW_READING_LIVE)) {
-        if (enabled) {
-            [self driveDiagnosticFlow];
-        } else {
-            const size_t enabledPollingCount =
-                link_scheduler_enabled_standard_count(&_flow.scheduler);
-            if (enabledPollingCount == 0U) {
-                [self setSharedStatus:
-                    @"Connected · polling idle · no PIDs selected"];
-            }
-        }
+    if (disposition == LinkApplePollingUpdateDispositionRestartLiveFlow) {
+        [self driveDiagnosticFlow];
+    } else if (disposition == LinkApplePollingUpdateDispositionBecameIdle) {
+        [self setSharedStatus:@"Connected · polling idle · no PIDs selected"];
     }
 }
 
 - (void)applyPollingPreferencesToScheduler
 {
-    (void)link_polling_policy_apply_to_scheduler(
-        &_pollingPolicy, &_flow.scheduler);
+    [_pollingCoordinator applyToFlow:&_flow];
 }
 
 - (nullable NSData *)csvDataSnapshot
@@ -2386,5 +2364,6 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
 
 #pragma mark - Shared vehicle-profile/session persistence
 
+#include "LinkApplePollingCoordinator.inc"
 #include "LinkAppleSettings.inc"
 #include "LinkVehicleProfileStore.inc"
