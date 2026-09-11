@@ -1,4 +1,4 @@
-name: HAL complete Apple controller ownership
+name: HAL finalize Apple ownership CI guards
 
 on:
   push:
@@ -8,156 +8,55 @@ permissions:
   contents: write
 
 jobs:
-  migrate:
-    if: github.event.head_commit.message == 'Run guarded Apple ownership completion'
+  finalize:
+    if: github.event.head_commit.message == 'Run guarded Apple CI guard update'
     runs-on: macos-latest
-    timeout-minutes: 55
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          submodules: recursive
           fetch-depth: 0
 
-      - name: Configure migration identity
+      - name: Configure maintenance identity
         shell: bash
         run: |
           set -euo pipefail
           git config user.name 'HAL Apple modularity'
           git config user.email 'actions@users.noreply.github.com'
 
-      - name: Materialize guarded migration
+      - name: Point CI evidence guards at the new telemetry owner
         shell: bash
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          import base64, gzip, pathlib
-          parts = sorted(pathlib.Path('.github/hal').glob('apple-migration.part*'))
-          if len(parts) != 5:
-              raise SystemExit(f'expected 5 migration parts, found {len(parts)}')
-          payload = ''.join(part.read_text(encoding='utf-8').strip() for part in parts)
-          target = pathlib.Path('${{ runner.temp }}/hal_finish_apple_modularity.py')
-          target.write_bytes(gzip.decompress(base64.b64decode(payload)))
-          text = target.read_text(encoding='utf-8')
-          old = '''    # remove stale call inserted above; runner owns timer now
-              controller = replace_once(controller, '    [self stopTickTimer];\\n', '', 'dealloc timer removal')
-          '''
-          if text.count(old) != 1:
-              raise SystemExit(f'session timer migration patch expected one match, found {text.count(old)}')
-          text = text.replace(old, '', 1)
-          old = '''    _sessionRunner.delegate = nil;\\n    [self stopTickTimer];\\n    if (_recorder.started'''
-          if text.count(old) != 1:
-              raise SystemExit(f'session dealloc timer patch expected one match, found {text.count(old)}')
-          text = text.replace(old, '''    _sessionRunner.delegate = nil;\\n    if (_recorder.started''', 1)
-          for message in (
-              'direct resynchronization remains after session stage',
-              'direct session/timer state remains in controller after session stage',
-          ):
-              text = text.replace(f"raise SystemExit('{message}')", f"print('{message}')")
-              text = text.replace(f'raise SystemExit("{message}")', f"print('{message}')")
-          target.write_text(text, encoding='utf-8')
-          PY
-          python3 -m py_compile "${{ runner.temp }}/hal_finish_apple_modularity.py"
-
-      - name: Extract polling coordinator and prove it
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 "${{ runner.temp }}/hal_finish_apple_modularity.py" polling
-          git diff --check
-          bash tests/apple/run-regressions.sh
-          git add platform/apple/LinkDiagnosticsController.m \
-            platform/apple/LinkApplePollingCoordinator.h \
-            platform/apple/LinkApplePollingCoordinator.inc \
-            tests/apple/run-regressions.sh
-          git commit -m 'Extract Apple polling coordinator' \
-            -m 'Move retained PID policy, scheduler application and live restart/idle decisions out of LinkDiagnosticsController while preserving its public API and regression behaviour.'
-
-      - name: Extract session runner and prove it
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 "${{ runner.temp }}/hal_finish_apple_modularity.py" session
           python3 - <<'PY'
           from pathlib import Path
-          import re
-          path = Path('platform/apple/LinkDiagnosticsController.m')
+          path = Path('.github/workflows/ci.yml')
           text = path.read_text(encoding='utf-8')
-          pattern = re.compile(
-              r'    sessionResult = link_elm327_session_begin_resynchronization\(\n'
-              r'\s*&_session, LinkAppleMonotonicMilliseconds\(\), UINT64_C\(2500\)\);'
-          )
-          replacement = (
-              '    sessionResult = [_sessionRunner\n'
-              '        beginResynchronizationAt:LinkAppleMonotonicMilliseconds()\n'
-              '                             timeout:UINT64_C(2500)];'
-          )
-          text, count = pattern.subn(replacement, text, count=1)
-          if count != 1:
-              raise SystemExit(f'expected one remaining live resynchronization call, found {count}')
+          replacements = {
+              "grep -Fq 'link_telemetry_recorder_begin(' platform/apple/LinkDiagnosticsController.m":
+                  "grep -Fq 'link_telemetry_recorder_begin(' platform/apple/LinkAppleTelemetryRecorder.inc",
+              "grep -Fq '\"BLE\", stateName.UTF8String' platform/apple/LinkDiagnosticsController.m":
+                  "grep -Fq '\"BLE\", stateName.UTF8String' platform/apple/LinkAppleTelemetryRecorder.inc",
+              "grep -Fq 'NATIVE_RX' platform/apple/LinkDiagnosticsController.m":
+                  "grep -Fq 'NATIVE_RX' platform/apple/LinkAppleTelemetryRecorder.inc",
+          }
+          for old, new in replacements.items():
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'expected exactly one CI ownership guard match for {old!r}, found {count}')
+              text = text.replace(old, new, 1)
           path.write_text(text, encoding='utf-8')
           PY
-          controller=platform/apple/LinkDiagnosticsController.m
-          if grep -Fq 'LinkElm327Session _session;' "$controller" || \
-             grep -Fq 'dispatch_source_t _tickTimer;' "$controller" || \
-             grep -Fq 'link_elm327_session_begin_resynchronization(' "$controller" || \
-             grep -Eq '&_session([,)]|[[:space:]])' "$controller"; then
-            echo 'Apple diagnostic controller still directly owns or accesses active ELM327 session state.' >&2
-            grep -n -C 3 -E 'LinkElm327Session _session;|dispatch_source_t _tickTimer;|link_elm327_session_begin_resynchronization|&_session([,)]|[[:space:]])' "$controller" || true
-            exit 1
-          fi
           git diff --check
           bash tests/apple/run-regressions.sh
-          git add platform/apple/LinkDiagnosticsController.m \
-            platform/apple/LinkAppleSessionRunner.h \
-            platform/apple/LinkAppleSessionRunner.inc \
-            tests/apple/run-regressions.sh
-          git commit -m 'Extract Apple session runner' \
-            -m 'Move active ELM327 session state, simulation transport, resynchronization and tick timer ownership out of LinkDiagnosticsController while leaving diagnostic policy and public APIs unchanged.'
+          git add .github/workflows/ci.yml
+          git commit -m 'Update CI for Apple telemetry ownership' \
+            -m 'Keep the existing evidence regression checks, but point telemetry-specific guards at LinkAppleTelemetryRecorder now that the controller no longer owns that state.'
 
-      - name: Extract telemetry recorder and prove it
+      - name: Publish only if main is unchanged
         shell: bash
         run: |
           set -euo pipefail
-          python3 "${{ runner.temp }}/hal_finish_apple_modularity.py" telemetry
-          # Keep workflow files byte-for-byte identical during this product-code publish.
-          # The ownership CI guard is applied separately after the green refactor lands.
-          git restore -- .github/workflows/ci.yml
-          git diff --check
-          bash tests/apple/run-regressions.sh
-          git add platform/apple/LinkDiagnosticsController.m \
-            platform/apple/LinkAppleTelemetryRecorder.h \
-            platform/apple/LinkAppleTelemetryRecorder.inc \
-            tests/apple/run-regressions.sh \
-            docs/APPLE-PROVIDER-BOUNDARY.md
-          git commit -m 'Extract Apple telemetry recorder' \
-            -m 'Move session evidence metadata, CSV ownership, telemetry stores and native capture recording out of LinkDiagnosticsController with source-ownership guards.'
-
-      - name: Validate complete portable core
-        shell: bash
-        run: |
-          set -euo pipefail
-          cmake -S . -B build-ownership -DCMAKE_BUILD_TYPE=Release
-          cmake --build build-ownership --parallel
-          ctest --test-dir build-ownership --output-on-failure
-
-      - name: Finalize one published release
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 "${{ runner.temp }}/hal_finish_apple_modularity.py" finalize
-          git diff --check
-          bash tests/apple/run-regressions.sh
-          git add VERSION include/link/version.h
-          git commit -m 'Release 0.15.19: complete Apple controller ownership extraction' \
-            -m 'Complete the Apple polling, session-runner and telemetry-recorder ownership boundaries. Each concern passed the real Apple regression harness before the next extraction, with public controller APIs and product source-list topology preserved.'
-
-      - name: Push only if main did not move underneath the migration
-        shell: bash
-        run: |
-          set -euo pipefail
-          # Product publication must not alter workflow definitions. Workflow cleanup and
-          # CI ownership guards are deliberately separate follow-up commits.
-          git diff --exit-code "$GITHUB_SHA" HEAD -- .github/workflows
           git fetch origin main
           test "$(git rev-parse origin/main)" = "$GITHUB_SHA"
           git push origin HEAD:main
