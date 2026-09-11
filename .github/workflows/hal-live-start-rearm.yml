@@ -1,0 +1,32 @@
+name: Apply live-start polling rearm
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/hal-live-start-rearm.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+      - name: Apply guarded patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .github/patches/hal_live_start_rearm.py
+          git diff --check
+          grep -Fq 'completedStage == LINK_DIAGNOSTIC_FLOW_CONFIGURING_LIVE_HEADERS' platform/apple/LinkDiagnosticsController.m
+          grep -Fq '0.15.16' VERSION include/link/version.h
+          git rm .github/workflows/hal-live-start-rearm.yml .github/patches/hal_live_start_rearm.py
+          git config user.name 'Shannon Smith'
+          git config user.email 'infiltratr@yandex.com'
+          git add platform/apple/LinkDiagnosticsController.m tests/apple/run-regressions.sh VERSION include/link/version.h
+          git commit -m 'Release 0.15.16: rearm polling at live entry' -m 'Reapply retained per-PID preferences after the final live-header response and before the first scheduler dispatch. This closes the stale-disabled handoff where a real VIN could reach LIVE without issuing any selected Mode 01 requests.'
+          git push origin HEAD:main
