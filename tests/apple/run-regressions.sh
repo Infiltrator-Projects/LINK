@@ -15,6 +15,20 @@ fi
 grep -Fq 'const BOOL explicitlySelected =' "$ble"
 grep -Fq '!explicitlySelected &&' "$ble"
 controller=platform/apple/LinkDiagnosticsController.m
+profile_store=platform/apple/LinkVehicleProfileStore.inc
+settings_store=platform/apple/LinkAppleSettings.inc
+test -s "$profile_store"
+test -s "$settings_store"
+grep -Fq '@implementation LinkVehicleProfileStore' "$profile_store"
+grep -Fq '@implementation LinkAppleSettingsStore' "$settings_store"
+if grep -Fq '@implementation LinkVehicleProfileStore' "$controller"; then
+    echo 'Apple diagnostic controller must not own vehicle-profile persistence.' >&2
+    exit 1
+fi
+if grep -Fq 'LinkAppleLanguageDefaultsKey' "$controller"; then
+    echo 'Apple diagnostic controller must not own settings persistence keys.' >&2
+    exit 1
+fi
 grep -Fq 'Connected · polling idle · no PIDs selected' "$controller"
 grep -Fq 'LinkPollingPolicy _pollingPolicy;' "$controller"
 grep -Fq 'link_polling_policy_apply_to_scheduler(' "$controller"

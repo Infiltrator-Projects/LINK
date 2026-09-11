@@ -83,6 +83,20 @@ struct ProfileRegression {
         pollingController.setPollingEnabled(true, forPID: 0x0C)
         precondition(pollingController.pollingEnabled(forPID: 0x0C))
 
-        print("LINK Apple simulation, profile-patch and polling-policy regressions passed")
+        // Apple settings persistence has one owner and preserves controller API.
+        pollingController.setSelectedMeasurementSystemKey("us-customary")
+        precondition(pollingController.selectedMeasurementSystemKey == "us-customary")
+        pollingController.setSelectedLanguageTag("en-US")
+        precondition(pollingController.selectedLanguageTag == "en-US")
+        let settingsReload = LinkDiagnosticsController(
+            productSlug: namespace + "-settings", flowConfig: flow,
+            liveStatusText: "live", simulatedLiveStatusText: "simulated",
+            standardVINStatusText: "VIN")
+        precondition(settingsReload.selectedMeasurementSystemKey == "us-customary")
+        precondition(settingsReload.selectedLanguageTag == "en-US")
+        settingsReload.setSelectedMeasurementSystemKey("metric")
+        settingsReload.setSelectedLanguageTag("en-AU")
+
+        print("LINK Apple simulation, profile-patch, polling-policy and settings regressions passed")
     }
 }
