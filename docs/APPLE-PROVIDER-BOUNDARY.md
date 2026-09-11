@@ -25,3 +25,22 @@ Mercedes me native-adapter support is a LINK adapter/transport capability. The n
 When the backend is intentionally disabled, the public adapter types remain available to the shared Apple controller while provider discovery/parser hooks resolve to inert inline stubs, allowing the Mercedes me implementation translation units to be omitted from that particular binary.
 
 This keeps adapter support in LINK, keeps manufacturer-specific vehicle knowledge in the owning product repository, and allows every LINK-family product to use any LINK-supported adapter that is technically compatible with the vehicle and diagnostic traffic.
+
+## Controller modularity rule
+
+`LinkDiagnosticsController` is a public facade, not the permanent home for every Apple-side concern. New behaviour should live in the smallest component that owns the relevant state and lifecycle, with the controller delegating to it. The controller may coordinate components, expose stable public API, and translate component events for product faces, but it should not duplicate transport, scheduling, telemetry, persistence, localisation, or recovery state machines.
+
+Refactors of the Apple controller must be behaviour-preserving and incremental. Each extraction must keep the public API stable unless an intentional API change is separately documented, keep one authoritative owner for each mutable state value, and add or retain regression coverage for the extracted behaviour before the old implementation is removed. Avoid large rewrites: one concern should be extracted and proven at a time.
+
+The target ownership boundaries are:
+
+- `LinkBLETransport`: Bluetooth discovery, peripheral identity, connection and byte transport.
+- portable LINK core: ELM327 session parsing, diagnostic flow, scheduler, OBD/UDS/ISO-TP semantics and protocol-neutral telemetry structures.
+- Apple session runner: command dispatch, timers and bridging portable flow actions/events to the active Apple transport.
+- Apple polling coordinator: user PID enablement policy, scheduler application and live-polling restart/resume semantics.
+- Apple telemetry recorder: session CSV ownership and recording/export plumbing.
+- Apple settings store: language and measurement persistence/resolution.
+- `LinkDiagnosticsController`: thin facade and coordinator over the above pieces.
+- branded product repositories: manufacturer-specific vehicle knowledge and product presentation.
+
+A change to one responsibility should not require unrelated components to know its internal state. In particular, branded products should be able to set generic PID selections without needing to understand when the LINK scheduler is constructed or when live polling needs to be kicked; LINK must guarantee that lifecycle internally.
