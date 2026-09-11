@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   patch:
-    if: github.event.head_commit.message == 'Use robust picker patch guards'
+    if: github.event.head_commit.message == 'Apply picker fix without CI mutation'
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
@@ -17,12 +17,12 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Apply guarded quick wins
+      - name: Apply guarded product fix
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD^)" = "04ac6a2c6214b30e4a03300238f649852fba153b"
-          test "$(git rev-parse HEAD~3)" = "3a60c45415273c8e91c7a5a887bb04ad787c80f6"
+          test "$(git rev-parse HEAD^)" = "d5bfd3f5147a352830a6baa9e7eec36b5ce0ac51"
+          test "$(git rev-parse HEAD~4)" = "3a60c45415273c8e91c7a5a887bb04ad787c80f6"
           python3 - <<'PY'
           from pathlib import Path
 
@@ -128,14 +128,6 @@ jobs:
           text = text.replace(old_presentation, new_presentation)
           ui.write_text(text)
 
-          ci = Path('.github/workflows/ci.yml')
-          ci_text = ci.read_text()
-          anchor = "          grep -Fq 'enum LinkConnectionPresentation' platform/apple/LinkDiagnosticUI.swift\n"
-          addition = anchor + "          grep -Fq 'remainingPresentationAttempts: 3' platform/apple/LinkDiagnosticUI.swift\n          grep -Fq 'unavailable: @escaping () -> Void' platform/apple/LinkDiagnosticUI.swift\n          grep -Fq 'Unable to open adapter picker · try Connect again' platform/apple/LinkDiagnosticUI.swift\n          if grep -Fq 'selection(.automatic)' platform/apple/LinkDiagnosticUI.swift; then\n            echo 'Apple Connect must not silently switch to automatic scan when the picker cannot be presented.' >&2\n            exit 1\n          fi\n          grep -Fq 'const BOOL explicitlySelected =' platform/apple/LinkBLETransport.m\n          grep -Fq '!explicitlySelected &&' platform/apple/LinkBLETransport.m\n"
-          if ci_text.count(anchor) != 1:
-              raise SystemExit(f'CI anchor guard failed: {ci_text.count(anchor)} matches')
-          ci.write_text(ci_text.replace(anchor, addition))
-
           version = Path('VERSION')
           if version.read_text().strip() != '0.15.12':
               raise SystemExit('unexpected LINK VERSION')
@@ -155,5 +147,5 @@ jobs:
           git config user.email "infiltratr@yandex.com"
           git add -A
           git diff --cached --check
-          git commit -m "Fix Apple picker presentation fallback" -m "Retry briefly when UIKit has not exposed a foreground presenter instead of silently changing an explicit Connect action into automatic adapter discovery. Surface a truthful retry message if presentation remains unavailable. Add CI guards for this contract and for the explicit BLE UUID transport path, then bump LINK to 0.15.13."
+          git commit -m "Fix Apple picker presentation fallback" -m "Retry briefly when UIKit has not exposed a foreground presenter instead of silently changing an explicit Connect action into automatic adapter discovery. Surface a truthful retry message if presentation remains unavailable, then bump LINK to 0.15.13."
           git push origin HEAD:main
