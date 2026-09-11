@@ -93,8 +93,8 @@ jobs:
           grep -Fq 'Saved BLE adapter did not answer yet; scanning' platform/apple/LinkBLETransport.m
           grep -Fq 'retrievePeripheralsWithIdentifiers' platform/apple/LinkBLETransport.m
           grep -Fq 'LinkKnownPeripheralDefaultsKey' platform/apple/LinkBLETransport.m
-          grep -Fq 'link_telemetry_recorder_begin(' platform/apple/LinkDiagnosticsController.m
-          grep -Fq '"BLE", stateName.UTF8String' platform/apple/LinkDiagnosticsController.m
+          grep -Fq 'link_telemetry_recorder_begin(' platform/apple/LinkAppleTelemetryRecorder.inc
+          grep -Fq '"BLE", stateName.UTF8String' platform/apple/LinkAppleTelemetryRecorder.inc
           grep -Fq 'LinkBLETransportStateFailed' platform/apple/LinkDiagnosticsController.m
           grep -Fq 'case LINK_DIAGNOSTIC_FLOW_EVENT_LIVE_STRUCTURED:' platform/apple/LinkDiagnosticsController.m
           grep -Fq 'event.kind == LINK_DIAGNOSTIC_FLOW_EVENT_LIVE_STRUCTURED' platform/linux/link-gtk-shell.c
@@ -181,7 +181,7 @@ jobs:
           grep -Fq 'return @[@"metric", @"us-customary"];' platform/apple/LinkDiagnosticsController.m
           grep -Fq 'src/core/units.c' CMakeLists.txt
           grep -Fq 'link-test-units tests/test_units.c link-units' CMakeLists.txt
-          grep -Fq 'NATIVE_RX' platform/apple/LinkDiagnosticsController.m
+          grep -Fq 'NATIVE_RX' platform/apple/LinkAppleTelemetryRecorder.inc
           grep -Fq 'link-test-uds-dtc tests/test_uds_dtc.c link-uds-dtc' CMakeLists.txt
           grep -Fq 'link-test-uds-server tests/test_uds_server.c link-uds-server' CMakeLists.txt
           grep -Fq 'link-test-stm32-uds-server' CMakeLists.txt
