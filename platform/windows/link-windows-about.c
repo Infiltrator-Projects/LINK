@@ -25,7 +25,7 @@
 #define LINK_THEME_ACCENT RGB(190, 199, 207)
 #endif
 #ifndef LINK_PRODUCT_FONT_UI
-#define LINK_PRODUCT_FONT_UI "Segoe UI"
+#define LINK_PRODUCT_FONT_UI "MB Corpo S Title WEB"
 #endif
 
 static HBRUSH link_windows_about_background_brush;
