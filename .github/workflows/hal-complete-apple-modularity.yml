@@ -48,6 +48,8 @@ jobs:
           if text.count(old) != 1:
               raise SystemExit(f'session dealloc timer patch expected one match, found {text.count(old)}')
           text = text.replace(old, '''    _sessionRunner.delegate = nil;\\n    if (_recorder.started''', 1)
+          # The original staged migration guarded before fixing the second live-resync call.
+          # Let the workflow apply and then explicitly verify that final ownership boundary.
           for message in (
               'direct resynchronization remains after session stage',
               'direct session/timer state remains in controller after session stage',
@@ -72,17 +74,84 @@ jobs:
           git commit -m 'Extract Apple polling coordinator' \
             -m 'Move retained PID policy, scheduler application and live restart/idle decisions out of LinkDiagnosticsController while preserving its public API and regression behaviour.'
 
-      - name: Inspect generated session extraction
+      - name: Extract session runner and prove it
         shell: bash
         run: |
           set -euo pipefail
           python3 "${{ runner.temp }}/hal_finish_apple_modularity.py" session
-          echo '--- generated session runner interface ---'
-          sed -n '1,280p' platform/apple/LinkAppleSessionRunner.h
-          echo '--- generated session runner implementation ---'
-          sed -n '1,420p' platform/apple/LinkAppleSessionRunner.inc
-          echo '--- remaining direct session/timer references in controller ---'
-          grep -n -C 4 -E 'link_elm327_session_begin_resynchronization|link_elm327_session_|&_session|_sessionInitialized|_simulator|_tickTimer|startTickTimer|stopTickTimer' platform/apple/LinkDiagnosticsController.m || true
-          echo '--- session-related controller diff ---'
-          git diff -- platform/apple/LinkDiagnosticsController.m platform/apple/LinkAppleSessionRunner.h platform/apple/LinkAppleSessionRunner.inc tests/apple/run-regressions.sh
-          exit 1
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('platform/apple/LinkDiagnosticsController.m')
+          text = path.read_text(encoding='utf-8')
+          old = '''    sessionResult = link_elm327_session_begin_resynchronization(
+              &_session, LinkAppleMonotonicMilliseconds(), UINT64_C(2500));'''
+          new = '''    sessionResult = [_sessionRunner
+              beginResynchronizationAt:LinkAppleMonotonicMilliseconds()
+                                   timeout:UINT64_C(2500)];'''
+          count = text.count(old)
+          if count != 1:
+              raise SystemExit(f'expected one remaining live resynchronization call, found {count}')
+          text = text.replace(old, new, 1)
+          path.write_text(text, encoding='utf-8')
+          PY
+          controller=platform/apple/LinkDiagnosticsController.m
+          if grep -Fq 'LinkElm327Session _session;' "$controller" || \
+             grep -Fq 'dispatch_source_t _tickTimer;' "$controller" || \
+             grep -Fq 'link_elm327_session_begin_resynchronization(' "$controller" || \
+             grep -Eq '&_session([,)]|[[:space:]])' "$controller"; then
+            echo 'Apple diagnostic controller still directly owns or accesses active ELM327 session state.' >&2
+            grep -n -C 3 -E 'LinkElm327Session _session;|dispatch_source_t _tickTimer;|link_elm327_session_begin_resynchronization|&_session([,)]|[[:space:]])' "$controller" || true
+            exit 1
+          fi
+          git diff --check
+          bash tests/apple/run-regressions.sh
+          git add platform/apple/LinkDiagnosticsController.m \
+            platform/apple/LinkAppleSessionRunner.h \
+            platform/apple/LinkAppleSessionRunner.inc \
+            tests/apple/run-regressions.sh
+          git commit -m 'Extract Apple session runner' \
+            -m 'Move active ELM327 session state, simulation transport, resynchronization and tick timer ownership out of LinkDiagnosticsController while leaving diagnostic policy and public APIs unchanged.'
+
+      - name: Extract telemetry recorder and prove it
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 "${{ runner.temp }}/hal_finish_apple_modularity.py" telemetry
+          git diff --check
+          bash tests/apple/run-regressions.sh
+          git add platform/apple/LinkDiagnosticsController.m \
+            platform/apple/LinkAppleTelemetryRecorder.h \
+            platform/apple/LinkAppleTelemetryRecorder.inc \
+            tests/apple/run-regressions.sh \
+            .github/workflows/ci.yml \
+            docs/APPLE-PROVIDER-BOUNDARY.md
+          git commit -m 'Extract Apple telemetry recorder' \
+            -m 'Move session evidence metadata, CSV ownership, telemetry stores and native capture recording out of LinkDiagnosticsController with source-ownership guards.'
+
+      - name: Validate complete portable core
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S . -B build-ownership -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-ownership --parallel
+          ctest --test-dir build-ownership --output-on-failure
+
+      - name: Finalize one published release
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 "${{ runner.temp }}/hal_finish_apple_modularity.py" finalize
+          git rm .github/workflows/hal-complete-apple-modularity.yml .github/hal/apple-migration.part*
+          git diff --check
+          bash tests/apple/run-regressions.sh
+          git add VERSION include/link/version.h
+          git commit -m 'Release 0.15.19: complete Apple controller ownership extraction' \
+            -m 'Complete the Apple polling, session-runner and telemetry-recorder ownership boundaries. Each concern passed the real Apple regression harness before the next extraction, with public controller APIs and product source-list topology preserved.'
+
+      - name: Push only if main did not move underneath the migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = "$GITHUB_SHA"
+          git push origin HEAD:main
