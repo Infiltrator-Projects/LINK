@@ -14,6 +14,9 @@ if grep -Fq 'selection(.automatic)' "$ui"; then
 fi
 grep -Fq 'const BOOL explicitlySelected =' "$ble"
 grep -Fq '!explicitlySelected &&' "$ble"
+controller=platform/apple/LinkDiagnosticsController.m
+grep -Fq 'Connected · polling idle · no PIDs selected' "$controller"
+grep -Fq 'if (item->pid_valid && item->enabled) ++enabledPollingCount;' "$controller"
 
 build_dir=$(mktemp -d "${TMPDIR:-/tmp}/link-apple-regression.XXXXXX")
 sdk=$(xcrun --sdk iphonesimulator --show-sdk-path)

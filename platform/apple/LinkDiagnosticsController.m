@@ -1950,15 +1950,23 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
         return;
     }
 
-    case LINK_DIAGNOSTIC_FLOW_ACTION_READY:
+    case LINK_DIAGNOSTIC_FLOW_ACTION_READY: {
+        size_t enabledPollingCount = 0U;
+        for (size_t index = 0U; index < _flow.scheduler.count; ++index) {
+            const LinkSchedulerItem *item = &_flow.scheduler.items[index];
+            if (item->pid_valid && item->enabled) ++enabledPollingCount;
+        }
         self.ready = YES;
         [self setSharedStatus:
             _flow.scheduler.count == 0U
                 ? @"Connected; no supported dashboard PIDs were advertised"
-                : (_simulated
-                    ? _simulatedLiveStatusText
-                    : _liveStatusText)];
+                : (enabledPollingCount == 0U
+                    ? @"Connected · polling idle · no PIDs selected"
+                    : (_simulated
+                        ? _simulatedLiveStatusText
+                        : _liveStatusText))];
         return;
+    }
 
     case LINK_DIAGNOSTIC_FLOW_ACTION_FAILED:
         [self failWithStatus:
@@ -2184,11 +2192,23 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
      * timer outstanding. Enabling one again should restart polling immediately,
      * but never race an in-flight ELM or manufacturer request.
      */
-    if (enabled && self.active && !_flow.awaiting_response &&
+    if (self.active && !_flow.awaiting_response &&
         !_manufacturerExtensionActive &&
         (_flow.stage == LINK_DIAGNOSTIC_FLOW_LIVE ||
          _flow.stage == LINK_DIAGNOSTIC_FLOW_READING_LIVE)) {
-        [self driveDiagnosticFlow];
+        if (enabled) {
+            [self driveDiagnosticFlow];
+        } else {
+            size_t enabledPollingCount = 0U;
+            for (size_t index = 0U; index < _flow.scheduler.count; ++index) {
+                const LinkSchedulerItem *item = &_flow.scheduler.items[index];
+                if (item->pid_valid && item->enabled) ++enabledPollingCount;
+            }
+            if (enabledPollingCount == 0U) {
+                [self setSharedStatus:
+                    @"Connected · polling idle · no PIDs selected"];
+            }
+        }
     }
 }
 
