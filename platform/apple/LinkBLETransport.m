@@ -542,12 +542,19 @@ static BOOL LinkRemainingBytesAreWhitespace(const uint8_t *bytes,
     if (!_startRequested || self.state != LinkBLETransportStateScanning) return;
     NSString *name = advertisementData[CBAdvertisementDataLocalNameKey];
     if (name.length == 0U) name = peripheral.name;
-    if (name.length == 0U || !LinkPeripheralNameLooksLikeAdapter(name)) return;
-    if (_requestedPeripheralIdentifier.length != 0U &&
-        ![peripheral.identifier.UUIDString
-            isEqualToString:_requestedPeripheralIdentifier]) {
+    const BOOL explicitlySelected =
+        _requestedPeripheralIdentifier.length != 0U &&
+        [peripheral.identifier.UUIDString
+            isEqualToString:_requestedPeripheralIdentifier];
+    if (_requestedPeripheralIdentifier.length != 0U && !explicitlySelected)
         return;
-    }
+    /* Automatic discovery remains conservative, but a peripheral the user
+     * explicitly selected must be probed by UUID even when its advertisement
+     * is unnamed or uses a name LINK has not seen before. */
+    if (!explicitlySelected &&
+        (name.length == 0U || !LinkPeripheralNameLooksLikeAdapter(name)))
+        return;
+    if (name.length == 0U) name = @"Selected Bluetooth device";
     [self connectPeripheral:peripheral name:name];
     (void)RSSI;
     (void)central;
