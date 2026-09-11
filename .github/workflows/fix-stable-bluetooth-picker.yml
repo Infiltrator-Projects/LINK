@@ -1,0 +1,32 @@
+name: Fix stable Bluetooth picker
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/fix-stable-bluetooth-picker.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+      - name: Apply stable picker fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .github/patches/fix_stable_bluetooth_picker.py
+          git diff --check
+          grep -Fq 'adapterDiscoveryOrder.compactMap' platform/apple/LinkDiagnosticUI.swift
+          if grep -Fq 'if $0.rssi != $1.rssi' platform/apple/LinkDiagnosticUI.swift; then exit 1; fi
+          git rm .github/workflows/fix-stable-bluetooth-picker.yml .github/patches/fix_stable_bluetooth_picker.py
+          git config user.name 'Shannon Smith'
+          git config user.email 'infiltratr@yandex.com'
+          git add platform/apple/LinkDiagnosticUI.swift tests/apple/run-regressions.sh VERSION include/link/version.h
+          git commit -m 'Release 0.15.15: keep Bluetooth picker rows stable' -m 'Freeze manual BLE device row order for each scan so RSSI updates cannot move a device underneath the user. RSSI still refreshes in place, saved adapters remain pinned, and Scan Again is the only action that rebuilds discovery order.'
+          git push origin HEAD:main
