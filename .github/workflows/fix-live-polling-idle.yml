@@ -1,0 +1,132 @@
+name: Fix live polling idle state
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/fix-live-polling-idle.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+      - name: Apply guarded LINK 0.15.14 fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('platform/apple/LinkDiagnosticsController.m')
+          text = path.read_text()
+
+          old_ready = '''    case LINK_DIAGNOSTIC_FLOW_ACTION_READY:
+        self.ready = YES;
+        [self setSharedStatus:
+            _flow.scheduler.count == 0U
+                ? @"Connected; no supported dashboard PIDs were advertised"
+                : (_simulated
+                    ? _simulatedLiveStatusText
+                    : _liveStatusText)];
+        return;
+'''
+          new_ready = '''    case LINK_DIAGNOSTIC_FLOW_ACTION_READY: {
+        size_t enabledPollingCount = 0U;
+        for (size_t index = 0U; index < _flow.scheduler.count; ++index) {
+            const LinkSchedulerItem *item = &_flow.scheduler.items[index];
+            if (item->pid_valid && item->enabled) ++enabledPollingCount;
+        }
+        self.ready = YES;
+        [self setSharedStatus:
+            _flow.scheduler.count == 0U
+                ? @"Connected; no supported dashboard PIDs were advertised"
+                : (enabledPollingCount == 0U
+                    ? @"Connected · polling idle · no PIDs selected"
+                    : (_simulated
+                        ? _simulatedLiveStatusText
+                        : _liveStatusText))];
+        return;
+    }
+'''
+          if text.count(old_ready) != 1:
+              raise SystemExit('ACTION_READY guard did not match exactly once')
+          text = text.replace(old_ready, new_ready)
+
+          old_tail = '''    if (enabled && self.active && !_flow.awaiting_response &&
+        !_manufacturerExtensionActive &&
+        (_flow.stage == LINK_DIAGNOSTIC_FLOW_LIVE ||
+         _flow.stage == LINK_DIAGNOSTIC_FLOW_READING_LIVE)) {
+        [self driveDiagnosticFlow];
+    }
+}
+
+- (void)applyPollingPreferencesToScheduler
+'''
+          new_tail = '''    if (self.active && !_flow.awaiting_response &&
+        !_manufacturerExtensionActive &&
+        (_flow.stage == LINK_DIAGNOSTIC_FLOW_LIVE ||
+         _flow.stage == LINK_DIAGNOSTIC_FLOW_READING_LIVE)) {
+        if (enabled) {
+            [self driveDiagnosticFlow];
+        } else {
+            size_t enabledPollingCount = 0U;
+            for (size_t index = 0U; index < _flow.scheduler.count; ++index) {
+                const LinkSchedulerItem *item = &_flow.scheduler.items[index];
+                if (item->pid_valid && item->enabled) ++enabledPollingCount;
+            }
+            if (enabledPollingCount == 0U) {
+                [self setSharedStatus:
+                    @"Connected · polling idle · no PIDs selected"];
+            }
+        }
+    }
+}
+
+- (void)applyPollingPreferencesToScheduler
+'''
+          if text.count(old_tail) != 1:
+              raise SystemExit('setPollingEnabled tail guard did not match exactly once')
+          text = text.replace(old_tail, new_tail)
+          path.write_text(text)
+
+          regression = Path('tests/apple/run-regressions.sh')
+          r = regression.read_text()
+          anchor = '''grep -Fq '!explicitlySelected &&' "$ble"
+'''
+          addition = '''grep -Fq '!explicitlySelected &&' "$ble"
+controller=platform/apple/LinkDiagnosticsController.m
+grep -Fq 'Connected · polling idle · no PIDs selected' "$controller"
+grep -Fq 'if (item->pid_valid && item->enabled) ++enabledPollingCount;' "$controller"
+'''
+          if r.count(anchor) != 1:
+              raise SystemExit('Apple regression anchor mismatch')
+          r = r.replace(anchor, addition)
+          regression.write_text(r)
+
+          version = Path('VERSION')
+          if version.read_text().strip() != '0.15.13':
+              raise SystemExit('unexpected LINK VERSION')
+          version.write_text('0.15.14\n')
+
+          header = Path('include/link/version.h')
+          h = header.read_text()
+          if h.count('#define LINK_VERSION_STRING "0.15.13"') != 1:
+              raise SystemExit('unexpected LINK version header')
+          header.write_text(h.replace('#define LINK_VERSION_STRING "0.15.13"', '#define LINK_VERSION_STRING "0.15.14"'))
+          PY
+
+          git diff --check
+          grep -Fq 'Connected · polling idle · no PIDs selected' platform/apple/LinkDiagnosticsController.m
+          grep -Fq '0.15.14' VERSION include/link/version.h
+          git rm .github/workflows/fix-live-polling-idle.yml
+          git config user.name 'Shannon Smith'
+          git config user.email 'infiltratr@yandex.com'
+          git add platform/apple/LinkDiagnosticsController.m tests/apple/run-regressions.sh VERSION include/link/version.h
+          git commit -m 'Release 0.15.14: report selected live polling truthfully' -m 'Distinguish a populated scheduler from enabled polling on Apple. Report a connected idle state when no PIDs are selected, preserve immediate restart when a PID is enabled, and guard the behavior in Apple regression checks.'
+          git push origin HEAD:main
