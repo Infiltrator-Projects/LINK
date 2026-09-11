@@ -2028,7 +2028,11 @@ class LinkStandardProductViewModel: NSObject, ObservableObject {
         }
         LinkConnectionPresentation.presentPicker(
             vehicleText: currentVehicleText,
-            knownAdapterIdentifier: knownAdapter) { [weak self] source in
+            knownAdapterIdentifier: knownAdapter,
+            unavailable: { [weak self] in
+                self?.statusText =
+                    "Unable to open adapter picker · try Connect again"
+            }) { [weak self] source in
                 self?.beginConnection(source)
             }
     }
@@ -2471,10 +2475,40 @@ enum LinkConnectionPresentation {
     static func presentPicker(
         vehicleText: String,
         knownAdapterIdentifier: String?,
+        unavailable: @escaping () -> Void,
+        selection: @escaping (LinkConnectionSource) -> Void
+    ) {
+        presentPicker(
+            vehicleText: vehicleText,
+            knownAdapterIdentifier: knownAdapterIdentifier,
+            remainingPresentationAttempts: 3,
+            unavailable: unavailable,
+            selection: selection)
+    }
+
+    private static func presentPicker(
+        vehicleText: String,
+        knownAdapterIdentifier: String?,
+        remainingPresentationAttempts: Int,
+        unavailable: @escaping () -> Void,
         selection: @escaping (LinkConnectionSource) -> Void
     ) {
         guard let presenter = presentingViewController() else {
-            selection(.automatic)
+            guard remainingPresentationAttempts > 0 else {
+                unavailable()
+                return
+            }
+            Task { @MainActor in
+                try? await Task<Never, Never>.sleep(
+                    nanoseconds: 100_000_000)
+                presentPicker(
+                    vehicleText: vehicleText,
+                    knownAdapterIdentifier: knownAdapterIdentifier,
+                    remainingPresentationAttempts:
+                        remainingPresentationAttempts - 1,
+                    unavailable: unavailable,
+                    selection: selection)
+            }
             return
         }
         let picker = LinkConnectionPickerViewController(
