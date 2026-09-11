@@ -127,10 +127,10 @@ static BOOL set_window_text_utf8(HWND window, const char *text)
 #define LINK_PRODUCT_CREDITS ""
 #endif
 #ifndef LINK_PRODUCT_FONT_UI
-#define LINK_PRODUCT_FONT_UI "Segoe UI"
+#define LINK_PRODUCT_FONT_UI "MB Corpo S Title WEB"
 #endif
 #ifndef LINK_PRODUCT_FONT_DISPLAY
-#define LINK_PRODUCT_FONT_DISPLAY LINK_PRODUCT_FONT_UI
+#define LINK_PRODUCT_FONT_DISPLAY "MB Corpo A Title Cond WEB"
 #endif
 #ifndef LINK_PRODUCT_FONT_LOG
 #define LINK_PRODUCT_FONT_LOG "Consolas"

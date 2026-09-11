@@ -77,6 +77,9 @@ typedef struct LinkGtkShell {
 } LinkGtkShell;
 
 static const char link_gtk_base_css[] =
+    "window, window *, popover, popover * { font-family: \"MB Corpo S Title WEB\", Sans; font-weight: 400; }"
+    ".link-brand { font-family: \"MB Corpo A Title Cond WEB\", \"MB Corpo S Title WEB\", Sans; font-weight: 400; }"
+    "button, button *, .link-section-title, .link-card-title, .link-detail-value, .link-status-chip { font-family: \"MB Corpo S Title WEB\", Sans; font-weight: 700; }"
     ".link-root { background: transparent; }"
     ".link-sidebar { background: rgba(0,0,0,0.24); border-right: 1px solid rgba(255,255,255,0.10); padding: 18px 16px; }"
     ".link-brand-header { padding: 2px 0 10px 0; }"

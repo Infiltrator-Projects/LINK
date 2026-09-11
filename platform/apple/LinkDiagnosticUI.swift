@@ -27,6 +27,60 @@ struct LinkDiagnosticTypography {
     let title2: Font
 }
 
+extension LinkDiagnosticTypography {
+    private static func infiltratorFont(
+        _ name: String,
+        size: CGFloat,
+        relativeTo style: Font.TextStyle,
+        fallbackWeight: Font.Weight
+    ) -> Font {
+        if UIFont(name: name, size: size) != nil {
+            return .custom(name, size: size, relativeTo: style)
+        }
+        return .system(size: size, weight: fallbackWeight)
+    }
+
+    static var infiltrator: LinkDiagnosticTypography {
+        LinkDiagnosticTypography(
+            display: infiltratorFont(
+                "MBCorpoATitleCondWEB-Regular", size: 29,
+                relativeTo: .title, fallbackWeight: .regular),
+            body: infiltratorFont(
+                "MBCorpoSTitleWEB-Regular", size: 17,
+                relativeTo: .body, fallbackWeight: .regular),
+            bodyBold: infiltratorFont(
+                "MBCorpoSTitleWEB-Bold", size: 17,
+                relativeTo: .body, fallbackWeight: .bold),
+            subheadline: infiltratorFont(
+                "MBCorpoSTitleWEB-Regular", size: 15,
+                relativeTo: .subheadline, fallbackWeight: .regular),
+            subheadlineBold: infiltratorFont(
+                "MBCorpoSTitleWEB-Bold", size: 15,
+                relativeTo: .subheadline, fallbackWeight: .bold),
+            headline: infiltratorFont(
+                "MBCorpoSTitleWEB-Bold", size: 17,
+                relativeTo: .headline, fallbackWeight: .bold),
+            caption: infiltratorFont(
+                "MBCorpoSTitleWEB-Regular", size: 12,
+                relativeTo: .caption, fallbackWeight: .regular),
+            captionBold: infiltratorFont(
+                "MBCorpoSTitleWEB-Bold", size: 12,
+                relativeTo: .caption, fallbackWeight: .bold),
+            caption2: infiltratorFont(
+                "MBCorpoSTitleWEB-Regular", size: 11,
+                relativeTo: .caption2, fallbackWeight: .regular),
+            caption2Bold: infiltratorFont(
+                "MBCorpoSTitleWEB-Bold", size: 11,
+                relativeTo: .caption2, fallbackWeight: .bold),
+            title3: infiltratorFont(
+                "MBCorpoSTitleWEB-Bold", size: 20,
+                relativeTo: .title3, fallbackWeight: .bold),
+            title2: infiltratorFont(
+                "MBCorpoSTitleWEB-Bold", size: 22,
+                relativeTo: .title2, fallbackWeight: .bold))
+    }
+}
+
 struct LinkDiagnosticTheme {
     let backgroundTop: Color
     let backgroundMiddle: Color
@@ -57,19 +111,27 @@ struct LinkDiagnosticTheme {
         success: Color.green,
         warning: Color.orange,
         fault: Color.red,
-        typography: LinkDiagnosticTypography(
-            display: .system(size: 29, weight: .semibold),
-            body: .body,
-            bodyBold: .body.bold(),
-            subheadline: .subheadline,
-            subheadlineBold: .subheadline.bold(),
-            headline: .headline,
-            caption: .caption,
-            captionBold: .caption.bold(),
-            caption2: .caption2,
-            caption2Bold: .caption2.bold(),
-            title3: .title3,
-            title2: .title2.bold()))
+        typography: .infiltrator)
+}
+
+private extension LinkDiagnosticTheme {
+    var withInfiltratorTypography: LinkDiagnosticTheme {
+        LinkDiagnosticTheme(
+            backgroundTop: backgroundTop,
+            backgroundMiddle: backgroundMiddle,
+            backgroundBottom: backgroundBottom,
+            panel: panel,
+            panelRaised: panelRaised,
+            primaryText: primaryText,
+            secondaryText: secondaryText,
+            mutedText: mutedText,
+            border: border,
+            accent: accent,
+            success: success,
+            warning: warning,
+            fault: fault,
+            typography: .infiltrator)
+    }
 }
 
 private struct LinkDiagnosticThemeKey: EnvironmentKey {
@@ -105,7 +167,7 @@ extension EnvironmentValues {
 
 extension View {
     func linkDiagnosticTheme(_ theme: LinkDiagnosticTheme) -> some View {
-        environment(\.linkDiagnosticTheme, theme)
+        environment(\.linkDiagnosticTheme, theme.withInfiltratorTypography)
     }
 
     func linkDiagnosticLocalization(
