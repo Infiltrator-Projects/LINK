@@ -119,13 +119,15 @@ jobs:
         run: |
           set -euo pipefail
           python3 "${{ runner.temp }}/hal_finish_apple_modularity.py" telemetry
+          # Keep workflow files byte-for-byte identical during this product-code publish.
+          # The ownership CI guard is applied separately after the green refactor lands.
+          git restore -- .github/workflows/ci.yml
           git diff --check
           bash tests/apple/run-regressions.sh
           git add platform/apple/LinkDiagnosticsController.m \
             platform/apple/LinkAppleTelemetryRecorder.h \
             platform/apple/LinkAppleTelemetryRecorder.inc \
             tests/apple/run-regressions.sh \
-            .github/workflows/ci.yml \
             docs/APPLE-PROVIDER-BOUNDARY.md
           git commit -m 'Extract Apple telemetry recorder' \
             -m 'Move session evidence metadata, CSV ownership, telemetry stores and native capture recording out of LinkDiagnosticsController with source-ownership guards.'
@@ -143,7 +145,6 @@ jobs:
         run: |
           set -euo pipefail
           python3 "${{ runner.temp }}/hal_finish_apple_modularity.py" finalize
-          git rm .github/workflows/hal-complete-apple-modularity.yml .github/hal/apple-migration.part*
           git diff --check
           bash tests/apple/run-regressions.sh
           git add VERSION include/link/version.h
@@ -154,6 +155,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # Product publication must not alter workflow definitions. Workflow cleanup and
+          # CI ownership guards are deliberately separate follow-up commits.
+          git diff --exit-code "$GITHUB_SHA" HEAD -- .github/workflows
           git fetch origin main
           test "$(git rev-parse origin/main)" = "$GITHUB_SHA"
           git push origin HEAD:main
