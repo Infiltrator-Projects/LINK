@@ -43,11 +43,14 @@ The target ownership boundaries are:
 - `LinkDiagnosticsController`: thin facade and coordinator over the above pieces.
 - branded product repositories: manufacturer-specific vehicle knowledge and product presentation.
 
-Current Apple source ownership also keeps vehicle/profile persistence in
-`LinkVehicleProfileStore.h` / `LinkVehicleProfileStore.inc` and preference
-persistence in `LinkAppleSettings.h` / `LinkAppleSettings.inc`. The `.inc`
-implementation files are intentionally compiled through the existing controller
-translation unit so pinned product Xcode projects do not need a source-list
-migration merely to consume this behaviour-preserving refactor.
+Current Apple source ownership now isolates active ELM/session timing in
+`LinkAppleSessionRunner`, retained standard-PID enablement in
+`LinkApplePollingCoordinator`, session evidence/CSV ownership in
+`LinkAppleTelemetryRecorder`, vehicle/profile persistence in
+`LinkVehicleProfileStore`, and language/unit persistence in
+`LinkAppleSettingsStore`. Their `.inc` implementations are intentionally
+compiled through the existing controller translation unit so pinned product
+Xcode projects do not need a source-list migration merely to consume these
+behaviour-preserving ownership extractions.
 
 A change to one responsibility should not require unrelated components to know its internal state. In particular, branded products should be able to set generic PID selections without needing to understand when the LINK scheduler is constructed or when live polling needs to be kicked; LINK must guarantee that lifecycle internally.

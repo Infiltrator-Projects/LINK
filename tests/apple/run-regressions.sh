@@ -19,14 +19,17 @@ profile_store=platform/apple/LinkVehicleProfileStore.inc
 settings_store=platform/apple/LinkAppleSettings.inc
 polling_coordinator=platform/apple/LinkApplePollingCoordinator.inc
 session_runner=platform/apple/LinkAppleSessionRunner.inc
+telemetry_recorder=platform/apple/LinkAppleTelemetryRecorder.inc
 test -s "$profile_store"
 test -s "$settings_store"
 test -s "$polling_coordinator"
 test -s "$session_runner"
+test -s "$telemetry_recorder"
 grep -Fq '@implementation LinkVehicleProfileStore' "$profile_store"
 grep -Fq '@implementation LinkAppleSettingsStore' "$settings_store"
 grep -Fq '@implementation LinkApplePollingCoordinator' "$polling_coordinator"
 grep -Fq '@implementation LinkAppleSessionRunner' "$session_runner"
+grep -Fq '@implementation LinkAppleTelemetryRecorder' "$telemetry_recorder"
 if grep -Fq '@implementation LinkVehicleProfileStore' "$controller"; then
     echo 'Apple diagnostic controller must not own vehicle-profile persistence.' >&2
     exit 1
@@ -48,6 +51,12 @@ if grep -Fq 'LinkElm327Session _session;' "$controller" || grep -Fq 'dispatch_so
 fi
 grep -Fq 'LinkElm327Session _session;' "$session_runner"
 grep -Fq 'dispatch_source_t _tickTimer;' "$session_runner"
+if grep -Fq 'LinkTelemetryRecorder _recorder;' "$controller" || grep -Fq 'NSMutableData *_sessionCSV;' "$controller"; then
+    echo 'Apple diagnostic controller must not own telemetry recorder/CSV state.' >&2
+    exit 1
+fi
+grep -Fq 'LinkTelemetryRecorder _recorder;' "$telemetry_recorder"
+grep -Fq 'NSMutableData *_sessionCSV;' "$telemetry_recorder"
 if grep -Fq '_pidPollingEnabled' "$controller"; then
     echo 'Apple controller must not own a second PID polling-policy array.' >&2
     exit 1

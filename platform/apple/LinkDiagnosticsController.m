@@ -3,6 +3,7 @@
 #import "LinkAppleSettings.h"
 #import "LinkAppleSessionRunner.h"
 #import "LinkApplePollingCoordinator.h"
+#import "LinkAppleTelemetryRecorder.h"
 
 #import "link/diagnostic_capability.h"
 #import "link/dtc_knowledge.h"
@@ -34,13 +35,8 @@
 - (void)notifyDelegate;
 - (void)setSharedStatus:(NSString *)status;
 - (BOOL)prepareForStart;
-- (void)rewriteCurrentSessionMetadataKey:(NSString *)key
-                                   value:(const char *)value;
 - (void)beginPortableSession;
 - (void)recordNativeTransportBytes:(const uint8_t *)data size:(size_t)size;
-- (void)recordNativeStreamEvent:(LinkMercedesMeStreamEventKind)kind
-                          bytes:(const uint8_t *)bytes
-                           size:(size_t)size;
 - (BOOL)beginCommand:(const char *)command timeout:(uint64_t)timeoutMs;
 - (void)notifyManufacturerFailure:(NSString *)status;
 - (void)recoverManufacturerExtensionAfterFailure:(NSString *)status;
@@ -59,6 +55,7 @@
     LinkBLETransport *_provider;
     LinkApplePollingCoordinator *_pollingCoordinator;
     LinkAppleSessionRunner *_sessionRunner;
+    LinkAppleTelemetryRecorder *_telemetryRecorder;
     BOOL _simulated;
     BOOL _manufacturerExtensionActive;
     BOOL _manufacturerRecoveryActive;
@@ -67,23 +64,12 @@
     LinkDiagnosticFlow _flow;
     LinkDiagnosticFlowConfig _flowConfig;
 
-    LinkTelemetryStore _telemetry;
-    LinkResponderTelemetryStore _responderTelemetry;
-    LinkStructuredTelemetryStore _structuredTelemetry;
-    LinkTelemetryRecorder _recorder;
-    LinkTelemetrySessionMetadata _sessionMetadata;
-    LinkMercedesMeStreamParser _nativeStreamParser;
-    NSMutableData *_sessionCSV;
-    NSUInteger _currentSessionCSVStart;
-
     NSUInteger _pollGeneration;
-    uint64_t _sessionMonotonicStartMs;
 
     NSString *_productSlug;
     NSString *_liveStatusText;
     NSString *_simulatedLiveStatusText;
     NSString *_standardVINStatusText;
-    NSString *_lastRecordedTransportStatus;
     BOOL _legacyDiagnosticResponseObserved;
     LinkAppleSettingsStore *_settings;
 }
@@ -97,20 +83,6 @@ static uint64_t LinkAppleMonotonicMilliseconds(void)
         ? UINT64_MAX : (uint64_t)milliseconds;
 }
 
-static uint64_t LinkAppleElapsedMilliseconds(uint64_t startedMs)
-{
-    const uint64_t nowMs = LinkAppleMonotonicMilliseconds();
-    return nowMs >= startedMs ? nowMs - startedMs : 0U;
-}
-
-static uint64_t LinkAppleEpochMilliseconds(void)
-{
-    NSTimeInterval seconds = [NSDate date].timeIntervalSince1970;
-    if (seconds <= 0.0) return 0U;
-    const double milliseconds = seconds * 1000.0;
-    return milliseconds >= (double)UINT64_MAX
-        ? UINT64_MAX : (uint64_t)milliseconds;
-}
 
 static NSString *LinkAppleStringFromCString(const char *value)
 {
@@ -147,13 +119,6 @@ static NSArray<NSString *> *LinkAppleDTCStrings(const LinkObd2DtcList *list)
     return [values copy];
 }
 
-static bool LinkAppleAppendCSV(void *context, const char *bytes, size_t length)
-{
-    if (context == NULL || bytes == NULL) return false;
-    NSMutableData *data = (__bridge NSMutableData *)context;
-    [data appendBytes:bytes length:length];
-    return true;
-}
 
 static bool LinkAppleFlowIsFaultScan(const LinkDiagnosticFlow *flow)
 {
@@ -174,17 +139,6 @@ static void LinkAppleNativeTransportReceive(
     [controller recordNativeTransportBytes:data size:size];
 }
 
-static void LinkAppleNativeStreamEvent(
-    void *context,
-    LinkMercedesMeStreamEventKind kind,
-    const uint8_t *bytes,
-    size_t size)
-{
-    LinkDiagnosticsController *controller =
-        (__bridge LinkDiagnosticsController *)context;
-    if (controller == nil) return;
-    [controller recordNativeStreamEvent:kind bytes:bytes size:size];
-}
 
 
 - (instancetype)initWithProductSlug:(NSString *)productSlug
@@ -209,6 +163,7 @@ static void LinkAppleNativeStreamEvent(
     _provider.delegate = self;
     _sessionRunner = [[LinkAppleSessionRunner alloc] initWithProvider:_provider];
     _sessionRunner.delegate = self;
+    _telemetryRecorder = [[LinkAppleTelemetryRecorder alloc] initWithProductSlug:_productSlug];
     _pollingCoordinator = [[LinkApplePollingCoordinator alloc] init];
 
     _statusText = @"Idle";
@@ -218,17 +173,6 @@ static void LinkAppleNativeStreamEvent(
     _permanentDTCs = @[];
 
     (void)link_diagnostic_flow_init(&_flow, &_flowConfig);
-    link_telemetry_store_init(&_telemetry);
-    link_responder_telemetry_store_init(&_responderTelemetry);
-    link_structured_telemetry_store_init(&_structuredTelemetry);
-    link_telemetry_recorder_init(&_recorder);
-    link_mercedes_me_stream_parser_init(&_nativeStreamParser);
-    _sessionCSV = [[NSMutableData alloc] init];
-    link_telemetry_store_set_favourite(&_telemetry, UINT8_C(0x0c), true);
-    link_telemetry_store_set_favourite(&_telemetry, UINT8_C(0x0d), true);
-    link_telemetry_store_set_favourite(&_telemetry, UINT8_C(0x05), true);
-    link_telemetry_store_set_favourite(&_telemetry, UINT8_C(0x0b), true);
-    link_telemetry_session_metadata_init(&_sessionMetadata, 0U, NULL, NULL);
     return self;
 }
 
@@ -236,10 +180,7 @@ static void LinkAppleNativeStreamEvent(
 {
     _provider.delegate = nil;
     _sessionRunner.delegate = nil;
-    if (_recorder.started && !_recorder.finished)
-        (void)link_telemetry_recorder_finish(
-            &_recorder, LinkAppleEpochMilliseconds());
-
+    [_telemetryRecorder finish];
     if (_sessionRunner.isInitialized) {
         [_sessionRunner disconnect];
     } else if (!_simulated) {
@@ -435,20 +376,7 @@ static void LinkAppleNativeStreamEvent(
 - (BOOL)latestStructuredSampleForPID:(uint8_t)pid
                               sample:(LinkStructuredTelemetrySample *)sample
 {
-    const size_t count =
-        link_structured_telemetry_store_history_count(&_structuredTelemetry);
-    if (sample == NULL) return NO;
-    for (size_t index = count; index != 0U; --index) {
-        LinkStructuredTelemetrySample candidate;
-        if (link_structured_telemetry_store_history_at(
-                &_structuredTelemetry, index - 1U, &candidate) &&
-            candidate.decoded.definition != NULL &&
-            candidate.decoded.definition->pid == pid) {
-            *sample = candidate;
-            return YES;
-        }
-    }
-    return NO;
+    return [_telemetryRecorder latestStructuredSampleForPID:pid sample:sample];
 }
 
 - (nullable NSString *)structuredDisplayValueForPID:(uint8_t)pid
@@ -783,12 +711,6 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
 
 - (BOOL)prepareForStart
 {
-    if (_recorder.started && !_recorder.finished) {
-        const uint64_t endedEpochMs = LinkAppleEpochMilliseconds();
-        link_telemetry_session_metadata_finish(&_sessionMetadata, endedEpochMs);
-        (void)link_telemetry_recorder_finish(&_recorder, endedEpochMs);
-    }
-
     _pollGeneration++;
     self.active = YES;
     self.ready = NO;
@@ -802,58 +724,13 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
     _manufacturerRecoveryActive = NO;
     _liveRecoveryActive = NO;
     _consecutiveLiveTimeouts = 0U;
-    _lastRecordedTransportStatus = nil;
 
     (void)link_diagnostic_flow_init(&_flow, &_flowConfig);
-    link_telemetry_store_clear_samples(&_telemetry);
-    link_responder_telemetry_store_clear(&_responderTelemetry);
-    link_structured_telemetry_store_clear(&_structuredTelemetry);
-    link_telemetry_recorder_init(&_recorder);
-    link_mercedes_me_stream_parser_init(&_nativeStreamParser);
-    _sessionMonotonicStartMs = LinkAppleMonotonicMilliseconds();
-    link_telemetry_session_metadata_init(
-        &_sessionMetadata, LinkAppleEpochMilliseconds(), NULL, NULL);
-
-    const BOOL continuingEvidence = _sessionCSV.length != 0U;
-    _currentSessionCSVStart = _sessionCSV.length;
-    const bool recorderStarted = continuingEvidence
-        ? link_telemetry_recorder_continue(
-            &_recorder, &_sessionMetadata, _productSlug.UTF8String,
-            LinkAppleAppendCSV, (__bridge void *)_sessionCSV)
-        : link_telemetry_recorder_begin(
-            &_recorder, &_sessionMetadata, _productSlug.UTF8String,
-            LinkAppleAppendCSV, (__bridge void *)_sessionCSV);
-    if (!recorderStarted) {
-        [_sessionCSV setLength:_currentSessionCSVStart];
+    if (![_telemetryRecorder prepareForStart]) {
         self.active = NO;
         return NO;
     }
     return YES;
-}
-
-- (void)rewriteCurrentSessionMetadataKey:(NSString *)key
-                                   value:(const char *)value
-{
-    if (key.length == 0U || value == NULL || value[0] == '\0' ||
-        _currentSessionCSVStart >= _sessionCSV.length) return;
-
-    NSString *identifier = [NSString stringWithUTF8String:value];
-    if (identifier.length == 0U) return;
-    NSString *escaped = [identifier stringByReplacingOccurrencesOfString:@"\""
-                                                               withString:@"\"\""];
-    NSData *needle = [[NSString stringWithFormat:@"# %@,\"\"\n", key]
-        dataUsingEncoding:NSUTF8StringEncoding];
-    NSData *replacement = [[NSString stringWithFormat:
-        @"# %@,\"%@\"\n", key, escaped]
-        dataUsingEncoding:NSUTF8StringEncoding];
-    NSRange range = NSMakeRange(
-        _currentSessionCSVStart, _sessionCSV.length - _currentSessionCSVStart);
-    NSRange match = [_sessionCSV rangeOfData:needle options:0 range:range];
-    if (match.location != NSNotFound) {
-        [_sessionCSV replaceBytesInRange:match
-                               withBytes:replacement.bytes
-                                  length:replacement.length];
-    }
 }
 
 - (void)start
@@ -946,10 +823,7 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
         [_provider disconnect];
     }
 
-    const uint64_t endedEpochMs = LinkAppleEpochMilliseconds();
-    link_telemetry_session_metadata_finish(&_sessionMetadata, endedEpochMs);
-    if (_recorder.started && !_recorder.finished)
-        (void)link_telemetry_recorder_finish(&_recorder, endedEpochMs);
+    [_telemetryRecorder finish];
 
     (void)link_diagnostic_flow_init(&_flow, &_flowConfig);
     _manufacturerExtensionActive = NO;
@@ -969,26 +843,13 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
 
     self.peripheralName = transport.peripheralName;
     self.adapterIdentifier = transport.adapterIdentifier;
-    if (transport.adapterIdentifier != nil) {
-        link_telemetry_session_metadata_set_adapter(
-            &_sessionMetadata, transport.adapterIdentifier.UTF8String);
-        [self rewriteCurrentSessionMetadataKey:@"adapter_identifier"
-                                         value:transport.adapterIdentifier.UTF8String];
-    }
+    if (transport.adapterIdentifier != nil)
+        [_telemetryRecorder setAdapterIdentifier:transport.adapterIdentifier.UTF8String];
 
     NSString *stateName = LinkAppleBLEStateName(transport.state);
     NSString *transportStatus = transport.statusText != nil
         ? transport.statusText : @"";
-    NSString *recordingKey = [NSString stringWithFormat:
-        @"%@|%@", stateName, transportStatus];
-    if (_recorder.started && !_recorder.finished &&
-        ![_lastRecordedTransportStatus isEqualToString:recordingKey]) {
-        _lastRecordedTransportStatus = recordingKey;
-        (void)link_telemetry_recorder_record_response_named(
-            &_recorder,
-            LinkAppleElapsedMilliseconds(_sessionMonotonicStartMs),
-            "BLE", stateName.UTF8String, transportStatus.UTF8String);
-    }
+    [_telemetryRecorder recordTransportStateName:stateName statusText:transportStatus];
 
     if (transport.isReady && transport.isNativeAdapter &&
         !_sessionRunner.isInitialized) {
@@ -1041,10 +902,7 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
 
     if (!_sessionRunner.isInitialized) self.statusText = transport.statusText;
     if (transport.state == LinkBLETransportStateFailed) {
-        const uint64_t endedEpochMs = LinkAppleEpochMilliseconds();
-        link_telemetry_session_metadata_finish(&_sessionMetadata, endedEpochMs);
-        if (_recorder.started && !_recorder.finished)
-            (void)link_telemetry_recorder_finish(&_recorder, endedEpochMs);
+        [_telemetryRecorder finish];
         self.active = NO;
         self.ready = NO;
     }
@@ -1053,57 +911,8 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
 
 - (void)recordNativeTransportBytes:(const uint8_t *)data size:(size_t)size
 {
-    NSMutableString *hex;
-    if (!self.nativeAdapterConnected || data == NULL || size == 0U ||
-        !_recorder.started || _recorder.finished) return;
-
-    hex = [[NSMutableString alloc] initWithCapacity:(NSUInteger)size * 2U];
-    for (size_t index = 0U; index < size; ++index)
-        [hex appendFormat:@"%02X", (unsigned int)data[index]];
-    (void)link_telemetry_recorder_record_response_named(
-        &_recorder,
-        LinkAppleElapsedMilliseconds(_sessionMonotonicStartMs),
-        "NATIVE_RX", "bytes", hex.UTF8String);
-
-    (void)link_mercedes_me_stream_parser_feed(
-        &_nativeStreamParser,
-        data,
-        size,
-        LinkAppleNativeStreamEvent,
-        (__bridge void *)self);
-}
-
-- (void)recordNativeStreamEvent:(LinkMercedesMeStreamEventKind)kind
-                          bytes:(const uint8_t *)bytes
-                           size:(size_t)size
-{
-    const char *name;
-    NSMutableString *hex;
-
-    if (!self.nativeAdapterConnected || !_recorder.started ||
-        _recorder.finished) return;
-
-    switch (kind) {
-    case LINK_MERCEDES_ME_STREAM_RECORD:
-        name = "NATIVE_RECORD";
-        break;
-    case LINK_MERCEDES_ME_STREAM_NACK:
-        name = "NATIVE_NACK";
-        break;
-    case LINK_MERCEDES_ME_STREAM_OVERFLOW:
-        name = "NATIVE_OVERFLOW";
-        break;
-    default:
-        return;
-    }
-
-    hex = [[NSMutableString alloc] initWithCapacity:(NSUInteger)size * 2U];
-    for (size_t index = 0U; bytes != NULL && index < size; ++index)
-        [hex appendFormat:@"%02X", (unsigned int)bytes[index]];
-    (void)link_telemetry_recorder_record_response_named(
-        &_recorder,
-        LinkAppleElapsedMilliseconds(_sessionMonotonicStartMs),
-        name, "bytes", hex.UTF8String);
+    if (!self.nativeAdapterConnected) return;
+    [_telemetryRecorder recordNativeTransportBytes:data size:size];
 }
 
 - (void)beginPortableSession
@@ -1428,16 +1237,11 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
         return;
     }
 
-    const uint64_t elapsed =
-        LinkAppleElapsedMilliseconds(_sessionMonotonicStartMs);
-    (void)link_telemetry_store_record_transcript(
-        &_telemetry, elapsed, [_sessionRunner currentCommand],
-        (uint32_t)response->result, response->text);
-
-    if (_recorder.started && !_recorder.finished &&
-        !link_telemetry_recorder_record_response_named(
-            &_recorder, elapsed, [_sessionRunner currentCommand],
-            link_elm327_result_name(response->result), response->text)) {
+    if (![_telemetryRecorder
+            recordTranscriptCommand:[_sessionRunner currentCommand]
+            resultCode:(uint32_t)response->result
+            resultName:link_elm327_result_name(response->result)
+            responseText:response->text]) {
         [self failWithStatus:@"Could not append diagnostic transcript"];
         return;
     }
@@ -1502,20 +1306,14 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
         if (identifier != NULL) {
             self.adapterIdentifier =
                 LinkAppleStringFromCString(identifier);
-            link_telemetry_session_metadata_set_adapter(
-                &_sessionMetadata, identifier);
-            [self rewriteCurrentSessionMetadataKey:@"adapter_identifier"
-                                             value:identifier];
+            [_telemetryRecorder setAdapterIdentifier:identifier];
         }
         break;
     }
 
     case LINK_DIAGNOSTIC_FLOW_EVENT_PROTOCOL_IDENTIFIED: {
         NSString *protocolText = self.obdProtocolText;
-        link_telemetry_session_metadata_set_obd_protocol(
-            &_sessionMetadata, protocolText.UTF8String);
-        [self rewriteCurrentSessionMetadataKey:@"obd_protocol"
-                                         value:protocolText.UTF8String];
+        [_telemetryRecorder setOBDProtocolText:protocolText];
         break;
     }
 
@@ -1580,133 +1378,14 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
         if (event->became_ready) self.ready = YES;
         break;
 
-    case LINK_DIAGNOSTIC_FLOW_EVENT_LIVE_SAMPLE: {
-        _consecutiveLiveTimeouts = 0U;
-        LinkTelemetryMeasurement measurement = {
-            .pid = event->sample.pid,
-            .value = event->sample.value,
-            .unit = event->sample.unit
-        };
-        const uint64_t elapsed =
-            LinkAppleElapsedMilliseconds(_sessionMonotonicStartMs);
-        if (!link_telemetry_store_record(
-                &_telemetry, elapsed, &measurement)) {
-            [self failWithStatus:
-                @"Could not record live telemetry sample"];
-            return NO;
-        }
-
-        bool recordedAttributedSample = false;
-        for (size_t responderIndex = 0U;
-             responderIndex < event->responder_samples.count;
-             ++responderIndex) {
-            const LinkObd2ResponderSample *responder =
-                &event->responder_samples.samples[responderIndex];
-            if (!responder->responder_id_available) continue;
-            LinkTelemetryMeasurement attributed = {
-                .pid = responder->sample.pid,
-                .value = responder->sample.value,
-                .unit = responder->sample.unit
-            };
-            if (!link_responder_telemetry_store_record(
-                    &_responderTelemetry, elapsed,
-                    responder->responder_id, responder->extended_id,
-                    &attributed)) {
-                [self failWithStatus:
-                    @"Could not record responder-attributed telemetry sample"];
-                return NO;
-            }
-            recordedAttributedSample = true;
-
-            const size_t historyCount =
-                link_responder_telemetry_store_history_count(
-                    &_responderTelemetry);
-            LinkResponderTelemetrySample recordedResponder;
-            if (_recorder.started && !_recorder.finished &&
-                (historyCount == 0U ||
-                 !link_responder_telemetry_store_history_at(
-                    &_responderTelemetry, historyCount - 1U,
-                    &recordedResponder) ||
-                 !link_telemetry_recorder_record_responder_sample_named(
-                    &_recorder, &recordedResponder,
-                    link_telemetry_store_is_favourite(
-                        &_telemetry, responder->sample.pid),
-                    link_obd2_pid_name(responder->sample.pid),
-                    link_obd2_unit_name(responder->sample.unit)))) {
-                [self failWithStatus:
-                    @"Could not append responder-attributed session recording"];
-                return NO;
-            }
-        }
-
-        LinkTelemetrySample recorded;
-        if (!recordedAttributedSample &&
-            _recorder.started && !_recorder.finished &&
-            link_telemetry_store_latest(
-                &_telemetry, event->sample.pid, &recorded) &&
-            !link_telemetry_recorder_record_sample_named(
-                &_recorder, &recorded,
-                link_telemetry_store_is_favourite(
-                    &_telemetry, event->sample.pid),
-                link_obd2_pid_name(event->sample.pid),
-                link_obd2_unit_name(event->sample.unit))) {
-            [self failWithStatus:
-                @"Could not append session recording"];
-            return NO;
-        }
-
-        self.ready = YES;
-        self.statusText = _simulated
-            ? _simulatedLiveStatusText : _liveStatusText;
-        break;
-    }
-
+    case LINK_DIAGNOSTIC_FLOW_EVENT_LIVE_SAMPLE:
     case LINK_DIAGNOSTIC_FLOW_EVENT_LIVE_STRUCTURED: {
         _consecutiveLiveTimeouts = 0U;
-        const uint64_t elapsed =
-            LinkAppleElapsedMilliseconds(_sessionMonotonicStartMs);
-
-        for (size_t responderIndex = 0U;
-             responderIndex < event->responder_decoded.count;
-             ++responderIndex) {
-            const LinkObd2ResponderDecodedPid *responder =
-                &event->responder_decoded.entries[responderIndex];
-            if (responder->decoded.definition == NULL) continue;
-
-            if (!link_structured_telemetry_store_record(
-                    &_structuredTelemetry, elapsed,
-                    responder->responder_id_available,
-                    responder->responder_id, responder->extended_id,
-                    &responder->decoded)) {
-                [self failWithStatus:
-                    @"Could not record structured live telemetry sample"];
-                return NO;
-            }
-
-            const size_t historyCount =
-                link_structured_telemetry_store_history_count(
-                    &_structuredTelemetry);
-            LinkStructuredTelemetrySample recordedStructured;
-            if (_recorder.started && !_recorder.finished &&
-                (historyCount == 0U ||
-                 !link_structured_telemetry_store_history_at(
-                    &_structuredTelemetry, historyCount - 1U,
-                    &recordedStructured) ||
-                 !link_telemetry_recorder_record_structured_pid_named(
-                    &_recorder, &recordedStructured,
-                    link_telemetry_store_is_favourite(
-                        &_telemetry,
-                        responder->decoded.definition->pid),
-                    responder->decoded.definition->name != NULL
-                        ? responder->decoded.definition->name
-                        : link_obd2_pid_name(
-                            responder->decoded.definition->pid)))) {
-                [self failWithStatus:
-                    @"Could not append structured SAE session recording"];
-                return NO;
-            }
+        NSString *recordingError = [_telemetryRecorder recordFlowEvent:event];
+        if (recordingError != nil) {
+            [self failWithStatus:recordingError];
+            return NO;
         }
-
         self.ready = YES;
         self.statusText = _simulated
             ? _simulatedLiveStatusText : _liveStatusText;
@@ -1916,91 +1595,27 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
 
 - (void)setVehicleIdentifier:(const char *)vehicleIdentifier
 {
-    link_telemetry_session_metadata_set_vehicle(
-        &_sessionMetadata, vehicleIdentifier);
-    [self rewriteCurrentSessionMetadataKey:@"vehicle_identifier"
-                                     value:vehicleIdentifier];
+    [_telemetryRecorder setVehicleIdentifier:vehicleIdentifier];
 }
 
 - (NSUInteger)recordedSampleCount
 {
-    uint64_t total =
-        link_telemetry_store_total_sample_count(&_telemetry);
-    const uint64_t structured =
-        link_structured_telemetry_store_total_sample_count(
-            &_structuredTelemetry);
-    total = UINT64_MAX - total < structured
-        ? UINT64_MAX : total + structured;
-    return total > (uint64_t)NSUIntegerMax
-        ? NSUIntegerMax : (NSUInteger)total;
+    return _telemetryRecorder.recordedSampleCount;
 }
 
 - (NSArray<NSNumber *> *)recentValuesForPID:(uint8_t)pid
                                       limit:(NSUInteger)limit
 {
-    if (limit == 0U) return @[];
-
-    NSMutableArray<NSNumber *> *values =
-        [[NSMutableArray alloc] initWithCapacity:limit];
-    const size_t count =
-        link_telemetry_store_history_count(&_telemetry);
-
-    for (size_t reverseIndex = count;
-         reverseIndex > 0U && values.count < limit;
-         --reverseIndex) {
-        LinkTelemetrySample sample;
-        if (!link_telemetry_store_history_at(
-                &_telemetry, reverseIndex - 1U, &sample) ||
-            sample.measurement.pid != pid) {
-            continue;
-        }
-        [values insertObject:@(sample.measurement.value) atIndex:0U];
-    }
-    return values;
+    return [_telemetryRecorder recentValuesForPID:pid limit:limit];
 }
 
 - (NSArray<NSNumber *> *)observedPIDsForResponderCANIdentifier:
     (uint32_t)responderCANIdentifier
                                                       extendedID:(BOOL)extendedID
 {
-    const uint32_t maximumIdentifier = extendedID
-        ? UINT32_C(0x1fffffff) : UINT32_C(0x7ff);
-    if (responderCANIdentifier > maximumIdentifier) return @[];
-
-    bool observed[256] = {false};
-    const size_t count =
-        link_responder_telemetry_store_history_count(&_responderTelemetry);
-    for (size_t index = 0U; index < count; ++index) {
-        LinkResponderTelemetrySample sample;
-        if (!link_responder_telemetry_store_history_at(
-                &_responderTelemetry, index, &sample) ||
-            sample.responder_id != responderCANIdentifier ||
-            sample.extended_id != extendedID) {
-            continue;
-        }
-        observed[sample.measurement.pid] = true;
-    }
-
-    const size_t structuredCount =
-        link_structured_telemetry_store_history_count(&_structuredTelemetry);
-    for (size_t index = 0U; index < structuredCount; ++index) {
-        LinkStructuredTelemetrySample sample;
-        if (!link_structured_telemetry_store_history_at(
-                &_structuredTelemetry, index, &sample) ||
-            !sample.responder_id_available ||
-            sample.responder_id != responderCANIdentifier ||
-            sample.extended_id != extendedID ||
-            sample.decoded.definition == NULL) {
-            continue;
-        }
-        observed[sample.decoded.definition->pid] = true;
-    }
-
-    NSMutableArray<NSNumber *> *pids = [[NSMutableArray alloc] init];
-    for (NSUInteger pid = 0U; pid < 256U; ++pid) {
-        if (observed[pid]) [pids addObject:@(pid)];
-    }
-    return [pids copy];
+    return [_telemetryRecorder
+        observedPIDsForResponderCANIdentifier:responderCANIdentifier
+        extendedID:extendedID];
 }
 
 - (NSArray<NSNumber *> *)supportedPIDsForResponderCANIdentifier:
@@ -2030,29 +1645,10 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
                                   extendedID:(BOOL)extendedID
                                        limit:(NSUInteger)limit
 {
-    if (limit == 0U) return @[];
-    const uint32_t maximumIdentifier = extendedID
-        ? UINT32_C(0x1fffffff) : UINT32_C(0x7ff);
-    if (responderCANIdentifier > maximumIdentifier) return @[];
-
-    NSMutableArray<NSNumber *> *values =
-        [[NSMutableArray alloc] initWithCapacity:limit];
-    const size_t count =
-        link_responder_telemetry_store_history_count(&_responderTelemetry);
-    for (size_t reverseIndex = count;
-         reverseIndex > 0U && values.count < limit;
-         --reverseIndex) {
-        LinkResponderTelemetrySample sample;
-        if (!link_responder_telemetry_store_history_at(
-                &_responderTelemetry, reverseIndex - 1U, &sample) ||
-            sample.measurement.pid != pid ||
-            sample.responder_id != responderCANIdentifier ||
-            sample.extended_id != extendedID) {
-            continue;
-        }
-        [values insertObject:@(sample.measurement.value) atIndex:0U];
-    }
-    return values;
+    return [_telemetryRecorder recentValuesForPID:pid
+                            responderCANIdentifier:responderCANIdentifier
+                                         extendedID:extendedID
+                                              limit:limit];
 }
 
 - (BOOL)supportsPID:(uint8_t)pid
@@ -2062,12 +1658,12 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
 
 - (BOOL)favouriteForPID:(uint8_t)pid
 {
-    return link_telemetry_store_is_favourite(&_telemetry, pid);
+    return [_telemetryRecorder favouriteForPID:pid];
 }
 
 - (void)setFavourite:(BOOL)favourite forPID:(uint8_t)pid
 {
-    link_telemetry_store_set_favourite(&_telemetry, pid, favourite);
+    [_telemetryRecorder setFavourite:favourite forPID:pid];
     [self notifyDelegate];
 }
 
@@ -2097,17 +1693,12 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
 
 - (nullable NSData *)csvDataSnapshot
 {
-    if (_sessionCSV.length == 0U) return nil;
-    return [_sessionCSV copy];
+    return [_telemetryRecorder csvDataSnapshot];
 }
 
 - (nullable NSString *)csvSnapshot
 {
-    NSData *snapshot = [self csvDataSnapshot];
-    if (snapshot == nil) return nil;
-    return [[NSString alloc]
-        initWithData:snapshot
-        encoding:NSUTF8StringEncoding];
+    return [_telemetryRecorder csvSnapshot];
 }
 
 @end
@@ -2305,5 +1896,6 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
 
 #include "LinkAppleSessionRunner.inc"
 #include "LinkApplePollingCoordinator.inc"
+#include "LinkAppleTelemetryRecorder.inc"
 #include "LinkAppleSettings.inc"
 #include "LinkVehicleProfileStore.inc"
