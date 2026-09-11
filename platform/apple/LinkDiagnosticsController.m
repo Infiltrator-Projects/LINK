@@ -1566,6 +1566,7 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
         return;
     }
 
+    const LinkDiagnosticFlowStage completedStage = _flow.stage;
     LinkDiagnosticFlowEvent event;
     LinkDiagnosticFlowResult result = link_diagnostic_flow_accept_response(
         &_flow, response, LinkAppleMonotonicMilliseconds(), &event);
@@ -1575,6 +1576,20 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
         [self failWithStatus:[NSString stringWithFormat:
             @"Shared diagnostic flow failed: %@", reason]];
         return;
+    }
+
+    /*
+     * The live scheduler is built before the final ATH1 live-header command,
+     * while product polling preferences can change throughout VIN/module
+     * discovery. Re-apply the retained preferences at the exact live-entry
+     * boundary so a real vehicle cannot arrive in LIVE with a freshly built
+     * scheduler still carrying stale disabled flags. This is deliberately
+     * before driveDiagnosticFlow(): the very next action must see the user's
+     * current selection.
+     */
+    if (completedStage == LINK_DIAGNOSTIC_FLOW_CONFIGURING_LIVE_HEADERS &&
+        _flow.stage == LINK_DIAGNOSTIC_FLOW_LIVE) {
+        [self applyPollingPreferencesToScheduler];
     }
 
     if (![self applyFlowEvent:&event]) return;

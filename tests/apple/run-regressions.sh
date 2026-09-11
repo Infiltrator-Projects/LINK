@@ -17,6 +17,8 @@ grep -Fq '!explicitlySelected &&' "$ble"
 controller=platform/apple/LinkDiagnosticsController.m
 grep -Fq 'Connected · polling idle · no PIDs selected' "$controller"
 grep -Fq 'if (item->pid_valid && item->enabled) ++enabledPollingCount;' "$controller"
+grep -Fq 'completedStage == LINK_DIAGNOSTIC_FLOW_CONFIGURING_LIVE_HEADERS' "$controller"
+grep -Fq '[self applyPollingPreferencesToScheduler];' "$controller"
 grep -Fq 'private var adapterDiscoveryOrder = [String]()' "$ui"
 grep -Fq 'adapterDiscoveryOrder.compactMap { adaptersByIdentifier[$0] }' "$ui"
 grep -Fq 'adapterDiscoveryOrder.append(identifier)' "$ui"
