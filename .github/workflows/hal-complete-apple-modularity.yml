@@ -48,8 +48,6 @@ jobs:
           if text.count(old) != 1:
               raise SystemExit(f'session dealloc timer patch expected one match, found {text.count(old)}')
           text = text.replace(old, '''    _sessionRunner.delegate = nil;\\n    if (_recorder.started''', 1)
-          # The original staged migration guarded before fixing the second live-resync call.
-          # Let the workflow apply and then explicitly verify that final ownership boundary.
           for message in (
               'direct resynchronization remains after session stage',
               'direct session/timer state remains in controller after session stage',
@@ -81,17 +79,21 @@ jobs:
           python3 "${{ runner.temp }}/hal_finish_apple_modularity.py" session
           python3 - <<'PY'
           from pathlib import Path
+          import re
           path = Path('platform/apple/LinkDiagnosticsController.m')
           text = path.read_text(encoding='utf-8')
-          old = '''    sessionResult = link_elm327_session_begin_resynchronization(
-              &_session, LinkAppleMonotonicMilliseconds(), UINT64_C(2500));'''
-          new = '''    sessionResult = [_sessionRunner
-              beginResynchronizationAt:LinkAppleMonotonicMilliseconds()
-                                   timeout:UINT64_C(2500)];'''
-          count = text.count(old)
+          pattern = re.compile(
+              r'    sessionResult = link_elm327_session_begin_resynchronization\(\n'
+              r'\s*&_session, LinkAppleMonotonicMilliseconds\(\), UINT64_C\(2500\)\);'
+          )
+          replacement = (
+              '    sessionResult = [_sessionRunner\n'
+              '        beginResynchronizationAt:LinkAppleMonotonicMilliseconds()\n'
+              '                             timeout:UINT64_C(2500)];'
+          )
+          text, count = pattern.subn(replacement, text, count=1)
           if count != 1:
               raise SystemExit(f'expected one remaining live resynchronization call, found {count}')
-          text = text.replace(old, new, 1)
           path.write_text(text, encoding='utf-8')
           PY
           controller=platform/apple/LinkDiagnosticsController.m
