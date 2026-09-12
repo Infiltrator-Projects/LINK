@@ -88,7 +88,9 @@ for source in platform/apple/LinkPortableCore.c platform/apple/LinkPortableObd2.
 done
 for source in platform/apple/LinkDiagnosticsController.m platform/apple/LinkBLETransport.m; do
     object="$build_dir/$(basename "$source").o"
-    xcrun clang -target "$target" -isysroot "$sdk" -fobjc-arc "${includes[@]}" -c "$source" -o "$object"
+    xcrun clang -target "$target" -isysroot "$sdk" -fobjc-arc \
+        -Werror=nullability-completeness "${includes[@]}" \
+        -c "$source" -o "$object"
     objects+=("$object")
 done
 xcrun swiftc -target "$target" -sdk "$sdk" -swift-version 5 -parse-as-library \
