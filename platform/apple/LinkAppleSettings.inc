@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /* Internal implementation include; compiled through LinkDiagnosticsController.m. */
 
-NS_ASSUME_NONNULL_BEGIN
-
 static NSString *const LinkAppleLanguageDefaultsKey = @"link.displayLanguage";
 static NSString *const LinkAppleMeasurementDefaultsKey = @"link.measurementSystem";
 
@@ -75,5 +73,3 @@ static NSString *const LinkAppleMeasurementDefaultsKey = @"link.measurementSyste
 }
 
 @end
-
-NS_ASSUME_NONNULL_END

@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /* Internal implementation include; compiled through LinkDiagnosticsController.m. */
 
-NS_ASSUME_NONNULL_BEGIN
-
 @implementation LinkApplePollingCoordinator {
     LinkPollingPolicy _policy;
 }
@@ -51,5 +49,3 @@ NS_ASSUME_NONNULL_BEGIN
 }
 
 @end
-
-NS_ASSUME_NONNULL_END

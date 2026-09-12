@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /* Internal implementation include; compiled through LinkDiagnosticsController.m. */
 
-NS_ASSUME_NONNULL_BEGIN
-
 static NSString * const LinkVehicleKnownPeripheralDefaultsKey =
     @"link.ble.knownPeripheralIdentifier.v1";
 
@@ -620,5 +618,3 @@ static NSArray<NSString *> *LinkSortedUniqueStableKeys(id raw)
 }
 
 @end
-
-NS_ASSUME_NONNULL_END

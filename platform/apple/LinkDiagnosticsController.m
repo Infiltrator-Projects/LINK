@@ -1894,8 +1894,11 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
 
 #pragma mark - Shared vehicle-profile/session persistence
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wnullability-completeness"
 #include "LinkAppleSessionRunner.inc"
 #include "LinkApplePollingCoordinator.inc"
 #include "LinkAppleTelemetryRecorder.inc"
 #include "LinkAppleSettings.inc"
 #include "LinkVehicleProfileStore.inc"
+#pragma clang diagnostic pop
