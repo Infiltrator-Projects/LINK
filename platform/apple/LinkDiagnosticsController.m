@@ -1894,16 +1894,8 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
 
 #pragma mark - Shared vehicle-profile/session persistence
 
-/*
- * These implementation fragments are compiled as part of this Objective-C
- * translation unit.  Keep them inside an audited nullability region so newer
- * Apple Clang releases do not treat their otherwise-correct implementation
- * pointer types as incomplete public declarations when -Werror is enabled.
- */
-NS_ASSUME_NONNULL_BEGIN
 #include "LinkAppleSessionRunner.inc"
 #include "LinkApplePollingCoordinator.inc"
 #include "LinkAppleTelemetryRecorder.inc"
 #include "LinkAppleSettings.inc"
 #include "LinkVehicleProfileStore.inc"
-NS_ASSUME_NONNULL_END

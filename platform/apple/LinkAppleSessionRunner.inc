@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 /* Internal implementation include; compiled through LinkDiagnosticsController.m. */
 
+NS_ASSUME_NONNULL_BEGIN
+
 static uint64_t LinkAppleSessionRunnerMonotonicMilliseconds(void)
 {
     NSTimeInterval uptime = NSProcessInfo.processInfo.systemUptime;
@@ -198,3 +200,5 @@ static void LinkAppleSessionRunnerEvent(
 }
 
 @end
+
+NS_ASSUME_NONNULL_END
