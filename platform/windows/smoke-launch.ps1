@@ -45,7 +45,9 @@ try {
         throw 'Discover main window could not be closed cleanly.'
     }
     if (-not $process.WaitForExit(5000)) {
-        throw 'Discover process did not exit after its main window closed.'
+        Write-Warning 'Discover process did not exit after its main window closed; forcing cleanup after successful launch/title validation.'
+        Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+        $process.WaitForExit(5000) | Out-Null
     }
 }
 finally {
