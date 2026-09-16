@@ -363,6 +363,15 @@ int main(void)
         CHECK(strstr(output.data, expected_link_version) != NULL);
         CHECK(occurrence_count(output.data, "# link_version,") == 1U);
     }
+#ifdef LINK_TEST_EXPECTED_REVISION
+    {
+        char expected_revision[96];
+        (void)snprintf(expected_revision, sizeof(expected_revision),
+                       "# link_revision,\"%s\"\n", LINK_TEST_EXPECTED_REVISION);
+        CHECK(strstr(output.data, expected_revision) != NULL);
+        CHECK(occurrence_count(output.data, "# link_revision,") == 1U);
+    }
+#endif
     CHECK(strstr(output.data, "\"Engine speed\"") != NULL);
 
     memset(&output, 0, sizeof(output));

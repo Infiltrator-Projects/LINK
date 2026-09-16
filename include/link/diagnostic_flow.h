@@ -289,6 +289,12 @@ const char *link_diagnostic_flow_obd_protocol_description(
     const LinkDiagnosticFlow *flow);
 bool link_diagnostic_flow_obd_protocol_was_automatic(
     const LinkDiagnosticFlow *flow);
+/** Adopt a validated manufacturer VIN during the startup extension.
+ * Emits the normal VIN event without restarting discovery or replacing a VIN
+ * already established by this session. The caller must validate response routing
+ * and service/DID provenance before passing the decoded VIN. */
+bool link_diagnostic_flow_adopt_manufacturer_vin(
+    LinkDiagnosticFlow *flow, const char *vin, LinkDiagnosticFlowEvent *event);
 const char *link_diagnostic_flow_standard_vin(
     const LinkDiagnosticFlow *flow);
 

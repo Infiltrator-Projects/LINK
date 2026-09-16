@@ -33,8 +33,10 @@ if(LINK_SOURCE_GIT_EXECUTABLE)
         OUTPUT_STRIP_TRAILING_WHITESPACE
         ERROR_QUIET
         RESULT_VARIABLE LINK_SOURCE_REVISION_RESULT)
+    string(LENGTH "${LINK_SOURCE_REVISION_CANDIDATE}" LINK_SOURCE_REVISION_LENGTH)
     if(LINK_SOURCE_REVISION_RESULT EQUAL 0 AND
-       LINK_SOURCE_REVISION_CANDIDATE MATCHES "^[0-9a-fA-F]{40}$")
+       LINK_SOURCE_REVISION_LENGTH EQUAL 40 AND
+       LINK_SOURCE_REVISION_CANDIDATE MATCHES "^[0-9a-fA-F]+$")
         set(LINK_SOURCE_REVISION "${LINK_SOURCE_REVISION_CANDIDATE}")
     endif()
 endif()
@@ -147,7 +149,7 @@ target_include_directories(link-core PUBLIC
 target_link_libraries(link-core PUBLIC InfiltratrCommon::Portable)
 if(LINK_SOURCE_REVISION)
     target_compile_definitions(link-core PRIVATE
-        LINK_SOURCE_REVISION="\"${LINK_SOURCE_REVISION}\"")
+        LINK_SOURCE_REVISION="${LINK_SOURCE_REVISION}")
 endif()
 
 if(MSVC)
@@ -533,6 +535,10 @@ if(BUILD_TESTING AND PROJECT_IS_TOP_LEVEL)
     add_test(NAME link-stm32-bxcan-hal COMMAND link-test-stm32-bxcan-hal)
 
     link_add_test(link-test-runtime tests/test_runtime.c link-runtime)
+    if(LINK_SOURCE_REVISION_RESULT EQUAL 0)
+        target_compile_definitions(link-test-runtime PRIVATE
+            LINK_TEST_EXPECTED_REVISION="${LINK_SOURCE_REVISION_CANDIDATE}")
+    endif()
     link_add_test(link-test-units tests/test_units.c link-units)
     link_add_test(link-test-session-trace tests/test_session_trace.c link-session-trace)
     link_add_test(link-test-discover-targets tests/test_discover_targets.c link-discover-targets)

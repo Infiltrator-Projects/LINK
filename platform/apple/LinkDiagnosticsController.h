@@ -124,6 +124,8 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)failWithStatus:(NSString *)status;
 - (void)updateStatusText:(NSString *)status;
 - (void)setVehicleIdentifier:(const char *)vehicleIdentifier;
+/** Publish a positively decoded startup manufacturer VIN to flow, profiles and telemetry. */
+- (BOOL)adoptManufacturerVIN:(const char *)vin;
 /**
  * Manufacturer products call this only after positively identifying a
  * legacy/pre-OBD-II diagnostic exchange. Modern proprietary UDS/KWP traffic

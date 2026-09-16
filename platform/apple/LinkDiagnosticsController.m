@@ -1593,6 +1593,14 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
     [self setSharedStatus:status];
 }
 
+- (BOOL)adoptManufacturerVIN:(const char *)vin
+{
+    LinkDiagnosticFlowEvent event;
+    if (!link_diagnostic_flow_adopt_manufacturer_vin(&_flow, vin, &event))
+        return NO;
+    return [self applyFlowEvent:&event];
+}
+
 - (void)setVehicleIdentifier:(const char *)vehicleIdentifier
 {
     [_telemetryRecorder setVehicleIdentifier:vehicleIdentifier];

@@ -469,6 +469,43 @@ static int test_manufacturer_extension_after_standard_vin(void)
     return 0;
 }
 
+static int test_manufacturer_vin_fallback(void)
+{
+    LinkDiagnosticFlow flow;
+    LinkDiagnosticFlowConfig config = LINK_DIAGNOSTIC_FLOW_CONFIG_INIT;
+    LinkDiagnosticFlowAction action;
+    LinkDiagnosticFlowEvent event;
+    LinkElm327Response missing = response_no_data();
+    const char *vin = "WDD2073032F129158";
+    config.manufacturer_extension_after_standard_vin = true;
+    config.restore_adapter_after_manufacturer_extension = true;
+    CHECK(link_diagnostic_flow_init(&flow, &config) == LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(!link_diagnostic_flow_adopt_manufacturer_vin(&flow, vin, &event));
+    CHECK(link_diagnostic_flow_start(&flow) == LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(complete_initialization(&flow) == 0);
+    CHECK(link_diagnostic_flow_next_action(&flow, 500U, &action) == LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(link_diagnostic_flow_accept_response(&flow, &missing, 500U, &event) == LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(!event.vin_available);
+    CHECK(link_diagnostic_flow_standard_vin(&flow) == NULL);
+    CHECK(!link_diagnostic_flow_adopt_manufacturer_vin(&flow, "short", &event));
+    CHECK(!link_diagnostic_flow_adopt_manufacturer_vin(&flow, "WDD2073032F12915I", &event));
+    CHECK(!link_diagnostic_flow_adopt_manufacturer_vin(&flow, NULL, &event));
+    CHECK(event.kind == LINK_DIAGNOSTIC_FLOW_EVENT_NONE);
+    CHECK(link_diagnostic_flow_adopt_manufacturer_vin(&flow, vin, &event));
+    CHECK(event.kind == LINK_DIAGNOSTIC_FLOW_EVENT_STANDARD_VIN);
+    CHECK(event.vin_available && strcmp(event.vin, vin) == 0);
+    CHECK(strcmp(link_diagnostic_flow_standard_vin(&flow), vin) == 0);
+    CHECK(flow.stage == LINK_DIAGNOSTIC_FLOW_MANUFACTURER_EXTENSION);
+    CHECK(!link_diagnostic_flow_adopt_manufacturer_vin(&flow, "SAJAD56L64WD78435", &event));
+    CHECK(strcmp(link_diagnostic_flow_standard_vin(&flow), vin) == 0);
+    CHECK(link_diagnostic_flow_resume_after_manufacturer(&flow) == LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(complete_initialization(&flow) == 0);
+    CHECK(strcmp(link_diagnostic_flow_standard_vin(&flow), vin) == 0);
+    CHECK(link_diagnostic_flow_next_action(&flow, 600U, &action) == LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(strcmp(action.command, "0100") == 0);
+    return 0;
+}
+
 static int test_pid_capabilities_per_responder(void)
 {
     LinkDiagnosticFlow flow;
@@ -862,6 +899,7 @@ static int test_fault_scan_presentation_state(void)
 
 int main(void)
 {
+    if (test_manufacturer_vin_fallback() != 0) return 1;
     if (test_scheduled_manufacturer_job() != 0) return 1;
     if (test_fault_scan_presentation_state() != 0) return 1;
     if (test_protocol_reporting() != 0) return 1;

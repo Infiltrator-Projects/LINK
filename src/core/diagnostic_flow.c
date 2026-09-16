@@ -1257,6 +1257,29 @@ bool link_diagnostic_flow_obd_protocol_was_automatic(
            flow->protocol_probe.protocol_was_automatic;
 }
 
+bool link_diagnostic_flow_adopt_manufacturer_vin(
+    LinkDiagnosticFlow *flow, const char *vin, LinkDiagnosticFlowEvent *event)
+{
+    size_t index;
+    if (event != NULL) memset(event, 0, sizeof(*event));
+    if (flow == NULL || vin == NULL || event == NULL ||
+        flow->stage != LINK_DIAGNOSTIC_FLOW_MANUFACTURER_EXTENSION ||
+        !flow->standard_vin_attempted || flow->standard_vin_available ||
+        strlen(vin) != LINK_OBD2_VIN_LENGTH) return false;
+    for (index = 0U; index < LINK_OBD2_VIN_LENGTH; ++index) {
+        const char value = vin[index];
+        if (!((value >= '0' && value <= '9') ||
+              (value >= 'A' && value <= 'Z' &&
+               value != 'I' && value != 'O' && value != 'Q'))) return false;
+    }
+    memcpy(flow->standard_vin, vin, sizeof(flow->standard_vin));
+    flow->standard_vin_available = true;
+    event->kind = LINK_DIAGNOSTIC_FLOW_EVENT_STANDARD_VIN;
+    event->vin_available = true;
+    event->vin = flow->standard_vin;
+    return true;
+}
+
 const char *link_diagnostic_flow_standard_vin(
     const LinkDiagnosticFlow *flow)
 {
