@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Remove audited redundant branch
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/prune-audited-branch.yml']
+permissions:
+  contents: write
+jobs:
+  prune:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          submodules: recursive
+      - name: Verify integration and delete the unchanged audited branch
+        run: bash scripts/prune-audited-branch.sh fix/windows-smoke-teardown fd71f96c8bda883b2e52f98a8d073a2b0f3f24ee
