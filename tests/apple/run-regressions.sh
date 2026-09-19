@@ -81,7 +81,7 @@ includes=(-Iinclude -Isrc/infiltratr-common/include -Iplatform/apple)
 objects=()
 for source in platform/apple/LinkPortableCore.c platform/apple/LinkPortableObd2.c \
     platform/apple/LinkPortableUds.c \
-    src/infiltratr-common/src/{core,arithmetic,config,i18n,token,timing,format,quantity}.c; do
+    src/infiltratr-common/src/{core,arithmetic,config,i18n,token,timing,format,escape,quantity}.c; do
     object="$build_dir/$(basename "$source").o"
     xcrun clang -target "$target" -isysroot "$sdk" -std=c11 "${includes[@]}" -c "$source" -o "$object"
     objects+=("$object")
