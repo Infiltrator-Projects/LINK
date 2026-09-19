@@ -71,8 +71,8 @@ jobs:
         run: |
           set -euo pipefail
           git submodule update --init src/infiltratr-common
-          test "$(tr -d '[:space:]' < src/infiltratr-common/VERSION)" = "1.19.2"
-          test "$(git -C src/infiltratr-common rev-parse HEAD)" = "44409af17c89b6ece6b4bcb2c0c133213c695c23"
+          test "$(tr -d '[:space:]' < src/infiltratr-common/VERSION)" = "1.19.3"
+          test "$(git -C src/infiltratr-common rev-parse HEAD)" = "de7251ce12ed176048df1bad05ef7e4d0db7e9ec"
 
       - name: Enforce transport and evidence regressions
         shell: bash
