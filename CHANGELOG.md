@@ -4,6 +4,16 @@ This file records user-visible, compatibility, diagnostic-knowledge and validati
 
 ## Unreleased
 
+- No unreleased changes.
+
+## 0.15.25 — 2026-09-19
+
+- Upgraded the exact nested Infiltratr Common dependency to 1.19.3.
+- Added a protocol-neutral, vehicle-scoped parameter selection model so product faces can keep explicit choices isolated by vehicle identity.
+- Generalised bounded session traces from OBD-only PID identity to LinkParameterKey while retaining the standard OBD compatibility API.
+- Expanded the graph capacity to the complete 256-entry standard PID space and added safe runtime reconfiguration of the selected graph set.
+- Centralised ELM327 CAN header and receive-address command formatting for reuse by manufacturer products.
+- Added regression coverage for vehicle isolation, selections beyond eight channels, manufacturer-capable trace identity, and shared CAN address formatting.
 - Canonical documentation baseline aligned with the Infiltrator project family.
 
 ## Policy
