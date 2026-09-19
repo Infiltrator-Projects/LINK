@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "link/dashboard.h"
 
+#include "infiltratr/core.h"
+
 #include <math.h>
 #include <string.h>
 
@@ -60,7 +62,7 @@ bool link_dashboard_gauge_range_for_parameter(
     if (definition == NULL || range == NULL || definition->stable_key == NULL)
         return false;
 
-    for (index = 0U; index < sizeof(reference_ranges) / sizeof(reference_ranges[0]); ++index) {
+    for (index = 0U; index < INFILTRATR_ARRAY_LENGTH(reference_ranges); ++index) {
         if (strcmp(definition->stable_key, reference_ranges[index].stable_key) == 0) {
             range->minimum = reference_ranges[index].minimum;
             range->maximum = reference_ranges[index].maximum;

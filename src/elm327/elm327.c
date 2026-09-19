@@ -28,7 +28,7 @@ static const LinkElm327ProtocolDefinition elm327_protocol_definitions[] = {
 
 size_t link_elm327_protocol_definition_count(void)
 {
-    return sizeof(elm327_protocol_definitions) / sizeof(elm327_protocol_definitions[0]);
+    return INFILTRATR_ARRAY_LENGTH(elm327_protocol_definitions);
 }
 
 const LinkElm327ProtocolDefinition *link_elm327_protocol_definition_at(size_t index)

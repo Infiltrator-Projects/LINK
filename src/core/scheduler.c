@@ -15,7 +15,7 @@ static const uint8_t link_default_polling_pids[] = {
 const uint8_t *link_scheduler_default_obd2_pids(size_t *count)
 {
     if (count != NULL)
-        *count = sizeof(link_default_polling_pids) / sizeof(link_default_polling_pids[0]);
+        *count = INFILTRATR_ARRAY_LENGTH(link_default_polling_pids);
     return link_default_polling_pids;
 }
 

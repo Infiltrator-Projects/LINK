@@ -2,6 +2,8 @@
 #include "link/workspace.h"
 #include "link/i18n.h"
 
+#include "infiltratr/core.h"
+
 #include <stddef.h>
 
 static LinkWorkspaceSectionDescriptor link_workspace_sections[] = {
@@ -36,7 +38,7 @@ static LinkWorkspaceSectionDescriptor link_workspace_sections[] = {
 
 static const LinkWorkspaceSectionDescriptor *localise(size_t index)
 {
-    if (index >= sizeof(link_workspace_sections) / sizeof(link_workspace_sections[0]))
+    if (index >= INFILTRATR_ARRAY_LENGTH(link_workspace_sections))
         return NULL;
     link_workspace_sections[index].title =
         link_i18n_tr(link_workspace_sections[index].title_i18n_key);
@@ -47,7 +49,7 @@ static const LinkWorkspaceSectionDescriptor *localise(size_t index)
 
 size_t link_workspace_section_count(void)
 {
-    return sizeof(link_workspace_sections) / sizeof(link_workspace_sections[0]);
+    return INFILTRATR_ARRAY_LENGTH(link_workspace_sections);
 }
 
 const LinkWorkspaceSectionDescriptor *link_workspace_section_at(size_t index)

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "link/session_trace.h"
 
+#include "infiltratr/core.h"
+
 #include <stdio.h>
 #include <string.h>
 
@@ -12,7 +14,7 @@ static const uint8_t link_default_graph_pids[] = {
 const uint8_t *link_session_trace_default_graph_pids(size_t *count)
 {
     if (count != NULL)
-        *count = sizeof(link_default_graph_pids) / sizeof(link_default_graph_pids[0]);
+        *count = INFILTRATR_ARRAY_LENGTH(link_default_graph_pids);
     return link_default_graph_pids;
 }
 

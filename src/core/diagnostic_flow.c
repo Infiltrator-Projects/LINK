@@ -126,7 +126,7 @@ static bool flow_next_freeze_candidate(
     LinkDiagnosticFlow *flow, uint8_t *pid)
 {
     const size_t count =
-        sizeof(flow_freeze_candidates) / sizeof(flow_freeze_candidates[0]);
+        INFILTRATR_ARRAY_LENGTH(flow_freeze_candidates);
 
     if (flow == NULL || pid == NULL) return false;
     while (flow->freeze_frame_candidate_index < count) {
@@ -143,7 +143,7 @@ static bool flow_next_freeze_candidate(
 static bool flow_has_freeze_candidate(const LinkDiagnosticFlow *flow)
 {
     const size_t count =
-        sizeof(flow_freeze_candidates) / sizeof(flow_freeze_candidates[0]);
+        INFILTRATR_ARRAY_LENGTH(flow_freeze_candidates);
     size_t index;
 
     if (flow == NULL) return false;
