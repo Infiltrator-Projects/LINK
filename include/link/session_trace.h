@@ -3,6 +3,7 @@
 #define LINK_SESSION_TRACE_H
 
 #include "link/diagnostic_flow.h"
+#include "link/parameter.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -18,6 +19,12 @@ extern "C" {
 #define LINK_SESSION_TRACE_LOG_MESSAGE_CAPACITY 160U
 
 typedef struct LinkSessionTrace {
+    /*
+     * graph_keys is authoritative. graph_pids is retained for source/ABI
+     * compatibility with standard-OBD product faces and is populated only
+     * when the corresponding key is a standard OBD-II PID.
+     */
+    LinkParameterKey graph_keys[LINK_SESSION_TRACE_MAX_GRAPHS];
     uint8_t graph_pids[LINK_SESSION_TRACE_MAX_GRAPHS];
     size_t graph_count;
     double graph_history[LINK_SESSION_TRACE_MAX_GRAPHS]
@@ -44,11 +51,26 @@ bool link_session_trace_init(
  */
 bool link_session_trace_configure_graph_pids(
     LinkSessionTrace *trace, const uint8_t *graph_pids, size_t graph_count);
+/**
+ * Replace the graph set with protocol-neutral parameter identities. History is
+ * reset atomically; duplicate or invalid keys are rejected.
+ */
+bool link_session_trace_configure_graph_keys(
+    LinkSessionTrace *trace,
+    const LinkParameterKey *graph_keys,
+    size_t graph_count);
+size_t link_session_trace_graph_key_index(
+    const LinkSessionTrace *trace,
+    const LinkParameterKey *key);
 size_t link_session_trace_graph_index(
     const LinkSessionTrace *trace, uint8_t pid);
 void link_session_trace_reset_graph(LinkSessionTrace *trace);
 void link_session_trace_record_graph(
     LinkSessionTrace *trace, uint8_t pid, double value);
+void link_session_trace_record_parameter(
+    LinkSessionTrace *trace,
+    const LinkParameterKey *key,
+    double value);
 void link_session_trace_format_sparkline(
     const double *history, size_t count, size_t next,
     char *output, size_t output_size);
