@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "link/dtc_knowledge.h"
 
+#include "infiltratr/core.h"
+
 #include <ctype.h>
 #include <stdio.h>
 #include <string.h>
@@ -69,17 +71,10 @@ static LinkDtcRangeKind range_kind_from_code(
     return LINK_DTC_RANGE_INVALID;
 }
 
-static void copy_text(char *destination, size_t size, const char *source)
-{
-    if (destination == NULL || size == 0U) return;
-    if (source == NULL) source = "";
-    (void)snprintf(destination, size, "%s", source);
-}
-
 static const LinkDtcCatalogueEntry *catalogue_find(const char code[LINK_DTC_CODE_LENGTH])
 {
     size_t low = 0U;
-    size_t high = sizeof(link_dtc_catalogue) / sizeof(link_dtc_catalogue[0]);
+    size_t high = INFILTRATR_ARRAY_LENGTH(link_dtc_catalogue);
 
     while (low < high) {
         size_t middle = low + (high - low) / 2U;
@@ -140,8 +135,8 @@ bool link_dtc_resolve(const char *code, LinkDtcKnowledge *knowledge)
         resolved.definition_known = true;
         resolved.origin = LINK_DTC_ORIGIN_STANDARD_GENERIC;
         resolved.source = LINK_DTC_SOURCE_STANDARD_GENERIC;
-        copy_text(resolved.title, sizeof(resolved.title), entry->title);
-        copy_text(resolved.category, sizeof(resolved.category), entry->category);
+        infiltratr_copy_string(resolved.title, sizeof(resolved.title), entry->title);
+        infiltratr_copy_string(resolved.category, sizeof(resolved.category), entry->category);
     }
 
     *knowledge = resolved;
@@ -167,7 +162,7 @@ bool link_dtc_namespace_at(uint16_t raw, LinkDtcKnowledge *knowledge)
 
 size_t link_dtc_catalogue_definition_count(void)
 {
-    return sizeof(link_dtc_catalogue) / sizeof(link_dtc_catalogue[0]);
+    return INFILTRATR_ARRAY_LENGTH(link_dtc_catalogue);
 }
 
 bool link_dtc_catalogue_definition_at(
@@ -177,17 +172,17 @@ bool link_dtc_catalogue_definition_at(
     LinkDtcKnowledge resolved = {0};
     const LinkDtcCatalogueEntry *entry;
     if (knowledge == NULL ||
-        index >= sizeof(link_dtc_catalogue) / sizeof(link_dtc_catalogue[0])) {
+        index >= INFILTRATR_ARRAY_LENGTH(link_dtc_catalogue)) {
         return false;
     }
     entry = &link_dtc_catalogue[index];
-    copy_text(resolved.code, sizeof(resolved.code), entry->code);
+    infiltratr_copy_string(resolved.code, sizeof(resolved.code), entry->code);
     resolved.definition_known = true;
     resolved.system = system_from_code(entry->code[0]);
     resolved.origin = LINK_DTC_ORIGIN_STANDARD_GENERIC;
     resolved.source = LINK_DTC_SOURCE_STANDARD_GENERIC;
-    copy_text(resolved.title, sizeof(resolved.title), entry->title);
-    copy_text(resolved.category, sizeof(resolved.category), entry->category);
+    infiltratr_copy_string(resolved.title, sizeof(resolved.title), entry->title);
+    infiltratr_copy_string(resolved.category, sizeof(resolved.category), entry->category);
     *knowledge = resolved;
     return true;
 }
@@ -265,7 +260,7 @@ bool link_dtc_format_uds_status(uint8_t status, char *buffer, size_t buffer_size
                strlen(buffer) < buffer_size;
     }
 
-    for (index = 0U; index < sizeof(bits) / sizeof(bits[0]); ++index) {
+    for (index = 0U; index < INFILTRATR_ARRAY_LENGTH(bits); ++index) {
         int written;
         if ((status & bits[index].mask) == 0U) continue;
         written = snprintf(buffer + used, buffer_size - used, "%s%s",

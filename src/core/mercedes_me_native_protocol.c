@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "link/mercedes_me_native_protocol.h"
 
+#include "infiltratr/endian.h"
+
 #include <stdbool.h>
 #include <string.h>
 
@@ -88,22 +90,6 @@ static uint32_t sub_word(uint32_t value, const uint8_t sbox[256])
            (uint32_t)sbox[(uint8_t)value];
 }
 
-static uint32_t load_be32(const uint8_t *bytes)
-{
-    return ((uint32_t)bytes[0] << 24U) |
-           ((uint32_t)bytes[1] << 16U) |
-           ((uint32_t)bytes[2] << 8U) |
-           (uint32_t)bytes[3];
-}
-
-static void store_be32(uint8_t *bytes, uint32_t value)
-{
-    bytes[0] = (uint8_t)(value >> 24U);
-    bytes[1] = (uint8_t)(value >> 16U);
-    bytes[2] = (uint8_t)(value >> 8U);
-    bytes[3] = (uint8_t)value;
-}
-
 static void aes256_init(Aes256Context *context, const uint8_t key[32])
 {
     uint32_t words[60];
@@ -116,7 +102,7 @@ static void aes256_init(Aes256Context *context, const uint8_t key[32])
         context->inverse_sbox[substituted] = (uint8_t)index;
     }
     for (index = 0U; index < AES_NK; ++index)
-        words[index] = load_be32(key + index * 4U);
+        words[index] = infiltratr_load_be32(key + index * 4U);
     for (index = AES_NK; index < 60U; ++index) {
         uint32_t temp = words[index - 1U];
         if ((index % AES_NK) == 0U) {
@@ -129,7 +115,7 @@ static void aes256_init(Aes256Context *context, const uint8_t key[32])
         words[index] = words[index - AES_NK] ^ temp;
     }
     for (index = 0U; index < 60U; ++index)
-        store_be32(context->round_keys + index * 4U, words[index]);
+        infiltratr_store_be32(context->round_keys + index * 4U, words[index]);
     memset(words, 0, sizeof(words));
 }
 
@@ -303,7 +289,7 @@ static void sha256_transform(uint32_t state[8], const uint8_t block[64])
     unsigned int index;
 
     for (index = 0U; index < 16U; ++index)
-        words[index] = load_be32(block + index * 4U);
+        words[index] = infiltratr_load_be32(block + index * 4U);
     for (index = 16U; index < 64U; ++index) {
         const uint32_t s0 =
             sha_rotr(words[index - 15U], 7U) ^
@@ -367,7 +353,7 @@ static void sha256_bytes(
             (uint8_t)(bit_length >> (index * 8U));
     sha256_transform(state, block);
     for (index = 0U; index < 8U; ++index)
-        store_be32(digest + index * 4U, state[index]);
+        infiltratr_store_be32(digest + index * 4U, state[index]);
     memset(block, 0, sizeof(block));
     memset(state, 0, sizeof(state));
 }
@@ -659,9 +645,8 @@ LinkMercedesMeNativeResult link_mercedes_me_secure_decode(
     aes256_init(&aes, session_key);
     for (offset = 0U; offset < ciphertext_size; offset += 16U)
         aes256_decrypt_block(&aes, encrypted + offset, inner + offset);
-    payload_size = ((size_t)inner[0] << 8U) | (size_t)inner[1];
-    expected_crc =
-        (uint16_t)(((uint16_t)inner[2] << 8U) | inner[3]);
+    payload_size = (size_t)infiltratr_load_be16(inner);
+    expected_crc = infiltratr_load_be16(inner + 2U);
     if (payload_size > LINK_MERCEDES_ME_SECURE_MAX_PLAINTEXT ||
         payload_size + LINK_MERCEDES_ME_SECURE_HEADER_SIZE >
             ciphertext_size)

@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "link/i18n.h"
 
+#include "infiltratr/core.h"
+
 #include <string.h>
 
 #define ENTRY(key_, value_) { (key_), (value_) }
-#define COUNT(array_) (sizeof(array_) / sizeof((array_)[0]))
 
 static const InfiltratrI18nEntry en_au[] = {
     ENTRY("nav.vehicle", "Vehicle"),
@@ -1714,20 +1715,20 @@ static const InfiltratrI18nEntry id_id[] = {
 };
 
 static const InfiltratrI18nCatalog catalogs[] = {
-    {"en-AU", en_au, COUNT(en_au)},
-    {"en-US", en_us, COUNT(en_us)},
-    {"de-DE", de_de, COUNT(de_de)},
-    {"fr-FR", fr_fr, COUNT(fr_fr)},
-    {"es-ES", es_es, COUNT(es_es)},
-    {"it-IT", it_it, COUNT(it_it)},
-    {"pl-PL", pl_pl, COUNT(pl_pl)},
-    {"pt-BR", pt_br, COUNT(pt_br)},
-    {"zh-CN", zh_cn, COUNT(zh_cn)},
-    {"hi-IN", hi_in, COUNT(hi_in)},
-    {"ar", ar, COUNT(ar)},
-    {"ja-JP", ja_jp, COUNT(ja_jp)},
-    {"ko-KR", ko_kr, COUNT(ko_kr)},
-    {"id-ID", id_id, COUNT(id_id)}
+    {"en-AU", en_au, INFILTRATR_ARRAY_LENGTH(en_au)},
+    {"en-US", en_us, INFILTRATR_ARRAY_LENGTH(en_us)},
+    {"de-DE", de_de, INFILTRATR_ARRAY_LENGTH(de_de)},
+    {"fr-FR", fr_fr, INFILTRATR_ARRAY_LENGTH(fr_fr)},
+    {"es-ES", es_es, INFILTRATR_ARRAY_LENGTH(es_es)},
+    {"it-IT", it_it, INFILTRATR_ARRAY_LENGTH(it_it)},
+    {"pl-PL", pl_pl, INFILTRATR_ARRAY_LENGTH(pl_pl)},
+    {"pt-BR", pt_br, INFILTRATR_ARRAY_LENGTH(pt_br)},
+    {"zh-CN", zh_cn, INFILTRATR_ARRAY_LENGTH(zh_cn)},
+    {"hi-IN", hi_in, INFILTRATR_ARRAY_LENGTH(hi_in)},
+    {"ar", ar, INFILTRATR_ARRAY_LENGTH(ar)},
+    {"ja-JP", ja_jp, INFILTRATR_ARRAY_LENGTH(ja_jp)},
+    {"ko-KR", ko_kr, INFILTRATR_ARRAY_LENGTH(ko_kr)},
+    {"id-ID", id_id, INFILTRATR_ARRAY_LENGTH(id_id)}
 };
 
 typedef struct LinkSelectableLocale {
@@ -1759,7 +1760,7 @@ static bool initialised;
 void link_i18n_init(void)
 {
     if (initialised) return;
-    initialised = infiltratr_i18n_init(&context, catalogs, COUNT(catalogs), "en-AU");
+    initialised = infiltratr_i18n_init(&context, catalogs, INFILTRATR_ARRAY_LENGTH(catalogs), "en-AU");
 }
 
 bool link_i18n_set_locale(const char *locale)
@@ -1791,17 +1792,17 @@ size_t link_i18n_format(char *destination, size_t capacity, const char *key,
 
 size_t link_i18n_supported_locale_count(void)
 {
-    return COUNT(selectable_locales);
+    return INFILTRATR_ARRAY_LENGTH(selectable_locales);
 }
 
 const char *link_i18n_supported_locale(size_t index)
 {
-    return index < COUNT(selectable_locales) ? selectable_locales[index].locale : NULL;
+    return index < INFILTRATR_ARRAY_LENGTH(selectable_locales) ? selectable_locales[index].locale : NULL;
 }
 
 const char *link_i18n_supported_locale_name(size_t index)
 {
-    return index < COUNT(selectable_locales) ? selectable_locales[index].native_name : NULL;
+    return index < INFILTRATR_ARRAY_LENGTH(selectable_locales) ? selectable_locales[index].native_name : NULL;
 }
 
 #undef COUNT

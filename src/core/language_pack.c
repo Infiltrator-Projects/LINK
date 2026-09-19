@@ -2,6 +2,9 @@
 #include "link/i18n.h"
 #include "link/parameter.h"
 
+#include "infiltratr/arithmetic.h"
+#include "infiltratr/core.h"
+
 #include <ctype.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -30,6 +33,7 @@ typedef struct LinkLanguagePack {
     bool rtl;
     LinkLanguagePackEntry *entries;
     size_t entry_count;
+    size_t entry_capacity;
 } LinkLanguagePack;
 
 static LinkLanguagePack packs[LINK_LANGUAGE_PACK_MAX_PACKS];
@@ -39,12 +43,14 @@ static char selected_pack_locale[32];
 static char *duplicate_text(const char *text)
 {
     size_t length;
+    size_t bytes;
     char *copy;
     if (text == NULL) return NULL;
     length = strlen(text);
-    copy = malloc(length + 1U);
+    if (!infiltratr_size_add_checked(length, 1U, &bytes)) return NULL;
+    copy = malloc(bytes);
     if (copy == NULL) return NULL;
-    memcpy(copy, text, length + 1U);
+    memcpy(copy, text, bytes);
     return copy;
 }
 
@@ -125,7 +131,6 @@ static const LinkLanguagePack *find_pack_const(const char *locale)
 static bool set_entry(LinkLanguagePack *pack, const char *key, const char *value)
 {
     size_t index;
-    LinkLanguagePackEntry *grown;
     char *key_copy;
     char *value_copy;
     if (pack == NULL || key == NULL || key[0] == '\0' || value == NULL) return false;
@@ -145,13 +150,16 @@ static bool set_entry(LinkLanguagePack *pack, const char *key, const char *value
         free(value_copy);
         return false;
     }
-    grown = realloc(pack->entries, (pack->entry_count + 1U) * sizeof(*grown));
-    if (grown == NULL) {
+    if (!infiltratr_array_reserve(
+            (void **)&pack->entries,
+            &pack->entry_capacity,
+            sizeof(*pack->entries),
+            pack->entry_count + 1U,
+            16U)) {
         free(key_copy);
         free(value_copy);
         return false;
     }
-    pack->entries = grown;
     pack->entries[pack->entry_count].key = key_copy;
     pack->entries[pack->entry_count].value = value_copy;
     ++pack->entry_count;
@@ -217,13 +225,12 @@ bool link_i18n_load_language_pack(const char *path)
             else { valid = false; break; }
             have_direction = true;
         } else if (strcmp(key, "version") == 0) {
-            char *end = NULL;
-            unsigned long parsed = strtoul(value, &end, 10);
-            if (end == value || end == NULL || *end != '\0' || parsed != 1UL) {
+            uint64_t parsed = 0U;
+            if (!infiltratr_parse_u64_range(value, 10U, 1U, 1U, &parsed)) {
                 valid = false;
                 break;
             }
-            have_version = true;
+            have_version = parsed == 1U;
         } else if (!set_entry(&candidate, key, value)) {
             valid = false;
             break;

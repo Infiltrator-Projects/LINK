@@ -5,6 +5,10 @@
  */
 #include "link/uds_services.h"
 
+#include "infiltratr/arithmetic.h"
+#include "infiltratr/core.h"
+#include "infiltratr/endian.h"
+
 #include <string.h>
 
 static const LinkUdsServiceDefinition link_uds_services[] = {
@@ -99,12 +103,11 @@ static LinkUdsResult uds_services_build_prefix_record(
         return uds_services_write_failure(
             buffer, buffer_size, written, LINK_UDS_RESULT_INVALID_ARGUMENT);
     }
-    if (record_length > SIZE_MAX - prefix_length) {
+    if (!infiltratr_size_add_checked(
+            prefix_length, record_length, &total)) {
         return uds_services_write_failure(
             buffer, buffer_size, written, LINK_UDS_RESULT_INVALID_ARGUMENT);
     }
-
-    total = prefix_length + record_length;
     if (buffer_size < total) {
         return uds_services_write_failure(
             buffer, buffer_size, written, LINK_UDS_RESULT_BUFFER_TOO_SMALL);
@@ -127,11 +130,9 @@ static LinkUdsResult uds_services_build_did_record(
     size_t buffer_size,
     size_t *written)
 {
-    const uint8_t prefix[] = {
-        service,
-        (uint8_t)(identifier >> 8U),
-        (uint8_t)identifier
-    };
+    uint8_t prefix[3U];
+    prefix[0] = service;
+    infiltratr_store_be16(prefix + 1U, identifier);
 
     return uds_services_build_prefix_record(
         prefix, sizeof(prefix), record, record_length,
@@ -184,7 +185,7 @@ static LinkUdsResult uds_services_build_memory_request(
 
 size_t link_uds_standard_service_count(void)
 {
-    return sizeof(link_uds_services) / sizeof(link_uds_services[0]);
+    return INFILTRATR_ARRAY_LENGTH(link_uds_services);
 }
 
 const LinkUdsServiceDefinition *link_uds_standard_service_at(size_t index)
@@ -323,8 +324,7 @@ LinkUdsResult link_uds_decode_did_response(
         return LINK_UDS_RESULT_MALFORMED_PDU;
     }
 
-    identifier =
-        (uint16_t)(((uint16_t)generic.data[0] << 8U) | generic.data[1]);
+    identifier = infiltratr_load_be16(generic.data);
     if (identifier != expected_identifier) {
         return LINK_UDS_RESULT_UNEXPECTED_RESPONSE;
     }
@@ -407,8 +407,7 @@ LinkUdsResult link_uds_decode_routine_control_response(
         return LINK_UDS_RESULT_UNEXPECTED_RESPONSE;
     }
 
-    routine_identifier =
-        (uint16_t)(((uint16_t)generic.data[1] << 8U) | generic.data[2]);
+    routine_identifier = infiltratr_load_be16(generic.data + 1U);
     if (routine_identifier != expected_routine_identifier) {
         return LINK_UDS_RESULT_UNEXPECTED_RESPONSE;
     }
@@ -640,8 +639,7 @@ LinkUdsResult link_uds_build_routine_control_request(
     prefix[0] = LINK_UDS_SERVICE_ROUTINE_CONTROL;
     prefix[1] = (uint8_t)(control_type |
         (suppress_positive_response ? 0x80U : 0x00U));
-    prefix[2] = (uint8_t)(routine_identifier >> 8U);
-    prefix[3] = (uint8_t)routine_identifier;
+    infiltratr_store_be16(prefix + 2U, routine_identifier);
 
     return uds_services_build_prefix_record(
         prefix, sizeof(prefix), option_record, option_record_length,

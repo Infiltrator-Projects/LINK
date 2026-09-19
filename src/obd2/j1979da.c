@@ -10,6 +10,9 @@
  */
 #include "link/j1979da.h"
 
+#include "infiltratr/core.h"
+#include "infiltratr/endian.h"
+
 #include <string.h>
 
 static const LinkJ1979Mode05TidDefinition mode05_tids[] = {
@@ -179,15 +182,10 @@ static const LinkJ1979UnitScaling mode06_uasids[] = {
     {0xFEU,0.25,0.0,"Pa",true}
 };
 
-static size_t count05(void) { return sizeof(mode05_tids)/sizeof(mode05_tids[0]); }
-static size_t count06t(void) { return sizeof(mode06_tids)/sizeof(mode06_tids[0]); }
-static size_t countmid(void) { return sizeof(mode06_monitors)/sizeof(mode06_monitors[0]); }
-static size_t countuas(void) { return sizeof(mode06_uasids)/sizeof(mode06_uasids[0]); }
-
-static uint16_t read_u16_be(const uint8_t *data)
-{
-    return (uint16_t)(((uint16_t)data[0] << 8U) | (uint16_t)data[1]);
-}
+static size_t count05(void) { return INFILTRATR_ARRAY_LENGTH(mode05_tids); }
+static size_t count06t(void) { return INFILTRATR_ARRAY_LENGTH(mode06_tids); }
+static size_t countmid(void) { return INFILTRATR_ARRAY_LENGTH(mode06_monitors); }
+static size_t countuas(void) { return INFILTRATR_ARRAY_LENGTH(mode06_uasids); }
 
 static char hex_digit(uint8_t value)
 {
@@ -385,7 +383,7 @@ LinkObd2Result link_j1979_decode_mode06_response(
         const uint8_t *r=pdu+1U+i*9U;
         LinkJ1979Mode06Result *o=&results->entries[i];
         o->mid=r[0]; o->tid=r[1]; o->uasid=r[2];
-        o->raw_value=read_u16_be(r+3U); o->raw_minimum=read_u16_be(r+5U); o->raw_maximum=read_u16_be(r+7U);
+        o->raw_value=infiltratr_load_be16(r+3U); o->raw_minimum=infiltratr_load_be16(r+5U); o->raw_maximum=infiltratr_load_be16(r+7U);
         o->monitor=link_j1979_mode06_monitor_definition(o->mid);
         o->test=link_j1979_mode06_tid_definition(o->tid);
         o->scaling=link_j1979_mode06_uasid_definition(o->uasid);
