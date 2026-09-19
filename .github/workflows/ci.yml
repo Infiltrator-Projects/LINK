@@ -71,12 +71,16 @@ jobs:
         run: |
           set -euo pipefail
           git submodule update --init src/infiltratr-common
-          expected_version="$(sed -n 's/^set(LINK_COMMON_VERSION "\\([^"]*\\)")/\\1/p' CMakeLists.txt)"
+          expected_version="$(awk -F'"' '/^set\\(LINK_COMMON_VERSION / {print $2; exit}' CMakeLists.txt)"
           expected_commit="$(git ls-tree HEAD src/infiltratr-common | awk '{print $3}')"
+          found_version="$(tr -d '[:space:]' < src/infiltratr-common/VERSION)"
+          found_commit="$(git -C src/infiltratr-common rev-parse HEAD)"
+          printf 'Common expected %s %s; found %s %s\n' \
+            "$expected_version" "$expected_commit" "$found_version" "$found_commit"
           test -n "$expected_version"
           test -n "$expected_commit"
-          test "$(tr -d '[:space:]' < src/infiltratr-common/VERSION)" = "$expected_version"
-          test "$(git -C src/infiltratr-common rev-parse HEAD)" = "$expected_commit"
+          test "$found_version" = "$expected_version"
+          test "$found_commit" = "$expected_commit"
 
       - name: Enforce transport and evidence regressions
         shell: bash
