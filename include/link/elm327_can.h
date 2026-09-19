@@ -70,6 +70,20 @@ LinkElm327CanResult link_elm327_can_channel_accept(
     LinkElm327CanChannelState *state,
     const LinkElm327Response *response);
 
+/** Render ATSH for an 11-bit or 29-bit CAN identifier. */
+LinkElm327CanResult link_elm327_can_format_header_command(
+    uint32_t can_id,
+    bool extended_id,
+    char *buffer,
+    size_t buffer_size);
+
+/** Render ATCRA for an 11-bit or 29-bit CAN receive identifier. */
+LinkElm327CanResult link_elm327_can_format_receive_address_command(
+    uint32_t can_id,
+    bool extended_id,
+    char *buffer,
+    size_t buffer_size);
+
 /** Render a complete PDU as the hex command consumed by ELM auto-formatting. */
 LinkElm327CanResult link_elm327_can_build_pdu_command(
     const uint8_t *pdu,
