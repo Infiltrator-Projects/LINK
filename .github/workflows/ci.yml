@@ -71,7 +71,7 @@ jobs:
         run: |
           set -euo pipefail
           git submodule update --init src/infiltratr-common
-          expected_version="$(awk -F'"' '/^set\\(LINK_COMMON_VERSION / {print $2; exit}' CMakeLists.txt)"
+          expected_version="$(grep -F 'set(LINK_COMMON_VERSION "' CMakeLists.txt | head -n 1 | cut -d'"' -f 2)"
           expected_commit="$(git ls-tree HEAD src/infiltratr-common | awk '{print $3}')"
           found_version="$(tr -d '[:space:]' < src/infiltratr-common/VERSION)"
           found_commit="$(git -C src/infiltratr-common rev-parse HEAD)"
