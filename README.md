@@ -2,7 +2,7 @@
 
 # LINK
 
-**Project copyright:** © 2000–2026 Shannon Smith
+**Project copyright:** © 2000-2026 Shannon Smith
 
 [![LINK CI](https://github.com/Infiltrator-Projects/LINK/actions/workflows/ci.yml/badge.svg)](https://github.com/Infiltrator-Projects/LINK/actions/workflows/ci.yml)
 
