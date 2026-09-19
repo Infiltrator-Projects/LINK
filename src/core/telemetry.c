@@ -3,10 +3,12 @@
 #include "link/version.h"
 
 #include "infiltratr/core.h"
+#include "infiltratr/escape.h"
 #include "infiltratr/format.h"
 
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 /*
@@ -380,23 +382,26 @@ static bool emit_quoted(LinkTelemetryTextSink sink,
                         void *context,
                         const char *text)
 {
-    const char *cursor = text != NULL ? text : "";
-    const char *segment = cursor;
-    if (!emit(sink, context, "\"")) return false;
-    while (*cursor != '\0') {
-        if (*cursor == '"') {
-            if (cursor > segment &&
-                !sink(context, segment, (size_t)(cursor - segment)))
-                return false;
-            if (!emit(sink, context, "\"\"")) return false;
-            segment = cursor + 1;
-        }
-        ++cursor;
-    }
-    if (cursor > segment &&
-        !sink(context, segment, (size_t)(cursor - segment)))
+    char stack_buffer[512];
+    char *encoded = stack_buffer;
+    size_t required = 0U;
+    bool ok;
+
+    if (sink == NULL) return false;
+    if (!infiltratr_escape_csv_field(
+            text != NULL ? text : "", false, NULL, 0U, &required) ||
+        required == 0U) {
         return false;
-    return emit(sink, context, "\"");
+    }
+    if (required > sizeof(stack_buffer)) {
+        encoded = malloc(required);
+        if (encoded == NULL) return false;
+    }
+    ok = infiltratr_escape_csv_field(
+        text != NULL ? text : "", false, encoded, required, NULL) &&
+        sink(context, encoded, required - 1U);
+    if (encoded != stack_buffer) free(encoded);
+    return ok;
 }
 
 static bool emit_metadata(LinkTelemetryTextSink sink,
@@ -460,17 +465,9 @@ static bool emit_build_identity(LinkTelemetryTextSink sink,
 
 static bool format_value(double value, char *buffer, size_t size)
 {
-    InfiltratrScalarFormatOptions options =
-        INFILTRATR_SCALAR_FORMAT_OPTIONS_INIT;
-    char *cursor;
     char *end;
-    options.decimal_places = 6U;
-    options.unavailable_text = "";
-    if (!infiltratr_format_scalar(
-            true, (long double)value, &options, buffer, size))
+    if (!infiltratr_format_fixed_ascii(value, 6U, buffer, size))
         return false;
-    for (cursor = buffer; *cursor != '\0'; ++cursor)
-        if (*cursor == ',') *cursor = '.';
     end = buffer + strlen(buffer);
     while (end > buffer && end[-1] == '0') --end;
     if (end > buffer && end[-1] == '.') --end;

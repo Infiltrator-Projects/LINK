@@ -411,7 +411,10 @@ int main(void)
         CHECK(link_telemetry_recorder_record_structured_pid_named(
             &recorder, &structured_sample, false, "DPF pressure"));
     }
-    CHECK(link_telemetry_recorder_record_response_named(&recorder, 30U, "010C", "ok", "41 0C 13 4A"));
+    CHECK(link_telemetry_recorder_record_response_named(
+        &recorder, 30U, "010C", "ok", "41 0C 13 4A"));
+    CHECK(link_telemetry_recorder_record_response_named(
+        &recorder, 31U, "AT\"I", "ok", "A\nB"));
     CHECK(link_telemetry_recorder_finish(&recorder, 3U));
     CHECK(strstr(output.data, "# link_session_stream_version,2\n") != NULL);
     CHECK(strstr(output.data,
@@ -420,6 +423,7 @@ int main(void)
     CHECK(strstr(output.data, "structured,3,23,0x7A,") != NULL);
     CHECK(strstr(output.data, "\"DPF pressure · ") != NULL);
     CHECK(strstr(output.data, "\"RAW 07 FF 9C 00 64 00 C8\"") != NULL);
+    CHECK(strstr(output.data, "\"AT\"\"I\",\"ok\",\"AB\"") != NULL);
     link_telemetry_recorder_init(&recorder);
     link_telemetry_session_metadata_init(&metadata, 4U, "adapter", "vehicle");
     CHECK(link_telemetry_recorder_continue(&recorder, &metadata, "link", sink, &output));

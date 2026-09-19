@@ -6,7 +6,9 @@
 #include "link/obd2.h"
 
 #include "infiltratr/core.h"
+#include "infiltratr/format.h"
 
+#include <stdio.h>
 #include <string.h>
 
 #define OBD2_MAX_LINE_BYTES 256U
@@ -60,6 +62,108 @@ static LinkObd2Result obd2_write_command(
     }
     buffer[byte_count * 2U] = '\0';
     return LINK_OBD2_RESULT_OK;
+}
+
+bool link_obd2_format_decoded_summary(
+    const LinkObd2DecodedPid *decoded,
+    size_t max_signals,
+    size_t max_raw_bytes,
+    char *buffer,
+    size_t buffer_size)
+{
+    size_t used = 0U;
+    size_t index;
+
+    if (buffer == NULL || buffer_size == 0U || decoded == NULL) {
+        if (buffer != NULL && buffer_size != 0U) buffer[0] = '\0';
+        return false;
+    }
+    buffer[0] = '\0';
+
+    if (decoded->signal_count != 0U && max_signals != 0U) {
+        const size_t shown =
+            decoded->signal_count < max_signals
+                ? decoded->signal_count : max_signals;
+        for (index = 0U; index < shown; ++index) {
+            const LinkObd2DecodedSignal *signal = &decoded->signals[index];
+            char number[64];
+            const char *label = signal->label != NULL ? signal->label : "value";
+            const char *unit = signal->unit != NULL ? signal->unit : "";
+            int written;
+            if (!infiltratr_format_fixed_ascii(
+                    signal->value, 2U, number, sizeof(number))) {
+                buffer[0] = '\0';
+                return false;
+            }
+            written = snprintf(
+                buffer + used, buffer_size - used, "%s%s %s%s%s",
+                index == 0U ? "" : " · ", label, number,
+                unit[0] != '\0' ? " " : "", unit);
+            if (written < 0 || (size_t)written >= buffer_size - used) {
+                buffer[0] = '\0';
+                return false;
+            }
+            used += (size_t)written;
+        }
+        if (decoded->signal_count > shown) {
+            const int written = snprintf(
+                buffer + used, buffer_size - used, " · +%zu",
+                decoded->signal_count - shown);
+            if (written < 0 || (size_t)written >= buffer_size - used) {
+                buffer[0] = '\0';
+                return false;
+            }
+        }
+        return true;
+    }
+
+    if (decoded->text_available && decoded->text[0] != '\0') {
+        const int written = snprintf(buffer, buffer_size, "%s", decoded->text);
+        if (written < 0 || (size_t)written >= buffer_size) {
+            buffer[0] = '\0';
+            return false;
+        }
+        return true;
+    }
+
+    if (decoded->raw_length != 0U && max_raw_bytes != 0U) {
+        const size_t shown =
+            decoded->raw_length < max_raw_bytes
+                ? decoded->raw_length : max_raw_bytes;
+        int written = snprintf(buffer, buffer_size, "RAW");
+        if (written < 0 || (size_t)written >= buffer_size) {
+            buffer[0] = '\0';
+            return false;
+        }
+        used = (size_t)written;
+        for (index = 0U; index < shown; ++index) {
+            written = snprintf(
+                buffer + used, buffer_size - used, " %02X",
+                (unsigned int)decoded->raw[index]);
+            if (written < 0 || (size_t)written >= buffer_size - used) {
+                buffer[0] = '\0';
+                return false;
+            }
+            used += (size_t)written;
+        }
+        if (decoded->raw_length > shown) {
+            written = snprintf(buffer + used, buffer_size - used, " …");
+            if (written < 0 || (size_t)written >= buffer_size - used) {
+                buffer[0] = '\0';
+                return false;
+            }
+        }
+        return true;
+    }
+
+    {
+        const int written = snprintf(buffer, buffer_size, "Decoded");
+        if (written < 0 || (size_t)written >= buffer_size) {
+            buffer[0] = '\0';
+            return false;
+        }
+    }
+    return true;
 }
 
 static LinkObd2Result obd2_response_ready(const LinkElm327Response *response)

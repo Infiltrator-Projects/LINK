@@ -6,6 +6,14 @@ This file records user-visible, compatibility, diagnostic-knowledge and validati
 
 - No unreleased changes.
 
+## 0.15.26 — 2026-09-19
+
+- Upgraded the exact nested Infiltratr Common dependency to 1.19.4.
+- Reused Common's deterministic fixed-point and CSV-field encoders in shared telemetry output.
+- Added shared preference-aware OBD-II value formatting so product faces no longer duplicate unit/precision policy.
+- Added a bounded decoded-PID summary formatter for product-neutral standard-data presentation.
+- Added regression coverage for shared display formatting and CSV control/quote handling.
+
 ## 0.15.25 — 2026-09-19
 
 - Upgraded the exact nested Infiltratr Common dependency to 1.19.3.

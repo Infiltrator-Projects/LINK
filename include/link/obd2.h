@@ -215,6 +215,21 @@ typedef struct {
 
 const char *link_obd2_result_name(LinkObd2Result result);
 const char *link_obd2_unit_name(LinkObd2Unit unit);
+
+/**
+ * Produce a bounded human-readable summary of a decoded standard PID.
+ *
+ * Decoded signals are listed first, text payloads are preserved, and otherwise
+ * raw bytes are rendered in hexadecimal. max_signals/max_raw_bytes bound the
+ * amount shown; zero means no entries of that class. Product-specific waiting
+ * and error wording remains outside LINK.
+ */
+bool link_obd2_format_decoded_summary(
+    const LinkObd2DecodedPid *decoded,
+    size_t max_signals,
+    size_t max_raw_bytes,
+    char *buffer,
+    size_t buffer_size);
 /** Resolve a standards-catalogue unit label to LINK's canonical unit enum. */
 bool link_obd2_unit_from_name(const char *name, LinkObd2Unit *unit);
 const char *link_obd2_pid_name(uint8_t pid);

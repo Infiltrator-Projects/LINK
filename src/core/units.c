@@ -1,5 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "link/units.h"
+
+#include "infiltratr/format.h"
+
+#include <math.h>
+#include <stdio.h>
 #include <string.h>
 
 static bool converted(
@@ -279,4 +284,95 @@ bool link_units_convert_obd2(
         return false;
     return link_units_convert_obd2_with_preferences(
         unit, canonical_value, &preferences, display_value, display_unit);
+}
+
+
+static bool format_display_value(double value,
+                                 unsigned int decimals,
+                                 const char *unit,
+                                 char *buffer,
+                                 size_t buffer_size)
+{
+    char number[64];
+    int written;
+    if (buffer == NULL || buffer_size == 0U || unit == NULL ||
+        !infiltratr_format_fixed_ascii(value, decimals, number, sizeof(number))) {
+        if (buffer != NULL && buffer_size != 0U) buffer[0] = '\0';
+        return false;
+    }
+    written = unit[0] != '\0'
+        ? snprintf(buffer, buffer_size, "%s %s", number, unit)
+        : snprintf(buffer, buffer_size, "%s", number);
+    if (written < 0 || (size_t)written >= buffer_size) {
+        buffer[0] = '\0';
+        return false;
+    }
+    return true;
+}
+
+bool link_units_format_obd2_with_preferences(
+    const LinkObd2Sample *sample,
+    const LinkUnitPreferences *preferences,
+    char *buffer,
+    size_t buffer_size)
+{
+    double display;
+    const char *unit;
+    unsigned int decimals = 2U;
+
+    if (buffer == NULL || buffer_size == 0U || sample == NULL ||
+        preferences == NULL || !isfinite(sample->value)) {
+        if (buffer != NULL && buffer_size != 0U) buffer[0] = '\0';
+        return false;
+    }
+    if (!link_units_convert_obd2_with_preferences(
+            sample->unit, sample->value, preferences, &display, &unit)) {
+        buffer[0] = '\0';
+        return false;
+    }
+
+    switch (sample->unit) {
+    case LINK_OBD2_UNIT_CELSIUS:
+        decimals = 1U;
+        unit = preferences->temperature == LINK_TEMPERATURE_FAHRENHEIT
+            ? "°F" : "°C";
+        break;
+    case LINK_OBD2_UNIT_KPA:
+        if (preferences->pressure == LINK_PRESSURE_BAR) {
+            decimals = 2U;
+        } else if (preferences->pressure == LINK_PRESSURE_PSI) {
+            decimals = sample->value > -70.0 && sample->value < 70.0 ? 2U : 1U;
+        } else {
+            decimals = sample->value > -100.0 && sample->value < 100.0 ? 2U : 1U;
+        }
+        break;
+    case LINK_OBD2_UNIT_KMH:
+    case LINK_OBD2_UNIT_KILOMETRES:
+        decimals = 1U;
+        break;
+    case LINK_OBD2_UNIT_GRAMS_PER_SECOND:
+    case LINK_OBD2_UNIT_LITRES_PER_HOUR:
+        decimals = 2U;
+        break;
+    default:
+        decimals = 2U;
+        break;
+    }
+
+    return format_display_value(display, decimals, unit, buffer, buffer_size);
+}
+
+bool link_units_format_obd2(
+    const LinkObd2Sample *sample,
+    LinkMeasurementSystem system,
+    char *buffer,
+    size_t buffer_size)
+{
+    LinkUnitPreferences preferences;
+    if (!link_unit_preferences_from_measurement_system(system, &preferences)) {
+        if (buffer != NULL && buffer_size != 0U) buffer[0] = '\0';
+        return false;
+    }
+    return link_units_format_obd2_with_preferences(
+        sample, &preferences, buffer, buffer_size);
 }

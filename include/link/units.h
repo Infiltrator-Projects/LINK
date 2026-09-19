@@ -132,6 +132,24 @@ bool link_units_convert_obd2(
     double *display_value,
     const char **display_unit);
 
+/**
+ * Render one canonical OBD-II scalar using the shared product-neutral display
+ * policy. Conversion and precision stay consistent across LINK product faces;
+ * manufacturer-specific labels and layout remain owned by each product.
+ */
+bool link_units_format_obd2_with_preferences(
+    const LinkObd2Sample *sample,
+    const LinkUnitPreferences *preferences,
+    char *buffer,
+    size_t buffer_size);
+
+/** Metric/US-customary convenience wrapper around the preference formatter. */
+bool link_units_format_obd2(
+    const LinkObd2Sample *sample,
+    LinkMeasurementSystem system,
+    char *buffer,
+    size_t buffer_size);
+
 #ifdef __cplusplus
 }
 #endif

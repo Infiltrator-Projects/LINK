@@ -100,6 +100,47 @@ int main(void)
         &preferences, &value, &unit));
     CHECK(CLOSE(value, 2.199692482990878) && strcmp(unit, "Imp gal/h") == 0);
 
+    {
+        char text[128];
+        LinkObd2Sample sample = {
+            .pid = UINT8_C(0x05),
+            .value = 100.0,
+            .unit = LINK_OBD2_UNIT_CELSIUS
+        };
+        link_unit_preferences_us_customary(&preferences);
+        CHECK(link_units_format_obd2_with_preferences(
+            &sample, &preferences, text, sizeof(text)));
+        CHECK(strcmp(text, "212.0 °F") == 0);
+
+        sample.value = 250.0;
+        sample.unit = LINK_OBD2_UNIT_KPA;
+        preferences.pressure = LINK_PRESSURE_BAR;
+        CHECK(link_units_format_obd2_with_preferences(
+            &sample, &preferences, text, sizeof(text)));
+        CHECK(strcmp(text, "2.50 bar") == 0);
+
+        LinkObd2DecodedPid decoded = {0};
+        decoded.signal_count = 2U;
+        decoded.signals[0].label = "A";
+        decoded.signals[0].value = 12.5;
+        decoded.signals[0].unit = "kPa";
+        decoded.signals[1].label = "B";
+        decoded.signals[1].value = 3.0;
+        decoded.signals[1].unit = "";
+        CHECK(link_obd2_format_decoded_summary(
+            &decoded, 2U, 8U, text, sizeof(text)));
+        CHECK(strcmp(text, "A 12.50 kPa · B 3.00") == 0);
+
+        memset(&decoded, 0, sizeof(decoded));
+        decoded.raw_length = 3U;
+        decoded.raw[0] = UINT8_C(0xAA);
+        decoded.raw[1] = UINT8_C(0x01);
+        decoded.raw[2] = UINT8_C(0xFF);
+        CHECK(link_obd2_format_decoded_summary(
+            &decoded, 2U, 2U, text, sizeof(text)));
+        CHECK(strcmp(text, "RAW AA 01 …") == 0);
+    }
+
     puts("LINK dimension-aware measurement conversion passed");
     return 0;
 }
