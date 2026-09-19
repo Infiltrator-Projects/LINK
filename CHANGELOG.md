@@ -6,6 +6,12 @@ This file records user-visible, compatibility, diagnostic-knowledge and validati
 
 - No unreleased changes.
 
+## 0.15.29 — 2026-09-19
+
+- Completed a forensic Common 1.19.8 reuse pass across portable codecs and platform providers, replacing parallel endian, checked-size, allocation-growth, strict parsing, bounded-copy and array-sizing mechanics with the canonical Common APIs while retaining the existing protocol and transport contracts.
+- Centralised Apple standard OBD-II value text rendering through LINK's shared preference-aware formatter so Swift, GTK and C presentation paths use the same deterministic conversion and precision policy.
+- Corrected the standalone native-Linux provider smoke target to link Common explicitly now that the provider edge consumes Common primitives directly.
+
 ## 0.15.28 — 2026-09-19
 
 - Advanced the exact Infiltratr Common dependency to 1.19.8, retaining LINK's shared formatting APIs while inheriting Common's consolidated parsing, ASCII, checked-size and POSIX numeric mechanics.
