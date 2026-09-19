@@ -3,6 +3,8 @@
 #include "link/mercedes_me_adapter.h"
 #include "link-linux-openport2.h"
 
+#include "infiltratr/core.h"
+
 #include <string.h>
 
 #if defined(__linux__)
@@ -1585,7 +1587,7 @@ size_t link_linux_serial_discover(char paths[][256], size_t capacity)
         while ((entry = readdir(directory)) != NULL && count < capacity) {
             bool match = false;
             for (prefix_index = 0U;
-                 prefix_index < sizeof(prefixes) / sizeof(prefixes[0]);
+                 prefix_index < INFILTRATR_ARRAY_LENGTH(prefixes);
                  ++prefix_index) {
                 size_t length = strlen(prefixes[prefix_index]);
                 if (strncmp(entry->d_name, prefixes[prefix_index], length) == 0) {

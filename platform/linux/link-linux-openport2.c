@@ -16,6 +16,7 @@
 #include "link-linux-openport2.h"
 
 #include "infiltratr/core.h"
+#include "infiltratr/endian.h"
 
 #if defined(__linux__)
 
@@ -156,19 +157,13 @@ static void make_can_id_message(LinkOpenPortPassThruMsg *message,
     message->ProtocolID = LINK_OP2_ISO15765;
     message->TxFlags = extended ? LINK_OP2_CAN_29BIT_ID : 0UL;
     message->DataSize = 4UL;
-    message->Data[0] = (unsigned char)((can_id >> 24U) & UINT32_C(0xff));
-    message->Data[1] = (unsigned char)((can_id >> 16U) & UINT32_C(0xff));
-    message->Data[2] = (unsigned char)((can_id >> 8U) & UINT32_C(0xff));
-    message->Data[3] = (unsigned char)(can_id & UINT32_C(0xff));
+    infiltratr_store_be32(message->Data, can_id);
 }
 
 static uint32_t message_can_id(const LinkOpenPortPassThruMsg *message)
 {
     if (message == NULL || message->DataSize < 4UL) return 0U;
-    return ((uint32_t)message->Data[0] << 24U) |
-           ((uint32_t)message->Data[1] << 16U) |
-           ((uint32_t)message->Data[2] << 8U) |
-           (uint32_t)message->Data[3];
+    return infiltratr_load_be32(message->Data);
 }
 
 static void stop_filters(LinkLinuxOpenPort2State *state)
@@ -386,7 +381,7 @@ static bool add_flow_filter(LinkLinuxOpenPort2State *state,
 
     if (state == NULL ||
         state->filter_count >=
-            sizeof(state->filter_ids) / sizeof(state->filter_ids[0])) {
+            INFILTRATR_ARRAY_LENGTH(state->filter_ids)) {
         return false;
     }
 
@@ -417,7 +412,7 @@ static bool add_pass_filter(LinkLinuxOpenPort2State *state,
 
     if (state == NULL ||
         state->filter_count >=
-            sizeof(state->filter_ids) / sizeof(state->filter_ids[0])) {
+            INFILTRATR_ARRAY_LENGTH(state->filter_ids)) {
         return false;
     }
     make_can_id_message(&mask, mask_id, extended);

@@ -4,6 +4,8 @@
 
 #include "link/i18n.h"
 
+#include "infiltratr/core.h"
+
 #include <stdio.h>
 #include <string.h>
 
@@ -192,7 +194,7 @@ static const char *translation_key(const char *text)
     };
     size_t index;
     if (text == NULL) return NULL;
-    for (index = 0U; index < sizeof(mappings) / sizeof(mappings[0]); ++index) {
+    for (index = 0U; index < INFILTRATR_ARRAY_LENGTH(mappings); ++index) {
         if (strcmp(text, mappings[index].text) == 0) return mappings[index].key;
     }
     return NULL;
@@ -203,7 +205,7 @@ static const char *literal_translate(const char *text)
     const int language = selected_language();
     size_t index;
     if (text == NULL || language == 0) return text;
-    for (index = 0U; index < sizeof(literal_translations) / sizeof(literal_translations[0]); ++index) {
+    for (index = 0U; index < INFILTRATR_ARRAY_LENGTH(literal_translations); ++index) {
         if (strcmp(text, literal_translations[index].english) == 0) {
             return language == 1 ? literal_translations[index].german
                                  : literal_translations[index].polish;

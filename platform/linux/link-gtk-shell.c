@@ -8,6 +8,8 @@
 #include "link-gtk-widgets.h"
 #include "link-gtk-about.h"
 
+#include "infiltratr/core.h"
+
 #include <stdio.h>
 #include <string.h>
 
@@ -1910,7 +1912,7 @@ static gboolean navigation_stress_step(gpointer user_data)
 
     next_delay = delays_ms[
         shell->navigation_stress_step %
-        (sizeof(delays_ms) / sizeof(delays_ms[0]))];
+        INFILTRATR_ARRAY_LENGTH(delays_ms)];
     (void)g_timeout_add(next_delay, navigation_stress_step, shell);
     return G_SOURCE_REMOVE;
 }

@@ -11,6 +11,9 @@
 #include "link/discover.h"
 #include "link/obd2.h"
 
+#include "infiltratr/core.h"
+#include "infiltratr/endian.h"
+
 #ifndef LINK_PRODUCT_NAME
 #define LINK_PRODUCT_NAME "LINK"
 #endif
@@ -146,10 +149,7 @@ static void post_logf(const char *format, ...)
 static uint32_t message_can_id(const PASSTHRU_MSG *msg)
 {
     if (msg == NULL || msg->DataSize < 4UL) return 0U;
-    return ((uint32_t)msg->Data[0] << 24U) |
-           ((uint32_t)msg->Data[1] << 16U) |
-           ((uint32_t)msg->Data[2] << 8U) |
-           (uint32_t)msg->Data[3];
+    return infiltratr_load_be32(msg->Data);
 }
 
 static void evidence_frame(const char *direction, const PASSTHRU_MSG *msg, const char *annotation)
@@ -194,7 +194,7 @@ static int read_registry_openport(char *path, size_t capacity)
         "SOFTWARE\\WOW6432Node\\PassThruSupport.04.04"
     };
     size_t root_index;
-    for (root_index = 0U; root_index < sizeof(roots) / sizeof(roots[0]); ++root_index) {
+    for (root_index = 0U; root_index < INFILTRATR_ARRAY_LENGTH(roots); ++root_index) {
         HKEY root;
         LONG rc = RegOpenKeyExA(HKEY_LOCAL_MACHINE, roots[root_index], 0U,
                                 KEY_READ | KEY_WOW64_32KEY, &root);
@@ -737,8 +737,8 @@ static void run_inventory(void)
     install_obd_flow_filters();
     set_status("READ-ONLY OBD inventory in progress");
     post_logf("Starting bounded read-only OBD inventory (%lu requests maximum).",
-              (unsigned long)(sizeof(queries) / sizeof(queries[0])));
-    for (q = 0U; q < sizeof(queries) / sizeof(queries[0]); ++q) {
+              (unsigned long)(INFILTRATR_ARRAY_LENGTH(queries)));
+    for (q = 0U; q < INFILTRATR_ARRAY_LENGTH(queries); ++q) {
         DWORD deadline;
         if (!send_read_only_obd(queries[q], sizeof(queries[q]))) continue;
         deadline = GetTickCount() + 350U;

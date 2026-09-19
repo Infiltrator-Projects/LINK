@@ -4,6 +4,8 @@
 
 #include "link/i18n.h"
 
+#include "infiltratr/core.h"
+
 #include <stdio.h>
 #include <string.h>
 
@@ -86,7 +88,7 @@ static BOOL set_window_text_utf8_i18n(HWND window, const char *text)
     wchar_t wide[1024];
     if (window == NULL ||
         !utf8_to_wide_i18n(text != NULL ? text : "", wide,
-                           sizeof(wide) / sizeof(wide[0]))) return FALSE;
+                           INFILTRATR_ARRAY_LENGTH(wide))) return FALSE;
     return SetWindowTextW(window, wide);
 }
 
@@ -95,7 +97,7 @@ static BOOL append_menu_utf8(HMENU menu, UINT flags, UINT_PTR item,
 {
     wchar_t wide[512];
     if (text == NULL) return AppendMenuW(menu, flags, item, NULL);
-    if (!utf8_to_wide_i18n(text, wide, sizeof(wide) / sizeof(wide[0])))
+    if (!utf8_to_wide_i18n(text, wide, INFILTRATR_ARRAY_LENGTH(wide)))
         return FALSE;
     return AppendMenuW(menu, flags, item, wide);
 }
@@ -231,7 +233,7 @@ static const char *semantic_key_from_any_language(const char *text)
         const char *candidate = link_i18n_installed_locale(locale_index);
         if (candidate == NULL || !link_i18n_select_locale(candidate)) continue;
         for (key_index = 0U;
-   key_index < sizeof(semantic_keys) / sizeof(semantic_keys[0]);
+   key_index < INFILTRATR_ARRAY_LENGTH(semantic_keys);
    ++key_index) {
   if (strcmp(text, link_i18n_text(semantic_keys[key_index])) == 0) {
       (void)snprintf(matched_key, sizeof(matched_key), "%s",
@@ -343,7 +345,7 @@ static void set_menu_text_by_command(HMENU menu, UINT command,
     MENUITEMINFOW info;
     wchar_t wide[512];
     if (menu == NULL || text == NULL ||
-        !utf8_to_wide_i18n(text, wide, sizeof(wide) / sizeof(wide[0]))) return;
+        !utf8_to_wide_i18n(text, wide, INFILTRATR_ARRAY_LENGTH(wide))) return;
     memset(&info, 0, sizeof(info));
     info.cbSize = sizeof(info);
     info.fMask = MIIM_STRING;
@@ -357,7 +359,7 @@ static void set_menu_text_by_position(HMENU menu, UINT position,
     MENUITEMINFOW info;
     wchar_t wide[512];
     if (menu == NULL || text == NULL ||
-        !utf8_to_wide_i18n(text, wide, sizeof(wide) / sizeof(wide[0]))) return;
+        !utf8_to_wide_i18n(text, wide, INFILTRATR_ARRAY_LENGTH(wide))) return;
     memset(&info, 0, sizeof(info));
     info.cbSize = sizeof(info);
     info.fMask = MIIM_STRING;
@@ -409,7 +411,7 @@ static BOOL CALLBACK retranslate_child(HWND child, LPARAM parameter)
     const char *translated;
     (void)parameter;
 
-    if (GetWindowTextW(child, wide, (int)(sizeof(wide) / sizeof(wide[0]))) <= 0)
+    if (GetWindowTextW(child, wide, (int)(INFILTRATR_ARRAY_LENGTH(wide))) <= 0)
         return TRUE;
     if (!wide_to_utf8_i18n(wide, utf8, sizeof(utf8))) return TRUE;
 
@@ -463,9 +465,9 @@ static void show_localised_about(HWND window)
                    LINK_PRODUCT_WEBSITE,
                    LINK_PRODUCT_COPYRIGHT);
     if (!utf8_to_wide_i18n(title, wide_title,
-                           sizeof(wide_title) / sizeof(wide_title[0])) ||
+                           INFILTRATR_ARRAY_LENGTH(wide_title)) ||
         !utf8_to_wide_i18n(content, wide_content,
-                           sizeof(wide_content) / sizeof(wide_content[0]))) return;
+                           INFILTRATR_ARRAY_LENGTH(wide_content))) return;
     (void)MessageBoxW(window, wide_content, wide_title,
                       MB_OK | MB_ICONINFORMATION);
 }
@@ -581,9 +583,9 @@ int link_win_i18n_message_box_a(HWND window, const char *text,
     wchar_t wide_text[1024];
     wchar_t wide_caption[512];
     if (!utf8_to_wide_i18n(link_win_i18n_translate_text(text), wide_text,
-                           sizeof(wide_text) / sizeof(wide_text[0])) ||
+                           INFILTRATR_ARRAY_LENGTH(wide_text)) ||
         !utf8_to_wide_i18n(caption != NULL ? caption : "", wide_caption,
-                           sizeof(wide_caption) / sizeof(wide_caption[0])))
+                           INFILTRATR_ARRAY_LENGTH(wide_caption)))
         return 0;
     return MessageBoxW(window, wide_text, wide_caption, type);
 }
