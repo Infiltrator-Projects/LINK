@@ -13,7 +13,7 @@ LINK is the shared C11 vehicle-diagnostics and application engine used by MBLINK
 
 ## Engineering ethos
 
-What belongs in a reusable vehicle-diagnostics engine when the products above it must remain trustworthy even as adapters, platforms and manufacturer knowledge change? LINK starts from protocol and operator-task contracts, then owns the product-neutral behaviour directly.
+What belongs in a reusable vehicle-diagnostics engine built from first principles when the products above it must remain trustworthy even as adapters, platforms and manufacturer knowledge change? LINK starts from protocol and operator-task contracts, then owns the product-neutral behaviour directly.
 
 Published standards, verified public material, captures and mature diagnostic tools are evidence used to establish behaviour; they are not substitutes for an explicit implementation contract. LINK owns generic transport, framing, diagnostic sequencing, safety policy, evidence handling and shared application behaviour. Manufacturer-specific knowledge remains above it, while broadly reusable non-automotive mechanics remain below it in the exact pinned Common dependency.
 
