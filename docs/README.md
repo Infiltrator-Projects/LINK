@@ -6,6 +6,7 @@ This directory is the canonical documentation entry point for LINK. The Infiltra
 
 - [Architecture](ARCHITECTURE.md) — ownership, layers, dependencies and system boundaries.
 - [Design](DESIGN.md) — first-principles goals, non-goals, trade-offs and failure philosophy.
+- [Decisions](DECISIONS.md) — durable architectural decisions, alternatives and consequences.
 - [Roadmap](ROADMAP.md) — current foundation, near-term priorities and longer-term direction.
 - [Validation](VALIDATION.md) — automated, manual and environment-specific evidence boundaries.
 - [Project README](../README.md) — product overview, capabilities, build/use entry point and engineering ethos.
