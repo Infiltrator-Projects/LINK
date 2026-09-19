@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "link/kwp2000.h"
 
+#include "infiltratr/endian.h"
+
 #include <string.h>
 
 static LinkKwp2000Result write_failure(
@@ -182,8 +184,7 @@ LinkKwp2000Result link_kwp2000_build_read_common_identifier_request(
         return write_failure(buffer, buffer_size, written,
                              LINK_KWP2000_RESULT_BUFFER_TOO_SMALL);
     buffer[0] = LINK_KWP2000_SERVICE_READ_DATA_BY_COMMON_IDENTIFIER;
-    buffer[1] = (uint8_t)(identifier >> 8U);
-    buffer[2] = (uint8_t)identifier;
+    infiltratr_store_be16(buffer + 1U, identifier);
     *written = 3U;
     return LINK_KWP2000_RESULT_OK;
 }
@@ -206,8 +207,7 @@ LinkKwp2000Result link_kwp2000_decode_read_common_identifier_response(
     if (result != LINK_KWP2000_RESULT_OK) return result;
     if (response.data_length < 2U) return LINK_KWP2000_RESULT_MALFORMED_PDU;
 
-    identifier = (uint16_t)(((uint16_t)response.data[0] << 8U) |
-                            response.data[1]);
+    identifier = infiltratr_load_be16(response.data);
     if (identifier != expected_identifier)
         return LINK_KWP2000_RESULT_UNEXPECTED_RESPONSE;
 
@@ -278,8 +278,7 @@ LinkKwp2000Result link_kwp2000_build_read_dtc_by_status_request(
                              LINK_KWP2000_RESULT_BUFFER_TOO_SMALL);
     buffer[0] = LINK_KWP2000_SERVICE_READ_DTC_BY_STATUS;
     buffer[1] = request_type;
-    buffer[2] = (uint8_t)(group_of_dtc >> 8U);
-    buffer[3] = (uint8_t)group_of_dtc;
+    infiltratr_store_be16(buffer + 2U, group_of_dtc);
     *written = 4U;
     return LINK_KWP2000_RESULT_OK;
 }
@@ -317,8 +316,7 @@ LinkKwp2000Result link_kwp2000_decode_read_dtc_by_status_response(
     for (index = 0U; index < available; ++index) {
         const size_t offset = 1U + index * 3U;
         dtcs->entries[index].code =
-            (uint16_t)(((uint16_t)response.data[offset] << 8U) |
-                       response.data[offset + 1U]);
+            infiltratr_load_be16(response.data + offset);
         dtcs->entries[index].status = response.data[offset + 2U];
     }
     dtcs->count = available;

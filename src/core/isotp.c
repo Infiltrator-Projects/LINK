@@ -6,6 +6,7 @@
 #include "link/isotp.h"
 
 #include "infiltratr/core.h"
+#include "infiltratr/endian.h"
 
 #include <string.h>
 
@@ -150,7 +151,7 @@ static size_t link_isotp_round_transmit_length(
         return required;
     }
 
-    for (index = 0U; index < sizeof(fd_lengths) / sizeof(fd_lengths[0]); ++index) {
+    for (index = 0U; index < INFILTRATR_ARRAY_LENGTH(fd_lengths); ++index) {
         if ((size_t)fd_lengths[index] >= required &&
             (size_t)fd_lengths[index] <= maximum) {
             return fd_lengths[index];
@@ -499,10 +500,7 @@ static LinkIsoTpResult link_isotp_rx_accept_first(
         }
 
         extended_length =
-            ((uint32_t)frame->data[offset + 2U] << 24U) |
-            ((uint32_t)frame->data[offset + 3U] << 16U) |
-            ((uint32_t)frame->data[offset + 4U] << 8U) |
-            (uint32_t)frame->data[offset + 5U];
+            infiltratr_load_be32(frame->data + offset + 2U);
 
         if (extended_length <= 4095U) {
             return link_isotp_rx_fail(

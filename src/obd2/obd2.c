@@ -5,7 +5,9 @@
  */
 #include "link/obd2.h"
 
+#include "infiltratr/arithmetic.h"
 #include "infiltratr/core.h"
+#include "infiltratr/endian.h"
 #include "infiltratr/format.h"
 
 #include <stdio.h>
@@ -48,10 +50,10 @@ static LinkObd2Result obd2_write_command(
     size_t needed;
 
     if (bytes == NULL || byte_count == 0U || buffer == NULL ||
-        byte_count > (SIZE_MAX - 1U) / 2U) {
+        !infiltratr_size_multiply_checked(byte_count, 2U, &needed) ||
+        !infiltratr_size_add_checked(needed, 1U, &needed)) {
         return LINK_OBD2_RESULT_INVALID_ARGUMENT;
     }
-    needed = byte_count * 2U + 1U;
     if (buffer_size < needed) {
         if (buffer_size != 0U) buffer[0] = '\0';
         return LINK_OBD2_RESULT_BUFFER_TOO_SMALL;
@@ -944,10 +946,7 @@ LinkObd2Result link_obd2_decode_support_bitmap_payload(
     }
 
     updated = *set;
-    mask = ((uint32_t)data[0] << 24U) |
-           ((uint32_t)data[1] << 16U) |
-           ((uint32_t)data[2] << 8U) |
-           (uint32_t)data[3];
+    mask = infiltratr_load_be32(data);
     obd2_apply_supported_mask(&updated, base_identifier, mask);
     *set = updated;
     *has_more = base_identifier <= UINT8_C(0xc0) &&
@@ -1042,10 +1041,7 @@ LinkObd2Result link_obd2_accept_supported_pid_responders(
             bytes[0] == UINT8_C(0x41) &&
             bytes[1] == base_pid) {
             matched = true;
-            mask = ((uint32_t)bytes[2] << 24U) |
-                   ((uint32_t)bytes[3] << 16U) |
-                   ((uint32_t)bytes[4] << 8U) |
-                   (uint32_t)bytes[5];
+            mask = infiltratr_load_be32(bytes + 2U);
             obd2_apply_supported_mask(&updated, base_pid, mask);
             if (responder_sets != NULL && responder_available) {
                 LinkObd2ResponderPidSet *entry =

@@ -6,6 +6,7 @@
 #include "link/uds.h"
 
 #include "infiltratr/core.h"
+#include "infiltratr/endian.h"
 
 #include <string.h>
 
@@ -183,9 +184,9 @@ LinkUdsResult link_uds_decode_session_control_response(
     if (generic.data_length == 5U) {
         decoded.timing_present = true;
         decoded.p2_server_max_ms =
-            (uint16_t)(((uint16_t)generic.data[1] << 8U) | generic.data[2]);
+            infiltratr_load_be16(generic.data + 1U);
         decoded.p2_star_server_max_10ms =
-            (uint16_t)(((uint16_t)generic.data[3] << 8U) | generic.data[4]);
+            infiltratr_load_be16(generic.data + 3U);
         if (decoded.p2_server_max_ms == 0U || decoded.p2_star_server_max_10ms == 0U) {
             return LINK_UDS_RESULT_MALFORMED_PDU;
         }
@@ -236,8 +237,7 @@ LinkUdsResult link_uds_build_read_did_request(
                                  LINK_UDS_RESULT_BUFFER_TOO_SMALL);
     }
     buffer[0] = LINK_UDS_SERVICE_READ_DATA_BY_IDENTIFIER;
-    buffer[1] = (uint8_t)(identifier >> 8U);
-    buffer[2] = (uint8_t)identifier;
+    infiltratr_store_be16(buffer + 1U, identifier);
     *written = 3U;
     return LINK_UDS_RESULT_OK;
 }
@@ -257,7 +257,7 @@ LinkUdsResult link_uds_decode_read_did_response(
     if (result != LINK_UDS_RESULT_OK) return result;
     if (generic.data_length < 2U) return LINK_UDS_RESULT_MALFORMED_PDU;
 
-    identifier = (uint16_t)(((uint16_t)generic.data[0] << 8U) | generic.data[1]);
+    identifier = infiltratr_load_be16(generic.data);
     if (identifier != expected_identifier) return LINK_UDS_RESULT_UNEXPECTED_RESPONSE;
     decoded.identifier = identifier;
     decoded.data = generic.data + 2U;
@@ -396,7 +396,7 @@ LinkUdsResult link_uds_client_begin(
         }
         client->request_has_did = true;
         client->request_did =
-            (uint16_t)(((uint16_t)request_pdu[1] << 8U) | request_pdu[2]);
+            infiltratr_load_be16(request_pdu + 1U);
     }
 
     client->deadline_us = infiltratr_u64_add_saturating(now_us, client->p2_timeout_us);
