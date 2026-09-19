@@ -12,7 +12,7 @@
 extern "C" {
 #endif
 
-#define LINK_SESSION_TRACE_MAX_GRAPHS 16U
+#define LINK_SESSION_TRACE_MAX_GRAPHS 256U
 #define LINK_SESSION_TRACE_GRAPH_HISTORY_CAPACITY 48U
 #define LINK_SESSION_TRACE_LOG_CAPACITY 24U
 #define LINK_SESSION_TRACE_LOG_MESSAGE_CAPACITY 160U
@@ -36,6 +36,13 @@ typedef struct LinkSessionTrace {
 const uint8_t *link_session_trace_default_graph_pids(size_t *count);
 
 bool link_session_trace_init(
+    LinkSessionTrace *trace, const uint8_t *graph_pids, size_t graph_count);
+/**
+ * Replace the graphed standard PID set without touching the session log.
+ * Graph history is reset so history can never be displayed under a different
+ * selected PID after a preference change. Duplicate PIDs are rejected.
+ */
+bool link_session_trace_configure_graph_pids(
     LinkSessionTrace *trace, const uint8_t *graph_pids, size_t graph_count);
 size_t link_session_trace_graph_index(
     const LinkSessionTrace *trace, uint8_t pid);
