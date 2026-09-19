@@ -16,6 +16,16 @@ const uint8_t *link_session_trace_default_graph_pids(size_t *count)
     return link_default_graph_pids;
 }
 
+static LinkParameterKey standard_obd_key(uint8_t pid)
+{
+    LinkParameterKey key = {
+        LINK_PARAMETER_PROTOCOL_OBD2,
+        LINK_PARAMETER_MODULE_STANDARD_OBD2,
+        (uint32_t)pid
+    };
+    return key;
+}
+
 bool link_session_trace_init(
     LinkSessionTrace *trace, const uint8_t *graph_pids, size_t graph_count)
 {
@@ -24,46 +34,83 @@ bool link_session_trace_init(
         return false;
     }
     memset(trace, 0, sizeof(*trace));
-    if (graph_count != 0U)
-        memcpy(trace->graph_pids, graph_pids, graph_count);
+    return link_session_trace_configure_graph_pids(
+        trace, graph_pids, graph_count);
+}
+
+bool link_session_trace_configure_graph_keys(
+    LinkSessionTrace *trace,
+    const LinkParameterKey *graph_keys,
+    size_t graph_count)
+{
+    size_t left;
+    size_t right;
+
+    if (trace == NULL || graph_count > LINK_SESSION_TRACE_MAX_GRAPHS ||
+        (graph_count != 0U && graph_keys == NULL)) {
+        return false;
+    }
+    for (left = 0U; left < graph_count; ++left) {
+        if (!link_parameter_key_is_valid(&graph_keys[left]))
+            return false;
+        for (right = left + 1U; right < graph_count; ++right) {
+            if (link_parameter_key_equal(
+                    &graph_keys[left], &graph_keys[right])) {
+                return false;
+            }
+        }
+    }
+
+    memset(trace->graph_keys, 0, sizeof(trace->graph_keys));
+    memset(trace->graph_pids, 0, sizeof(trace->graph_pids));
+    for (left = 0U; left < graph_count; ++left) {
+        trace->graph_keys[left] = graph_keys[left];
+        if (graph_keys[left].protocol == LINK_PARAMETER_PROTOCOL_OBD2 &&
+            graph_keys[left].module ==
+                LINK_PARAMETER_MODULE_STANDARD_OBD2 &&
+            graph_keys[left].identifier <= UINT8_MAX) {
+            trace->graph_pids[left] = (uint8_t)graph_keys[left].identifier;
+        }
+    }
     trace->graph_count = graph_count;
+    link_session_trace_reset_graph(trace);
     return true;
 }
 
 bool link_session_trace_configure_graph_pids(
     LinkSessionTrace *trace, const uint8_t *graph_pids, size_t graph_count)
 {
-    size_t left;
-    size_t right;
-
+    LinkParameterKey keys[LINK_SESSION_TRACE_MAX_GRAPHS];
+    size_t index;
     if (trace == NULL || graph_count > LINK_SESSION_TRACE_MAX_GRAPHS ||
         (graph_count != 0U && graph_pids == NULL)) {
         return false;
     }
-    for (left = 0U; left < graph_count; ++left) {
-        for (right = left + 1U; right < graph_count; ++right) {
-            if (graph_pids[left] == graph_pids[right])
-                return false;
-        }
-    }
+    for (index = 0U; index < graph_count; ++index)
+        keys[index] = standard_obd_key(graph_pids[index]);
+    return link_session_trace_configure_graph_keys(
+        trace, keys, graph_count);
+}
 
-    memset(trace->graph_pids, 0, sizeof(trace->graph_pids));
-    if (graph_count != 0U)
-        memcpy(trace->graph_pids, graph_pids, graph_count);
-    trace->graph_count = graph_count;
-    link_session_trace_reset_graph(trace);
-    return true;
+size_t link_session_trace_graph_key_index(
+    const LinkSessionTrace *trace,
+    const LinkParameterKey *key)
+{
+    size_t index;
+    if (trace == NULL || !link_parameter_key_is_valid(key))
+        return trace != NULL ? trace->graph_count : 0U;
+    for (index = 0U; index < trace->graph_count; ++index) {
+        if (link_parameter_key_equal(&trace->graph_keys[index], key))
+            return index;
+    }
+    return trace->graph_count;
 }
 
 size_t link_session_trace_graph_index(
     const LinkSessionTrace *trace, uint8_t pid)
 {
-    size_t index;
-    if (trace == NULL) return 0U;
-    for (index = 0U; index < trace->graph_count; ++index) {
-        if (trace->graph_pids[index] == pid) return index;
-    }
-    return trace->graph_count;
+    const LinkParameterKey key = standard_obd_key(pid);
+    return link_session_trace_graph_key_index(trace, &key);
 }
 
 void link_session_trace_reset_graph(LinkSessionTrace *trace)
@@ -74,12 +121,17 @@ void link_session_trace_reset_graph(LinkSessionTrace *trace)
     memset(trace->graph_history_next, 0, sizeof(trace->graph_history_next));
 }
 
-void link_session_trace_record_graph(
-    LinkSessionTrace *trace, uint8_t pid, double value)
+void link_session_trace_record_parameter(
+    LinkSessionTrace *trace,
+    const LinkParameterKey *key,
+    double value)
 {
-    const size_t graph = link_session_trace_graph_index(trace, pid);
+    size_t graph;
     uint8_t slot;
-    if (trace == NULL || graph >= trace->graph_count) return;
+    if (trace == NULL || !link_parameter_key_is_valid(key))
+        return;
+    graph = link_session_trace_graph_key_index(trace, key);
+    if (graph >= trace->graph_count) return;
 
     slot = trace->graph_history_next[graph];
     trace->graph_history[graph][slot] = value;
@@ -89,6 +141,13 @@ void link_session_trace_record_graph(
         LINK_SESSION_TRACE_GRAPH_HISTORY_CAPACITY) {
         ++trace->graph_history_count[graph];
     }
+}
+
+void link_session_trace_record_graph(
+    LinkSessionTrace *trace, uint8_t pid, double value)
+{
+    const LinkParameterKey key = standard_obd_key(pid);
+    link_session_trace_record_parameter(trace, &key, value);
 }
 
 static size_t bounded_length(const char *text, size_t maximum)
