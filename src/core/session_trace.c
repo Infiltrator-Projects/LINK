@@ -30,6 +30,31 @@ bool link_session_trace_init(
     return true;
 }
 
+bool link_session_trace_configure_graph_pids(
+    LinkSessionTrace *trace, const uint8_t *graph_pids, size_t graph_count)
+{
+    size_t left;
+    size_t right;
+
+    if (trace == NULL || graph_count > LINK_SESSION_TRACE_MAX_GRAPHS ||
+        (graph_count != 0U && graph_pids == NULL)) {
+        return false;
+    }
+    for (left = 0U; left < graph_count; ++left) {
+        for (right = left + 1U; right < graph_count; ++right) {
+            if (graph_pids[left] == graph_pids[right])
+                return false;
+        }
+    }
+
+    memset(trace->graph_pids, 0, sizeof(trace->graph_pids));
+    if (graph_count != 0U)
+        memcpy(trace->graph_pids, graph_pids, graph_count);
+    trace->graph_count = graph_count;
+    link_session_trace_reset_graph(trace);
+    return true;
+}
+
 size_t link_session_trace_graph_index(
     const LinkSessionTrace *trace, uint8_t pid)
 {
