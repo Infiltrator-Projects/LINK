@@ -6,6 +6,10 @@ This file records user-visible, compatibility, diagnostic-knowledge and validati
 
 - No unreleased changes.
 
+## 0.15.28 — 2026-09-19
+
+- Advanced the exact Infiltratr Common dependency to 1.19.8, retaining LINK's shared formatting APIs while inheriting Common's consolidated parsing, ASCII, checked-size and POSIX numeric mechanics.
+
 ## 0.15.27 — 2026-09-19
 
 - Centralised fuel-economy/trip value rendering in LINK so product faces share unit conversion, precision and unavailable/stationary semantics.
