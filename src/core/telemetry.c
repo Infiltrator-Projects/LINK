@@ -488,8 +488,9 @@ static bool format_structured_raw(
         return false;
     buffer[0] = '\0';
     if (decoded->text_available && decoded->text[0] != '\0') {
-        const int written = snprintf(buffer, capacity, "%s", decoded->text);
-        return written >= 0 && (size_t)written < capacity;
+        if (strlen(decoded->text) >= capacity) return false;
+        infiltratr_copy_string(buffer, capacity, decoded->text);
+        return true;
     }
     if (decoded->raw_length == 0U) {
         const int written = snprintf(buffer, capacity, "RAW");

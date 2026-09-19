@@ -5,6 +5,7 @@
  */
 #include "link/elm327_session.h"
 
+#include "infiltratr/arithmetic.h"
 #include "infiltratr/core.h"
 
 #include <string.h>
@@ -32,10 +33,12 @@ static void elm327_session_add_unexpected(LinkElm327Session *session,
     if (session == NULL || amount == 0U) {
         return;
     }
-    if (SIZE_MAX - session->unexpected_input_bytes < amount) {
+    size_t updated = 0U;
+    if (!infiltratr_size_add_checked(
+            session->unexpected_input_bytes, amount, &updated)) {
         session->unexpected_input_bytes = SIZE_MAX;
     } else {
-        session->unexpected_input_bytes += amount;
+        session->unexpected_input_bytes = updated;
     }
 }
 

@@ -120,11 +120,11 @@ bool link_obd2_format_decoded_summary(
     }
 
     if (decoded->text_available && decoded->text[0] != '\0') {
-        const int written = snprintf(buffer, buffer_size, "%s", decoded->text);
-        if (written < 0 || (size_t)written >= buffer_size) {
+        if (strlen(decoded->text) >= buffer_size) {
             buffer[0] = '\0';
             return false;
         }
+        infiltratr_copy_string(buffer, buffer_size, decoded->text);
         return true;
     }
 

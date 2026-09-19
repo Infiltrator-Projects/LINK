@@ -213,11 +213,13 @@ bool link_i18n_load_language_pack(const char *path)
         value = unquote_text(equals + 1);
         if (strcmp(key, "locale") == 0) {
             if (strlen(value) >= sizeof(candidate.locale)) { valid = false; break; }
-            (void)snprintf(candidate.locale, sizeof(candidate.locale), "%s", value);
+            infiltratr_copy_string(
+                candidate.locale, sizeof(candidate.locale), value);
             have_locale = candidate.locale[0] != '\0';
         } else if (strcmp(key, "name") == 0) {
             if (strlen(value) >= sizeof(candidate.native_name)) { valid = false; break; }
-            (void)snprintf(candidate.native_name, sizeof(candidate.native_name), "%s", value);
+            infiltratr_copy_string(
+                candidate.native_name, sizeof(candidate.native_name), value);
             have_name = candidate.native_name[0] != '\0';
         } else if (strcmp(key, "direction") == 0) {
             if (strcmp(value, "rtl") == 0) candidate.rtl = true;
