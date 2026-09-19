@@ -6,6 +6,12 @@ This file records user-visible, compatibility, diagnostic-knowledge and validati
 
 - No unreleased changes.
 
+## 0.15.30 — 2026-09-20
+
+- Advanced the exact nested Infiltratr Common dependency to 1.19.10.
+- Preserved LINK's protocol, transport and presentation contracts while exposing Common 1.19.10's expanded product-neutral Night/Day design palette transitively to LINK-based product faces.
+- Kept automotive semantics in LINK and generic design ownership in Common; no duplicate theme wrapper or second palette source was introduced.
+
 ## 0.15.29 — 2026-09-19
 
 - Completed a forensic Common 1.19.8 reuse pass across portable codecs and platform providers, replacing parallel endian, checked-size, allocation-growth, strict parsing, bounded-copy and array-sizing mechanics with the canonical Common APIs while retaining the existing protocol and transport contracts.
