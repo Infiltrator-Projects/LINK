@@ -31,6 +31,23 @@ int main(void)
         CHECK(link_session_trace_configure_graph_pids(&trace, pids, 2U));
     }
 
+    {
+        const LinkParameterKey generic[] = {
+            { LINK_PARAMETER_PROTOCOL_OBD2,
+              LINK_PARAMETER_MODULE_STANDARD_OBD2, UINT32_C(0x0c) },
+            { LINK_PARAMETER_PROTOCOL_UDS,
+              UINT32_C(0x7e1), UINT32_C(0xf190) }
+        };
+        CHECK(link_session_trace_configure_graph_keys(&trace, generic, 2U));
+        CHECK(link_session_trace_graph_key_index(
+            &trace, &generic[1]) == 1U);
+        link_session_trace_record_parameter(&trace, &generic[1], 42.0);
+        CHECK(trace.graph_history_count[1] == 1U);
+        CHECK(trace.graph_history[1][0] == 42.0);
+        CHECK(trace.graph_pids[1] == 0U);
+        CHECK(link_session_trace_configure_graph_pids(&trace, pids, 2U));
+    }
+
     link_session_trace_record_graph(&trace, 0x0cU, 10.0);
     link_session_trace_record_graph(&trace, 0x0cU, 20.0);
     CHECK(trace.graph_history_count[0] == 2U);
