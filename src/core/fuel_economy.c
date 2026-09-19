@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "link/fuel_economy.h"
 
+#include "infiltratr/format.h"
+
 #include <math.h>
+#include <stdio.h>
 #include <string.h>
 
 static bool finite_nonnegative(double value)
@@ -367,6 +370,159 @@ LinkFuelEconomySnapshot link_fuel_economy_snapshot(
         snapshot.trip_distance_km = economy->integrated_trip_distance_km;
     }
     return snapshot;
+}
+
+static bool format_value_unit(double value,
+                              unsigned int decimals,
+                              const char *unit,
+                              char *buffer,
+                              size_t capacity)
+{
+    char number[64];
+    int written;
+    if (buffer == NULL || capacity == 0U || unit == NULL ||
+        !infiltratr_format_fixed_ascii(value, decimals, number, sizeof(number))) {
+        if (buffer != NULL && capacity != 0U) buffer[0] = '\0';
+        return false;
+    }
+    written = snprintf(buffer, capacity, "%s %s", number, unit);
+    if (written < 0 || (size_t)written >= capacity) {
+        buffer[0] = '\0';
+        return false;
+    }
+    return true;
+}
+
+static bool format_fuel_economy_value(
+    double litres_per_100km,
+    LinkFuelEconomyUnit preference,
+    char *buffer,
+    size_t capacity)
+{
+    double display;
+    const char *unit;
+    if (!link_units_convert_fuel_economy(
+            litres_per_100km, preference, &display, &unit)) {
+        return false;
+    }
+    return format_value_unit(display, 1U, unit, buffer, capacity);
+}
+
+static bool format_fuel_rate_value(
+    double litres_per_hour,
+    LinkFuelRateUnit preference,
+    char *buffer,
+    size_t capacity)
+{
+    double display;
+    const char *unit;
+    if (!link_units_convert_fuel_rate(
+            litres_per_hour, preference, &display, &unit)) {
+        return false;
+    }
+    return format_value_unit(display, 2U, unit, buffer, capacity);
+}
+
+static bool format_fuel_volume_value(
+    double litres,
+    LinkFuelVolumeUnit preference,
+    char *buffer,
+    size_t capacity)
+{
+    double display;
+    const char *unit;
+    if (!link_units_convert_fuel_volume(
+            litres, preference, &display, &unit)) {
+        return false;
+    }
+    return format_value_unit(display, 2U, unit, buffer, capacity);
+}
+
+static bool format_distance_value(
+    double kilometres,
+    LinkDistanceUnit preference,
+    char *buffer,
+    size_t capacity)
+{
+    double display;
+    const char *unit;
+    if (!link_units_convert_distance(
+            kilometres, preference, &display, &unit)) {
+        return false;
+    }
+    return format_value_unit(display, 1U, unit, buffer, capacity);
+}
+
+bool link_fuel_economy_format_display(
+    const LinkFuelEconomySnapshot *snapshot,
+    const LinkUnitPreferences *preferences,
+    bool connected,
+    LinkFuelEconomyDisplay *display)
+{
+    char volume[48];
+    char distance[48];
+    int written;
+
+    if (display != NULL) memset(display, 0, sizeof(*display));
+    if (snapshot == NULL || preferences == NULL || display == NULL)
+        return false;
+
+    if (snapshot->instantaneous_available) {
+        if (!format_fuel_economy_value(
+                snapshot->instantaneous_l_per_100km,
+                preferences->fuel_economy,
+                display->instantaneous, sizeof(display->instantaneous))) {
+            return false;
+        }
+    } else {
+        const char *text = connected && !snapshot->moving
+            ? "— · stationary / awaiting speed"
+            : "Waiting for measured fuel data";
+        if (snprintf(display->instantaneous, sizeof(display->instantaneous),
+                     "%s", text) < 0) {
+            return false;
+        }
+    }
+
+    if (snapshot->average_available) {
+        if (!format_fuel_economy_value(
+                snapshot->average_l_per_100km,
+                preferences->fuel_economy,
+                display->average, sizeof(display->average))) {
+            return false;
+        }
+    } else if (snprintf(display->average, sizeof(display->average),
+                        "%s", "Waiting for trip distance") < 0) {
+        return false;
+    }
+
+    if (snapshot->fuel_rate_available) {
+        if (!format_fuel_rate_value(
+                snapshot->fuel_rate_l_per_hour,
+                preferences->fuel_rate,
+                display->fuel_rate, sizeof(display->fuel_rate))) {
+            return false;
+        }
+    } else if (snprintf(display->fuel_rate, sizeof(display->fuel_rate),
+                        "%s", "Not available") < 0) {
+        return false;
+    }
+
+    if (!format_fuel_volume_value(
+            snapshot->trip_fuel_litres, preferences->fuel_volume,
+            volume, sizeof(volume)) ||
+        !format_distance_value(
+            snapshot->trip_distance_km, preferences->distance,
+            distance, sizeof(distance))) {
+        return false;
+    }
+    written = snprintf(display->trip, sizeof(display->trip),
+                       "%s over %s", volume, distance);
+    if (written < 0 || (size_t)written >= sizeof(display->trip)) {
+        memset(display, 0, sizeof(*display));
+        return false;
+    }
+    return true;
 }
 
 const char *link_fuel_economy_source_name(LinkFuelEconomySource source)

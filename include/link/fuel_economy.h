@@ -12,6 +12,7 @@
 #define LINK_FUEL_ECONOMY_H
 
 #include "link/obd2.h"
+#include "link/units.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -54,6 +55,23 @@ typedef struct LinkFuelEconomySnapshot {
     /** Borrowed provenance supplied with the selected factory observation. */
     const char *factory_provenance;
 } LinkFuelEconomySnapshot;
+
+#define LINK_FUEL_ECONOMY_DISPLAY_VALUE_CAPACITY 64U
+#define LINK_FUEL_ECONOMY_DISPLAY_TRIP_CAPACITY 128U
+
+/**
+ * Product-neutral presentation strings for a resolved fuel-economy snapshot.
+ *
+ * Values are converted with the caller's dimension preferences. The wording
+ * describes diagnostic state only; product/manufacturer explanatory copy stays
+ * above LINK.
+ */
+typedef struct LinkFuelEconomyDisplay {
+    char instantaneous[LINK_FUEL_ECONOMY_DISPLAY_VALUE_CAPACITY];
+    char average[LINK_FUEL_ECONOMY_DISPLAY_VALUE_CAPACITY];
+    char fuel_rate[LINK_FUEL_ECONOMY_DISPLAY_VALUE_CAPACITY];
+    char trip[LINK_FUEL_ECONOMY_DISPLAY_TRIP_CAPACITY];
+} LinkFuelEconomyDisplay;
 
 typedef struct LinkFuelEconomy {
     bool speed_valid;
@@ -156,6 +174,18 @@ void link_fuel_economy_tick(LinkFuelEconomy *economy, uint64_t now_ms);
 LinkFuelEconomySnapshot link_fuel_economy_snapshot(
     const LinkFuelEconomy *economy,
     uint64_t now_ms);
+
+/**
+ * Format one resolved snapshot consistently for LINK-family product faces.
+ *
+ * connected distinguishes an established stationary session from an offline
+ * or not-yet-sampled state. On failure display storage is cleared.
+ */
+bool link_fuel_economy_format_display(
+    const LinkFuelEconomySnapshot *snapshot,
+    const LinkUnitPreferences *preferences,
+    bool connected,
+    LinkFuelEconomyDisplay *display);
 
 const char *link_fuel_economy_source_name(LinkFuelEconomySource source);
 bool link_fuel_economy_source_is_factory(LinkFuelEconomySource source);

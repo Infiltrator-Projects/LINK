@@ -6,6 +6,11 @@ This file records user-visible, compatibility, diagnostic-knowledge and validati
 
 - No unreleased changes.
 
+## 0.15.27 — 2026-09-19
+
+- Centralised fuel-economy/trip value rendering in LINK so product faces share unit conversion, precision and unavailable/stationary semantics.
+- Added regression coverage for metric and US-customary fuel-economy presentation.
+
 ## 0.15.26 — 2026-09-19
 
 - Upgraded the exact nested Infiltratr Common dependency to 1.19.7.

@@ -3,6 +3,7 @@
 
 #include <math.h>
 #include <stdio.h>
+#include <string.h>
 
 static int failures = 0;
 
@@ -138,6 +139,50 @@ static void test_factory_counters(void)
     CHECK(snapshot.factory_provenance == provenance);
 }
 
+static void test_display_formatting(void)
+{
+    LinkFuelEconomySnapshot snapshot = {0};
+    LinkUnitPreferences preferences;
+    LinkFuelEconomyDisplay display;
+
+    snapshot.instantaneous_available = true;
+    snapshot.instantaneous_l_per_100km = 7.5;
+    snapshot.fuel_rate_available = true;
+    snapshot.fuel_rate_l_per_hour = 6.0;
+    snapshot.average_available = true;
+    snapshot.average_l_per_100km = 8.25;
+    snapshot.trip_fuel_litres = 2.5;
+    snapshot.trip_distance_km = 30.0;
+    snapshot.moving = true;
+
+    link_unit_preferences_metric(&preferences);
+    CHECK(link_fuel_economy_format_display(
+        &snapshot, &preferences, true, &display));
+    CHECK(strcmp(display.instantaneous, "7.5 L/100 km") == 0);
+    CHECK(strcmp(display.average, "8.2 L/100 km") == 0);
+    CHECK(strcmp(display.fuel_rate, "6.00 L/h") == 0);
+    CHECK(strcmp(display.trip, "2.50 L over 30.0 km") == 0);
+
+    link_unit_preferences_us_customary(&preferences);
+    CHECK(link_fuel_economy_format_display(
+        &snapshot, &preferences, true, &display));
+    CHECK(strstr(display.instantaneous, "mpg") != NULL);
+    CHECK(strstr(display.fuel_rate, "US gal/h") != NULL);
+    CHECK(strstr(display.trip, "US gal over") != NULL);
+    CHECK(strstr(display.trip, "mi") != NULL);
+
+    memset(&snapshot, 0, sizeof(snapshot));
+    CHECK(link_fuel_economy_format_display(
+        &snapshot, &preferences, true, &display));
+    CHECK(strcmp(display.instantaneous,
+                 "— · stationary / awaiting speed") == 0);
+    CHECK(strcmp(display.average, "Waiting for trip distance") == 0);
+    CHECK(strcmp(display.fuel_rate, "Not available") == 0);
+
+    CHECK(!link_fuel_economy_format_display(
+        NULL, &preferences, true, &display));
+}
+
 static void test_invalid_inputs(void)
 {
     LinkFuelEconomy economy;
@@ -159,6 +204,7 @@ int main(void)
     test_stationary_and_stale();
     test_trip_integration();
     test_factory_counters();
+    test_display_formatting();
     test_invalid_inputs();
     if (failures != 0) {
         fprintf(stderr, "%d fuel-economy test(s) failed\n", failures);
