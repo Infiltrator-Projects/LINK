@@ -2431,18 +2431,18 @@ class LinkStandardProductViewModel: NSObject, ObservableObject {
             let pid = metadata.pid
             let supported = productController.supportsPID(pid)
             let pollingEnabled = productController.pollingEnabled(forPID: pid)
+            let canonicalHistory = productController.recentValues(
+                forPID: pid, limit: 60).map(\.doubleValue)
             let history = productController.displayRecentValues(
                 forPID: pid, limit: 60).map(\.doubleValue)
             let value = history.last
+            let canonicalValue = canonicalHistory.last
             let unit = productController.displayUnit(forPID: pid)
             let structuredValue = productController.structuredDisplayValue(forPID: pid)
             let rawHex = productController.structuredRawHex(forPID: pid)
             let range = productController.displayRange(forPID: pid)
             let minimum = range.count >= 2 ? range[0].doubleValue : nil
             let maximum = range.count >= 2 ? range[1].doubleValue : nil
-            let suffix = unit.isEmpty ? "" : " \(unit)"
-            let precision = link_parameter_obd2_definition(pid)
-                .map { Int32(min(Int($0.pointee.decimal_places), 9)) } ?? 1
             result.append(LinkDiagnosticParameter(
                 id: configuration.standardPIDStableKey(pid),
                 protocolName: "OBD2",
@@ -2451,8 +2451,9 @@ class LinkStandardProductViewModel: NSObject, ObservableObject {
                 shortName: String(format: "PID %02X", pid),
                 title: String(cString: name),
                 suffix: unit,
-                formattedValue: value.map {
-                    String(format: "%.*f%@", precision, $0, suffix)
+                formattedValue: canonicalValue.map {
+                    productController.formattedDisplayValue(
+                        forPID: pid, canonicalValue: $0)
                 } ?? "N/A",
                 value: value,
                 structuredValue: structuredValue,

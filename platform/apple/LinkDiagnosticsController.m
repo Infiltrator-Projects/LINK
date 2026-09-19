@@ -300,6 +300,33 @@ static void LinkAppleNativeTransportReceive(
     return value;
 }
 
+- (NSString *)formattedDisplayValueForPID:(uint8_t)pid
+                           canonicalValue:(double)value
+{
+    LinkObd2UnitCode unit = LINK_OBD2_UNIT_NONE;
+    char buffer[96];
+    if (link_parameter_obd2_expected_unit(pid, &unit)) {
+        LinkObd2Sample sample;
+        sample.pid = pid;
+        sample.value = value;
+        sample.unit = (LinkObd2Unit)unit;
+        if (link_units_format_obd2(
+                &sample, [self resolvedMeasurementSystem],
+                buffer, sizeof(buffer))) {
+            return [NSString stringWithUTF8String:buffer];
+        }
+    }
+
+    const LinkParameterDefinition *definition =
+        link_parameter_obd2_definition(pid);
+    if (definition != NULL &&
+        link_parameter_format_value(
+            definition, true, value, buffer, sizeof(buffer))) {
+        return [NSString stringWithUTF8String:buffer];
+    }
+    return [NSString stringWithFormat:@"%g", value];
+}
+
 - (double)displayTemperatureCelsius:(double)celsius
 {
     double display = celsius;
@@ -1834,6 +1861,11 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
 - (double)displayValueForPID:(uint8_t)pid canonicalValue:(double)value
 {
     return [_shared displayValueForPID:pid canonicalValue:value];
+}
+- (NSString *)formattedDisplayValueForPID:(uint8_t)pid
+                           canonicalValue:(double)value
+{
+    return [_shared formattedDisplayValueForPID:pid canonicalValue:value];
 }
 - (double)displayTemperatureCelsius:(double)celsius
 {

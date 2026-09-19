@@ -137,6 +137,9 @@ NS_ASSUME_NONNULL_BEGIN
                                       limit:(NSUInteger)limit;
 /** Presentation-converted history; canonical telemetry remains unchanged. */
 - (double)displayValueForPID:(uint8_t)pid canonicalValue:(double)value;
+/** LINK-owned deterministic value/unit rendering for one canonical OBD-II scalar. */
+- (NSString *)formattedDisplayValueForPID:(uint8_t)pid
+                           canonicalValue:(double)value;
 - (double)displayTemperatureCelsius:(double)celsius;
 - (NSString *)displayTemperatureUnit;
 - (NSArray<NSNumber *> *)displayRecentValuesForPID:(uint8_t)pid
@@ -251,6 +254,8 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)setSelectedMeasurementSystemKey:(NSString *)key;
 - (NSArray<NSNumber *> *)recentValuesForPID:(uint8_t)pid limit:(NSUInteger)limit;
 - (double)displayValueForPID:(uint8_t)pid canonicalValue:(double)value;
+- (NSString *)formattedDisplayValueForPID:(uint8_t)pid
+                           canonicalValue:(double)value;
 - (double)displayTemperatureCelsius:(double)celsius;
 - (NSString *)displayTemperatureUnit;
 - (NSArray<NSNumber *> *)displayRecentValuesForPID:(uint8_t)pid limit:(NSUInteger)limit;

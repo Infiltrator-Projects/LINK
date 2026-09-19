@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "link/mercedes_me_adapter.h"
 
+#include "infiltratr/core.h"
+
 #include <stddef.h>
 
 static const LinkMercedesMeConnectionProblemDefinition
@@ -154,7 +156,7 @@ const char *link_mercedes_me_reason_name(int ordinal)
         "R_GATT_FAILURE"
     };
     if (ordinal < 0 ||
-        (size_t)ordinal >= sizeof(names) / sizeof(names[0]))
+        (size_t)ordinal >= INFILTRATR_ARRAY_LENGTH(names))
         return "R_UNKNOWN";
     return names[ordinal];
 }

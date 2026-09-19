@@ -15,6 +15,8 @@
 #endif
 #include "link-linux-openport2.h"
 
+#include "infiltratr/core.h"
+
 #if defined(__linux__)
 
 #include <ctype.h>
@@ -268,13 +270,9 @@ static void normalize_command(const uint8_t *bytes,
 
 static bool parse_hex_u32(const char *text, uint32_t *value)
 {
-    char *end = NULL;
-    unsigned long parsed;
-    if (text == NULL || value == NULL || text[0] == '\0') return false;
-    errno = 0;
-    parsed = strtoul(text, &end, 16);
-    if (errno != 0 || end == text || *end != '\0' ||
-        parsed > UINT32_MAX) {
+    uint64_t parsed = 0U;
+    if (text == NULL || value == NULL ||
+        !infiltratr_parse_u64_range(text, 16U, 0U, UINT32_MAX, &parsed)) {
         return false;
     }
     *value = (uint32_t)parsed;
