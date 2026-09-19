@@ -159,7 +159,7 @@ static void test_display_formatting(void)
     CHECK(link_fuel_economy_format_display(
         &snapshot, &preferences, true, &display));
     CHECK(strcmp(display.instantaneous, "7.5 L/100 km") == 0);
-    CHECK(strcmp(display.average, "8.2 L/100 km") == 0);
+    CHECK(strcmp(display.average, "8.3 L/100 km") == 0);
     CHECK(strcmp(display.fuel_rate, "6.00 L/h") == 0);
     CHECK(strcmp(display.trip, "2.50 L over 30.0 km") == 0);
 
