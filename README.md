@@ -2,6 +2,8 @@
 
 # LINK
 
+**Project copyright:** © 2000–2026 Shannon Smith
+
 [![LINK CI](https://github.com/Infiltrator-Projects/LINK/actions/workflows/ci.yml/badge.svg)](https://github.com/Infiltrator-Projects/LINK/actions/workflows/ci.yml)
 
 LINK is the shared C11 vehicle-diagnostics and application engine used by MBLINK, JAGLINK, BMWLINK, AUDILINK and FORDLINK.
