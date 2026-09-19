@@ -411,6 +411,7 @@ if(LINK_BUILD_LINUX_PROVIDER_SMOKE)
         "${CMAKE_CURRENT_SOURCE_DIR}/platform/linux"
         "${LINK_PROVIDER_BLUEZ_INCLUDE_DIR}")
     target_link_libraries(link-linux-provider-smoke PRIVATE
+        InfiltratrCommon::Portable
         PkgConfig::LINK_PROVIDER_LIBUSB
         PkgConfig::LINK_PROVIDER_GIO)
     if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
