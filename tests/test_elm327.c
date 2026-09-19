@@ -90,6 +90,15 @@ int main(void)
     link_elm327_probe_begin(&probe);
     REQUIRE(strcmp(link_elm327_probe_command(&probe), "AT@1") == 0);
 
+    REQUIRE(link_elm327_can_format_header_command(
+                UINT32_C(0x7e1), false,
+                can_command, sizeof(can_command)) == LINK_ELM327_CAN_RESULT_OK);
+    REQUIRE(strcmp(can_command, "ATSH7E1") == 0);
+    REQUIRE(link_elm327_can_format_receive_address_command(
+                UINT32_C(0x18daf110), true,
+                can_command, sizeof(can_command)) == LINK_ELM327_CAN_RESULT_OK);
+    REQUIRE(strcmp(can_command, "ATCRA18DAF110") == 0);
+
     REQUIRE(link_elm327_can_channel_begin(&can_state, &can_config) == LINK_ELM327_CAN_RESULT_OK);
     REQUIRE(link_elm327_can_channel_command(&can_state, can_command, sizeof(can_command)) == LINK_ELM327_CAN_RESULT_OK);
     REQUIRE(strcmp(can_command, "ATSH7E0") == 0);
