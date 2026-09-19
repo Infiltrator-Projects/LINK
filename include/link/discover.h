@@ -6,6 +6,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "link/research.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -52,6 +54,21 @@ int link_evidence_write_frame(link_evidence_writer *writer,
 int link_evidence_write_annotation(link_evidence_writer *writer,
                                    uint64_t timestamp_ns,
                                    const char *text);
+int link_evidence_write_research_session(link_evidence_writer *writer,
+                                         uint64_t timestamp_ns,
+                                         const char *product,
+                                         const char *transport,
+                                         uint32_t nominal_bitrate);
+int link_evidence_write_research_phase(link_evidence_writer *writer,
+                                       uint64_t timestamp_ns,
+                                       LinkResearchPhase phase);
+int link_evidence_write_event_marker(link_evidence_writer *writer,
+                                     uint64_t timestamp_ns,
+                                     size_t marker_index,
+                                     const char *text);
+int link_evidence_write_research_summary(link_evidence_writer *writer,
+                                         uint64_t timestamp_ns,
+                                         const LinkResearchState *state);
 int link_evidence_flush(link_evidence_writer *writer);
 void link_evidence_close(link_evidence_writer *writer);
 

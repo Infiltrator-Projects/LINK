@@ -10,6 +10,7 @@
 
 #include "link/discover.h"
 #include "link/obd2.h"
+#include "link/research.h"
 
 #include "infiltratr/core.h"
 #include "infiltratr/endian.h"
@@ -99,6 +100,7 @@ typedef struct app_state_ {
     HANDLE stop_event;
     CRITICAL_SECTION evidence_lock;
     link_evidence_writer *evidence;
+    LinkResearchState research;
     char evidence_path[MAX_PATH];
     int connected;
 } app_state;
@@ -162,9 +164,15 @@ static void evidence_frame(const char *direction, const PASSTHRU_MSG *msg, const
     payload = msg->DataSize > 4UL ? msg->Data + 4U : msg->Data;
     length = msg->DataSize > 4UL ? (size_t)(msg->DataSize - 4UL) : (size_t)msg->DataSize;
     EnterCriticalSection(&g_app.evidence_lock);
-    (void)link_evidence_write_frame(g_app.evidence, unix_time_ns(), direction,
-                                    msg->ProtocolID == J2534_ISO15765 ? "ISO15765" : "CAN",
-                                    id, payload, length, annotation);
+    if (link_evidence_write_frame(g_app.evidence, unix_time_ns(), direction,
+                                  msg->ProtocolID == J2534_ISO15765 ? "ISO15765" : "CAN",
+                                  id, payload, length, annotation) == 0) {
+        const LinkResearchDirection research_direction =
+            strcmp(direction, "tx") == 0
+                ? LINK_RESEARCH_DIRECTION_TX
+                : LINK_RESEARCH_DIRECTION_RX;
+        (void)link_research_record_frame(&g_app.research, research_direction);
+    }
     LeaveCriticalSection(&g_app.evidence_lock);
 }
 
@@ -184,7 +192,31 @@ static int make_evidence_file(void)
                    (unsigned int)st.wMinute, (unsigned int)st.wSecond);
     g_app.evidence_path[sizeof(g_app.evidence_path) - 1U] = '\0';
     g_app.evidence = link_evidence_open(g_app.evidence_path);
-    return g_app.evidence != NULL;
+    if (g_app.evidence == NULL) return 0;
+    {
+        const uint64_t timestamp_ns = unix_time_ns();
+        (void)link_research_begin(&g_app.research, timestamp_ns);
+        (void)link_evidence_write_research_session(
+            g_app.evidence, timestamp_ns, LINK_PRODUCT_NAME,
+            "OpenPort 2.0 / SAE J2534", 500000U);
+        (void)link_evidence_write_research_phase(
+            g_app.evidence, timestamp_ns, g_app.research.phase);
+        (void)link_evidence_flush(g_app.evidence);
+    }
+    return 1;
+}
+
+static void research_set_phase(LinkResearchPhase phase)
+{
+    const uint64_t timestamp_ns = unix_time_ns();
+    if (g_app.evidence == NULL) return;
+    EnterCriticalSection(&g_app.evidence_lock);
+    if (link_research_set_phase(&g_app.research, phase, timestamp_ns)) {
+        (void)link_evidence_write_research_phase(
+            g_app.evidence, timestamp_ns, phase);
+        (void)link_evidence_flush(g_app.evidence);
+    }
+    LeaveCriticalSection(&g_app.evidence_lock);
 }
 
 static int read_registry_openport(char *path, size_t capacity)
@@ -345,7 +377,8 @@ static int connect_passive(void)
         return 0;
     }
     g_app.connected = 1;
-    set_status("PASSIVE CAN 500 kbit/s — read only");
+    research_set_phase(LINK_RESEARCH_PHASE_PASSIVE_CAPTURE);
+    set_status("VEHICLE RESEARCH · PASSIVE CAN 500 kbit/s — read only");
     post_logf("Passive capture connected at 500 kbit/s. No transmit path is used by capture mode.");
     return 1;
 }
@@ -629,6 +662,7 @@ static DWORD WINAPI full_sweep_worker(LPVOID unused)
                        "FULL SWEEP - %s", plan->name);
         post_status(status);
     }
+    research_set_phase(LINK_RESEARCH_PHASE_MANUFACTURER_SWEEP);
     post_logf(
         "FULL SWEEP started: %s (%lu product-defined diagnostic targets).",
         plan->name, (unsigned long)plan->target_count);
@@ -657,6 +691,7 @@ static DWORD WINAPI full_sweep_worker(LPVOID unused)
     }
 
     disconnect_channel();
+    research_set_phase(LINK_RESEARCH_PHASE_PAUSED);
     if (full_sweep_cancelled()) {
         post_status("FULL SWEEP cancelled - passive capture is stopped");
         post_logf("FULL SWEEP cancelled after %lu responder(s).",
@@ -732,7 +767,8 @@ static void run_inventory(void)
         return;
     }
     install_obd_flow_filters();
-    set_status("READ-ONLY OBD inventory in progress");
+    research_set_phase(LINK_RESEARCH_PHASE_STANDARD_INVENTORY);
+    set_status("VEHICLE RESEARCH · READ-ONLY OBD inventory in progress");
     post_logf("Starting bounded read-only OBD inventory (%lu requests maximum).",
               (unsigned long)(INFILTRATR_ARRAY_LENGTH(queries)));
     for (q = 0U; q < INFILTRATR_ARRAY_LENGTH(queries); ++q) {
@@ -811,18 +847,20 @@ static void connect_device(void)
 static void export_evidence(void)
 {
     OPENFILENAMEA ofn;
-    char path[MAX_PATH] = LINK_PRODUCT_NAME "-evidence.jsonl";
+    char path[MAX_PATH] = LINK_PRODUCT_NAME "-vehicle-research.jsonl";
     if (g_app.evidence == NULL) {
         MessageBoxA(g_app.window, "No evidence has been recorded yet.", LINK_PRODUCT_NAME " Discover", MB_OK | MB_ICONINFORMATION);
         return;
     }
     EnterCriticalSection(&g_app.evidence_lock);
+    (void)link_evidence_write_research_summary(
+        g_app.evidence, unix_time_ns(), &g_app.research);
     (void)link_evidence_flush(g_app.evidence);
     LeaveCriticalSection(&g_app.evidence_lock);
     memset(&ofn, 0, sizeof(ofn));
     ofn.lStructSize = sizeof(ofn);
     ofn.hwndOwner = g_app.window;
-    ofn.lpstrFilter = "JSON Lines (*.jsonl)\0*.jsonl\0All files (*.*)\0*.*\0\0";
+    ofn.lpstrFilter = "Vehicle Research JSON Lines (*.jsonl)\0*.jsonl\0All files (*.*)\0*.*\0\0";
     ofn.lpstrFile = path;
     ofn.nMaxFile = (DWORD)sizeof(path);
     ofn.lpstrDefExt = "jsonl";
@@ -831,18 +869,25 @@ static void export_evidence(void)
         post_logf("Evidence exported to %s", path);
 }
 
-static void add_annotation(void)
+static void add_event_marker(void)
 {
     char text[512];
+    size_t marker_index;
+    const uint64_t timestamp_ns = unix_time_ns();
     if (g_app.evidence == NULL) return;
     GetWindowTextA(g_app.note, text, (int)sizeof(text));
     text[sizeof(text) - 1U] = '\0';
     if (text[0] == '\0') return;
     EnterCriticalSection(&g_app.evidence_lock);
-    (void)link_evidence_write_annotation(g_app.evidence, unix_time_ns(), text);
-    (void)link_evidence_flush(g_app.evidence);
+    marker_index = link_research_mark_event(&g_app.research);
+    if (marker_index != 0U) {
+        (void)link_evidence_write_event_marker(
+            g_app.evidence, timestamp_ns, marker_index, text);
+        (void)link_evidence_flush(g_app.evidence);
+    }
     LeaveCriticalSection(&g_app.evidence_lock);
-    post_logf("ANNOTATION: %s", text);
+    if (marker_index != 0U)
+        post_logf("EVENT %lu: %s", (unsigned long)marker_index, text);
     SetWindowTextA(g_app.note, "");
 }
 
@@ -874,7 +919,7 @@ static void create_controls(HWND window)
     button = CreateWindowA("BUTTON", "Stop", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
                            368, 68, 80, 30, window, (HMENU)(INT_PTR)IDC_STOP, NULL, NULL);
     SendMessageA(button, WM_SETFONT, (WPARAM)font, TRUE);
-    button = CreateWindowA("BUTTON", "Export JSONL", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+    button = CreateWindowA("BUTTON", "Export Research", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
                            456, 68, 120, 30, window, (HMENU)(INT_PTR)IDC_EXPORT, NULL, NULL);
     SendMessageA(button, WM_SETFONT, (WPARAM)font, TRUE);
     g_app.status = CreateWindowA("STATIC", "DISCONNECTED — deny-by-default safety policy active", WS_CHILD | WS_VISIBLE,
@@ -887,7 +932,7 @@ static void create_controls(HWND window)
     g_app.note = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", "", WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL,
                                  12, 448, 620, 26, window, (HMENU)(INT_PTR)IDC_NOTE, NULL, NULL);
     SendMessageA(g_app.note, WM_SETFONT, (WPARAM)font, TRUE);
-    button = CreateWindowA("BUTTON", "Add annotation", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+    button = CreateWindowA("BUTTON", "Mark event", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
                            640, 448, 132, 26, window, (HMENU)(INT_PTR)IDC_ADDNOTE, NULL, NULL);
     SendMessageA(button, WM_SETFONT, (WPARAM)font, TRUE);
 }
@@ -907,12 +952,13 @@ static LRESULT CALLBACK window_proc(HWND window, UINT message, WPARAM wparam, LP
         case IDC_FULL_SWEEP: run_full_sweep(); return 0;
 #endif
         case IDC_STOP:
+            research_set_phase(LINK_RESEARCH_PHASE_PAUSED);
             close_device();
             set_status("DISCONNECTED — deny-by-default safety policy active");
             post_logf("Capture stopped.");
             return 0;
         case IDC_EXPORT: export_evidence(); return 0;
-        case IDC_ADDNOTE: add_annotation(); return 0;
+        case IDC_ADDNOTE: add_event_marker(); return 0;
         default: break;
         }
         break;
@@ -967,7 +1013,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR command_line, i
     cls.lpszClassName = LINK_PRODUCT_WINDOW_CLASS;
     if (RegisterClassExA(&cls) == 0U) return 1;
     window = CreateWindowExA(0U, cls.lpszClassName,
-                             LINK_PRODUCT_SLUG "-discover — OpenPort 2.0 / J2534 read-only discovery",
+                             LINK_PRODUCT_SLUG "-discover — Vehicle Research / OpenPort 2.0",
                              WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, 810, 540,
                              NULL, NULL, instance, NULL);
     if (window == NULL) return 1;

@@ -6,6 +6,13 @@ This file records user-visible, compatibility, diagnostic-knowledge and validati
 
 - No unreleased changes.
 
+## 0.15.31 — 2026-09-20
+
+- Added LINK's portable Vehicle Research session state with explicit passive-capture, standards-inventory, manufacturer-sweep, paused and complete phases.
+- Extended the shared evidence stream with typed research-session, research-phase, event-marker and research-summary records while preserving every raw frame.
+- Upgraded the shared Windows Discover face into the first Vehicle Research workspace slice: passive capture, bounded OBD inventory, product sweep, operator event markers and research export now share one deterministic session timeline.
+- Kept the existing deny-by-default transmission policy unchanged; research additions do not enable reset, security, routine, clear, coding or programming operations.
+
 ## 0.15.30 — 2026-09-20
 
 - Advanced the exact nested Infiltratr Common dependency to 1.19.10.

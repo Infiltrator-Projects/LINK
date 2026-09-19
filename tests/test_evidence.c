@@ -65,6 +65,31 @@ int main(void)
         return 1;
     }
 
+    {
+        LinkResearchState research;
+        size_t event_index;
+        (void)link_research_begin(&research, UINT64_C(123456791));
+        (void)link_research_set_phase(
+            &research, LINK_RESEARCH_PHASE_PASSIVE_CAPTURE,
+            UINT64_C(123456792));
+        (void)link_research_record_frame(
+            &research, LINK_RESEARCH_DIRECTION_RX);
+        event_index = link_research_mark_event(&research);
+        if (link_evidence_write_research_session(
+                writer, UINT64_C(123456791), "TEST", "mock", 500000U) != 0 ||
+            link_evidence_write_research_phase(
+                writer, UINT64_C(123456792), research.phase) != 0 ||
+            link_evidence_write_event_marker(
+                writer, UINT64_C(123456793), event_index, "accelerate") != 0 ||
+            link_evidence_write_research_summary(
+                writer, UINT64_C(123456794), &research) != 0) {
+            (void)fprintf(stderr, "cannot write research evidence\n");
+            link_evidence_close(writer);
+            (void)remove(path);
+            return 1;
+        }
+    }
+
     if (link_evidence_flush(writer) != 0) {
         (void)fprintf(stderr, "cannot flush evidence writer\n");
         link_evidence_close(writer);
@@ -96,6 +121,14 @@ int main(void)
     failures += require_substring(buffer, "\"data\":\"01090AFF\"");
     failures += require_substring(buffer, "operator \\\"note\\\"");
     failures += require_substring(buffer, "line1\\nline2");
+    failures += require_substring(buffer, "\"type\":\"research-session\"");
+    failures += require_substring(buffer, "\"product\":\"TEST\"");
+    failures += require_substring(buffer, "\"type\":\"research-phase\"");
+    failures += require_substring(buffer, "\"phase\":\"passive-capture\"");
+    failures += require_substring(buffer, "\"type\":\"event-marker\"");
+    failures += require_substring(buffer, "\"text\":\"accelerate\"");
+    failures += require_substring(buffer, "\"type\":\"research-summary\"");
+    failures += require_substring(buffer, "\"frames\":1");
 
     return failures == 0 ? 0 : 1;
 }

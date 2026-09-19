@@ -141,6 +141,7 @@ add_library(link-core STATIC
     src/discover/safety.c
     src/discover/sweep.c
     src/discover/evidence.c
+    src/discover/research.c
     src/discover/ecu_probe.c)
 add_library(LINK::Core ALIAS link-core)
 set_target_properties(link-core PROPERTIES EXPORT_NAME Core)
@@ -560,6 +561,7 @@ if(BUILD_TESTING AND PROJECT_IS_TOP_LEVEL)
     link_add_test(link-test-discover-safety tests/test_discover_safety.c link-discover-safety)
     link_add_test(link-test-discover-sweep tests/test_discover_sweep.c link-discover-sweep)
     link_add_test(link-test-evidence tests/test_evidence.c link-evidence)
+    link_add_test(link-test-research tests/test_research.c link-research)
     link_add_test(link-test-ecu-probe tests/test_ecu_probe.c link-ecu-probe)
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
         link_add_test(link-test-linux-openport2-status tests/test_linux_openport2_status.c link-linux-openport2-status)
