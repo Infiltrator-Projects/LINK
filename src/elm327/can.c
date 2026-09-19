@@ -76,6 +76,26 @@ static LinkElm327CanResult elm327_can_format_id_command(
     return LINK_ELM327_CAN_RESULT_OK;
 }
 
+LinkElm327CanResult link_elm327_can_format_header_command(
+    uint32_t can_id,
+    bool extended_id,
+    char *buffer,
+    size_t buffer_size)
+{
+    return elm327_can_format_id_command(
+        "ATSH", can_id, extended_id, buffer, buffer_size);
+}
+
+LinkElm327CanResult link_elm327_can_format_receive_address_command(
+    uint32_t can_id,
+    bool extended_id,
+    char *buffer,
+    size_t buffer_size)
+{
+    return elm327_can_format_id_command(
+        "ATCRA", can_id, extended_id, buffer, buffer_size);
+}
+
 static LinkElm327CanResult elm327_can_parse_hex_line(
     const char *line,
     size_t line_length,
@@ -420,12 +440,12 @@ LinkElm327CanResult link_elm327_can_channel_command(
 
     switch (state->stage) {
     case LINK_ELM327_CAN_STAGE_SET_HEADER:
-        return elm327_can_format_id_command(
-            "ATSH", state->config.tx_can_id, state->config.extended_id,
+        return link_elm327_can_format_header_command(
+            state->config.tx_can_id, state->config.extended_id,
             buffer, buffer_size);
     case LINK_ELM327_CAN_STAGE_SET_RECEIVE_ADDRESS:
-        return elm327_can_format_id_command(
-            "ATCRA", state->config.rx_can_id, state->config.extended_id,
+        return link_elm327_can_format_receive_address_command(
+            state->config.rx_can_id, state->config.extended_id,
             buffer, buffer_size);
     case LINK_ELM327_CAN_STAGE_ENABLE_AUTO_FORMATTING:
         fixed = "ATCAF1";
