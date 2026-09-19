@@ -6,6 +6,8 @@
 
 #include "link-windows-about.h"
 
+#include "infiltratr/core.h"
+
 #include <commctrl.h>
 #include <shellapi.h>
 #include <stdio.h>
@@ -136,8 +138,8 @@ static HFONT link_windows_about_make_font(HWND window)
     if (dc != NULL) ReleaseDC(window, dc);
     if (!link_windows_about_utf8_to_wide(
             LINK_PRODUCT_FONT_UI, family,
-            sizeof(family) / sizeof(family[0]))) {
-        (void)wcscpy_s(family, sizeof(family) / sizeof(family[0]),
+            INFILTRATR_ARRAY_LENGTH(family))) {
+        (void)wcscpy_s(family, INFILTRATR_ARRAY_LENGTH(family),
                        L"Segoe UI");
     }
 
@@ -298,12 +300,12 @@ void link_windows_show_about(HWND parent,
     }
 
     if (!link_windows_about_utf8_to_wide(
-            title_utf8, title, sizeof(title) / sizeof(title[0])) ||
+            title_utf8, title, INFILTRATR_ARRAY_LENGTH(title)) ||
         !link_windows_about_utf8_to_wide(
             info->product_name, product_name,
-            sizeof(product_name) / sizeof(product_name[0])) ||
+            INFILTRATR_ARRAY_LENGTH(product_name)) ||
         !link_windows_about_utf8_to_wide(
-            content_utf8, content, sizeof(content) / sizeof(content[0]))) {
+            content_utf8, content, INFILTRATR_ARRAY_LENGTH(content))) {
         (void)MessageBoxA(
             parent, "Unable to prepare About information.",
             "LINK About", MB_OK | MB_ICONERROR);

@@ -29,6 +29,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include "infiltratr/core.h"
 #include <wchar.h>
 
 #include "link-windows-about.h"
@@ -74,7 +76,7 @@ static BOOL set_window_text_utf8(HWND window, const char *text)
     wchar_t wide[1024];
 
     if (!utf8_to_wide(text != NULL ? text : "", wide,
-                      sizeof(wide) / sizeof(wide[0]))) {
+                      INFILTRATR_ARRAY_LENGTH(wide))) {
         return FALSE;
     }
     return SetWindowTextW(window, wide);

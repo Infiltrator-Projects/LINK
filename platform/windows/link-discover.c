@@ -374,10 +374,7 @@ static int send_read_only_target(
     tx.ProtocolID = J2534_ISO15765;
     tx.TxFlags = J2534_ISO15765_FRAME_PAD |
                  (extended ? J2534_CAN_29BIT_ID : 0UL);
-    tx.Data[0] = (unsigned char)((can_id >> 24U) & 0xFFU);
-    tx.Data[1] = (unsigned char)((can_id >> 16U) & 0xFFU);
-    tx.Data[2] = (unsigned char)((can_id >> 8U) & 0xFFU);
-    tx.Data[3] = (unsigned char)(can_id & 0xFFU);
+    infiltratr_store_be32(tx.Data, can_id);
     memcpy(tx.Data + 4U, payload, payload_length);
     tx.DataSize = (unsigned long)(payload_length + 4U);
 
