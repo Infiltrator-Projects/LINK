@@ -6,6 +6,11 @@ This file records user-visible, compatibility, diagnostic-knowledge and validati
 
 - No unreleased changes.
 
+## 0.15.32 — 2026-09-20
+
+- Published the repository-wide copyright normalization already present on main.
+- No diagnostic, transport, safety, Vehicle Research, API or presentation behaviour changed from 0.15.31.
+
 ## 0.15.31 — 2026-09-20
 
 - Added LINK's portable Vehicle Research session state with explicit passive-capture, standards-inventory, manufacturer-sweep, paused and complete phases.
