@@ -2718,6 +2718,7 @@ struct LinkStandardProductContentView: View {
             subtitle: appearance.subtitle,
             version: model.versionText,
             summary: appearance.summary,
+            build: "Source / Xcode build",
             authors: appearance.authors,
             copyright: appearance.copyrightFull,
             website: appearance.website,

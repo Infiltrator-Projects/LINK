@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.15.39 — 2026-09-21
+
+- Complete the suite-wide About contract by supplying the canonical Build field to LINK's standard SwiftUI product face.
+- Repair the Win32 Discover About metadata initializer after the shared About model gained a Build field; use designated initializers so future model growth cannot silently shift identity fields.
+- Give native Windows Discover surfaces an explicit build identity while preserving the shared Website, Credits, Licence and Close structure.
+
+
 This file records user-visible, compatibility, diagnostic-knowledge and validation changes for LINK.
 
 ## 0.15.38 — 2026-09-21

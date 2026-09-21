@@ -113,6 +113,9 @@ static BOOL set_window_text_utf8(HWND window, const char *text)
 #ifndef LINK_PRODUCT_DESCRIPTION
 #define LINK_PRODUCT_DESCRIPTION "OpenPort 2.0 / SAE J2534 read-only discovery and evidence capture."
 #endif
+#ifndef LINK_PRODUCT_BUILD
+#define LINK_PRODUCT_BUILD "Windows / native build"
+#endif
 #ifndef LINK_PRODUCT_RELEASE_DATE
 #define LINK_PRODUCT_RELEASE_DATE ""
 #endif
@@ -326,17 +329,18 @@ static HMENU create_main_menu(void)
 static void show_about(void)
 {
     static const LinkAboutInfo info = {
-        LINK_PRODUCT_NAME " Discover",
-        LINK_PRODUCT_SUBTITLE,
-        LINK_PRODUCT_VERSION,
-        LINK_PRODUCT_DESCRIPTION,
-        LINK_PRODUCT_RELEASE_DATE,
-        LINK_PRODUCT_AUTHORS,
-        LINK_PRODUCT_COPYRIGHT,
-        LINK_PRODUCT_WEBSITE,
-        LINK_PRODUCT_LICENSE_NAME,
-        LINK_PRODUCT_LICENSE_TEXT,
-        LINK_PRODUCT_CREDITS
+        .product_name = LINK_PRODUCT_NAME " Discover",
+        .subtitle = LINK_PRODUCT_SUBTITLE,
+        .version = LINK_PRODUCT_VERSION,
+        .description = LINK_PRODUCT_DESCRIPTION,
+        .build = LINK_PRODUCT_BUILD,
+        .release_date = LINK_PRODUCT_RELEASE_DATE,
+        .authors = LINK_PRODUCT_AUTHORS,
+        .copyright = LINK_PRODUCT_COPYRIGHT,
+        .website = LINK_PRODUCT_WEBSITE,
+        .license_name = LINK_PRODUCT_LICENSE_NAME,
+        .license_text = LINK_PRODUCT_LICENSE_TEXT,
+        .credits = LINK_PRODUCT_CREDITS
     };
 
     link_windows_show_about(g_app.window, g_product_icon, &info);
