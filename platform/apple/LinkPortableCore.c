@@ -31,6 +31,7 @@
 #include "../../src/core/isotp.c"
 #endif
 #include "../../src/core/parameter.c"
+#include "../../src/core/selection.c"
 #include "../../src/core/dashboard.c"
 #include "../../src/core/scheduler.c"
 #include "../../src/core/telemetry.c"

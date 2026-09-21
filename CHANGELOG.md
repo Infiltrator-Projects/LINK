@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.15.40 — 2026-09-21
+
+- Repair the Apple portable-core amalgamation exposed by the suite-wide About rollout: include the shared selection engine now required by LINK::Core.
+- Keep the Apple bridge validator and actual compiled source topology in exact agreement so product faces can consume the current LINK revision without copying core source lists.
+- Preserve the 0.15.39 suite-standard About contract unchanged.
+
+
 ## 0.15.39 — 2026-09-21
 
 - Complete the suite-wide About contract by supplying the canonical Build field to LINK's standard SwiftUI product face.
