@@ -684,6 +684,93 @@ static inline LinkUdsResult link_uds_decode_read_dtc_information_response(
     return LINK_UDS_RESULT_OK;
 }
 
+/**
+ * Decode a ReadDTCInformation response and validate request-specific echoes.
+ *
+ * The structure-only decoder above intentionally accepts any syntactically
+ * valid response for a selected subfunction. Transaction code has stronger
+ * information: it knows the exact request that was sent. This wrapper uses
+ * that knowledge to reject responses whose echoed memory selection, record
+ * number, functional group, or DTC does not match the request.
+ *
+ * This is particularly important for 0x17..0x19. A malformed server that
+ * omits MemorySelection can otherwise produce a byte stream that is
+ * structurally parseable while shifting the DTC bytes into the wrong fields.
+ */
+static inline LinkUdsResult
+link_uds_decode_read_dtc_information_response_for_request(
+    const LinkUdsDtcInformationRequest *request,
+    const uint8_t *pdu,
+    size_t pdu_length,
+    LinkUdsDtcInformationResponse *response)
+{
+    LinkUdsDtcInformationResponse decoded;
+    LinkUdsResult result;
+    uint32_t echoed_dtc;
+
+    if (request == NULL || response == NULL)
+        return LINK_UDS_RESULT_INVALID_ARGUMENT;
+
+    result = link_uds_decode_read_dtc_information_response(
+        request->subfunction, pdu, pdu_length, &decoded);
+    if (result != LINK_UDS_RESULT_OK) return result;
+
+    switch (request->subfunction) {
+    case LINK_UDS_DTC_REPORT_STORED_DATA_BY_RECORD_NUMBER:
+    case LINK_UDS_DTC_REPORT_EXT_DATA_BY_RECORD_NUMBER:
+        if (!decoded.record_number_available ||
+            decoded.record_number != request->record_number)
+            return LINK_UDS_RESULT_UNEXPECTED_RESPONSE;
+        break;
+
+    case LINK_UDS_DTC_REPORT_USER_MEMORY_BY_STATUS_MASK:
+        if (!decoded.memory_selection_available ||
+            decoded.memory_selection != request->memory_selection)
+            return LINK_UDS_RESULT_UNEXPECTED_RESPONSE;
+        break;
+
+    case LINK_UDS_DTC_REPORT_USER_MEMORY_SNAPSHOT_BY_DTC_NUMBER:
+    case LINK_UDS_DTC_REPORT_USER_MEMORY_EXT_DATA_BY_DTC_NUMBER:
+        if (!decoded.memory_selection_available ||
+            decoded.memory_selection != request->memory_selection ||
+            decoded.records_length < 4U)
+            return LINK_UDS_RESULT_UNEXPECTED_RESPONSE;
+        echoed_dtc = link_uds_dtc_read_code(decoded.records);
+        if (echoed_dtc != request->dtc)
+            return LINK_UDS_RESULT_UNEXPECTED_RESPONSE;
+        break;
+
+    case LINK_UDS_DTC_REPORT_SNAPSHOT_BY_DTC_NUMBER:
+    case LINK_UDS_DTC_REPORT_EXT_DATA_BY_DTC_NUMBER:
+    case LINK_UDS_DTC_REPORT_MIRROR_MEMORY_EXT_DATA_BY_DTC_NUMBER:
+        if (decoded.records_length < 4U ||
+            link_uds_dtc_read_code(decoded.records) != request->dtc)
+            return LINK_UDS_RESULT_UNEXPECTED_RESPONSE;
+        break;
+
+    case LINK_UDS_DTC_REPORT_SEVERITY_INFORMATION_OF_DTC:
+        if (link_uds_dtc_response_record_count(&decoded) != 1U ||
+            decoded.records_length < 6U ||
+            link_uds_dtc_read_code(decoded.records + 2U) != request->dtc)
+            return LINK_UDS_RESULT_UNEXPECTED_RESPONSE;
+        break;
+
+    case LINK_UDS_DTC_REPORT_WWH_OBD_BY_MASK_RECORD:
+    case LINK_UDS_DTC_REPORT_WWH_OBD_WITH_PERMANENT_STATUS:
+        if (!decoded.functional_group_identifier_available ||
+            decoded.functional_group_identifier !=
+                request->functional_group_identifier)
+            return LINK_UDS_RESULT_UNEXPECTED_RESPONSE;
+        break;
+
+    default:
+        break;
+    }
+
+    *response = decoded;
+    return LINK_UDS_RESULT_OK;
+}
+
 /* Compatibility helper retained for existing callers of 0x19/0x02. */
 static inline LinkUdsResult link_uds_build_report_dtcs_by_status_mask_request(
     uint8_t status_mask,
