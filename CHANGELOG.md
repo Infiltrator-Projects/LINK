@@ -11,6 +11,7 @@ This file records user-visible, compatibility, diagnostic-knowledge and validati
 - Completed the Common 1.19.20 forward-consumption pass in the Linux GTK shell.
 - Replaced the shell's GLib monotonic-clock wrapper with Common's canonical monotonic nanosecond provider.
 - Moved LINK language-preference XDG path resolution, recursive directory creation and atomic persistence onto Common's POSIX contracts while retaining LINK's own language policy and INI schema.
+- Replaced the language-pack parser's locale-sensitive ctype whitespace/case conversion with Common's deterministic ASCII contracts.
 - Kept language-pack discovery and GTK-native UI concerns in the Linux presentation layer; no code or policy was added to Common.
 
 ## 0.15.33 — 2026-09-21
