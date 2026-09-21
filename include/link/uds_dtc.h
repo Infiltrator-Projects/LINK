@@ -75,6 +75,35 @@ typedef struct {
     uint8_t status;
 } LinkUdsDtcRecord;
 
+/*
+ * Typed views for the fixed-width ReadDTCInformation record families.
+ * Variable-size snapshot and extended-data records deliberately remain raw:
+ * their DID/data lengths are ECU/application defined and cannot be inferred
+ * safely by the generic ISO 14229 codec.
+ */
+typedef struct {
+    uint32_t code;
+    uint8_t snapshot_record_number;
+} LinkUdsDtcSnapshotIdentificationRecord;
+
+typedef struct {
+    uint8_t severity;
+    uint8_t functional_unit;
+    uint32_t code;
+    uint8_t status;
+} LinkUdsDtcSeverityRecord;
+
+typedef struct {
+    uint32_t code;
+    uint8_t fault_detection_counter;
+} LinkUdsDtcFaultDetectionCounterRecord;
+
+typedef struct {
+    uint8_t severity;
+    uint32_t code;
+    uint8_t status;
+} LinkUdsDtcWwhSeverityRecord;
+
 typedef struct {
     uint8_t availability_mask;
     size_t count;
@@ -350,6 +379,127 @@ static inline bool link_uds_dtc_response_records_valid(
            (response->records_length % record_size) == 0U;
 }
 
+static inline uint32_t link_uds_dtc_read_code(const uint8_t *record)
+{
+    return record == NULL ? 0U :
+        ((uint32_t)record[0] << 16U) |
+        ((uint32_t)record[1] << 8U) |
+        (uint32_t)record[2];
+}
+
+static inline size_t link_uds_dtc_response_record_size(
+    const LinkUdsDtcInformationResponse *response)
+{
+    if (response == NULL) return 0U;
+    switch (response->record_format) {
+    case LINK_UDS_DTC_RECORDS_DTC_STATUS:
+    case LINK_UDS_DTC_RECORDS_SNAPSHOT_IDENTIFICATION:
+    case LINK_UDS_DTC_RECORDS_FAULT_DETECTION_COUNTER:
+        return 4U;
+    case LINK_UDS_DTC_RECORDS_DTC_SEVERITY:
+        return 6U;
+    case LINK_UDS_DTC_RECORDS_WWH_SEVERITY:
+        return 5U;
+    case LINK_UDS_DTC_RECORDS_RAW:
+    default:
+        return 0U;
+    }
+}
+
+static inline size_t link_uds_dtc_response_record_count(
+    const LinkUdsDtcInformationResponse *response)
+{
+    const size_t record_size = link_uds_dtc_response_record_size(response);
+    return response == NULL || record_size == 0U ||
+           (response->records_length % record_size) != 0U
+        ? 0U : response->records_length / record_size;
+}
+
+static inline bool link_uds_dtc_response_status_record_at(
+    const LinkUdsDtcInformationResponse *response,
+    size_t index,
+    LinkUdsDtcRecord *record)
+{
+    const uint8_t *source;
+    if (response == NULL || record == NULL ||
+        response->record_format != LINK_UDS_DTC_RECORDS_DTC_STATUS ||
+        index >= link_uds_dtc_response_record_count(response))
+        return false;
+    source = response->records + (index * 4U);
+    record->code = link_uds_dtc_read_code(source);
+    record->status = source[3];
+    return true;
+}
+
+static inline bool link_uds_dtc_response_snapshot_identification_at(
+    const LinkUdsDtcInformationResponse *response,
+    size_t index,
+    LinkUdsDtcSnapshotIdentificationRecord *record)
+{
+    const uint8_t *source;
+    if (response == NULL || record == NULL ||
+        response->record_format !=
+            LINK_UDS_DTC_RECORDS_SNAPSHOT_IDENTIFICATION ||
+        index >= link_uds_dtc_response_record_count(response))
+        return false;
+    source = response->records + (index * 4U);
+    record->code = link_uds_dtc_read_code(source);
+    record->snapshot_record_number = source[3];
+    return true;
+}
+
+static inline bool link_uds_dtc_response_severity_record_at(
+    const LinkUdsDtcInformationResponse *response,
+    size_t index,
+    LinkUdsDtcSeverityRecord *record)
+{
+    const uint8_t *source;
+    if (response == NULL || record == NULL ||
+        response->record_format != LINK_UDS_DTC_RECORDS_DTC_SEVERITY ||
+        index >= link_uds_dtc_response_record_count(response))
+        return false;
+    source = response->records + (index * 6U);
+    record->severity = source[0];
+    record->functional_unit = source[1];
+    record->code = link_uds_dtc_read_code(source + 2U);
+    record->status = source[5];
+    return true;
+}
+
+static inline bool link_uds_dtc_response_fault_counter_at(
+    const LinkUdsDtcInformationResponse *response,
+    size_t index,
+    LinkUdsDtcFaultDetectionCounterRecord *record)
+{
+    const uint8_t *source;
+    if (response == NULL || record == NULL ||
+        response->record_format !=
+            LINK_UDS_DTC_RECORDS_FAULT_DETECTION_COUNTER ||
+        index >= link_uds_dtc_response_record_count(response))
+        return false;
+    source = response->records + (index * 4U);
+    record->code = link_uds_dtc_read_code(source);
+    record->fault_detection_counter = source[3];
+    return true;
+}
+
+static inline bool link_uds_dtc_response_wwh_severity_at(
+    const LinkUdsDtcInformationResponse *response,
+    size_t index,
+    LinkUdsDtcWwhSeverityRecord *record)
+{
+    const uint8_t *source;
+    if (response == NULL || record == NULL ||
+        response->record_format != LINK_UDS_DTC_RECORDS_WWH_SEVERITY ||
+        index >= link_uds_dtc_response_record_count(response))
+        return false;
+    source = response->records + (index * 5U);
+    record->severity = source[0];
+    record->code = link_uds_dtc_read_code(source + 1U);
+    record->status = source[4];
+    return true;
+}
+
 /**
  * Decode the fixed standard envelope of any supported 0x19 response.
  *
@@ -462,7 +612,12 @@ static inline LinkUdsResult link_uds_decode_read_dtc_information_response(
 
     case LINK_UDS_DTC_REPORT_USER_MEMORY_SNAPSHOT_BY_DTC_NUMBER:
     case LINK_UDS_DTC_REPORT_USER_MEMORY_EXT_DATA_BY_DTC_NUMBER:
-        if (generic.data_length < 2U) return LINK_UDS_RESULT_MALFORMED_PDU;
+        /*
+         * Positive response starts with the memory-selection echo followed by
+         * one DTCAndStatusRecord (3-byte DTC + status) before the variable
+         * snapshot/extended-data tail.
+         */
+        if (generic.data_length < 6U) return LINK_UDS_RESULT_MALFORMED_PDU;
         decoded.memory_selection_available = true;
         decoded.memory_selection = generic.data[1];
         decoded.records = generic.data + 2U;
@@ -514,9 +669,11 @@ static inline LinkUdsResult link_uds_decode_read_dtc_information_response(
     case LINK_UDS_DTC_REPORT_EXT_DATA_BY_DTC_NUMBER:
     case LINK_UDS_DTC_REPORT_MIRROR_MEMORY_EXT_DATA_BY_DTC_NUMBER:
         /*
-         * These responses contain variable-size snapshot/extended-data
-         * records. Preserve the complete post-subfunction payload.
+         * These responses contain a mandatory DTCAndStatusRecord followed by
+         * variable-size snapshot/extended-data records. Validate the fixed
+         * envelope, then preserve the complete post-subfunction payload.
          */
+        if (generic.data_length < 5U) return LINK_UDS_RESULT_MALFORMED_PDU;
         break;
 
     default:
@@ -565,18 +722,15 @@ static inline LinkUdsResult link_uds_decode_report_dtcs_by_status_mask_response(
     if (result != LINK_UDS_RESULT_OK) return result;
 
     decoded.availability_mask = response.status_availability_mask;
-    record_count = response.records_length / 4U;
+    record_count = link_uds_dtc_response_record_count(&response);
     decoded.truncated = record_count > LINK_UDS_DTC_MAX_RECORDS;
     if (record_count > LINK_UDS_DTC_MAX_RECORDS)
         record_count = LINK_UDS_DTC_MAX_RECORDS;
 
     for (index = 0U; index < record_count; ++index) {
-        const uint8_t *record = response.records + (index * 4U);
-        decoded.records[index].code =
-            ((uint32_t)record[0] << 16U) |
-            ((uint32_t)record[1] << 8U) |
-            (uint32_t)record[2];
-        decoded.records[index].status = record[3];
+        if (!link_uds_dtc_response_status_record_at(
+                &response, index, &decoded.records[index]))
+            return LINK_UDS_RESULT_MALFORMED_PDU;
     }
     decoded.count = record_count;
     *list = decoded;
