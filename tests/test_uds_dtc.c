@@ -517,6 +517,118 @@ static int test_invalid_responses(void)
     }
     return 0;
 }
+static int test_request_specific_response_validation(void)
+{
+    LinkUdsDtcInformationRequest request =
+        LINK_UDS_DTC_INFORMATION_REQUEST_INIT;
+    LinkUdsDtcInformationResponse response;
+
+    /*
+     * 0x18 must echo MemorySelection before the mandatory DTCAndStatusRecord.
+     * The malformed vector mirrors the supplied STM32 server shape: it omits
+     * MemorySelection, causing the first DTC byte to occupy that position.
+     */
+    {
+        const uint8_t valid[] = {
+            0x59U,0x18U,0x31U,0x12U,0x34U,0x56U,0x09U,0x22U,0x01U
+        };
+        const uint8_t missing_memory_selection[] = {
+            0x59U,0x18U,0x12U,0x34U,0x56U,0x09U,0x22U,0x01U
+        };
+        request.subfunction =
+            LINK_UDS_DTC_REPORT_USER_MEMORY_SNAPSHOT_BY_DTC_NUMBER;
+        request.dtc = UINT32_C(0x123456);
+        request.record_number = 0x22U;
+        request.memory_selection = 0x31U;
+        CHECK(link_uds_decode_read_dtc_information_response_for_request(
+            &request, valid, sizeof(valid), &response) == LINK_UDS_RESULT_OK);
+        CHECK(link_uds_decode_read_dtc_information_response_for_request(
+            &request, missing_memory_selection,
+            sizeof(missing_memory_selection), &response) ==
+            LINK_UDS_RESULT_UNEXPECTED_RESPONSE);
+    }
+
+    {
+        const uint8_t valid[] = {
+            0x59U,0x17U,0x31U,0xffU,0x12U,0x34U,0x56U,0x09U
+        };
+        const uint8_t wrong_memory[] = {
+            0x59U,0x17U,0x44U,0xffU,0x12U,0x34U,0x56U,0x09U
+        };
+        request = (LinkUdsDtcInformationRequest)
+            LINK_UDS_DTC_INFORMATION_REQUEST_INIT;
+        request.subfunction = LINK_UDS_DTC_REPORT_USER_MEMORY_BY_STATUS_MASK;
+        request.status_mask = 0xffU;
+        request.memory_selection = 0x31U;
+        CHECK(link_uds_decode_read_dtc_information_response_for_request(
+            &request, valid, sizeof(valid), &response) == LINK_UDS_RESULT_OK);
+        CHECK(link_uds_decode_read_dtc_information_response_for_request(
+            &request, wrong_memory, sizeof(wrong_memory), &response) ==
+            LINK_UDS_RESULT_UNEXPECTED_RESPONSE);
+    }
+
+    {
+        const uint8_t valid[] = {
+            0x59U,0x04U,0x12U,0x34U,0x56U,0x09U,0x22U,0x01U
+        };
+        const uint8_t wrong_dtc[] = {
+            0x59U,0x04U,0x65U,0x43U,0x21U,0x09U,0x22U,0x01U
+        };
+        request = (LinkUdsDtcInformationRequest)
+            LINK_UDS_DTC_INFORMATION_REQUEST_INIT;
+        request.subfunction = LINK_UDS_DTC_REPORT_SNAPSHOT_BY_DTC_NUMBER;
+        request.dtc = UINT32_C(0x123456);
+        request.record_number = 0x22U;
+        CHECK(link_uds_decode_read_dtc_information_response_for_request(
+            &request, valid, sizeof(valid), &response) == LINK_UDS_RESULT_OK);
+        CHECK(link_uds_decode_read_dtc_information_response_for_request(
+            &request, wrong_dtc, sizeof(wrong_dtc), &response) ==
+            LINK_UDS_RESULT_UNEXPECTED_RESPONSE);
+    }
+
+    {
+        const uint8_t valid[] = {
+            0x59U,0x16U,0x26U,0x12U,0x34U,0x56U,0x09U,0xaaU
+        };
+        const uint8_t wrong_record[] = {
+            0x59U,0x16U,0x27U,0x12U,0x34U,0x56U,0x09U,0xaaU
+        };
+        request = (LinkUdsDtcInformationRequest)
+            LINK_UDS_DTC_INFORMATION_REQUEST_INIT;
+        request.subfunction = LINK_UDS_DTC_REPORT_EXT_DATA_BY_RECORD_NUMBER;
+        request.record_number = 0x26U;
+        CHECK(link_uds_decode_read_dtc_information_response_for_request(
+            &request, valid, sizeof(valid), &response) == LINK_UDS_RESULT_OK);
+        CHECK(link_uds_decode_read_dtc_information_response_for_request(
+            &request, wrong_record, sizeof(wrong_record), &response) ==
+            LINK_UDS_RESULT_UNEXPECTED_RESPONSE);
+    }
+
+    {
+        const uint8_t valid[] = {
+            0x59U,0x42U,0x33U,0xffU,0xe0U,0x04U,
+            0x20U,0x12U,0x34U,0x56U,0x09U
+        };
+        const uint8_t wrong_group[] = {
+            0x59U,0x42U,0x44U,0xffU,0xe0U,0x04U,
+            0x20U,0x12U,0x34U,0x56U,0x09U
+        };
+        request = (LinkUdsDtcInformationRequest)
+            LINK_UDS_DTC_INFORMATION_REQUEST_INIT;
+        request.subfunction = LINK_UDS_DTC_REPORT_WWH_OBD_BY_MASK_RECORD;
+        request.functional_group_identifier = 0x33U;
+        request.status_mask = 0xffU;
+        request.severity_mask = 0xe0U;
+        CHECK(link_uds_decode_read_dtc_information_response_for_request(
+            &request, valid, sizeof(valid), &response) == LINK_UDS_RESULT_OK);
+        CHECK(link_uds_decode_read_dtc_information_response_for_request(
+            &request, wrong_group, sizeof(wrong_group), &response) ==
+            LINK_UDS_RESULT_UNEXPECTED_RESPONSE);
+    }
+
+    return 0;
+}
+
 int main(void)
 {
     char text[7] = "bad";
@@ -526,6 +638,7 @@ int main(void)
     if (test_build_request() != 0) return 1;
     if (test_decode_records() != 0) return 1;
     if (test_invalid_responses() != 0) return 1;
+    if (test_request_specific_response_validation() != 0) return 1;
     CHECK(!link_uds_dtc_format_hex(UINT32_C(0x01000000), text, sizeof(text)));
     CHECK(text[0] == '\0');
     CHECK(!link_uds_dtc_format_hex(UINT32_C(0x123456), text, 6U));
