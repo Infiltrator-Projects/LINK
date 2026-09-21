@@ -9,8 +9,10 @@
 #include "link-gtk-about.h"
 
 #include "infiltratr/core.h"
+#include "infiltratr/posix.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 typedef struct LinkGtkShell {
@@ -131,8 +133,9 @@ static const char link_gtk_base_css[] =
 
 static uint64_t monotonic_ms(void)
 {
-    const gint64 value = g_get_monotonic_time();
-    return value <= 0 ? 0U : (uint64_t)(value / 1000);
+    uint64_t nanoseconds = 0U;
+    if (!infiltratr_monotonic_nanoseconds(&nanoseconds)) return 0U;
+    return nanoseconds / UINT64_C(1000000);
 }
 
 #define LINK_GTK_SESSION_TRACE_LIMIT (16U * 1024U * 1024U)
@@ -699,15 +702,41 @@ static void clear_box(GtkWidget *box)
     }
 }
 
+static char *link_path_join_alloc(const char *left, const char *right)
+{
+    size_t capacity;
+    char *path;
+
+    if (left == NULL || right == NULL ||
+        !infiltratr_size_add_checked(strlen(left), strlen(right), &capacity) ||
+        !infiltratr_size_add_checked(capacity, 2U, &capacity)) {
+        return NULL;
+    }
+    path = malloc(capacity);
+    if (path == NULL) return NULL;
+    if (!infiltratr_path_join(path, capacity, left, right)) {
+        free(path);
+        return NULL;
+    }
+    return path;
+}
+
 static char *language_config_path(void)
 {
-    char *directory = g_build_filename(g_get_user_config_dir(),
-                                       "the-first-infiltrator", NULL);
+    char *base = NULL;
+    char *directory;
     char *path;
+
+    if (!infiltratr_xdg_config_home_alloc(&base)) return NULL;
+    directory = link_path_join_alloc(base, "the-first-infiltrator");
+    free(base);
     if (directory == NULL) return NULL;
-    (void)g_mkdir_with_parents(directory, 0700);
-    path = g_build_filename(directory, "link-language.ini", NULL);
-    g_free(directory);
+    if (infiltratr_mkdir_parents(directory, 0700U) != 0) {
+        free(directory);
+        return NULL;
+    }
+    path = link_path_join_alloc(directory, "link-language.ini");
+    free(directory);
     return path;
 }
 
@@ -759,11 +788,13 @@ static void save_selected_locale(const char *locale)
     g_key_file_set_string(key_file, "ui", "language", locale);
     data = g_key_file_to_data(key_file, &length, NULL);
     if (data != NULL) {
-        (void)g_file_set_contents(path, data, (gssize)length, NULL);
+        (void)infiltratr_atomic_file_write_bytes(
+            path, INFILTRATR_ATOMIC_FILE_PRESERVE_PERMISSIONS,
+            data, (size_t)length);
         g_free(data);
     }
     g_key_file_unref(key_file);
-    g_free(path);
+    free(path);
 }
 
 static void initialise_selected_locale(void)
@@ -783,7 +814,7 @@ static void initialise_selected_locale(void)
     }
     g_free(locale);
     g_key_file_unref(key_file);
-    g_free(path);
+    free(path);
 }
 
 static guint selected_locale_index(void)
