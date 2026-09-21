@@ -63,6 +63,27 @@ static void test_service_catalogue(void)
         }
     }
 
+    {
+        const LinkUdsServiceDefinition *read_dtc =
+            link_uds_standard_service_find(
+                LINK_UDS_SERVICE_READ_DTC_INFORMATION);
+        const LinkUdsServiceDefinition *clear_dtc =
+            link_uds_standard_service_find(
+                LINK_UDS_SERVICE_CLEAR_DIAGNOSTIC_INFORMATION);
+        const LinkUdsServiceDefinition *authentication =
+            link_uds_standard_service_find(
+                LINK_UDS_SERVICE_AUTHENTICATION);
+        check(read_dtc != NULL &&
+              read_dtc->effect == LINK_UDS_SERVICE_EFFECT_READ_ONLY,
+              "0x19 remains read-only");
+        check(clear_dtc != NULL &&
+              clear_dtc->effect == LINK_UDS_SERVICE_EFFECT_STATE_CHANGING,
+              "0x14 remains state-changing");
+        check(authentication != NULL &&
+              authentication->effect == LINK_UDS_SERVICE_EFFECT_SECURITY,
+              "0x29 remains security-gated");
+    }
+
     check(link_uds_standard_service_find(0x99U) == NULL,
           "unknown service absent");
     check(strcmp(link_uds_service_effect_name(
@@ -171,6 +192,22 @@ static void test_requested_issue_services(void)
             buffer, sizeof(buffer), &written);
         expect_bytes(result, LINK_UDS_RESULT_OK, buffer, written,
                      expected, sizeof(expected), "ClearDiagnosticInformation");
+    }
+    {
+        const uint8_t expected[] = {
+            0x14U, 0x12U, 0x34U, 0x56U, 0x31U
+        };
+        result = link_uds_build_clear_diagnostic_information_request(
+            UINT32_C(0x00123456), true, 0x31U,
+            buffer, sizeof(buffer), &written);
+        expect_bytes(result, LINK_UDS_RESULT_OK, buffer, written,
+                     expected, sizeof(expected),
+                     "ClearDiagnosticInformation memory selection");
+        result = link_uds_build_clear_diagnostic_information_request(
+            UINT32_C(0x01000000), false, 0U,
+            buffer, sizeof(buffer), &written);
+        check(result == LINK_UDS_RESULT_INVALID_ARGUMENT && written == 0U,
+              "ClearDiagnosticInformation rejects >24-bit group");
     }
     {
         const uint8_t control[] = { 0x03U, 0x55U };
