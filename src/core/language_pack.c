@@ -5,7 +5,6 @@
 #include "infiltratr/arithmetic.h"
 #include "infiltratr/core.h"
 
-#include <ctype.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -58,9 +57,9 @@ static char *trim_text(char *text)
 {
     char *end;
     if (text == NULL) return NULL;
-    while (*text != '\0' && isspace((unsigned char)*text) != 0) ++text;
+    while (*text != '\0' && infiltratr_ascii_is_space((unsigned char)*text)) ++text;
     end = text + strlen(text);
-    while (end > text && isspace((unsigned char)end[-1]) != 0) --end;
+    while (end > text && infiltratr_ascii_is_space((unsigned char)end[-1])) --end;
     *end = '\0';
     return text;
 }
@@ -88,7 +87,7 @@ static void normalise_tag(const char *input, char *output, size_t capacity)
     while (*input != '\0' && *input != '.' && *input != '@' && out + 1U < capacity) {
         unsigned char c = (unsigned char)*input++;
         if (c == '_') c = '-';
-        output[out++] = (char)tolower(c);
+        output[out++] = (char)infiltratr_ascii_to_lower(c);
     }
     output[out] = '\0';
 }
