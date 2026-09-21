@@ -102,6 +102,13 @@ record families. Variable snapshot and extended-data payloads remain bounded raw
 spans until a higher layer supplies the DID/data-length knowledge needed to
 interpret them without guessing.
 
+For transaction-aware callers, `link_uds_decode_read_dtc_information_response_for_request()`
+adds a second validation layer using the exact request that was transmitted.
+It rejects mismatched MemorySelection, record-number, functional-group and
+requested-DTC echoes. This prevents malformed responses with omitted fields
+from being accepted merely because the remaining bytes form a structurally
+plausible envelope.
+
 The decoder rejects truncated positive responses that omit a mandatory
 DTCAndStatusRecord for reports `0x04`, `0x06`, `0x10`, `0x18` or
 `0x19`. User-defined-memory reports `0x18` and `0x19` additionally

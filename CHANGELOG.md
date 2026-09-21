@@ -2,6 +2,13 @@
 
 This file records user-visible, compatibility, diagnostic-knowledge and validation changes for LINK.
 
+## 0.15.38 — 2026-09-21
+
+- Added request-aware ReadDTCInformation response validation so transaction code verifies request-specific echoes instead of accepting a merely parseable byte layout.
+- Validated MemorySelection for 0x17..0x19, record-number echoes for 0x05/0x16, functional-group echoes for 0x42/0x55, and requested-DTC echoes for the applicable snapshot, extended-data and severity reports.
+- Added regression vectors for malformed user-memory responses that omit MemorySelection, matching the failure class found during forensic comparison with the externally supplied STM32 server.
+- Kept transmission policy unchanged: 0x19 remains read-only; ClearDiagnosticInformation 0x14 remains state-changing; Authentication 0x29 remains security-gated.
+
 ## 0.15.37 — 2026-09-21
 
 - Standardised LINK-owned About presentation on the System Monitor contract across Linux, Windows and Apple surfaces.
