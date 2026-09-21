@@ -8,6 +8,7 @@
 #include "link-gtk-widgets.h"
 #include "link-gtk-about.h"
 
+#include "infiltratr/arithmetic.h"
 #include "infiltratr/core.h"
 #include "infiltratr/posix.h"
 
