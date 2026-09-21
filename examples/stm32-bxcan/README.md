@@ -172,3 +172,20 @@ abort/error propagation and interrupt-time timestamps. CI also cross-compiles
 the adapter and UDS example as freestanding Cortex-M3 (F103/F107 class) and
 Cortex-M7 (F767 class) code. Electrical timing, pins, transceiver behaviour and
 vehicle communication remain hardware validation steps.
+
+
+## Complete STM32F103 ECU/server reference
+
+LINK issue #32 adds a server-role reference for the 512 KiB STM32F103 rather
+than extending the VIN tester into a second ad-hoc protocol stack. See
+[`issue-32/README.md`](issue-32/README.md).
+
+The F103 ECU core wires all 27 standard LINK UDS service IDs, routes the full
+ReadDTCInformation surface through the shared rich DTC handler, implements
+persistent ClearDiagnosticInformation state, and stores bounded application
+state in an alternating two-page CRC-protected flash journal. Programming
+services are deliberately limited to a non-executable data sandbox; production
+firmware programming still belongs to the target bootloader/security policy.
+
+The supplied Cube integration targets CAN1 on PA11/PA12 at 500 kbit/s and
+reserves the final two 2 KiB pages of a 512 KiB device.

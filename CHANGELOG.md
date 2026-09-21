@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.15.43 — 2026-09-21
+
+- Complete LINK issue #32 with a bounded STM32F103 ECU/server reference covering all 27 standard LINK UDS service IDs.
+- Add persistent 0x14/0x19 diagnostic state using an alternating two-page CRC-verified flash journal for the requested 512 KiB / 2 KiB-page F103 layout.
+- Add a security/session-gated programming sandbox, AES-CMAC SecurityAccess reference flow, writable/dynamic DIDs, transfer sequencing and reboot-persistence regression coverage without pretending to provide a production bootloader or OEM key algorithm.
+- Add a Cube/HAL integration for CAN1 PA11/PA12 at 500 kbit/s and extend Cortex-M3/M7 cross-compilation to the shared UDS server, AES-CMAC and F103 ECU core.
+- Record the exact LINK #31 forensic repair map against external STM32F103TEST commit 5055d58, including the still-present 0x17 family error, missing 0x18/0x19 MemorySelection echoes, unsupported 0x12-0x15 reports and incomplete 0x42 envelope.
+
 ## 0.15.42 — 2026-09-21
 
 - Complete LINK issue #26 with a reusable allocation-free AES-128 / RFC 4493 AES-CMAC primitive and deterministic published test vectors.

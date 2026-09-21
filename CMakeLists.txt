@@ -550,6 +550,23 @@ if(BUILD_TESTING AND PROJECT_IS_TOP_LEVEL)
     endif()
     add_test(NAME link-stm32-bxcan-hal COMMAND link-test-stm32-bxcan-hal)
 
+    add_executable(link-test-stm32f103-uds-ecu
+        tests/test_stm32f103_uds_ecu.c
+        examples/stm32-bxcan/link-stm32f103-uds-ecu.c)
+    target_include_directories(link-test-stm32f103-uds-ecu PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/examples/stm32-bxcan")
+    target_link_libraries(link-test-stm32f103-uds-ecu PRIVATE LINK::Core)
+    if(MSVC)
+        target_compile_options(link-test-stm32f103-uds-ecu PRIVATE /W4 /WX /utf-8)
+    else()
+        target_compile_options(link-test-stm32f103-uds-ecu PRIVATE ${LINK_WARNING_FLAGS})
+    endif()
+    if(LINK_ENABLE_SANITIZERS)
+        target_compile_options(link-test-stm32f103-uds-ecu PRIVATE ${LINK_SANITIZER_FLAGS})
+        target_link_options(link-test-stm32f103-uds-ecu PRIVATE -fsanitize=address,undefined)
+    endif()
+    add_test(NAME link-stm32f103-uds-ecu COMMAND link-test-stm32f103-uds-ecu)
+
     link_add_test(link-test-runtime tests/test_runtime.c link-runtime)
     if(LINK_SOURCE_REVISION_RESULT EQUAL 0)
         target_compile_definitions(link-test-runtime PRIVATE
