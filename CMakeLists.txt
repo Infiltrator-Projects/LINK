@@ -138,6 +138,7 @@ add_library(link-core STATIC
     src/crypto/aes_cmac.c
     src/uds/uds.c
     src/uds/uds_services.c
+    src/uds/uds_authentication.c
     src/uds/uds_server.c
     src/discover/safety.c
     src/discover/sweep.c
@@ -585,6 +586,7 @@ if(BUILD_TESTING AND PROJECT_IS_TOP_LEVEL)
     link_add_test(link-test-dtc-knowledge tests/test_dtc_knowledge.c link-dtc-knowledge)
     link_add_test(link-test-aes-cmac tests/test_aes_cmac.c link-aes-cmac)
     link_add_test(link-test-uds tests/test_uds.c link-uds)
+    link_add_test(link-test-uds-authentication tests/test_uds_authentication.c link-uds-authentication)
     link_add_test(link-test-ardep-uds-reference tests/test_ardep_uds_reference.c link-ardep-uds-reference)
     link_add_test(link-test-uds-dtc tests/test_uds_dtc.c link-uds-dtc)
     link_add_test(link-test-uds-server tests/test_uds_server.c link-uds-server)

@@ -326,6 +326,7 @@ jobs:
             src/core/isotp.c
             src/uds/uds.c
             src/uds/uds_services.c
+            src/uds/uds_authentication.c
             src/uds/uds_server.c
             src/infiltratr-common/src/core.c
             platform/stm32/link-stm32-can.c
@@ -350,6 +351,7 @@ jobs:
             src/crypto/aes_cmac.c
             src/uds/uds.c
             src/uds/uds_services.c
+            src/uds/uds_authentication.c
             src/uds/uds_server.c
             src/infiltratr-common/src/core.c
             platform/stm32/link-stm32-can.c

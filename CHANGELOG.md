@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.15.44 — 2026-09-21
+
+- Complete the generic portion of MBLINK issue #63 with a typed ISO 14229-1:2020 Authentication (0x29) codec covering all nine authentication tasks and strict positive-response envelope validation.
+- Complete the generic variable-record gap from MBLINK issue #59 with definition-driven snapshot/stored-data DID segmentation plus typed extended-data views; unknown DID lengths return unsupported rather than being guessed.
+- Preserve the security boundary: Authentication remains SECURITY-classified and Discover deny-by-default, with certificate, trust, key and OEM policy owned by the caller.
+
 ## 0.15.43 — 2026-09-21
 
 - Complete LINK issue #32 with a bounded STM32F103 ECU/server reference covering all 27 standard LINK UDS service IDs.

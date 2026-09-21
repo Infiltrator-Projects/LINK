@@ -129,6 +129,39 @@ A custom `0x27` handler still overrides the built-in facility and can call
 `link_uds_server_set_security_level()` after its own verification. No
 Mercedes, Jaguar or other OEM seed/key algorithm is embedded in LINK.
 
+## Authentication (0x29) typed 2020 codec
+
+LINK provides a dedicated allocation-free Authentication codec in
+`link/uds_authentication.h` for all nine ISO 14229-1:2020 authentication tasks
+(`0x00` through `0x08`). Typed builders cover de-authentication,
+unidirectional and bidirectional certificate verification, proof of ownership,
+certificate transmission, challenge request, proof verification and
+authentication-configuration discovery.
+
+The positive-response decoder validates the standard length-prefixed
+certificate, challenge, proof, ephemeral-key and session-key envelopes and
+rejects truncation or trailing bytes. Cryptographic material remains borrowed
+opaque spans: LINK does not parse certificates, choose algorithms, own trust
+anchors, verify private keys or infer an OEM role/profile.
+
+Authentication remains classified SECURITY and blocked by Discover. Codec
+completeness is not permission to authenticate against a vehicle.
+
+## Definition-driven DTC snapshot and stored-data records
+
+Variable snapshot and stored-data records can now be parsed completely without
+guessing manufacturer layouts. `link_uds_dtc_snapshot_record_view()` and
+`link_uds_dtc_stored_data_record_view()` expose the fixed DTC/status,
+record-number and DID-count envelope.
+`link_uds_dtc_decode_did_values()` then walks the DID/value sequence using a
+caller-supplied DID-length resolver.
+
+If a DID length is unknown, the decoder returns
+`LINK_UDS_RESULT_UNSUPPORTED` rather than guessing a boundary. Extended-data
+records have a parallel typed view that preserves the record number and bounded
+raw payload because their internal bytes are application-defined rather than
+DID-framed.
+
 ## Safety boundary
 
 Codec availability is not authorization.

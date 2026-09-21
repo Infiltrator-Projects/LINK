@@ -3,4 +3,5 @@
 #include "../../src/crypto/aes_cmac.c"
 #include "../../src/uds/uds.c"
 #include "../../src/uds/uds_services.c"
+#include "../../src/uds/uds_authentication.c"
 #include "../../src/uds/uds_server.c"

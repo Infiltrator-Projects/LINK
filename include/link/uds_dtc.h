@@ -771,6 +771,153 @@ link_uds_decode_read_dtc_information_response_for_request(
     return LINK_UDS_RESULT_OK;
 }
 
+
+/*
+ * Variable snapshot/stored-data records contain DID/value sequences whose
+ * lengths are ECU/application-defined. LINK parses them only when the caller
+ * supplies that missing definition knowledge.
+ */
+typedef bool (*LinkUdsDtcDidLengthResolver)(
+    void *context, uint16_t identifier, size_t *data_length);
+
+typedef struct {
+    uint16_t identifier;
+    const uint8_t *data;
+    size_t data_length;
+} LinkUdsDtcDidValue;
+
+typedef struct {
+    uint32_t code;
+    uint8_t status;
+    uint8_t record_number;
+    uint8_t identifier_count;
+    const uint8_t *did_data;
+    size_t did_data_length;
+} LinkUdsDtcDidRecordView;
+
+typedef struct {
+    uint32_t code;
+    uint8_t status;
+    uint8_t record_number;
+    const uint8_t *data;
+    size_t data_length;
+} LinkUdsDtcExtendedDataView;
+
+static inline LinkUdsResult link_uds_dtc_decode_did_values(
+    const uint8_t *data, size_t data_length, uint8_t identifier_count,
+    LinkUdsDtcDidLengthResolver resolve_length, void *resolver_context,
+    LinkUdsDtcDidValue *values, size_t value_capacity, size_t *value_count)
+{
+    size_t offset = 0U;
+    size_t index;
+
+    if (value_count == NULL || resolve_length == NULL ||
+        (identifier_count != 0U && (data == NULL || values == NULL)))
+        return LINK_UDS_RESULT_INVALID_ARGUMENT;
+    *value_count = 0U;
+    if ((size_t)identifier_count > value_capacity)
+        return LINK_UDS_RESULT_BUFFER_TOO_SMALL;
+
+    for (index = 0U; index < (size_t)identifier_count; ++index) {
+        uint16_t identifier;
+        size_t length = 0U;
+        if (offset > data_length || data_length - offset < 2U)
+            return LINK_UDS_RESULT_MALFORMED_PDU;
+        identifier = (uint16_t)(
+            ((uint16_t)data[offset] << 8U) | data[offset + 1U]);
+        offset += 2U;
+        if (!resolve_length(resolver_context, identifier, &length) ||
+            length == 0U)
+            return LINK_UDS_RESULT_UNSUPPORTED;
+        if (length > data_length - offset)
+            return LINK_UDS_RESULT_MALFORMED_PDU;
+        values[index].identifier = identifier;
+        values[index].data = data + offset;
+        values[index].data_length = length;
+        offset += length;
+    }
+    if (offset != data_length) return LINK_UDS_RESULT_MALFORMED_PDU;
+    *value_count = (size_t)identifier_count;
+    return LINK_UDS_RESULT_OK;
+}
+
+static inline bool link_uds_dtc_snapshot_record_view(
+    const LinkUdsDtcInformationResponse *response,
+    LinkUdsDtcDidRecordView *view)
+{
+    const uint8_t *record;
+    if (response == NULL || view == NULL ||
+        (response->subfunction != LINK_UDS_DTC_REPORT_SNAPSHOT_BY_DTC_NUMBER &&
+         response->subfunction !=
+             LINK_UDS_DTC_REPORT_USER_MEMORY_SNAPSHOT_BY_DTC_NUMBER) ||
+        response->records == NULL || response->records_length < 6U)
+        return false;
+    record = response->records;
+    view->code = link_uds_dtc_read_code(record);
+    view->status = record[3U];
+    view->record_number = record[4U];
+    view->identifier_count = record[5U];
+    view->did_data = record + 6U;
+    view->did_data_length = response->records_length - 6U;
+    return true;
+}
+
+static inline bool link_uds_dtc_stored_data_record_view(
+    const LinkUdsDtcInformationResponse *response,
+    LinkUdsDtcDidRecordView *view)
+{
+    const uint8_t *record;
+    if (response == NULL || view == NULL ||
+        response->subfunction != LINK_UDS_DTC_REPORT_STORED_DATA_BY_RECORD_NUMBER ||
+        !response->record_number_available ||
+        response->records == NULL || response->records_length < 5U)
+        return false;
+    record = response->records;
+    view->code = link_uds_dtc_read_code(record);
+    view->status = record[3U];
+    view->record_number = response->record_number;
+    view->identifier_count = record[4U];
+    view->did_data = record + 5U;
+    view->did_data_length = response->records_length - 5U;
+    return true;
+}
+
+static inline bool link_uds_dtc_extended_data_view(
+    const LinkUdsDtcInformationResponse *response,
+    LinkUdsDtcExtendedDataView *view)
+{
+    const uint8_t *record;
+    size_t data_offset;
+    uint8_t record_number;
+
+    if (response == NULL || view == NULL || response->records == NULL ||
+        response->records_length < 4U)
+        return false;
+    record = response->records;
+    switch (response->subfunction) {
+    case LINK_UDS_DTC_REPORT_EXT_DATA_BY_DTC_NUMBER:
+    case LINK_UDS_DTC_REPORT_MIRROR_MEMORY_EXT_DATA_BY_DTC_NUMBER:
+    case LINK_UDS_DTC_REPORT_USER_MEMORY_EXT_DATA_BY_DTC_NUMBER:
+        if (response->records_length < 5U) return false;
+        record_number = record[4U];
+        data_offset = 5U;
+        break;
+    case LINK_UDS_DTC_REPORT_EXT_DATA_BY_RECORD_NUMBER:
+        if (!response->record_number_available) return false;
+        record_number = response->record_number;
+        data_offset = 4U;
+        break;
+    default:
+        return false;
+    }
+    view->code = link_uds_dtc_read_code(record);
+    view->status = record[3U];
+    view->record_number = record_number;
+    view->data = record + data_offset;
+    view->data_length = response->records_length - data_offset;
+    return true;
+}
+
 /* Compatibility helper retained for existing callers of 0x19/0x02. */
 static inline LinkUdsResult link_uds_build_report_dtcs_by_status_mask_request(
     uint8_t status_mask,

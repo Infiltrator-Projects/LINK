@@ -629,6 +629,80 @@ static int test_request_specific_response_validation(void)
     return 0;
 }
 
+
+static bool test_snapshot_did_length(
+    void *context, uint16_t identifier, size_t *data_length)
+{
+    (void)context;
+    if (data_length == NULL) return false;
+    if (identifier == UINT16_C(0xf190)) {
+        *data_length = 2U;
+        return true;
+    }
+    if (identifier == UINT16_C(0x1234)) {
+        *data_length = 1U;
+        return true;
+    }
+    return false;
+}
+
+static int test_variable_record_views(void)
+{
+    const uint8_t snapshot_pdu[] = {
+        0x59U,0x04U,
+        0x12U,0x34U,0x56U,0x09U,
+        0x01U,0x02U,
+        0xf1U,0x90U,0xaaU,0xbbU,
+        0x12U,0x34U,0xccU
+    };
+    const uint8_t ext_pdu[] = {
+        0x59U,0x06U,
+        0x12U,0x34U,0x56U,0x09U,
+        0x02U,0xdeU,0xadU
+    };
+    const uint8_t unknown_did[] = {0x99U,0x99U,0x01U};
+    LinkUdsDtcInformationResponse response;
+    LinkUdsDtcDidRecordView snapshot;
+    LinkUdsDtcExtendedDataView extended;
+    LinkUdsDtcDidValue values[2U];
+    size_t count = 0U;
+
+    CHECK(link_uds_decode_read_dtc_information_response(
+              LINK_UDS_DTC_REPORT_SNAPSHOT_BY_DTC_NUMBER,
+              snapshot_pdu, sizeof(snapshot_pdu), &response) ==
+          LINK_UDS_RESULT_OK);
+    CHECK(link_uds_dtc_snapshot_record_view(&response, &snapshot));
+    CHECK(snapshot.code == UINT32_C(0x123456));
+    CHECK(snapshot.status == 0x09U);
+    CHECK(snapshot.record_number == 0x01U);
+    CHECK(snapshot.identifier_count == 2U);
+    CHECK(link_uds_dtc_decode_did_values(
+              snapshot.did_data, snapshot.did_data_length,
+              snapshot.identifier_count, test_snapshot_did_length, NULL,
+              values, 2U, &count) == LINK_UDS_RESULT_OK);
+    CHECK(count == 2U);
+    CHECK(values[0].identifier == UINT16_C(0xf190));
+    CHECK(values[0].data_length == 2U &&
+          values[0].data[0] == 0xaaU && values[0].data[1] == 0xbbU);
+    CHECK(values[1].identifier == UINT16_C(0x1234));
+    CHECK(values[1].data_length == 1U && values[1].data[0] == 0xccU);
+
+    CHECK(link_uds_decode_read_dtc_information_response(
+              LINK_UDS_DTC_REPORT_EXT_DATA_BY_DTC_NUMBER,
+              ext_pdu, sizeof(ext_pdu), &response) == LINK_UDS_RESULT_OK);
+    CHECK(link_uds_dtc_extended_data_view(&response, &extended));
+    CHECK(extended.code == UINT32_C(0x123456));
+    CHECK(extended.record_number == 0x02U);
+    CHECK(extended.data_length == 2U &&
+          extended.data[0] == 0xdeU && extended.data[1] == 0xadU);
+
+    CHECK(link_uds_dtc_decode_did_values(
+              unknown_did, sizeof(unknown_did), 1U,
+              test_snapshot_did_length, NULL,
+              values, 2U, &count) == LINK_UDS_RESULT_UNSUPPORTED);
+    return 0;
+}
+
 int main(void)
 {
     char text[7] = "bad";
@@ -639,6 +713,7 @@ int main(void)
     if (test_decode_records() != 0) return 1;
     if (test_invalid_responses() != 0) return 1;
     if (test_request_specific_response_validation() != 0) return 1;
+    if (test_variable_record_views() != 0) return 1;
     CHECK(!link_uds_dtc_format_hex(UINT32_C(0x01000000), text, sizeof(text)));
     CHECK(text[0] == '\0');
     CHECK(!link_uds_dtc_format_hex(UINT32_C(0x123456), text, 6U));
