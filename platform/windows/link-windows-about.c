@@ -7,6 +7,7 @@
 #include "link-windows-about.h"
 
 #include "infiltratr/core.h"
+#include "infiltratr/dynlib.h"
 
 #include <commctrl.h>
 #include <shellapi.h>
@@ -90,42 +91,38 @@ static void link_windows_about_apply_nonclient(HWND window)
 {
     typedef HRESULT (WINAPI *DwmSetWindowAttributeFn)(
         HWND, DWORD, LPCVOID, DWORD);
-    HMODULE module = LoadLibraryA("dwmapi.dll");
+    InfiltratrDynlib module = INFILTRATR_DYNLIB_INIT;
     DwmSetWindowAttributeFn set_attribute = NULL;
     BOOL dark = TRUE;
     COLORREF caption = (COLORREF)LINK_THEME_BACKGROUND;
     COLORREF text = (COLORREF)LINK_THEME_TEXT;
     COLORREF border = (COLORREF)LINK_THEME_ACCENT;
 
-    if (module == NULL) return;
-    {
-        FARPROC proc = GetProcAddress(module, "DwmSetWindowAttribute");
-        if (proc != NULL)
-            memcpy(&set_attribute, &proc, sizeof(set_attribute));
-    }
+    if (!infiltratr_dynlib_open(&module, "dwmapi.dll")) return;
+    (void)infiltratr_dynlib_symbol(
+        &module, "DwmSetWindowAttribute",
+        &set_attribute, sizeof(set_attribute));
     if (set_attribute != NULL) {
         (void)set_attribute(window, 20U, &dark, (DWORD)sizeof(dark));
         (void)set_attribute(window, 35U, &caption, (DWORD)sizeof(caption));
         (void)set_attribute(window, 36U, &text, (DWORD)sizeof(text));
         (void)set_attribute(window, 34U, &border, (DWORD)sizeof(border));
     }
-    FreeLibrary(module);
+    infiltratr_dynlib_close(&module);
 }
 
 static void link_windows_about_apply_control_theme(HWND control)
 {
     typedef HRESULT (WINAPI *SetWindowThemeFn)(HWND, LPCWSTR, LPCWSTR);
-    HMODULE module = LoadLibraryA("uxtheme.dll");
+    InfiltratrDynlib module = INFILTRATR_DYNLIB_INIT;
     SetWindowThemeFn set_theme = NULL;
 
-    if (module == NULL) return;
-    {
-        FARPROC proc = GetProcAddress(module, "SetWindowTheme");
-        if (proc != NULL) memcpy(&set_theme, &proc, sizeof(set_theme));
-    }
+    if (!infiltratr_dynlib_open(&module, "uxtheme.dll")) return;
+    (void)infiltratr_dynlib_symbol(
+        &module, "SetWindowTheme", &set_theme, sizeof(set_theme));
     if (set_theme != NULL)
         (void)set_theme(control, L"DarkMode_Explorer", NULL);
-    FreeLibrary(module);
+    infiltratr_dynlib_close(&module);
 }
 
 static HFONT link_windows_about_make_font(HWND window)

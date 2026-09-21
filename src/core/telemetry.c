@@ -51,7 +51,7 @@ bool link_telemetry_store_record(LinkTelemetryStore *store,
     sample.sequence = store->next_sequence;
     sample.timestamp_ms = timestamp_ms;
     sample.measurement = *measurement;
-    if (store->next_sequence != UINT64_MAX) store->next_sequence++;
+    store->next_sequence = infiltratr_u64_add_saturating(store->next_sequence, 1U);
     store->total_sample_count = infiltratr_u64_add_saturating(
         store->total_sample_count, 1U);
     store->latest[measurement->pid] = sample;
@@ -188,7 +188,7 @@ bool link_responder_telemetry_store_record(
     sample.responder_id = responder_id;
     sample.extended_id = extended_id;
     sample.measurement = *measurement;
-    if (store->next_sequence != UINT64_MAX) store->next_sequence++;
+    store->next_sequence = infiltratr_u64_add_saturating(store->next_sequence, 1U);
     store->total_sample_count = infiltratr_u64_add_saturating(
         store->total_sample_count, 1U);
     store->history[store->history_head] = sample;
@@ -275,7 +275,7 @@ bool link_structured_telemetry_store_record(
     sample.extended_id = extended_id;
     sample.decoded = *decoded;
 
-    if (store->next_sequence != UINT64_MAX) store->next_sequence++;
+    store->next_sequence = infiltratr_u64_add_saturating(store->next_sequence, 1U);
     store->total_sample_count = infiltratr_u64_add_saturating(
         store->total_sample_count, 1U);
     store->history[store->history_head] = sample;

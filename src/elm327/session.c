@@ -17,10 +17,7 @@ static bool elm327_session_bytes_are_whitespace(
         return false;
     }
     for (size_t index = 0U; index < size; ++index) {
-        const uint8_t value = data[index];
-        if (value != (uint8_t)' ' && value != (uint8_t)'\t' &&
-            value != (uint8_t)'\r' && value != (uint8_t)'\n' &&
-            value != (uint8_t)'\v' && value != (uint8_t)'\f') {
+        if (!infiltratr_ascii_is_space((unsigned char)data[index])) {
             return false;
         }
     }

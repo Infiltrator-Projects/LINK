@@ -182,12 +182,6 @@ static int simulator_hex_value(char value)
     return -1;
 }
 
-static bool simulator_space(unsigned char value)
-{
-    return value == ' ' || value == '\t' || value == '\r' ||
-           value == '\n' || value == '\v' || value == '\f';
-}
-
 static bool simulator_canonicalise(
     const char *source, char *destination, size_t destination_size)
 {
@@ -198,14 +192,12 @@ static bool simulator_canonicalise(
     }
     while (*source != '\0') {
         unsigned char value = (unsigned char)*source++;
-        if (simulator_space(value)) continue;
+        if (infiltratr_ascii_is_space(value)) continue;
         if (written + 1U >= destination_size) {
             destination[0] = '\0';
             return false;
         }
-        if (value >= (unsigned char)'a' && value <= (unsigned char)'z') {
-            value = (unsigned char)(value - (unsigned char)'a' + (unsigned char)'A');
-        }
+        value = infiltratr_ascii_to_upper(value);
         destination[written++] = (char)value;
     }
     destination[written] = '\0';

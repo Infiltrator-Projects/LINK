@@ -95,8 +95,6 @@ bool link_dashboard_gauge_fraction(
         return false;
     }
     result = (value - range->minimum) / (range->maximum - range->minimum);
-    if (result < 0.0) result = 0.0;
-    if (result > 1.0) result = 1.0;
-    *fraction = result;
+    *fraction = infiltratr_clamp_double(result, 0.0, 1.0);
     return true;
 }

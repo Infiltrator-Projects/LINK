@@ -270,7 +270,7 @@ static bool bluez_find_device(GDBusConnection *bus,
         if (properties != NULL) {
             const gchar *candidate = NULL;
             if (g_variant_lookup(properties, "Address", "&s", &candidate) &&
-                candidate != NULL && g_ascii_strcasecmp(candidate, address) == 0) {
+                candidate != NULL && infiltratr_ascii_equal_ci(candidate, address)) {
                 (void)snprintf(path, capacity, "%s", object_path);
                 found = true;
             }
@@ -323,7 +323,7 @@ static bool ble_extract_address(const char *device,
         if (c == '\0') return false;
         if ((index + 1U) % 3U == 0U) {
             if (c != ':') return false;
-        } else if (!g_ascii_isxdigit(c)) {
+        } else if (!infiltratr_ascii_is_xdigit((unsigned char)c)) {
             return false;
         }
         address[index] = c;
@@ -343,7 +343,7 @@ static bool classic_extract_address(const char *device,
         if (c == '\0') return false;
         if ((index + 1U) % 3U == 0U) {
             if (c != ':') return false;
-        } else if (!g_ascii_isxdigit(c)) {
+        } else if (!infiltratr_ascii_is_xdigit((unsigned char)c)) {
             return false;
         }
         address[index] = c;
@@ -359,21 +359,7 @@ static LinkAdapterKind bluetooth_adapter_kind(const char *name)
 
 static bool bluetooth_name_contains(const char *name, const char *needle)
 {
-    gchar *lower_name;
-    gchar *lower_needle;
-    bool found;
-    if (name == NULL || needle == NULL) return false;
-    lower_name = g_ascii_strdown(name, -1);
-    lower_needle = g_ascii_strdown(needle, -1);
-    if (lower_name == NULL || lower_needle == NULL) {
-        g_free(lower_name);
-        g_free(lower_needle);
-        return false;
-    }
-    found = strstr(lower_name, lower_needle) != NULL;
-    g_free(lower_name);
-    g_free(lower_needle);
-    return found;
+    return infiltratr_ascii_contains_ci(name, needle);
 }
 
 static bool bluetooth_name_prefers_classic(const char *name)
@@ -407,7 +393,7 @@ static int ble_discovered_compare(const void *left, const void *right)
     if (a->has_rssi != b->has_rssi) return a->has_rssi ? -1 : 1;
     if (a->has_rssi && b->has_rssi && a->rssi != b->rssi)
         return a->rssi > b->rssi ? -1 : 1;
-    return g_ascii_strcasecmp(a->name, b->name);
+    return infiltratr_ascii_compare_ci(a->name, b->name);
 }
 
 static size_t ble_discover_devices(char paths[][256], size_t capacity)
@@ -909,12 +895,12 @@ static bool ble_find_characteristics(LinkLinuxBleState *state,
          */
         for (i = 0U; i < count; ++i) {
             if (!characteristics[i].writable ||
-                g_ascii_strcasecmp(characteristics[i].uuid,
-                    LINK_MERCEDES_ME_NUS_RX_UUID) != 0) continue;
+                !infiltratr_ascii_equal_ci(characteristics[i].uuid,
+                    LINK_MERCEDES_ME_NUS_RX_UUID)) continue;
             for (j = 0U; j < count; ++j) {
                 if (!characteristics[j].notifiable ||
-                    g_ascii_strcasecmp(characteristics[j].uuid,
-                        LINK_MERCEDES_ME_NUS_TX_UUID) != 0 ||
+                    !infiltratr_ascii_equal_ci(characteristics[j].uuid,
+                        LINK_MERCEDES_ME_NUS_TX_UUID) ||
                     strcmp(characteristics[i].service,
                            characteristics[j].service) != 0) continue;
                 (void)snprintf(state->write_path, sizeof(state->write_path),
@@ -935,8 +921,8 @@ static bool ble_find_characteristics(LinkLinuxBleState *state,
         for (i = 0U; i < count; ++i) {
             if (characteristics[i].writable &&
                 characteristics[i].notifiable &&
-                g_ascii_strcasecmp(characteristics[i].uuid,
-                    LINK_MERCEDES_ME_TOSHIBA_CHARACTERISTIC_UUID) == 0) {
+                infiltratr_ascii_equal_ci(characteristics[i].uuid,
+                    LINK_MERCEDES_ME_TOSHIBA_CHARACTERISTIC_UUID)) {
                 (void)snprintf(state->write_path, sizeof(state->write_path),
                                "%s", characteristics[i].path);
                 (void)snprintf(state->notify_path, sizeof(state->notify_path),

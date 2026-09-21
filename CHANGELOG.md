@@ -6,6 +6,14 @@ This file records user-visible, compatibility, diagnostic-knowledge and validati
 
 - No unreleased changes.
 
+## 0.15.35 — 2026-09-21
+
+- Completed a second forensic Common 1.19.20 forward-consumption pass without changing Common.
+- Replaced remaining allocation-heavy GLib ASCII case-folding in the Linux Bluetooth provider with Common's deterministic ASCII comparison, substring and hexadecimal-classification contracts.
+- Replaced the Windows About dialog's remaining direct LoadLibrary/GetProcAddress plumbing with Common's UTF-8-aware dynamic-library boundary.
+- Reused Common's ASCII whitespace/case conversion in simulator/session normalization, Common's finite clamp in dashboard gauge normalization and Common's saturating counter increment in telemetry sequence handling.
+- Deliberately retained protocol-specific narrow whitespace grammars, streaming JSON writers and GLib-native timing where the existing implementation is semantically narrower or more efficient than the available Common primitive.
+
 ## 0.15.34 — 2026-09-21
 
 - Completed the Common 1.19.20 forward-consumption pass in the Linux GTK shell.
