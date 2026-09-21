@@ -2,6 +2,14 @@
 
 This file records user-visible, compatibility, diagnostic-knowledge and validation changes for LINK.
 
+## 0.15.37 — 2026-09-21
+
+- Standardised LINK-owned About presentation on the System Monitor contract across Linux, Windows and Apple surfaces.
+- Removed forced Linux About sizing, private About CSS and product-tagline hierarchy so GTK owns the native dialog geometry.
+- Added a first-class build label to the shared About model and aligned the main hierarchy to icon, product, version, description, build, website and copyright.
+- Kept Credits and Licence as dedicated actions on every supported presentation surface; Windows now exposes native Credits and Licence buttons instead of flattening those details into the main text.
+- Standardised the visible website label to `Website` and Australian `Licence` wording in LINK-owned custom surfaces.
+
 ## 0.15.36 — 2026-09-21
 
 - Forensically revalidated the complete requested ReadDTCInformation (0x19) surface across all 27 report types and added an explicit implementation conformance matrix.

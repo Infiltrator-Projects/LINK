@@ -892,6 +892,7 @@ struct LinkDiagnosticAboutInfo {
     let subtitle: String?
     let version: String
     let summary: String?
+    let build: String?
     let releaseDate: String?
     let authors: [String]
     let copyright: String?
@@ -905,6 +906,7 @@ struct LinkDiagnosticAboutInfo {
         subtitle: String? = nil,
         version: String,
         summary: String? = nil,
+        build: String? = nil,
         releaseDate: String? = nil,
         authors: [String] = [],
         copyright: String? = nil,
@@ -917,6 +919,7 @@ struct LinkDiagnosticAboutInfo {
         self.subtitle = subtitle
         self.version = version
         self.summary = summary
+        self.build = build
         self.releaseDate = releaseDate
         self.authors = authors
         self.copyright = copyright
@@ -971,7 +974,7 @@ struct LinkDiagnosticAboutView<Logo: View>: View {
                             .buttonStyle(.bordered)
                     }
                     if hasLicense {
-                        Button("License") { detail = .license }
+                        Button("Licence") { detail = .license }
                             .buttonStyle(.bordered)
                     }
                     Button("Close") { onClose() }
@@ -999,16 +1002,10 @@ struct LinkDiagnosticAboutView<Logo: View>: View {
                 Text(info.productName)
                     .font(theme.typography.display)
                     .foregroundStyle(theme.primaryText)
-                if let subtitle = info.subtitle, !subtitle.isEmpty {
-                    Text(subtitle)
-                        .font(theme.typography.caption2Bold)
-                        .textCase(.uppercase)
-                        .tracking(1.4)
-                        .foregroundStyle(theme.secondaryText)
-                }
+                /* Product taglines belong to the application shell, not About. */
             }
 
-            Text("Version \(info.version)")
+            Text(info.version)
                 .font(theme.typography.subheadline)
                 .foregroundStyle(theme.mutedText)
 
@@ -1018,6 +1015,12 @@ struct LinkDiagnosticAboutView<Logo: View>: View {
                     .multilineTextAlignment(.center)
                     .foregroundStyle(theme.primaryText)
                     .padding(.horizontal, 28)
+            }
+
+            if let build = info.build, !build.isEmpty {
+                Text("Build: \(build)")
+                    .font(theme.typography.subheadline)
+                    .foregroundStyle(theme.mutedText)
             }
 
             if let releaseDate = info.releaseDate, !releaseDate.isEmpty {
@@ -1033,7 +1036,7 @@ struct LinkDiagnosticAboutView<Logo: View>: View {
             }
 
             if let website = info.website {
-                Link("Project Website", destination: website)
+                Link("Website", destination: website)
                     .font(theme.typography.bodyBold)
                     .foregroundStyle(theme.accent)
             }
@@ -1047,7 +1050,7 @@ struct LinkDiagnosticAboutView<Logo: View>: View {
             logo
                 .padding(.top, 24)
 
-            Text(detail == .credits ? "Credits" : "License")
+            Text(detail == .credits ? "Credits" : "Licence")
                 .font(theme.typography.title2)
                 .foregroundStyle(theme.primaryText)
 
@@ -1071,13 +1074,10 @@ struct LinkDiagnosticAboutView<Logo: View>: View {
 
     private var creditsText: String {
         var sections: [String] = []
-        if !info.authors.isEmpty {
-            sections.append(
-                (info.authors.count == 1 ? "Author\n" : "Authors\n") +
-                info.authors.joined(separator: "\n"))
-        }
         if !info.credits.isEmpty {
             sections.append(info.credits.joined(separator: "\n"))
+        } else if !info.authors.isEmpty {
+            sections.append(info.authors.joined(separator: "\n"))
         }
         return sections.joined(separator: "\n\n")
     }

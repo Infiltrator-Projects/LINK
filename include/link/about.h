@@ -19,6 +19,7 @@ typedef struct LinkAboutInfo {
     const char *subtitle;
     const char *version;
     const char *description;
+    const char *build;
     const char *release_date;
     const char *authors;
     const char *copyright;

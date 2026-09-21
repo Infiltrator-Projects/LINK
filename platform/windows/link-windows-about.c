@@ -35,6 +35,11 @@ static HBRUSH link_windows_about_background_brush;
 static HFONT link_windows_about_font;
 static WNDPROC link_windows_about_original_proc;
 
+enum {
+    LINK_ABOUT_CREDITS_BUTTON = 1001,
+    LINK_ABOUT_LICENCE_BUTTON = 1002
+};
+
 
 static int link_windows_about_has_text(const char *value)
 {
@@ -217,8 +222,7 @@ static HRESULT CALLBACK link_windows_about_callback(
     HWND window, UINT notification, WPARAM wparam, LPARAM lparam,
     LONG_PTR reference_data)
 {
-    (void)wparam;
-    (void)reference_data;
+    const LinkAboutInfo *info = (const LinkAboutInfo *)reference_data;
 
     if (notification == TDN_CREATED) {
         link_windows_about_background_brush =
@@ -239,6 +243,31 @@ static HRESULT CALLBACK link_windows_about_callback(
         (void)ShellExecuteW(
             window, L"open", (LPCWSTR)lparam, NULL, NULL, SW_SHOWNORMAL);
     }
+
+    if (notification == TDN_BUTTON_CLICKED && info != NULL) {
+        const char *detail_utf8 = NULL;
+        const wchar_t *heading = NULL;
+        wchar_t detail[8192];
+
+        if ((int)wparam == LINK_ABOUT_CREDITS_BUTTON) {
+            detail_utf8 = link_windows_about_has_text(info->credits)
+                ? info->credits : info->authors;
+            heading = L"Credits";
+        } else if ((int)wparam == LINK_ABOUT_LICENCE_BUTTON) {
+            detail_utf8 = link_windows_about_has_text(info->license_text)
+                ? info->license_text : info->license_name;
+            heading = L"Licence";
+        }
+
+        if (detail_utf8 != NULL &&
+            link_windows_about_utf8_to_wide(
+                detail_utf8, detail, INFILTRATR_ARRAY_LENGTH(detail))) {
+            (void)TaskDialog(
+                window, NULL, heading, heading, detail,
+                TDCBF_CLOSE_BUTTON, TD_INFORMATION_ICON, NULL);
+            return S_FALSE;
+        }
+    }
     return S_OK;
 }
 
@@ -252,6 +281,8 @@ void link_windows_show_about(HWND parent,
     wchar_t product_name[256];
     wchar_t content[8192];
     TASKDIALOGCONFIG config;
+    TASKDIALOG_BUTTON buttons[2];
+    UINT button_count = 0U;
     HRESULT result;
 
     if (info == NULL || !link_windows_about_has_text(info->product_name))
@@ -262,23 +293,19 @@ void link_windows_show_about(HWND parent,
     title_utf8[sizeof(title_utf8) - 1U] = '\0';
 
     link_windows_about_field(
-        content_utf8, sizeof(content_utf8), "Version", info->version);
-    link_windows_about_field(
-        content_utf8, sizeof(content_utf8), NULL, info->subtitle);
+        content_utf8, sizeof(content_utf8), NULL, info->version);
     link_windows_about_field(
         content_utf8, sizeof(content_utf8), NULL, info->description);
     link_windows_about_field(
+        content_utf8, sizeof(content_utf8), "Build", info->build);
+    link_windows_about_field(
         content_utf8, sizeof(content_utf8), "Release date", info->release_date);
-    link_windows_about_field(
-        content_utf8, sizeof(content_utf8), "Authors", info->authors);
-    link_windows_about_field(
-        content_utf8, sizeof(content_utf8), "Credits", info->credits);
 
     if (link_windows_about_has_text(info->website)) {
         char website[2048];
         (void)snprintf(
             website, sizeof(website),
-            "<a href=\"%s\">Project website</a>", info->website);
+            "<a href=\"%s\">Website</a>", info->website);
         website[sizeof(website) - 1U] = '\0';
         link_windows_about_field(
             content_utf8, sizeof(content_utf8), NULL, website);
@@ -286,14 +313,18 @@ void link_windows_show_about(HWND parent,
 
     link_windows_about_field(
         content_utf8, sizeof(content_utf8), NULL, info->copyright);
-    if (link_windows_about_has_text(info->license_text)) {
-        link_windows_about_field(
-            content_utf8, sizeof(content_utf8),
-            info->license_name, info->license_text);
-    } else {
-        link_windows_about_field(
-            content_utf8, sizeof(content_utf8),
-            "Licence", info->license_name);
+
+    if (link_windows_about_has_text(info->credits) ||
+        link_windows_about_has_text(info->authors)) {
+        buttons[button_count].nButtonID = LINK_ABOUT_CREDITS_BUTTON;
+        buttons[button_count].pszButtonText = L"Credits";
+        ++button_count;
+    }
+    if (link_windows_about_has_text(info->license_text) ||
+        link_windows_about_has_text(info->license_name)) {
+        buttons[button_count].nButtonID = LINK_ABOUT_LICENCE_BUTTON;
+        buttons[button_count].pszButtonText = L"Licence";
+        ++button_count;
     }
 
     if (!link_windows_about_utf8_to_wide(
@@ -321,10 +352,13 @@ void link_windows_show_about(HWND parent,
         config.hMainIcon = icon;
     }
     config.dwCommonButtons = TDCBF_CLOSE_BUTTON;
+    config.cButtons = button_count;
+    config.pButtons = button_count != 0U ? buttons : NULL;
     config.pszWindowTitle = title;
     config.pszMainInstruction = product_name;
     config.pszContent = content;
     config.pfCallback = link_windows_about_callback;
+    config.lpCallbackData = (LONG_PTR)info;
 
     result = TaskDialogIndirect(&config, NULL, NULL, NULL);
     if (FAILED(result)) {
