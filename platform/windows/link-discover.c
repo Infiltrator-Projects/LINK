@@ -13,6 +13,7 @@
 #include "link/research.h"
 
 #include "infiltratr/core.h"
+#include "infiltratr/dynlib.h"
 #include "infiltratr/endian.h"
 
 #ifndef LINK_PRODUCT_NAME
@@ -76,7 +77,7 @@ typedef unsigned long (WINAPI *PassThruStartMsgFilterFn)(unsigned long, unsigned
 typedef unsigned long (WINAPI *PassThruStopMsgFilterFn)(unsigned long, unsigned long);
 
 typedef struct j2534_api_ {
-    HMODULE dll;
+    InfiltratrDynlib dll;
     PassThruOpenFn open;
     PassThruCloseFn close;
     PassThruConnectFn connect;
@@ -264,37 +265,100 @@ static int read_registry_openport(char *path, size_t capacity)
     return 0;
 }
 
-static FARPROC load_symbol(HMODULE dll, const char *name)
+static char *windows_ansi_to_utf8(const char *text)
 {
-    FARPROC symbol = GetProcAddress(dll, name);
-    if (symbol == NULL) post_logf("Missing J2534 entry point: %s", name);
-    return symbol;
+    wchar_t *wide;
+    char *utf8;
+    int wide_count;
+    int utf8_count;
+
+    if (text == NULL || text[0] == '\0') return NULL;
+    wide_count = MultiByteToWideChar(CP_ACP, MB_ERR_INVALID_CHARS,
+                                     text, -1, NULL, 0);
+    if (wide_count <= 0 ||
+        (size_t)wide_count > SIZE_MAX / sizeof(*wide)) {
+        return NULL;
+    }
+    wide = malloc((size_t)wide_count * sizeof(*wide));
+    if (wide == NULL) return NULL;
+    if (MultiByteToWideChar(CP_ACP, MB_ERR_INVALID_CHARS,
+                            text, -1, wide, wide_count) != wide_count) {
+        free(wide);
+        return NULL;
+    }
+    utf8_count = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS,
+                                     wide, -1, NULL, 0, NULL, NULL);
+    if (utf8_count <= 0) {
+        free(wide);
+        return NULL;
+    }
+    utf8 = malloc((size_t)utf8_count);
+    if (utf8 == NULL) {
+        free(wide);
+        return NULL;
+    }
+    if (WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS,
+                            wide, -1, utf8, utf8_count, NULL, NULL) !=
+        utf8_count) {
+        free(utf8);
+        utf8 = NULL;
+    }
+    free(wide);
+    return utf8;
+}
+
+static void clear_j2534_functions(j2534_api *api)
+{
+    if (api == NULL) return;
+    api->open = NULL;
+    api->close = NULL;
+    api->connect = NULL;
+    api->disconnect = NULL;
+    api->read_msgs = NULL;
+    api->write_msgs = NULL;
+    api->start_filter = NULL;
+    api->stop_filter = NULL;
 }
 
 static int load_j2534(const char *path)
 {
-    FARPROC p;
-    memset(&g_app.api, 0, sizeof(g_app.api));
-    g_app.api.dll = LoadLibraryA(path);
-    if (g_app.api.dll == NULL) {
-        post_logf("Cannot load J2534 DLL: %s (Win32 error %lu)", path, (unsigned long)GetLastError());
+    char *utf8_path;
+    InfiltratrDynlibBinding bindings[] = {
+        { "PassThruOpen", &g_app.api.open, sizeof(g_app.api.open), true },
+        { "PassThruClose", &g_app.api.close, sizeof(g_app.api.close), true },
+        { "PassThruConnect", &g_app.api.connect, sizeof(g_app.api.connect), true },
+        { "PassThruDisconnect", &g_app.api.disconnect, sizeof(g_app.api.disconnect), true },
+        { "PassThruReadMsgs", &g_app.api.read_msgs, sizeof(g_app.api.read_msgs), true },
+        { "PassThruWriteMsgs", &g_app.api.write_msgs, sizeof(g_app.api.write_msgs), true },
+        { "PassThruStartMsgFilter", &g_app.api.start_filter, sizeof(g_app.api.start_filter), true },
+        { "PassThruStopMsgFilter", &g_app.api.stop_filter, sizeof(g_app.api.stop_filter), true }
+    };
+
+    if (infiltratr_dynlib_is_open(&g_app.api.dll)) {
+        post_logf("J2534 DLL is already loaded.");
         return 0;
     }
-#define LOAD_FN(field, name) do { p = load_symbol(g_app.api.dll, name); if (p == NULL) goto fail; memcpy(&g_app.api.field, &p, sizeof(g_app.api.field)); } while (0)
-    LOAD_FN(open, "PassThruOpen");
-    LOAD_FN(close, "PassThruClose");
-    LOAD_FN(connect, "PassThruConnect");
-    LOAD_FN(disconnect, "PassThruDisconnect");
-    LOAD_FN(read_msgs, "PassThruReadMsgs");
-    LOAD_FN(write_msgs, "PassThruWriteMsgs");
-    LOAD_FN(start_filter, "PassThruStartMsgFilter");
-    LOAD_FN(stop_filter, "PassThruStopMsgFilter");
-#undef LOAD_FN
+    clear_j2534_functions(&g_app.api);
+    utf8_path = windows_ansi_to_utf8(path);
+    if (utf8_path == NULL) {
+        post_logf("Cannot interpret J2534 DLL path as Windows text: %s",
+                  path != NULL ? path : "");
+        return 0;
+    }
+    if (!infiltratr_dynlib_open(&g_app.api.dll, utf8_path)) {
+        post_logf("Cannot load J2534 DLL: %s", path);
+        free(utf8_path);
+        return 0;
+    }
+    free(utf8_path);
+    if (!infiltratr_dynlib_bind_symbols(
+            &g_app.api.dll, bindings, INFILTRATR_ARRAY_LENGTH(bindings))) {
+        post_logf("J2534 DLL is missing one or more required entry points.");
+        infiltratr_dynlib_close(&g_app.api.dll);
+        clear_j2534_functions(&g_app.api);
+        return 0;
+    }
     return 1;
-fail:
-    FreeLibrary(g_app.api.dll);
-    memset(&g_app.api, 0, sizeof(g_app.api));
-    return 0;
 }
 
 static void disconnect_channel(void)
@@ -327,8 +391,9 @@ static void close_device(void)
         (void)g_app.api.close(g_app.device_id);
         g_app.device_id = 0UL;
     }
-    if (g_app.api.dll != NULL) FreeLibrary(g_app.api.dll);
-    memset(&g_app.api, 0, sizeof(g_app.api));
+    if (infiltratr_dynlib_is_open(&g_app.api.dll))
+        infiltratr_dynlib_close(&g_app.api.dll);
+    clear_j2534_functions(&g_app.api);
     g_app.connected = 0;
 }
 

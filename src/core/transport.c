@@ -7,32 +7,10 @@
 #include "link/mercedes_me_adapter.h"
 #include "link/elm327_simulator.h"
 
+#include "infiltratr/core.h"
+
 #include <stdio.h>
 #include <string.h>
-
-static unsigned char link_ascii_lower(unsigned char value)
-{
-    if (value >= (unsigned char)'A' && value <= (unsigned char)'Z')
-        return (unsigned char)(value - (unsigned char)'A' + (unsigned char)'a');
-    return value;
-}
-
-static bool link_ascii_contains_nocase(const char *text, const char *needle)
-{
-    size_t text_length, needle_length, start, offset;
-    if (text == NULL || needle == NULL || needle[0] == '\0') return false;
-    text_length = strlen(text);
-    needle_length = strlen(needle);
-    if (needle_length > text_length) return false;
-    for (start = 0U; start + needle_length <= text_length; ++start) {
-        for (offset = 0U; offset < needle_length; ++offset) {
-            if (link_ascii_lower((unsigned char)text[start + offset]) !=
-                link_ascii_lower((unsigned char)needle[offset])) break;
-        }
-        if (offset == needle_length) return true;
-    }
-    return false;
-}
 
 LinkAdapterKind link_adapter_kind_from_bluetooth_name(const char *name)
 {
@@ -40,13 +18,13 @@ LinkAdapterKind link_adapter_kind_from_bluetooth_name(const char *name)
         LINK_MERCEDES_ME_ADAPTER_UNKNOWN)
         return LINK_ADAPTER_KIND_MERCEDES_ME_NATIVE;
     if (name == NULL || name[0] == '\0') return LINK_ADAPTER_KIND_UNKNOWN;
-    if (link_ascii_contains_nocase(name, "vgate") ||
-        link_ascii_contains_nocase(name, "v-link") ||
-        link_ascii_contains_nocase(name, "vlink") ||
-        link_ascii_contains_nocase(name, "icar") ||
-        link_ascii_contains_nocase(name, "obd") ||
-        link_ascii_contains_nocase(name, "elm") ||
-        link_ascii_contains_nocase(name, "car pro"))
+    if (infiltratr_ascii_contains_ci(name, "vgate") ||
+        infiltratr_ascii_contains_ci(name, "v-link") ||
+        infiltratr_ascii_contains_ci(name, "vlink") ||
+        infiltratr_ascii_contains_ci(name, "icar") ||
+        infiltratr_ascii_contains_ci(name, "obd") ||
+        infiltratr_ascii_contains_ci(name, "elm") ||
+        infiltratr_ascii_contains_ci(name, "car pro"))
         return LINK_ADAPTER_KIND_ELM327;
     return LINK_ADAPTER_KIND_UNKNOWN;
 }

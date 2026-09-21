@@ -61,8 +61,8 @@ option(LINK_ENABLE_INSTALL
     "Install LINK headers, library and CMake package when LINK is top-level"
     ${PROJECT_IS_TOP_LEVEL})
 
-set(LINK_COMMON_VERSION "1.19.10")
-set(LINK_COMMON_COMMIT "33e69c0a462b56d388881d89c4eb49f72fa0b0fe")
+set(LINK_COMMON_VERSION "1.19.20")
+set(LINK_COMMON_COMMIT "336ab8f7f8b7364b6296c7560fc67b242b27eb9d")
 set(LINK_COMMON_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/infiltratr-common")
 
 if(NOT TARGET InfiltratrCommon::Portable)
@@ -226,8 +226,13 @@ function(link_enable_linux_gtk_shell target)
         pkg_check_modules(LINK_LIBUSB REQUIRED IMPORTED_TARGET libusb-1.0)
     endif()
 
+    if(NOT TARGET InfiltratrCommon::Common)
+        message(FATAL_ERROR
+            "link_enable_linux_gtk_shell requires the full Infiltratr Common platform target.")
+    endif()
     target_link_libraries(${target} PRIVATE
         LINK::Core
+        InfiltratrCommon::Common
         "${LINK_BLUEZ_LIBRARY}"
         PkgConfig::LINK_LIBUSB)
 
@@ -305,7 +310,13 @@ function(link_add_windows_discover target)
         "${link_windows_discover_source}"
         "${link_windows_about_source}"
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platform/windows/link-discover-i18n.c")
-    target_link_libraries(${target} PRIVATE LINK::Core comdlg32 advapi32 shell32 comctl32)
+    if(NOT TARGET InfiltratrCommon::Common)
+        message(FATAL_ERROR
+            "link_add_windows_discover requires the full Infiltratr Common platform target.")
+    endif()
+    target_link_libraries(${target} PRIVATE
+        LINK::Core InfiltratrCommon::Common
+        comdlg32 advapi32 shell32 comctl32)
     target_compile_definitions(${target} PRIVATE
         _CRT_SECURE_NO_WARNINGS
         LINK_PRODUCT_NAME="${LINK_FACE_PRODUCT_NAME}"

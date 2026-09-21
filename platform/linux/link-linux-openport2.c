@@ -17,17 +17,16 @@
 
 #include "infiltratr/core.h"
 #include "infiltratr/endian.h"
+#include "infiltratr/posix.h"
 
 #if defined(__linux__)
 
-#include <ctype.h>
 #include <errno.h>
 #include <libusb.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 
 #define LINK_OP2_SELECTION "OP2:Tactrix OpenPort 2.0"
 #define LINK_OP2_VENDOR_ID UINT16_C(0x0403)
@@ -142,10 +141,9 @@ static LinkLinuxOpenPort2State *openport_state(
 
 static uint64_t monotonic_ms(void)
 {
-    struct timespec value;
-    if (clock_gettime(CLOCK_MONOTONIC, &value) != 0) return 0U;
-    return (uint64_t)value.tv_sec * UINT64_C(1000) +
-           (uint64_t)value.tv_nsec / UINT64_C(1000000);
+    uint64_t nanoseconds = 0U;
+    if (!infiltratr_monotonic_nanoseconds(&nanoseconds)) return 0U;
+    return nanoseconds / UINT64_C(1000000);
 }
 
 static void make_can_id_message(LinkOpenPortPassThruMsg *message,
@@ -257,8 +255,8 @@ static void normalize_command(const uint8_t *bytes,
     if (bytes == NULL) return;
     for (index = 0U; index < size && used + 1U < capacity; ++index) {
         unsigned char value = bytes[index];
-        if (isspace(value)) continue;
-        command[used++] = (char)toupper(value);
+        if (infiltratr_ascii_is_space(value)) continue;
+        command[used++] = (char)infiltratr_ascii_to_upper(value);
     }
     command[used] = '\0';
 }
@@ -601,8 +599,8 @@ static bool send_stored_request(LinkLinuxOpenPort2State *state)
     state->request_saw_pending = false;
     state->response_length = 0U;
     state->response_text[0] = '\0';
-    state->request_deadline_ms =
-        monotonic_ms() + (uint64_t)state->response_timeout_ms;
+    state->request_deadline_ms = infiltratr_u64_add_saturating(
+        monotonic_ms(), (uint64_t)state->response_timeout_ms);
     return true;
 }
 
@@ -682,8 +680,8 @@ static void accept_pass_thru_message(LinkLinuxOpenPort2State *state,
     state->request_saw_response = true;
     if (payload_is_response_pending(payload, payload_length)) {
         state->request_saw_pending = true;
-        state->request_deadline_ms =
-            monotonic_ms() + LINK_OP2_RESPONSE_PENDING_EXTENSION_MS;
+        state->request_deadline_ms = infiltratr_u64_add_saturating(
+            monotonic_ms(), LINK_OP2_RESPONSE_PENDING_EXTENSION_MS);
         return;
     }
 

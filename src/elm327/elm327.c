@@ -77,12 +77,6 @@ LinkElm327Result link_elm327_build_set_protocol_command(
     return LINK_ELM327_RESULT_OK;
 }
 
-static bool elm327_ascii_space(unsigned char value)
-{
-    return value == ' ' || value == '\t' || value == '\r' || value == '\n' ||
-           value == '\v' || value == '\f';
-}
-
 static size_t elm327_canonicalise(const char *source, char *destination,
                                   size_t destination_size)
 {
@@ -98,17 +92,15 @@ static size_t elm327_canonicalise(const char *source, char *destination,
 
     while (*source != '\0') {
         unsigned char value = (unsigned char)*source++;
-        if (elm327_ascii_space(value)) {
+        if (infiltratr_ascii_is_space(value)) {
             continue;
         }
         if (written + 1U >= destination_size) {
             destination[0] = '\0';
             return 0U;
         }
-        if (value >= (unsigned char)'a' && value <= (unsigned char)'z') {
-            value = (unsigned char)(value - (unsigned char)'a' + (unsigned char)'A');
-        }
-        destination[written++] = (char)value;
+        destination[written++] =
+            (char)infiltratr_ascii_to_upper(value);
     }
     destination[written] = '\0';
     return written;

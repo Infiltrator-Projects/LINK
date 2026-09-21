@@ -38,33 +38,13 @@ mercedes_me_connection_problems[] = {
     { "GATT_FAILURE", 650 }
 };
 
-static unsigned char ascii_lower(unsigned char value)
-{
-    if (value >= (unsigned char)'A' && value <= (unsigned char)'Z')
-        return (unsigned char)(value - (unsigned char)'A' + (unsigned char)'a');
-    return value;
-}
-
-static bool prefix_nocase(const char *text, const char *prefix)
-{
-    size_t i = 0U;
-    if (text == NULL || prefix == NULL) return false;
-    while (prefix[i] != '\0') {
-        if (text[i] == '\0' ||
-            ascii_lower((unsigned char)text[i]) !=
-            ascii_lower((unsigned char)prefix[i])) return false;
-        ++i;
-    }
-    return true;
-}
-
 LinkMercedesMeAdapterFamily link_mercedes_me_adapter_family_from_name(
     const char *name)
 {
     unsigned char selector;
     if (name == NULL) return LINK_MERCEDES_ME_ADAPTER_UNKNOWN;
-    if (prefix_nocase(name, "VAN-")) return LINK_MERCEDES_ME_ADAPTER_OTHER_APPS;
-    if (!prefix_nocase(name, "MB-") || name[3] == '\0')
+    if (infiltratr_ascii_starts_with_ci(name, "VAN-")) return LINK_MERCEDES_ME_ADAPTER_OTHER_APPS;
+    if (!infiltratr_ascii_starts_with_ci(name, "MB-") || name[3] == '\0')
         return LINK_MERCEDES_ME_ADAPTER_UNKNOWN;
     selector = (unsigned char)name[3];
     if (selector == '1' || selector == '8' || selector == '9')

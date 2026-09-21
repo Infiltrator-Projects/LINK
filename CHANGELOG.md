@@ -6,6 +6,14 @@ This file records user-visible, compatibility, diagnostic-knowledge and validati
 
 - No unreleased changes.
 
+## 0.15.33 — 2026-09-21
+
+- Advanced LINK from Infiltratr Common 1.19.10 to 1.19.20 and pinned the exact released Common commit.
+- Removed LINK-local ASCII case-folding and whitespace helpers now owned by Common, keeping protocol and adapter matching locale-independent.
+- Replaced the Windows Discover J2534 loader's direct LoadLibrary/GetProcAddress plumbing with Common's UTF-8-aware dynamic-library boundary and atomic symbol binding.
+- Reused Common's monotonic-clock adapter and saturating deadline arithmetic in the native Linux OpenPort provider.
+- Linked platform UI providers to Common's full platform target only where those platform services are actually required; the portable LINK core remains on Common::Portable.
+
 ## 0.15.32 — 2026-09-20
 
 - Published the repository-wide copyright normalization already present on main.
