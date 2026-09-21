@@ -36,6 +36,9 @@ extern "C" {
 #define LINK_UDS_NRC_REQUEST_SEQUENCE_ERROR 0x24U
 #define LINK_UDS_NRC_REQUEST_OUT_OF_RANGE 0x31U
 #define LINK_UDS_NRC_SECURITY_ACCESS_DENIED 0x33U
+#define LINK_UDS_NRC_INVALID_KEY 0x35U
+#define LINK_UDS_NRC_EXCEED_NUMBER_OF_ATTEMPTS 0x36U
+#define LINK_UDS_NRC_REQUIRED_TIME_DELAY_NOT_EXPIRED 0x37U
 #define LINK_UDS_NRC_GENERAL_PROGRAMMING_FAILURE 0x72U
 #define LINK_UDS_NRC_SUBFUNCTION_NOT_SUPPORTED_IN_ACTIVE_SESSION 0x7eU
 #define LINK_UDS_NRC_SERVICE_NOT_SUPPORTED_IN_ACTIVE_SESSION 0x7fU
@@ -115,6 +118,25 @@ typedef struct {
     void *context;
 } LinkUdsServerHandlerSlot;
 
+typedef LinkUdsServerHandlerResult (*LinkUdsSecurityAccessSeedFn)(
+    void *context, uint8_t security_level,
+    const uint8_t *request_record, size_t request_record_length,
+    uint8_t *seed, size_t seed_capacity);
+
+typedef bool (*LinkUdsSecurityAccessVerifyKeyFn)(
+    void *context, uint8_t security_level,
+    const uint8_t *key, size_t key_length);
+
+typedef struct {
+    LinkUdsSecurityAccessSeedFn seed;
+    LinkUdsSecurityAccessVerifyKeyFn verify_key;
+    void *context;
+    uint8_t max_invalid_key_attempts;
+    uint32_t delay_ms;
+} LinkUdsSecurityAccessConfig;
+
+#define LINK_UDS_SECURITY_ACCESS_CONFIG_INIT { NULL, NULL, NULL, 0U, 0U }
+
 typedef uint32_t (*LinkUdsServerClockMsFn)(void *context);
 
 typedef struct {
@@ -144,11 +166,19 @@ typedef struct {
      */
     const LinkUdsServerPolicy *policies;
     size_t policy_count;
+
+    /*
+     * Optional built-in SecurityAccess (0x27) sequencing. LINK owns only the
+     * UDS state machine, attempts/delay policy and level state. The target
+     * supplies seed generation and key verification.
+     */
+    LinkUdsSecurityAccessConfig security_access;
 } LinkUdsServerConfig;
 
 #define LINK_UDS_SERVER_CONFIG_INIT \
     { UINT16_C(50), UINT16_C(500), true, false, true, 0U, NULL, NULL, \
-      LINK_UDS_ECU_RESET_SUPPORT_ALL_RESETS, false, 0U, NULL, 0U }
+      LINK_UDS_ECU_RESET_SUPPORT_ALL_RESETS, false, 0U, NULL, 0U, \
+      LINK_UDS_SECURITY_ACCESS_CONFIG_INIT }
 
 typedef enum {
     LINK_UDS_SERVER_RESULT_POSITIVE = 0,
@@ -165,6 +195,11 @@ typedef struct {
     size_t handler_count;
     uint8_t active_session;
     uint8_t active_security_level;
+    uint8_t pending_security_level;
+    uint8_t invalid_security_key_attempts;
+    bool security_seed_pending;
+    bool security_delay_active;
+    uint32_t security_delay_started_ms;
     uint8_t last_service;
     uint8_t last_negative_response_code;
     uint8_t pending_ecu_reset_type;

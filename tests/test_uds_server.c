@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+#include "link/aes_cmac.h"
 #include "link/uds_server.h"
 
 #include <stdio.h>
@@ -470,6 +471,138 @@ static int test_execution_policy_validation(void)
     return 0;
 }
 
+typedef struct {
+    uint8_t seed[LINK_AES128_BLOCK_BYTES];
+    uint8_t secret[LINK_AES128_KEY_BYTES];
+} TestSecurityAccess;
+
+static LinkUdsServerHandlerResult test_security_seed(
+    void *context, uint8_t security_level,
+    const uint8_t *request_record, size_t request_record_length,
+    uint8_t *seed, size_t seed_capacity)
+{
+    TestSecurityAccess *fixture = (TestSecurityAccess *)context;
+    if (security_level != 1U || request_record_length != 0U ||
+        request_record != NULL) {
+        return link_uds_server_handler_negative(LINK_UDS_NRC_REQUEST_OUT_OF_RANGE);
+    }
+    if (seed_capacity < sizeof(fixture->seed)) {
+        return link_uds_server_handler_negative(LINK_UDS_NRC_RESPONSE_TOO_LONG);
+    }
+    memcpy(seed, fixture->seed, sizeof(fixture->seed));
+    return link_uds_server_handler_positive(sizeof(fixture->seed));
+}
+
+static bool test_security_verify(
+    void *context, uint8_t security_level,
+    const uint8_t *key, size_t key_length)
+{
+    TestSecurityAccess *fixture = (TestSecurityAccess *)context;
+    return security_level == 1U &&
+           key_length == LINK_AES_CMAC_TAG_BYTES &&
+           link_aes_cmac_128_verify(
+               fixture->secret, fixture->seed, sizeof(fixture->seed), key);
+}
+
+static int test_security_access_builtin(void)
+{
+    static const uint8_t rfc_key[16U] = {
+        0x2bU,0x7eU,0x15U,0x16U,0x28U,0xaeU,0xd2U,0xa6U,
+        0xabU,0xf7U,0x15U,0x88U,0x09U,0xcfU,0x4fU,0x3cU
+    };
+    static const uint8_t rfc_message[16U] = {
+        0x6bU,0xc1U,0xbeU,0xe2U,0x2eU,0x40U,0x9fU,0x96U,
+        0xe9U,0x3dU,0x7eU,0x11U,0x73U,0x93U,0x17U,0x2aU
+    };
+    static const uint8_t correct_key[16U] = {
+        0x07U,0x0aU,0x16U,0xb4U,0x6bU,0x4dU,0x41U,0x44U,
+        0xf7U,0x9bU,0xddU,0x9dU,0xd0U,0x4aU,0x28U,0x7cU
+    };
+    uint8_t send_bad_key[18U] = {0x27U,0x02U};
+    uint8_t send_correct_key[18U] = {0x27U,0x02U};
+    const uint8_t request_seed[] = {0x27U,0x01U};
+    const uint8_t send_key_without_seed[18U] = {0x27U,0x04U};
+    TestSecurityAccess fixture;
+    TestClock clock = {0U};
+    LinkUdsServer server;
+    LinkUdsServerConfig config = LINK_UDS_SERVER_CONFIG_INIT;
+    uint8_t response[64U];
+    size_t length = 0U;
+
+    memcpy(fixture.seed, rfc_message, sizeof(fixture.seed));
+    memcpy(fixture.secret, rfc_key, sizeof(fixture.secret));
+    memcpy(send_correct_key + 2U, correct_key, sizeof(correct_key));
+    config.clock_ms = test_clock_ms;
+    config.clock_context = &clock;
+    config.security_access.seed = test_security_seed;
+    config.security_access.verify_key = test_security_verify;
+    config.security_access.context = &fixture;
+    config.security_access.max_invalid_key_attempts = 2U;
+    config.security_access.delay_ms = 1000U;
+
+    CHECK(link_uds_server_init(&server, &config));
+    CHECK(link_uds_server_handle(
+              &server, send_key_without_seed, sizeof(send_key_without_seed),
+              response, sizeof(response), &length) ==
+          LINK_UDS_SERVER_RESULT_NEGATIVE);
+    CHECK(response[2] == LINK_UDS_NRC_REQUEST_SEQUENCE_ERROR);
+
+    CHECK(link_uds_server_handle(
+              &server, request_seed, sizeof(request_seed),
+              response, sizeof(response), &length) ==
+          LINK_UDS_SERVER_RESULT_POSITIVE);
+    CHECK(length == 18U && response[0] == 0x67U && response[1] == 0x01U);
+    CHECK(memcmp(response + 2U, rfc_message, sizeof(rfc_message)) == 0);
+
+    CHECK(link_uds_server_handle(
+              &server, send_bad_key, sizeof(send_bad_key),
+              response, sizeof(response), &length) ==
+          LINK_UDS_SERVER_RESULT_NEGATIVE);
+    CHECK(response[2] == LINK_UDS_NRC_INVALID_KEY);
+    CHECK(link_uds_server_handle(
+              &server, send_bad_key, sizeof(send_bad_key),
+              response, sizeof(response), &length) ==
+          LINK_UDS_SERVER_RESULT_NEGATIVE);
+    CHECK(response[2] == LINK_UDS_NRC_EXCEED_NUMBER_OF_ATTEMPTS);
+    CHECK(link_uds_server_handle(
+              &server, request_seed, sizeof(request_seed),
+              response, sizeof(response), &length) ==
+          LINK_UDS_SERVER_RESULT_NEGATIVE);
+    CHECK(response[2] == LINK_UDS_NRC_REQUIRED_TIME_DELAY_NOT_EXPIRED);
+
+    clock.now_ms = 1000U;
+    CHECK(link_uds_server_handle(
+              &server, request_seed, sizeof(request_seed),
+              response, sizeof(response), &length) ==
+          LINK_UDS_SERVER_RESULT_POSITIVE);
+    CHECK(link_uds_server_handle(
+              &server, send_correct_key, sizeof(send_correct_key),
+              response, sizeof(response), &length) ==
+          LINK_UDS_SERVER_RESULT_POSITIVE);
+    CHECK(length == 2U && response[0] == 0x67U && response[1] == 0x02U);
+    CHECK(link_uds_server_active_security_level(&server) == 1U);
+    return 0;
+}
+
+static int test_security_access_config_validation(void)
+{
+    LinkUdsServer server;
+    LinkUdsServerConfig config = LINK_UDS_SERVER_CONFIG_INIT;
+
+    config.security_access.seed = test_security_seed;
+    CHECK(!link_uds_server_init(&server, &config));
+    config = (LinkUdsServerConfig)LINK_UDS_SERVER_CONFIG_INIT;
+    config.security_access.verify_key = test_security_verify;
+    CHECK(!link_uds_server_init(&server, &config));
+    config = (LinkUdsServerConfig)LINK_UDS_SERVER_CONFIG_INIT;
+    config.security_access.seed = test_security_seed;
+    config.security_access.verify_key = test_security_verify;
+    config.security_access.max_invalid_key_attempts = 2U;
+    config.security_access.delay_ms = 1000U;
+    CHECK(!link_uds_server_init(&server, &config));
+    return 0;
+}
+
 static int test_dtc_all_subfunctions(void)
 {
     static const LinkUdsDtcRecord records[] = {
@@ -925,6 +1058,8 @@ int main(void)
     if (test_custom_handlers() != 0) return EXIT_FAILURE;
     if (test_execution_policy() != 0) return EXIT_FAILURE;
     if (test_execution_policy_validation() != 0) return EXIT_FAILURE;
+    if (test_security_access_builtin() != 0) return EXIT_FAILURE;
+    if (test_security_access_config_validation() != 0) return EXIT_FAILURE;
     if (test_dtc_all_subfunctions() != 0) return EXIT_FAILURE;
     if (test_dtc_rich_all_subfunctions() != 0) return EXIT_FAILURE;
     if (test_dtc_empty_supported_and_history() != 0) return EXIT_FAILURE;

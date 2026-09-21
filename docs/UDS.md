@@ -105,6 +105,30 @@ A successful product SecurityAccess handler can call
 logic. By default a real session change, S3 fallback to Default, explicit server
 session reset and ECU reset return the active security level to 0.
 
+## SecurityAccess hook and AES-CMAC
+
+LINK provides an allocation-free AES-128/AES-CMAC primitive in
+`link/aes_cmac.h`. Its deterministic tests use the published RFC 4493/NIST
+AES zero-block and 0-, 16-, 40- and 64-byte CMAC vectors. The primitive is
+protocol-neutral: availability does not assert that any vehicle or ECU uses
+CMAC for SecurityAccess.
+
+The UDS server may optionally own the generic `0x27 SecurityAccess` state
+machine through `LinkUdsSecurityAccessConfig`. A target supplies a seed
+callback and a key-verification callback. LINK maps requestSeed/sendKey pairs
+to ordinal security levels 1 through 63, enforces request-seed-before-send-key
+sequencing, updates the active security level only after successful
+verification, and optionally owns invalid-key attempt/delay state.
+
+Generic rejection uses NRC `0x24` for sequence errors, `0x35` for an
+invalid key, `0x36` when the configured attempt limit is reached, and
+`0x37` while the delay remains active. Session transitions clear any pending
+seed/key sequence but do not erase an active lockout timer.
+
+A custom `0x27` handler still overrides the built-in facility and can call
+`link_uds_server_set_security_level()` after its own verification. No
+Mercedes, Jaguar or other OEM seed/key algorithm is embedded in LINK.
+
 ## Safety boundary
 
 Codec availability is not authorization.
@@ -159,9 +183,13 @@ require the memory-selection echo before that fixed DTC-and-status envelope.
 - memory address/size width validation and ALFID encoding;
 - response echo validation for subfunction, DID, routine and transfer services;
 - bounded-buffer and malformed-argument failure behaviour; and
-- preservation of the pre-existing UDS client/session tests.
+- preservation of the pre-existing UDS client/session tests; and
+- RFC 4493 AES-CMAC vectors, invalid arguments and tag verification.
 
-`tests/test_uds_server.c` additionally verifies service-wide and exact
+`tests/test_uds_server.c` additionally verifies built-in SecurityAccess
+requestSeed/sendKey sequencing, a CMAC-backed sample verifier, invalid-key
+attempt counting, delay expiry, NRC selection and configuration rejection. It
+also verifies service-wide and exact
 subfunction policy precedence, Default/Programming/Extended session gating,
 security-level gating, physical/functional addressing, the expected UDS NRC for
 each rejection class, security reset on session change, invalid policy-table

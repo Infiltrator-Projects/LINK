@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.15.42 — 2026-09-21
+
+- Complete LINK issue #26 with a reusable allocation-free AES-128 / RFC 4493 AES-CMAC primitive and deterministic published test vectors.
+- Add an algorithm-neutral UDS 0x27 SecurityAccess server hook: target callbacks own seed generation and key verification while LINK owns requestSeed/sendKey sequencing and active security-level state.
+- Add generic invalid-key attempt/delay handling with NRC 0x35, 0x36 and 0x37, preserving lockout state across ordinary diagnostic-session changes.
+- Keep OEM security policy out of LINK: CMAC availability never implies that Mercedes or any other ECU uses CMAC.
+
 ## 0.15.41 — 2026-09-21
 
 - Complete LINK issue #25 with product-neutral per-service and per-subfunction UDS server execution policy metadata.

@@ -70,6 +70,28 @@ static bool uds_server_policy_table_valid(
     return true;
 }
 
+static bool uds_server_security_access_config_valid(
+    const LinkUdsServerConfig *config)
+{
+    const LinkUdsSecurityAccessConfig *security;
+    bool has_seed;
+    bool has_verify;
+
+    if (config == NULL) return false;
+    security = &config->security_access;
+    has_seed = security->seed != NULL;
+    has_verify = security->verify_key != NULL;
+    if (has_seed != has_verify) return false;
+    if (!has_seed) {
+        return security->max_invalid_key_attempts == 0U &&
+               security->delay_ms == 0U;
+    }
+    if (security->max_invalid_key_attempts == 0U) {
+        return security->delay_ms == 0U;
+    }
+    return security->delay_ms != 0U && config->clock_ms != NULL;
+}
+
 static bool uds_server_config_valid(const LinkUdsServerConfig *config)
 {
     return config != NULL && config->p2_server_max_ms != 0U &&
@@ -77,7 +99,8 @@ static bool uds_server_config_valid(const LinkUdsServerConfig *config)
            (config->s3_server_timeout_ms == 0U || config->clock_ms != NULL) &&
            (config->supported_ecu_reset_types &
             (uint8_t)~LINK_UDS_ECU_RESET_SUPPORT_ALL_RESETS) == 0U &&
-           uds_server_policy_table_valid(config->policies, config->policy_count);
+           uds_server_policy_table_valid(config->policies, config->policy_count) &&
+           uds_server_security_access_config_valid(config);
 }
 
 static bool uds_server_nrc_valid(uint8_t nrc)
@@ -144,11 +167,27 @@ static bool uds_server_session_transition_allowed(
     return true;
 }
 
+static void uds_server_clear_security_sequence(LinkUdsServer *server)
+{
+    if (server == NULL) return;
+    server->security_seed_pending = false;
+    server->pending_security_level = 0U;
+}
+
+static void uds_server_clear_security_failures(LinkUdsServer *server)
+{
+    if (server == NULL) return;
+    server->invalid_security_key_attempts = 0U;
+    server->security_delay_active = false;
+    server->security_delay_started_ms = 0U;
+}
+
 void link_uds_server_reset_session(LinkUdsServer *server)
 {
     if (server == NULL) return;
     server->active_session = LINK_UDS_SESSION_DEFAULT;
     server->active_security_level = 0U;
+    uds_server_clear_security_sequence(server);
     if (server->config.clock_ms != NULL) {
         server->last_activity_ms =
             server->config.clock_ms(server->config.clock_context);
@@ -160,17 +199,25 @@ void link_uds_server_tick(LinkUdsServer *server)
 {
     uint32_t now;
 
-    if (server == NULL || server->config.clock_ms == NULL ||
-        server->config.s3_server_timeout_ms == 0U ||
-        !server->activity_started) {
+    if (server == NULL || server->config.clock_ms == NULL) {
         return;
     }
     now = server->config.clock_ms(server->config.clock_context);
+    if (server->security_delay_active &&
+        (uint32_t)(now - server->security_delay_started_ms) >=
+            server->config.security_access.delay_ms) {
+        uds_server_clear_security_failures(server);
+    }
+    if (server->config.s3_server_timeout_ms == 0U ||
+        !server->activity_started) {
+        return;
+    }
     if (server->active_session != LINK_UDS_SESSION_DEFAULT &&
         (uint32_t)(now - server->last_activity_ms) >=
             server->config.s3_server_timeout_ms) {
         server->active_session = LINK_UDS_SESSION_DEFAULT;
         server->active_security_level = 0U;
+        uds_server_clear_security_sequence(server);
         server->last_activity_ms = now;
     }
 }
@@ -202,6 +249,8 @@ bool link_uds_server_set_security_level(
         return false;
     }
     server->active_security_level = security_level;
+    uds_server_clear_security_sequence(server);
+    uds_server_clear_security_failures(server);
     return true;
 }
 
@@ -337,9 +386,11 @@ static LinkUdsServerHandlerResult uds_server_builtin_session(
         data[3] = (uint8_t)(server->config.p2_star_server_max_10ms >> 8U);
         data[4] = (uint8_t)server->config.p2_star_server_max_10ms;
     }
-    if (server->config.reset_security_on_session_change &&
-        server->active_session != session) {
-        server->active_security_level = 0U;
+    if (server->active_session != session) {
+        uds_server_clear_security_sequence(server);
+        if (server->config.reset_security_on_session_change) {
+            server->active_security_level = 0U;
+        }
     }
     server->active_session = session;
     return link_uds_server_handler_positive(required);
@@ -382,6 +433,7 @@ static LinkUdsServerHandlerResult uds_server_builtin_ecu_reset(
         server->pending_ecu_reset_type = reset_type;
         server->active_session = LINK_UDS_SESSION_DEFAULT;
         server->active_security_level = 0U;
+        uds_server_clear_security_sequence(server);
         return link_uds_server_handler_positive(1U);
 
     case LINK_UDS_ECU_RESET_ENABLE_RAPID_POWER_SHUTDOWN:
@@ -422,6 +474,84 @@ static LinkUdsServerHandlerResult uds_server_builtin_ecu_reset(
         return link_uds_server_handler_negative(
             LINK_UDS_NRC_SUBFUNCTION_NOT_SUPPORTED);
     }
+}
+
+static LinkUdsServerHandlerResult uds_server_builtin_security_access(
+    LinkUdsServer *server,
+    const LinkUdsServerRequest *request,
+    uint8_t *data,
+    size_t capacity)
+{
+    const LinkUdsSecurityAccessConfig *security = &server->config.security_access;
+    const uint8_t access_type = request->subfunction;
+    const uint8_t security_level = (uint8_t)((access_type + 1U) / 2U);
+    const bool request_seed = (access_type & UINT8_C(1)) != 0U;
+
+    if (access_type == 0U || access_type == 0x7fU) {
+        return link_uds_server_handler_negative(
+            LINK_UDS_NRC_SUBFUNCTION_NOT_SUPPORTED);
+    }
+    if (server->security_delay_active) {
+        return link_uds_server_handler_negative(
+            LINK_UDS_NRC_REQUIRED_TIME_DELAY_NOT_EXPIRED);
+    }
+    if (capacity < 1U) {
+        return link_uds_server_handler_negative(LINK_UDS_NRC_RESPONSE_TOO_LONG);
+    }
+
+    if (request_seed) {
+        const uint8_t *record =
+            request->pdu_length > 2U ? request->pdu + 2U : NULL;
+        const size_t record_length =
+            request->pdu_length > 2U ? request->pdu_length - 2U : 0U;
+        LinkUdsServerHandlerResult result = security->seed(
+            security->context, security_level,
+            record, record_length, data + 1U, capacity - 1U);
+
+        if (result.action == LINK_UDS_SERVER_HANDLER_POSITIVE) {
+            if (result.response_data_length > capacity - 1U) {
+                return link_uds_server_handler_negative(
+                    LINK_UDS_NRC_RESPONSE_TOO_LONG);
+            }
+            data[0U] = access_type;
+            server->security_seed_pending = true;
+            server->pending_security_level = security_level;
+            result.response_data_length++;
+        }
+        return result;
+    }
+
+    if (request->pdu_length < 3U) {
+        return link_uds_server_handler_negative(
+            LINK_UDS_NRC_INCORRECT_MESSAGE_LENGTH_OR_INVALID_FORMAT);
+    }
+    if (!server->security_seed_pending ||
+        server->pending_security_level != security_level) {
+        return link_uds_server_handler_negative(
+            LINK_UDS_NRC_REQUEST_SEQUENCE_ERROR);
+    }
+    if (security->verify_key(
+            security->context, security_level,
+            request->pdu + 2U, request->pdu_length - 2U)) {
+        data[0U] = access_type;
+        (void)link_uds_server_set_security_level(server, security_level);
+        return link_uds_server_handler_positive(1U);
+    }
+
+    if (server->invalid_security_key_attempts != UINT8_MAX) {
+        server->invalid_security_key_attempts++;
+    }
+    if (security->max_invalid_key_attempts != 0U &&
+        server->invalid_security_key_attempts >=
+            security->max_invalid_key_attempts) {
+        uds_server_clear_security_sequence(server);
+        server->security_delay_active = true;
+        server->security_delay_started_ms =
+            server->config.clock_ms(server->config.clock_context);
+        return link_uds_server_handler_negative(
+            LINK_UDS_NRC_EXCEED_NUMBER_OF_ATTEMPTS);
+    }
+    return link_uds_server_handler_negative(LINK_UDS_NRC_INVALID_KEY);
 }
 
 static LinkUdsServerHandlerResult uds_server_builtin_tester_present(
@@ -571,6 +701,12 @@ LinkUdsServerResult link_uds_server_handle_with_context(
             response_capacity > 1U ? response_capacity - 1U : 0U);
     } else if (service == LINK_UDS_SERVICE_ECU_RESET) {
         handler_result = uds_server_builtin_ecu_reset(
+            server, &request,
+            response_capacity > 1U ? response_pdu + 1U : response_pdu,
+            response_capacity > 1U ? response_capacity - 1U : 0U);
+    } else if (service == LINK_UDS_SERVICE_SECURITY_ACCESS &&
+               server->config.security_access.seed != NULL) {
+        handler_result = uds_server_builtin_security_access(
             server, &request,
             response_capacity > 1U ? response_pdu + 1U : response_pdu,
             response_capacity > 1U ? response_capacity - 1U : 0U);

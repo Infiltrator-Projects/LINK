@@ -135,6 +135,7 @@ add_library(link-core STATIC
     src/obd2/dtc_knowledge.c
     src/core/doip.c
     src/kwp2000/kwp2000.c
+    src/crypto/aes_cmac.c
     src/uds/uds.c
     src/uds/uds_services.c
     src/uds/uds_server.c
@@ -565,6 +566,7 @@ if(BUILD_TESTING AND PROJECT_IS_TOP_LEVEL)
     link_add_test(link-test-doip tests/test_doip.c link-doip)
     link_add_test(link-test-kwp2000 tests/test_kwp2000.c link-kwp2000)
     link_add_test(link-test-dtc-knowledge tests/test_dtc_knowledge.c link-dtc-knowledge)
+    link_add_test(link-test-aes-cmac tests/test_aes_cmac.c link-aes-cmac)
     link_add_test(link-test-uds tests/test_uds.c link-uds)
     link_add_test(link-test-ardep-uds-reference tests/test_ardep_uds_reference.c link-ardep-uds-reference)
     link_add_test(link-test-uds-dtc tests/test_uds_dtc.c link-uds-dtc)
