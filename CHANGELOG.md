@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.15.41 — 2026-09-21
+
+- Complete LINK issue #25 with product-neutral per-service and per-subfunction UDS server execution policy metadata.
+- Add explicit Default/Programming/Extended/Safety session masks, 64 security levels, and physical/functional/both addressing policy.
+- Enforce policy before application handlers with context-appropriate NRCs while preserving the existing unrestricted API when no policy table is configured.
+- Pass real physical/functional request context from the STM32 UDS server into the shared dispatcher and regression-test policy precedence, validation and security-state transitions.
+
 ## 0.15.40 — 2026-09-21
 
 - Repair the Apple portable-core amalgamation exposed by the suite-wide About rollout: include the shared selection engine now required by LINK::Core.

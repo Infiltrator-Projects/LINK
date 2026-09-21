@@ -295,6 +295,181 @@ static int test_custom_handlers(void)
     return 0;
 }
 
+static LinkUdsServerHandlerResult policy_echo_handler(
+    void *context,
+    const LinkUdsServerRequest *request,
+    uint8_t *data,
+    size_t capacity)
+{
+    (void)context;
+    if (capacity < 1U) {
+        return link_uds_server_handler_negative(LINK_UDS_NRC_RESPONSE_TOO_LONG);
+    }
+    data[0] = request->has_subfunction ? request->subfunction : 0x5aU;
+    return link_uds_server_handler_positive(1U);
+}
+
+static int test_execution_policy(void)
+{
+    static const LinkUdsServerPolicy policies[] = {
+        {
+            LINK_UDS_SERVICE_READ_DATA_BY_IDENTIFIER,
+            false, 0U,
+            LINK_UDS_SESSION_MASK_DEFAULT | LINK_UDS_SESSION_MASK_EXTENDED,
+            LINK_UDS_SECURITY_LEVEL_MASK(0) |
+                LINK_UDS_SECURITY_LEVEL_MASK(2),
+            LINK_UDS_ADDRESSING_MASK_BOTH
+        },
+        {
+            LINK_UDS_SERVICE_ROUTINE_CONTROL,
+            true, LINK_UDS_ROUTINE_START,
+            LINK_UDS_SESSION_MASK_PROGRAMMING,
+            LINK_UDS_SECURITY_LEVEL_MASK(2),
+            LINK_UDS_ADDRESSING_MASK_PHYSICAL
+        }
+    };
+    LinkUdsServer server;
+    LinkUdsServerConfig config = LINK_UDS_SERVER_CONFIG_INIT;
+    LinkUdsServerRequestContext functional =
+        LINK_UDS_SERVER_REQUEST_CONTEXT_INIT;
+    uint8_t response[64U];
+    size_t length = 0U;
+    const uint8_t did[] = {0x22U, 0xf1U, 0x90U};
+    const uint8_t programming[] = {0x10U, 0x02U};
+    const uint8_t extended[] = {0x10U, 0x03U};
+    const uint8_t routine[] = {0x31U, 0x01U, 0x12U, 0x34U};
+
+    config.policies = policies;
+    config.policy_count = sizeof(policies) / sizeof(policies[0]);
+    CHECK(link_uds_server_init(&server, &config));
+    CHECK(link_uds_server_set_handler(
+        &server, LINK_UDS_SERVICE_READ_DATA_BY_IDENTIFIER,
+        read_did_handler, (void *)"12345678901234567"));
+    CHECK(link_uds_server_set_handler(
+        &server, LINK_UDS_SERVICE_ROUTINE_CONTROL,
+        policy_echo_handler, NULL));
+
+    CHECK(link_uds_server_policy_find(
+              &server, LINK_UDS_SERVICE_READ_DATA_BY_IDENTIFIER,
+              false, 0U) == &policies[0]);
+    CHECK(link_uds_server_policy_find(
+              &server, LINK_UDS_SERVICE_ROUTINE_CONTROL,
+              true, LINK_UDS_ROUTINE_START) == &policies[1]);
+
+    /* Service-wide policy allows Default + unsecured physical access. */
+    CHECK(link_uds_server_handle(
+              &server, did, sizeof(did),
+              response, sizeof(response), &length) ==
+          LINK_UDS_SERVER_RESULT_POSITIVE);
+
+    /* The same service explicitly allows functional addressing. */
+    functional.addressing = LINK_UDS_SERVER_ADDRESSING_FUNCTIONAL;
+    CHECK(link_uds_server_handle_with_context(
+              &server, &functional, did, sizeof(did),
+              response, sizeof(response), &length) ==
+          LINK_UDS_SERVER_RESULT_POSITIVE);
+
+    /* Exact subfunction policy rejects the wrong active session with 0x7E. */
+    CHECK(link_uds_server_handle(
+              &server, routine, sizeof(routine),
+              response, sizeof(response), &length) ==
+          LINK_UDS_SERVER_RESULT_NEGATIVE);
+    CHECK(response[2] ==
+          LINK_UDS_NRC_SUBFUNCTION_NOT_SUPPORTED_IN_ACTIVE_SESSION);
+
+    CHECK(link_uds_server_handle(
+              &server, programming, sizeof(programming),
+              response, sizeof(response), &length) ==
+          LINK_UDS_SERVER_RESULT_POSITIVE);
+
+    /* Programming is outside the service-wide ReadDID session mask: 0x7F. */
+    CHECK(link_uds_server_handle(
+              &server, did, sizeof(did),
+              response, sizeof(response), &length) ==
+          LINK_UDS_SERVER_RESULT_NEGATIVE);
+    CHECK(response[2] == LINK_UDS_NRC_SERVICE_NOT_SUPPORTED_IN_ACTIVE_SESSION);
+
+    /* Correct session but locked security is rejected with SecurityAccessDenied. */
+    CHECK(link_uds_server_handle(
+              &server, routine, sizeof(routine),
+              response, sizeof(response), &length) ==
+          LINK_UDS_SERVER_RESULT_NEGATIVE);
+    CHECK(response[2] == LINK_UDS_NRC_SECURITY_ACCESS_DENIED);
+    CHECK(link_uds_server_set_security_level(&server, 2U));
+    CHECK(link_uds_server_active_security_level(&server) == 2U);
+
+    CHECK(link_uds_server_handle(
+              &server, routine, sizeof(routine),
+              response, sizeof(response), &length) ==
+          LINK_UDS_SERVER_RESULT_POSITIVE);
+    CHECK(response[0] == 0x71U && response[1] == LINK_UDS_ROUTINE_START);
+
+    /* The exact routine policy is physical-only: functional gets 0x12. */
+    CHECK(link_uds_server_handle_with_context(
+              &server, &functional, routine, sizeof(routine),
+              response, sizeof(response), &length) ==
+          LINK_UDS_SERVER_RESULT_NEGATIVE);
+    CHECK(response[2] == LINK_UDS_NRC_SUBFUNCTION_NOT_SUPPORTED);
+
+    /* Changing session clears the unlocked level by default. */
+    CHECK(link_uds_server_handle(
+              &server, extended, sizeof(extended),
+              response, sizeof(response), &length) ==
+          LINK_UDS_SERVER_RESULT_POSITIVE);
+    CHECK(link_uds_server_active_security_level(&server) == 0U);
+    CHECK(link_uds_server_handle(
+              &server, did, sizeof(did),
+              response, sizeof(response), &length) ==
+          LINK_UDS_SERVER_RESULT_POSITIVE);
+
+    CHECK(!link_uds_server_set_security_level(
+        &server, LINK_UDS_SECURITY_LEVEL_MAX + 1U));
+    return 0;
+}
+
+static int test_execution_policy_validation(void)
+{
+    LinkUdsServer server;
+    LinkUdsServerConfig config = LINK_UDS_SERVER_CONFIG_INIT;
+    const LinkUdsServerPolicy invalid_zero_session[] = {
+        {
+            LINK_UDS_SERVICE_READ_DATA_BY_IDENTIFIER,
+            false, 0U, 0U,
+            LINK_UDS_SECURITY_LEVEL_MASK_UNSECURED,
+            LINK_UDS_ADDRESSING_MASK_PHYSICAL
+        }
+    };
+    const LinkUdsServerPolicy duplicate[] = {
+        {
+            LINK_UDS_SERVICE_ROUTINE_CONTROL,
+            true, LINK_UDS_ROUTINE_START,
+            LINK_UDS_SESSION_MASK_ALL,
+            LINK_UDS_SECURITY_LEVEL_MASK_ALL,
+            LINK_UDS_ADDRESSING_MASK_BOTH
+        },
+        {
+            LINK_UDS_SERVICE_ROUTINE_CONTROL,
+            true, LINK_UDS_ROUTINE_START,
+            LINK_UDS_SESSION_MASK_PROGRAMMING,
+            LINK_UDS_SECURITY_LEVEL_MASK(1),
+            LINK_UDS_ADDRESSING_MASK_PHYSICAL
+        }
+    };
+
+    config.policies = invalid_zero_session;
+    config.policy_count = 1U;
+    CHECK(!link_uds_server_init(&server, &config));
+
+    config.policies = duplicate;
+    config.policy_count = 2U;
+    CHECK(!link_uds_server_init(&server, &config));
+
+    config.policies = NULL;
+    config.policy_count = 1U;
+    CHECK(!link_uds_server_init(&server, &config));
+    return 0;
+}
+
 static int test_dtc_all_subfunctions(void)
 {
     static const LinkUdsDtcRecord records[] = {
@@ -748,6 +923,8 @@ int main(void)
     if (test_session_state_machine_and_ecu_reset() != 0) return EXIT_FAILURE;
     if (test_ecu_reset_semantics() != 0) return EXIT_FAILURE;
     if (test_custom_handlers() != 0) return EXIT_FAILURE;
+    if (test_execution_policy() != 0) return EXIT_FAILURE;
+    if (test_execution_policy_validation() != 0) return EXIT_FAILURE;
     if (test_dtc_all_subfunctions() != 0) return EXIT_FAILURE;
     if (test_dtc_rich_all_subfunctions() != 0) return EXIT_FAILURE;
     if (test_dtc_empty_supported_and_history() != 0) return EXIT_FAILURE;

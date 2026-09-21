@@ -69,6 +69,42 @@ in `uds.h` or `uds_dtc.h`. The common helpers cover:
 
 No helper allocates memory. Callers own every input/output buffer and raw record.
 
+## Server execution policy
+
+The portable UDS server can optionally consume a caller-owned
+`LinkUdsServerPolicy` table. Policy remains product-neutral: LINK supplies the
+enforcement mechanism while the ECU/application supplies the actual rules.
+
+A service-wide entry can restrict a SID by:
+
+- the four standard session bits (Default, Programming, Extended Diagnostic and
+  Safety System Diagnostic);
+- a 64-level security mask, where level 0 represents the locked/unsecured state;
+- physical addressing, functional addressing, or both.
+
+A subfunction-specific entry for a service that uses subfunctions overrides the
+service-wide entry for that exact 7-bit subfunction. Duplicate policy keys,
+unknown services, impossible masks and subfunction rules attached to services
+without subfunctions are rejected during server initialization.
+
+`link_uds_server_handle()` remains source-compatible and treats direct callers
+as physically addressed. Transports that know the addressing context use
+`link_uds_server_handle_with_context()`; the STM32 server path now passes
+physical versus functional addressing explicitly.
+
+Policy rejection occurs before the application handler runs. A disallowed
+service/subfunction session produces NRC `0x7F`/`0x7E`, a disallowed
+addressing form produces `0x11`/`0x12`, and an otherwise valid request whose
+active security level is not permitted produces `0x33`. Functional-address
+transport rules may then suppress the standard negative-response classes as
+required by the transport/application contract.
+
+Security state is explicit server state rather than an embedded key algorithm.
+A successful product SecurityAccess handler can call
+`link_uds_server_set_security_level()`; LINK does not invent OEM seed/key
+logic. By default a real session change, S3 fallback to Default, explicit server
+session reset and ECU reset return the active security level to 0.
+
 ## Safety boundary
 
 Codec availability is not authorization.
@@ -124,6 +160,13 @@ require the memory-selection echo before that fixed DTC-and-status envelope.
 - response echo validation for subfunction, DID, routine and transfer services;
 - bounded-buffer and malformed-argument failure behaviour; and
 - preservation of the pre-existing UDS client/session tests.
+
+`tests/test_uds_server.c` additionally verifies service-wide and exact
+subfunction policy precedence, Default/Programming/Extended session gating,
+security-level gating, physical/functional addressing, the expected UDS NRC for
+each rejection class, security reset on session change, invalid policy-table
+rejection, and backward-compatible unrestricted operation when no policy table
+is configured.
 
 `tests/test_discover_safety.c` independently proves that adding those codecs
 does not broaden the Discover transmit allowlist.

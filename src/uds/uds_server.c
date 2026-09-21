@@ -4,13 +4,80 @@
 
 #include <string.h>
 
+static uint8_t uds_server_session_mask(uint8_t session)
+{
+    switch (session) {
+    case LINK_UDS_SESSION_DEFAULT:
+        return LINK_UDS_SESSION_MASK_DEFAULT;
+    case LINK_UDS_SESSION_PROGRAMMING:
+        return LINK_UDS_SESSION_MASK_PROGRAMMING;
+    case LINK_UDS_SESSION_EXTENDED:
+        return LINK_UDS_SESSION_MASK_EXTENDED;
+    case LINK_UDS_SESSION_SAFETY_SYSTEM:
+        return LINK_UDS_SESSION_MASK_SAFETY_SYSTEM;
+    default:
+        return 0U;
+    }
+}
+
+static uint8_t uds_server_addressing_mask(LinkUdsServerAddressing addressing)
+{
+    return addressing == LINK_UDS_SERVER_ADDRESSING_FUNCTIONAL
+        ? LINK_UDS_ADDRESSING_MASK_FUNCTIONAL
+        : LINK_UDS_ADDRESSING_MASK_PHYSICAL;
+}
+
+static bool uds_server_policy_valid(const LinkUdsServerPolicy *policy)
+{
+    const LinkUdsServiceDefinition *definition;
+    if (policy == NULL ||
+        (policy->session_mask & (uint8_t)~LINK_UDS_SESSION_MASK_ALL) != 0U ||
+        policy->session_mask == 0U ||
+        policy->security_level_mask == 0U ||
+        (policy->addressing_mask &
+         (uint8_t)~LINK_UDS_ADDRESSING_MASK_BOTH) != 0U ||
+        policy->addressing_mask == 0U) {
+        return false;
+    }
+    definition = link_uds_standard_service_find(policy->service);
+    if (definition == NULL) return false;
+    return !policy->subfunction_specific ||
+           (definition->uses_subfunction && policy->subfunction <= 0x7fU);
+}
+
+static bool uds_server_policy_table_valid(
+    const LinkUdsServerPolicy *policies,
+    size_t policy_count)
+{
+    size_t index;
+    size_t other;
+    if (policy_count == 0U) return true;
+    if (policies == NULL) return false;
+    for (index = 0U; index < policy_count; ++index) {
+        if (!uds_server_policy_valid(&policies[index])) return false;
+        for (other = index + 1U; other < policy_count; ++other) {
+            if (policies[index].service != policies[other].service ||
+                policies[index].subfunction_specific !=
+                    policies[other].subfunction_specific) {
+                continue;
+            }
+            if (!policies[index].subfunction_specific ||
+                policies[index].subfunction == policies[other].subfunction) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 static bool uds_server_config_valid(const LinkUdsServerConfig *config)
 {
     return config != NULL && config->p2_server_max_ms != 0U &&
            config->p2_star_server_max_10ms != 0U &&
            (config->s3_server_timeout_ms == 0U || config->clock_ms != NULL) &&
            (config->supported_ecu_reset_types &
-            (uint8_t)~LINK_UDS_ECU_RESET_SUPPORT_ALL_RESETS) == 0U;
+            (uint8_t)~LINK_UDS_ECU_RESET_SUPPORT_ALL_RESETS) == 0U &&
+           uds_server_policy_table_valid(config->policies, config->policy_count);
 }
 
 static bool uds_server_nrc_valid(uint8_t nrc)
@@ -81,6 +148,7 @@ void link_uds_server_reset_session(LinkUdsServer *server)
 {
     if (server == NULL) return;
     server->active_session = LINK_UDS_SESSION_DEFAULT;
+    server->active_security_level = 0U;
     if (server->config.clock_ms != NULL) {
         server->last_activity_ms =
             server->config.clock_ms(server->config.clock_context);
@@ -102,6 +170,7 @@ void link_uds_server_tick(LinkUdsServer *server)
         (uint32_t)(now - server->last_activity_ms) >=
             server->config.s3_server_timeout_ms) {
         server->active_session = LINK_UDS_SESSION_DEFAULT;
+        server->active_security_level = 0U;
         server->last_activity_ms = now;
     }
 }
@@ -123,6 +192,45 @@ bool link_uds_server_rapid_power_shutdown_enabled(
     const LinkUdsServer *server)
 {
     return server != NULL && server->rapid_power_shutdown_enabled;
+}
+
+bool link_uds_server_set_security_level(
+    LinkUdsServer *server,
+    uint8_t security_level)
+{
+    if (server == NULL || security_level > LINK_UDS_SECURITY_LEVEL_MAX) {
+        return false;
+    }
+    server->active_security_level = security_level;
+    return true;
+}
+
+uint8_t link_uds_server_active_security_level(const LinkUdsServer *server)
+{
+    return server == NULL ? 0U : server->active_security_level;
+}
+
+const LinkUdsServerPolicy *link_uds_server_policy_find(
+    const LinkUdsServer *server,
+    uint8_t service,
+    bool has_subfunction,
+    uint8_t subfunction)
+{
+    const LinkUdsServerPolicy *fallback = NULL;
+    size_t index;
+    if (server == NULL || server->config.policies == NULL) return NULL;
+    for (index = 0U; index < server->config.policy_count; ++index) {
+        const LinkUdsServerPolicy *policy = &server->config.policies[index];
+        if (policy->service != service) continue;
+        if (!policy->subfunction_specific) {
+            fallback = policy;
+            continue;
+        }
+        if (has_subfunction && policy->subfunction == subfunction) {
+            return policy;
+        }
+    }
+    return fallback;
 }
 
 static LinkUdsServerHandlerSlot *uds_server_find_handler(
@@ -229,6 +337,10 @@ static LinkUdsServerHandlerResult uds_server_builtin_session(
         data[3] = (uint8_t)(server->config.p2_star_server_max_10ms >> 8U);
         data[4] = (uint8_t)server->config.p2_star_server_max_10ms;
     }
+    if (server->config.reset_security_on_session_change &&
+        server->active_session != session) {
+        server->active_security_level = 0U;
+    }
     server->active_session = session;
     return link_uds_server_handler_positive(required);
 }
@@ -269,6 +381,7 @@ static LinkUdsServerHandlerResult uds_server_builtin_ecu_reset(
         data[0] = reset_type;
         server->pending_ecu_reset_type = reset_type;
         server->active_session = LINK_UDS_SESSION_DEFAULT;
+        server->active_security_level = 0U;
         return link_uds_server_handler_positive(1U);
 
     case LINK_UDS_ECU_RESET_ENABLE_RAPID_POWER_SHUTDOWN:
@@ -339,14 +452,33 @@ LinkUdsServerResult link_uds_server_handle(
     size_t response_capacity,
     size_t *response_length)
 {
+    const LinkUdsServerRequestContext context =
+        LINK_UDS_SERVER_REQUEST_CONTEXT_INIT;
+    return link_uds_server_handle_with_context(
+        server, &context, request_pdu, request_length,
+        response_pdu, response_capacity, response_length);
+}
+
+LinkUdsServerResult link_uds_server_handle_with_context(
+    LinkUdsServer *server,
+    const LinkUdsServerRequestContext *context,
+    const uint8_t *request_pdu,
+    size_t request_length,
+    uint8_t *response_pdu,
+    size_t response_capacity,
+    size_t *response_length)
+{
     const LinkUdsServiceDefinition *definition;
+    const LinkUdsServerPolicy *policy;
     LinkUdsServerHandlerSlot *slot;
     LinkUdsServerRequest request;
     LinkUdsServerHandlerResult handler_result;
     uint8_t service;
 
     if (response_length != NULL) *response_length = 0U;
-    if (server == NULL || request_pdu == NULL || request_length == 0U ||
+    if (server == NULL || context == NULL ||
+        context->addressing > LINK_UDS_SERVER_ADDRESSING_FUNCTIONAL ||
+        request_pdu == NULL || request_length == 0U ||
         response_pdu == NULL || response_length == NULL) {
         return LINK_UDS_SERVER_RESULT_INVALID_ARGUMENT;
     }
@@ -375,6 +507,8 @@ LinkUdsServerResult link_uds_server_handle(
     request.pdu = request_pdu;
     request.pdu_length = request_length;
     request.has_subfunction = definition->uses_subfunction;
+    request.addressing = context->addressing;
+    request.security_level = server->active_security_level;
     request.record = request_length > 1U ? request_pdu + 1U : NULL;
     request.record_length = request_length > 1U ? request_length - 1U : 0U;
 
@@ -388,6 +522,40 @@ LinkUdsServerResult link_uds_server_handle(
         request.suppress_positive_response =
             (request_pdu[1] & UINT8_C(0x80)) != 0U;
         request.subfunction = request_pdu[1] & UINT8_C(0x7f);
+    }
+
+    policy = link_uds_server_policy_find(
+        server, service, request.has_subfunction, request.subfunction);
+    if (policy != NULL) {
+        const bool exact_subfunction_policy = policy->subfunction_specific;
+        const uint8_t session_mask =
+            uds_server_session_mask(server->active_session);
+        const uint8_t addressing_mask =
+            uds_server_addressing_mask(context->addressing);
+        const uint64_t security_mask =
+            LINK_UDS_SECURITY_LEVEL_MASK(server->active_security_level);
+
+        if ((policy->session_mask & session_mask) == 0U) {
+            return uds_server_write_negative(
+                server, service,
+                exact_subfunction_policy
+                    ? LINK_UDS_NRC_SUBFUNCTION_NOT_SUPPORTED_IN_ACTIVE_SESSION
+                    : LINK_UDS_NRC_SERVICE_NOT_SUPPORTED_IN_ACTIVE_SESSION,
+                response_pdu, response_capacity, response_length);
+        }
+        if ((policy->addressing_mask & addressing_mask) == 0U) {
+            return uds_server_write_negative(
+                server, service,
+                exact_subfunction_policy
+                    ? LINK_UDS_NRC_SUBFUNCTION_NOT_SUPPORTED
+                    : LINK_UDS_NRC_SERVICE_NOT_SUPPORTED,
+                response_pdu, response_capacity, response_length);
+        }
+        if ((policy->security_level_mask & security_mask) == 0U) {
+            return uds_server_write_negative(
+                server, service, LINK_UDS_NRC_SECURITY_ACCESS_DENIED,
+                response_pdu, response_capacity, response_length);
+        }
     }
 
     slot = uds_server_find_handler(server, service);

@@ -244,13 +244,18 @@ static LinkStm32UdsServerResult link_stm32_uds_server_dispatch_payload(
     bool functional_request,
     uint64_t now_us)
 {
+    LinkUdsServerRequestContext request_context =
+        LINK_UDS_SERVER_REQUEST_CONTEXT_INIT;
     size_t response_length = 0U;
     if (request == NULL || request_length == 0U) {
         return link_stm32_uds_server_fail(
             transport, LINK_STM32_UDS_SERVER_RESULT_ISOTP_ERROR);
     }
-    transport->uds_result = link_uds_server_handle(
-        transport->server, request, request_length,
+    request_context.addressing = functional_request
+        ? LINK_UDS_SERVER_ADDRESSING_FUNCTIONAL
+        : LINK_UDS_SERVER_ADDRESSING_PHYSICAL;
+    transport->uds_result = link_uds_server_handle_with_context(
+        transport->server, &request_context, request, request_length,
         transport->tx_storage, transport->tx_capacity, &response_length);
     if (transport->uds_result == LINK_UDS_SERVER_RESULT_INVALID_ARGUMENT ||
         transport->uds_result == LINK_UDS_SERVER_RESULT_BUFFER_TOO_SMALL) {

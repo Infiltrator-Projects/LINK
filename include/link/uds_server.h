@@ -42,6 +42,42 @@ extern "C" {
 
 #define LINK_UDS_SERVER_MAX_HANDLERS LINK_UDS_STANDARD_SERVICE_COUNT
 
+#define LINK_UDS_SESSION_MASK_DEFAULT UINT8_C(0x01)
+#define LINK_UDS_SESSION_MASK_PROGRAMMING UINT8_C(0x02)
+#define LINK_UDS_SESSION_MASK_EXTENDED UINT8_C(0x04)
+#define LINK_UDS_SESSION_MASK_SAFETY_SYSTEM UINT8_C(0x08)
+#define LINK_UDS_SESSION_MASK_ALL UINT8_C(0x0f)
+
+#define LINK_UDS_SECURITY_LEVEL_MAX 63U
+#define LINK_UDS_SECURITY_LEVEL_MASK(level) (UINT64_C(1) << (level))
+#define LINK_UDS_SECURITY_LEVEL_MASK_UNSECURED UINT64_C(1)
+#define LINK_UDS_SECURITY_LEVEL_MASK_ALL UINT64_MAX
+
+#define LINK_UDS_ADDRESSING_MASK_PHYSICAL UINT8_C(0x01)
+#define LINK_UDS_ADDRESSING_MASK_FUNCTIONAL UINT8_C(0x02)
+#define LINK_UDS_ADDRESSING_MASK_BOTH UINT8_C(0x03)
+
+typedef enum {
+    LINK_UDS_SERVER_ADDRESSING_PHYSICAL = 0,
+    LINK_UDS_SERVER_ADDRESSING_FUNCTIONAL
+} LinkUdsServerAddressing;
+
+typedef struct {
+    uint8_t service;
+    bool subfunction_specific;
+    uint8_t subfunction;
+    uint8_t session_mask;
+    uint64_t security_level_mask;
+    uint8_t addressing_mask;
+} LinkUdsServerPolicy;
+
+typedef struct {
+    LinkUdsServerAddressing addressing;
+} LinkUdsServerRequestContext;
+
+#define LINK_UDS_SERVER_REQUEST_CONTEXT_INIT \
+    { LINK_UDS_SERVER_ADDRESSING_PHYSICAL }
+
 typedef enum {
     LINK_UDS_SERVER_HANDLER_POSITIVE = 0,
     LINK_UDS_SERVER_HANDLER_NEGATIVE,
@@ -53,6 +89,8 @@ typedef struct {
     bool has_subfunction;
     uint8_t subfunction;
     bool suppress_positive_response;
+    LinkUdsServerAddressing addressing;
+    uint8_t security_level;
     const uint8_t *pdu;
     size_t pdu_length;
     const uint8_t *record;
@@ -84,6 +122,7 @@ typedef struct {
     uint16_t p2_star_server_max_10ms;
     bool include_session_timing;
     bool enforce_session_sequence;
+    bool reset_security_on_session_change;
     uint32_t s3_server_timeout_ms;
     LinkUdsServerClockMsFn clock_ms;
     void *clock_context;
@@ -97,11 +136,19 @@ typedef struct {
     uint8_t supported_ecu_reset_types;
     bool rapid_power_shutdown_supported;
     uint8_t rapid_power_shutdown_time_seconds;
+
+    /*
+     * Optional product-neutral execution policy. Exact subfunction entries
+     * override service-wide entries. No table preserves the historical
+     * unrestricted dispatcher behaviour.
+     */
+    const LinkUdsServerPolicy *policies;
+    size_t policy_count;
 } LinkUdsServerConfig;
 
 #define LINK_UDS_SERVER_CONFIG_INIT \
-    { UINT16_C(50), UINT16_C(500), true, false, 0U, NULL, NULL, \
-      LINK_UDS_ECU_RESET_SUPPORT_ALL_RESETS, false, 0U }
+    { UINT16_C(50), UINT16_C(500), true, false, true, 0U, NULL, NULL, \
+      LINK_UDS_ECU_RESET_SUPPORT_ALL_RESETS, false, 0U, NULL, 0U }
 
 typedef enum {
     LINK_UDS_SERVER_RESULT_POSITIVE = 0,
@@ -117,6 +164,7 @@ typedef struct {
     LinkUdsServerHandlerSlot handlers[LINK_UDS_SERVER_MAX_HANDLERS];
     size_t handler_count;
     uint8_t active_session;
+    uint8_t active_security_level;
     uint8_t last_service;
     uint8_t last_negative_response_code;
     uint8_t pending_ecu_reset_type;
@@ -189,6 +237,23 @@ LinkUdsServerResult link_uds_server_handle(
     uint8_t *response_pdu,
     size_t response_capacity,
     size_t *response_length);
+LinkUdsServerResult link_uds_server_handle_with_context(
+    LinkUdsServer *server,
+    const LinkUdsServerRequestContext *context,
+    const uint8_t *request_pdu,
+    size_t request_length,
+    uint8_t *response_pdu,
+    size_t response_capacity,
+    size_t *response_length);
+const LinkUdsServerPolicy *link_uds_server_policy_find(
+    const LinkUdsServer *server,
+    uint8_t service,
+    bool has_subfunction,
+    uint8_t subfunction);
+bool link_uds_server_set_security_level(
+    LinkUdsServer *server,
+    uint8_t security_level);
+uint8_t link_uds_server_active_security_level(const LinkUdsServer *server);
 uint8_t link_uds_server_active_session(const LinkUdsServer *server);
 uint8_t link_uds_server_last_negative_response_code(const LinkUdsServer *server);
 void link_uds_server_tick(LinkUdsServer *server);
