@@ -2,9 +2,14 @@
 
 This file records user-visible, compatibility, diagnostic-knowledge and validation changes for LINK.
 
-## Unreleased
+## 0.15.36 — 2026-09-21
 
-- No unreleased changes.
+- Forensically revalidated the complete requested ReadDTCInformation (0x19) surface across all 27 report types and added an explicit implementation conformance matrix.
+- Corrected response validation for 0x19/0x04, 0x06, 0x10, 0x18 and 0x19 so truncated positive responses can no longer be accepted without their mandatory DTC-and-status envelope; user-defined-memory responses also require the memory-selection echo.
+- Added allocation-free typed record views for fixed DTC/status, snapshot-identification, severity, fault-detection-counter and WWH severity records while retaining implementation-defined snapshot/extended-data tails as raw bounded spans.
+- Expanded ReadDTCInformation regression coverage to every requested report family, including malformed fixed-envelope cases.
+- Locked the service-effect contract in tests: 0x19 remains read-only, 0x14 ClearDiagnosticInformation remains state-changing, and 0x29 Authentication remains security-gated.
+- Expanded ClearDiagnosticInformation codec tests for optional memory selection and 24-bit group bounds. No Discover permission was broadened.
 
 ## 0.15.35 — 2026-09-21
 

@@ -88,6 +88,25 @@ An owning product may add a narrower policy only when it has a concrete use
 case, ECU-specific validation and appropriate operator controls. The shared
 LINK codec layer itself does not contain a bypass.
 
+## ReadDTCInformation conformance boundary
+
+The complete 27-report implementation matrix is maintained in
+[`UDS-READ-DTC-CONFORMANCE.md`](UDS-READ-DTC-CONFORMANCE.md). The matrix
+separates the fixed ISO-shaped envelope that LINK can validate generically from
+snapshot and extended-data tails whose record sizes depend on ECU/application
+definitions.
+
+LINK exposes typed, allocation-free views for fixed-width DTC/status,
+snapshot-identification, severity, fault-detection-counter and WWH severity
+record families. Variable snapshot and extended-data payloads remain bounded raw
+spans until a higher layer supplies the DID/data-length knowledge needed to
+interpret them without guessing.
+
+The decoder rejects truncated positive responses that omit a mandatory
+DTCAndStatusRecord for reports `0x04`, `0x06`, `0x10`, `0x18` or
+`0x19`. User-defined-memory reports `0x18` and `0x19` additionally
+require the memory-selection echo before that fixed DTC-and-status envelope.
+
 ## Tests
 
 `tests/test_uds.c` verifies:
