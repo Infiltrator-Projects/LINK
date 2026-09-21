@@ -161,70 +161,190 @@ static int test_all_report_requests(void)
 
 static int test_generic_report_responses(void)
 {
+    static const uint8_t count_reports[] = {
+        0x01U, 0x07U, 0x11U, 0x12U
+    };
+    static const uint8_t status_reports[] = {
+        0x02U, 0x0aU, 0x0bU, 0x0cU, 0x0dU,
+        0x0eU, 0x0fU, 0x13U, 0x15U
+    };
+    static const uint8_t severity_reports[] = {0x08U, 0x09U};
+    static const uint8_t variable_dtc_reports[] = {0x04U, 0x06U, 0x10U};
+    static const uint8_t record_number_reports[] = {0x05U, 0x16U};
     LinkUdsDtcInformationResponse response;
+    size_t index;
 
-    {
-        const uint8_t pdu[] = {0x59U,0x01U,0xffU,0x04U,0x00U,0x12U};
+    for (index = 0U;
+         index < sizeof(count_reports) / sizeof(count_reports[0]);
+         ++index) {
+        uint8_t pdu[] = {
+            0x59U, count_reports[index], 0xffU, 0x04U, 0x00U, 0x12U
+        };
         CHECK(link_uds_decode_read_dtc_information_response(
-            0x01U, pdu, sizeof(pdu), &response) == LINK_UDS_RESULT_OK);
+            count_reports[index], pdu, sizeof(pdu), &response) ==
+            LINK_UDS_RESULT_OK);
         CHECK(response.status_availability_mask_available);
         CHECK(response.status_availability_mask == 0xffU);
         CHECK(response.dtc_format_identifier_available);
         CHECK(response.dtc_format_identifier == 0x04U);
         CHECK(response.dtc_count_available && response.dtc_count == 0x12U);
         CHECK(response.records_length == 0U);
+        CHECK(link_uds_dtc_response_record_count(&response) == 0U);
     }
+
+    for (index = 0U;
+         index < sizeof(status_reports) / sizeof(status_reports[0]);
+         ++index) {
+        uint8_t pdu[] = {
+            0x59U, status_reports[index], 0xffU,
+            0x12U, 0x34U, 0x56U, 0x09U
+        };
+        LinkUdsDtcRecord record;
+        CHECK(link_uds_decode_read_dtc_information_response(
+            status_reports[index], pdu, sizeof(pdu), &response) ==
+            LINK_UDS_RESULT_OK);
+        CHECK(response.status_availability_mask_available);
+        CHECK(response.status_availability_mask == 0xffU);
+        CHECK(response.record_format == LINK_UDS_DTC_RECORDS_DTC_STATUS);
+        CHECK(link_uds_dtc_response_record_count(&response) == 1U);
+        CHECK(link_uds_dtc_response_status_record_at(&response, 0U, &record));
+        CHECK(record.code == UINT32_C(0x123456));
+        CHECK(record.status == 0x09U);
+        CHECK(!link_uds_dtc_response_status_record_at(&response, 1U, &record));
+    }
+
     {
         const uint8_t pdu[] = {
-            0x59U,0x08U,0xffU,
-            0x20U,0x10U,0x12U,0x34U,0x56U,0x09U
+            0x59U,0x03U,0x12U,0x34U,0x56U,0x22U
+        };
+        LinkUdsDtcSnapshotIdentificationRecord record;
+        CHECK(link_uds_decode_read_dtc_information_response(
+            0x03U, pdu, sizeof(pdu), &response) == LINK_UDS_RESULT_OK);
+        CHECK(response.record_format ==
+              LINK_UDS_DTC_RECORDS_SNAPSHOT_IDENTIFICATION);
+        CHECK(link_uds_dtc_response_record_count(&response) == 1U);
+        CHECK(link_uds_dtc_response_snapshot_identification_at(
+            &response, 0U, &record));
+        CHECK(record.code == UINT32_C(0x123456));
+        CHECK(record.snapshot_record_number == 0x22U);
+    }
+
+    for (index = 0U;
+         index < sizeof(variable_dtc_reports) /
+                 sizeof(variable_dtc_reports[0]);
+         ++index) {
+        uint8_t pdu[] = {
+            0x59U, variable_dtc_reports[index],
+            0x12U,0x34U,0x56U,0x09U,0xaaU
         };
         CHECK(link_uds_decode_read_dtc_information_response(
-            0x08U, pdu, sizeof(pdu), &response) == LINK_UDS_RESULT_OK);
-        CHECK(response.record_format == LINK_UDS_DTC_RECORDS_DTC_SEVERITY);
-        CHECK(response.records_length == 6U);
+            variable_dtc_reports[index], pdu, sizeof(pdu), &response) ==
+            LINK_UDS_RESULT_OK);
+        CHECK(response.record_format == LINK_UDS_DTC_RECORDS_RAW);
+        CHECK(response.records_length == 5U);
+        CHECK(response.records[0] == 0x12U);
+        CHECK(response.records[3] == 0x09U);
+        CHECK(response.records[4] == 0xaaU);
+        CHECK(link_uds_dtc_response_record_count(&response) == 0U);
     }
+
+    for (index = 0U;
+         index < sizeof(record_number_reports) /
+                 sizeof(record_number_reports[0]);
+         ++index) {
+        uint8_t pdu[] = {
+            0x59U, record_number_reports[index], 0x23U,
+            0x12U,0x34U,0x56U,0x09U,0xaaU
+        };
+        CHECK(link_uds_decode_read_dtc_information_response(
+            record_number_reports[index], pdu, sizeof(pdu), &response) ==
+            LINK_UDS_RESULT_OK);
+        CHECK(response.record_number_available);
+        CHECK(response.record_number == 0x23U);
+        CHECK(response.record_format == LINK_UDS_DTC_RECORDS_RAW);
+        CHECK(response.records_length == 5U);
+    }
+
+    for (index = 0U;
+         index < sizeof(severity_reports) / sizeof(severity_reports[0]);
+         ++index) {
+        uint8_t pdu[] = {
+            0x59U,severity_reports[index],0xffU,
+            0x20U,0x10U,0x12U,0x34U,0x56U,0x09U
+        };
+        LinkUdsDtcSeverityRecord record;
+        CHECK(link_uds_decode_read_dtc_information_response(
+            severity_reports[index], pdu, sizeof(pdu), &response) ==
+            LINK_UDS_RESULT_OK);
+        CHECK(response.status_availability_mask == 0xffU);
+        CHECK(response.record_format == LINK_UDS_DTC_RECORDS_DTC_SEVERITY);
+        CHECK(link_uds_dtc_response_record_count(&response) == 1U);
+        CHECK(link_uds_dtc_response_severity_record_at(
+            &response, 0U, &record));
+        CHECK(record.severity == 0x20U);
+        CHECK(record.functional_unit == 0x10U);
+        CHECK(record.code == UINT32_C(0x123456));
+        CHECK(record.status == 0x09U);
+    }
+
     {
         const uint8_t pdu[] = {
             0x59U,0x14U,0x12U,0x34U,0x56U,0x7fU
         };
+        LinkUdsDtcFaultDetectionCounterRecord record;
         CHECK(link_uds_decode_read_dtc_information_response(
             0x14U, pdu, sizeof(pdu), &response) == LINK_UDS_RESULT_OK);
         CHECK(response.record_format ==
               LINK_UDS_DTC_RECORDS_FAULT_DETECTION_COUNTER);
-        CHECK(response.records_length == 4U);
+        CHECK(link_uds_dtc_response_record_count(&response) == 1U);
+        CHECK(link_uds_dtc_response_fault_counter_at(&response, 0U, &record));
+        CHECK(record.code == UINT32_C(0x123456));
+        CHECK(record.fault_detection_counter == 0x7fU);
     }
+
     {
         const uint8_t pdu[] = {
             0x59U,0x17U,0x31U,0xffU,
             0x12U,0x34U,0x56U,0x09U
         };
+        LinkUdsDtcRecord record;
         CHECK(link_uds_decode_read_dtc_information_response(
             0x17U, pdu, sizeof(pdu), &response) == LINK_UDS_RESULT_OK);
         CHECK(response.memory_selection_available);
         CHECK(response.memory_selection == 0x31U);
         CHECK(response.status_availability_mask == 0xffU);
-        CHECK(response.records_length == 4U);
+        CHECK(response.record_format == LINK_UDS_DTC_RECORDS_DTC_STATUS);
+        CHECK(link_uds_dtc_response_record_count(&response) == 1U);
+        CHECK(link_uds_dtc_response_status_record_at(&response, 0U, &record));
+        CHECK(record.code == UINT32_C(0x123456));
     }
+
     {
-        const uint8_t pdu[] = {
-            0x59U,0x19U,0x31U,
-            0x12U,0x34U,0x56U,0x09U,0x90U,0xaaU,0xbbU
-        };
-        CHECK(link_uds_decode_read_dtc_information_response(
-            0x19U, pdu, sizeof(pdu), &response) == LINK_UDS_RESULT_OK);
-        CHECK(response.memory_selection_available);
-        CHECK(response.memory_selection == 0x31U);
-        CHECK(response.record_format == LINK_UDS_DTC_RECORDS_RAW);
-        CHECK(response.records_length == 7U);
-        CHECK(response.records[0] == 0x12U);
-        CHECK(response.records[6] == 0xbbU);
+        static const uint8_t reports[] = {0x18U, 0x19U};
+        for (index = 0U; index < sizeof(reports); ++index) {
+            uint8_t pdu[] = {
+                0x59U,reports[index],0x31U,
+                0x12U,0x34U,0x56U,0x09U,0x90U,0xaaU,0xbbU
+            };
+            CHECK(link_uds_decode_read_dtc_information_response(
+                reports[index], pdu, sizeof(pdu), &response) ==
+                LINK_UDS_RESULT_OK);
+            CHECK(response.memory_selection_available);
+            CHECK(response.memory_selection == 0x31U);
+            CHECK(response.record_format == LINK_UDS_DTC_RECORDS_RAW);
+            CHECK(response.records_length == 7U);
+            CHECK(response.records[0] == 0x12U);
+            CHECK(response.records[3] == 0x09U);
+            CHECK(response.records[6] == 0xbbU);
+        }
     }
+
     {
         const uint8_t pdu[] = {
             0x59U,0x42U,0x33U,0xffU,0xe0U,0x04U,
             0x20U,0x12U,0x34U,0x56U,0x09U
         };
+        LinkUdsDtcWwhSeverityRecord record;
         CHECK(link_uds_decode_read_dtc_information_response(
             0x42U, pdu, sizeof(pdu), &response) == LINK_UDS_RESULT_OK);
         CHECK(response.functional_group_identifier_available);
@@ -233,27 +353,31 @@ static int test_generic_report_responses(void)
         CHECK(response.severity_availability_mask == 0xe0U);
         CHECK(response.dtc_format_identifier == 0x04U);
         CHECK(response.record_format == LINK_UDS_DTC_RECORDS_WWH_SEVERITY);
-        CHECK(response.records_length == 5U);
+        CHECK(link_uds_dtc_response_record_count(&response) == 1U);
+        CHECK(link_uds_dtc_response_wwh_severity_at(&response, 0U, &record));
+        CHECK(record.severity == 0x20U);
+        CHECK(record.code == UINT32_C(0x123456));
+        CHECK(record.status == 0x09U);
     }
+
     {
         const uint8_t pdu[] = {
             0x59U,0x55U,0x33U,0xffU,0x04U,
             0x12U,0x34U,0x56U,0x09U
         };
+        LinkUdsDtcRecord record;
         CHECK(link_uds_decode_read_dtc_information_response(
             0x55U, pdu, sizeof(pdu), &response) == LINK_UDS_RESULT_OK);
         CHECK(response.functional_group_identifier == 0x33U);
+        CHECK(response.status_availability_mask == 0xffU);
+        CHECK(response.dtc_format_identifier == 0x04U);
         CHECK(response.record_format == LINK_UDS_DTC_RECORDS_DTC_STATUS);
-        CHECK(response.records_length == 4U);
+        CHECK(link_uds_dtc_response_record_count(&response) == 1U);
+        CHECK(link_uds_dtc_response_status_record_at(&response, 0U, &record));
+        CHECK(record.code == UINT32_C(0x123456));
+        CHECK(record.status == 0x09U);
     }
-    {
-        const uint8_t malformed[] = {
-            0x59U,0x02U,0xffU,0x12U,0x34U
-        };
-        CHECK(link_uds_decode_read_dtc_information_response(
-            0x02U, malformed, sizeof(malformed), &response) ==
-            LINK_UDS_RESULT_MALFORMED_PDU);
-    }
+
     {
         const uint8_t negative[] = {0x7fU,0x19U,0x31U};
         CHECK(link_uds_decode_read_dtc_information_response(
@@ -262,7 +386,6 @@ static int test_generic_report_responses(void)
     }
     return 0;
 }
-
 static int test_build_request(void)
 {
     uint8_t request[4] = {0xa5U, 0xa5U, 0xa5U, 0xa5U};
@@ -321,7 +444,11 @@ static int test_invalid_responses(void)
     const uint8_t truncated[] = {0x59U, 0x02U};
     const uint8_t partial_record[] = {0x59U, 0x02U, 0xffU, 0x12U, 0x34U};
     const uint8_t negative[] = {0x7fU, 0x19U, 0x31U};
+    static const uint8_t variable_dtc_reports[] = {0x04U, 0x06U, 0x10U};
+    static const uint8_t user_memory_reports[] = {0x18U, 0x19U};
     LinkUdsDtcList list;
+    LinkUdsDtcInformationResponse response;
+    size_t index;
 
     CHECK(link_uds_decode_report_dtcs_by_status_mask_response(
               empty, sizeof(empty), &list) == LINK_UDS_RESULT_OK);
@@ -338,9 +465,58 @@ static int test_invalid_responses(void)
     CHECK(link_uds_decode_report_dtcs_by_status_mask_response(
               negative, sizeof(negative), &list) ==
           LINK_UDS_RESULT_NEGATIVE_RESPONSE);
+
+    for (index = 0U;
+         index < sizeof(variable_dtc_reports) /
+                 sizeof(variable_dtc_reports[0]);
+         ++index) {
+        uint8_t short_pdu[] = {
+            0x59U,variable_dtc_reports[index],0x12U,0x34U,0x56U
+        };
+        CHECK(link_uds_decode_read_dtc_information_response(
+            variable_dtc_reports[index], short_pdu, sizeof(short_pdu),
+            &response) == LINK_UDS_RESULT_MALFORMED_PDU);
+    }
+
+    for (index = 0U;
+         index < sizeof(user_memory_reports) /
+                 sizeof(user_memory_reports[0]);
+         ++index) {
+        uint8_t short_pdu[] = {
+            0x59U,user_memory_reports[index],0x31U,0x12U,0x34U,0x56U
+        };
+        CHECK(link_uds_decode_read_dtc_information_response(
+            user_memory_reports[index], short_pdu, sizeof(short_pdu),
+            &response) == LINK_UDS_RESULT_MALFORMED_PDU);
+    }
+
+    {
+        const uint8_t malformed_count[] = {
+            0x59U,0x01U,0xffU,0x04U,0x00U
+        };
+        CHECK(link_uds_decode_read_dtc_information_response(
+            0x01U, malformed_count, sizeof(malformed_count), &response) ==
+            LINK_UDS_RESULT_MALFORMED_PDU);
+    }
+    {
+        const uint8_t malformed_severity[] = {
+            0x59U,0x08U,0xffU,0x20U,0x10U,0x12U,0x34U
+        };
+        CHECK(link_uds_decode_read_dtc_information_response(
+            0x08U, malformed_severity, sizeof(malformed_severity), &response) ==
+            LINK_UDS_RESULT_MALFORMED_PDU);
+    }
+    {
+        const uint8_t malformed_wwh[] = {
+            0x59U,0x42U,0x33U,0xffU,0xe0U,0x04U,
+            0x20U,0x12U,0x34U
+        };
+        CHECK(link_uds_decode_read_dtc_information_response(
+            0x42U, malformed_wwh, sizeof(malformed_wwh), &response) ==
+            LINK_UDS_RESULT_MALFORMED_PDU);
+    }
     return 0;
 }
-
 int main(void)
 {
     char text[7] = "bad";
