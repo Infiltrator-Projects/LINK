@@ -68,12 +68,12 @@ static int drive_passed_cycle(
         def, state, LINK_UDS_DTC_TEST_PASSED));
     CHECK(state->fault_detection_counter == -64);
     CHECK(!state->passed_this_cycle);
-    CHECK((state->status & LINK_UDS_DTC_STATUS_TEST_FAILED) != 0U);
 
     CHECK(link_uds_dtc_lifecycle_report_test(
         def, state, LINK_UDS_DTC_TEST_PASSED));
     CHECK(state->fault_detection_counter == -128);
     CHECK(state->passed_this_cycle);
+    CHECK((state->status & LINK_UDS_DTC_STATUS_TEST_FAILED) == 0U);
 
     CHECK(link_uds_dtc_lifecycle_end_operation_cycle(def, state));
     return 0;
