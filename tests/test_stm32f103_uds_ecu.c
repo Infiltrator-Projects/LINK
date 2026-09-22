@@ -2,7 +2,7 @@
 #include "link-stm32f103-uds-ecu.h"
 
 #include "link/aes_cmac.h"
-#include "link/uds_services.h"
+#include "link/uds_services.h"\n#include "link/uds_dtc.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -380,6 +380,65 @@ static int test_persistence_and_dtc_clear(void)
     return 0;
 }
 
+static int test_issue37_clear_sequence_and_status_masks(void)
+{
+    TestPlatform platform;
+    LinkStm32F103UdsEcu ecu;
+    LinkStm32F103UdsEcuConfig config;
+    LinkUdsDtcInformationResponse decoded;
+    uint8_t response[64U];
+    size_t response_length = 0U;
+    const uint8_t clear_all[] = {0x14U,0xffU,0xffU,0xffU};
+    const uint8_t count_all[] = {0x19U,0x01U,0xffU};
+    const uint8_t count_faults[] = {0x19U,0x01U,0x0dU};
+
+    memset(&platform, 0, sizeof(platform));
+    memset(platform.page_a, 0xff, sizeof(platform.page_a));
+    memset(platform.page_b, 0xff, sizeof(platform.page_b));
+    config = test_config(&platform);
+    CHECK(link_stm32f103_uds_ecu_init(&ecu, &config));
+
+    CHECK(link_stm32f103_uds_ecu_handle(
+        &ecu, NULL, clear_all, sizeof(clear_all),
+        response, sizeof(response), &response_length) ==
+        LINK_UDS_SERVER_RESULT_NEGATIVE);
+    CHECK(response_length == 3U);
+    CHECK(response[0] == 0x7fU && response[1] == 0x14U &&
+          response[2] == LINK_UDS_NRC_SERVICE_NOT_SUPPORTED_IN_ACTIVE_SESSION);
+
+    CHECK(expect_positive(
+        &ecu, count_all, sizeof(count_all),
+        response, sizeof(response), &response_length) == 0);
+    CHECK(link_uds_decode_read_dtc_information_response(
+        LINK_UDS_DTC_REPORT_NUMBER_BY_STATUS_MASK,
+        response, response_length, &decoded) == LINK_UDS_RESULT_OK);
+    CHECK(decoded.dtc_count_available && decoded.dtc_count == 3U);
+
+    CHECK(enter_programming_and_unlock(
+        &ecu, response, sizeof(response), &response_length) == 0);
+    CHECK(expect_positive(
+        &ecu, clear_all, sizeof(clear_all),
+        response, sizeof(response), &response_length) == 0);
+    CHECK(response_length == 1U && response[0] == 0x54U);
+
+    CHECK(expect_positive(
+        &ecu, count_faults, sizeof(count_faults),
+        response, sizeof(response), &response_length) == 0);
+    CHECK(link_uds_decode_read_dtc_information_response(
+        LINK_UDS_DTC_REPORT_NUMBER_BY_STATUS_MASK,
+        response, response_length, &decoded) == LINK_UDS_RESULT_OK);
+    CHECK(decoded.dtc_count_available && decoded.dtc_count == 0U);
+
+    CHECK(expect_positive(
+        &ecu, count_all, sizeof(count_all),
+        response, sizeof(response), &response_length) == 0);
+    CHECK(link_uds_decode_read_dtc_information_response(
+        LINK_UDS_DTC_REPORT_NUMBER_BY_STATUS_MASK,
+        response, response_length, &decoded) == LINK_UDS_RESULT_OK);
+    CHECK(decoded.dtc_count_available && decoded.dtc_count == 3U);
+    return 0;
+}
+
 static int test_policy_blocks_unsafe_default_session(void)
 {
     TestPlatform platform;
@@ -416,6 +475,7 @@ int main(void)
 {
     CHECK(test_all_27_service_surfaces() == 0);
     CHECK(test_persistence_and_dtc_clear() == 0);
+    CHECK(test_issue37_clear_sequence_and_status_masks() == 0);
     CHECK(test_policy_blocks_unsafe_default_session() == 0);
     puts("STM32F103 complete UDS ECU tests passed");
     return EXIT_SUCCESS;
