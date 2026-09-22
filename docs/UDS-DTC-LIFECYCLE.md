@@ -107,9 +107,13 @@ reference check for testFailed/pending/confirmed state.
 The STM32F103 ECU example uses the shared lifecycle engine rather than manually
 inventing status transitions.
 
-Its three demonstration DTC definitions carry FunctionalGroupIdentifier 0x33.
-The reference monitor uses ±64 steps, two failed operation cycles for
-confirmation, and three fully passed operation cycles for aging.
+Its supported-DTC catalogue contains the 66 definitions supplied with LINK
+#42's diagnostic workbook, replacing the old three synthetic placeholders.
+The workbook-derived U300614/U300615 records use FunctionalGroupIdentifier
+0x33; the C1006xx safety/chassis records use 0xD0. Severity and functional-unit
+metadata are retained from the workbook-derived table. The reference monitor
+uses ±64 steps, two failed operation cycles for confirmation, and three fully
+passed operation cycles for aging.
 
 Monitor samples are **RAM-local**. LINK does not erase/program the STM32 flash
 journal every time a diagnostic monitor runs. The reference ECU persists the
