@@ -53,6 +53,7 @@ void link_uds_dtc_lifecycle_begin_operation_cycle(
     state->fault_detection_counter = 0;
     state->tested_this_cycle = false;
     state->failed_this_cycle = false;
+    state->passed_this_cycle = false;
 }
 
 bool link_uds_dtc_lifecycle_report_test(
