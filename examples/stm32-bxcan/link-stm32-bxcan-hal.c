@@ -103,6 +103,42 @@ static bool link_stm32_bxcan_send(
     return true;
 }
 
+static bool link_stm32_bxcan_mailbox_status_flags(
+    uint32_t mailbox,
+    uint32_t *request_complete,
+    uint32_t *tx_ok,
+    uint32_t *arbitration_lost,
+    uint32_t *tx_error)
+{
+    if (request_complete == NULL || tx_ok == NULL ||
+        arbitration_lost == NULL || tx_error == NULL) {
+        return false;
+    }
+
+    switch (mailbox) {
+    case CAN_TX_MAILBOX0:
+        *request_complete = CAN_FLAG_RQCP0;
+        *tx_ok = CAN_FLAG_TXOK0;
+        *arbitration_lost = CAN_FLAG_ALST0;
+        *tx_error = CAN_FLAG_TERR0;
+        return true;
+    case CAN_TX_MAILBOX1:
+        *request_complete = CAN_FLAG_RQCP1;
+        *tx_ok = CAN_FLAG_TXOK1;
+        *arbitration_lost = CAN_FLAG_ALST1;
+        *tx_error = CAN_FLAG_TERR1;
+        return true;
+    case CAN_TX_MAILBOX2:
+        *request_complete = CAN_FLAG_RQCP2;
+        *tx_ok = CAN_FLAG_TXOK2;
+        *arbitration_lost = CAN_FLAG_ALST2;
+        *tx_error = CAN_FLAG_TERR2;
+        return true;
+    default:
+        return false;
+    }
+}
+
 static LinkStm32CanTxStatus link_stm32_bxcan_tx_status(
     void *context,
     uint32_t *completion_tick_ms)
@@ -131,6 +167,52 @@ static LinkStm32CanTxStatus link_stm32_bxcan_tx_status(
         adapter->pending_mailbox = 0U;
         return LINK_STM32_CAN_TX_COMPLETE;
     }
+
+    /*
+     * Some Cube projects enable only the bxCAN RX0 NVIC line. In that valid
+     * polling configuration the hardware still latches RQCP/TXOK/ALST/TERR,
+     * but no HAL TX callback runs. Read those sticky completion flags before
+     * deciding that a released mailbox is an unexplained failure.
+     *
+     * Callback completion remains preferred because it preserves the exact ISR
+     * tick. Polling completion timestamps are deliberately conservative: the
+     * current HAL tick is later than or equal to the actual wire completion, so
+     * ISO-TP separation timing can never be advanced early.
+     */
+    {
+        uint32_t rqcp = 0U;
+        uint32_t txok = 0U;
+        uint32_t alst = 0U;
+        uint32_t terr = 0U;
+
+        if (link_stm32_bxcan_mailbox_status_flags(
+                pending, &rqcp, &txok, &alst, &terr) &&
+            __HAL_CAN_GET_FLAG(adapter->hcan, rqcp) != 0U) {
+            const bool succeeded =
+                __HAL_CAN_GET_FLAG(adapter->hcan, txok) != 0U &&
+                __HAL_CAN_GET_FLAG(adapter->hcan, alst) == 0U &&
+                __HAL_CAN_GET_FLAG(adapter->hcan, terr) == 0U;
+            const uint32_t detected_tick_ms = HAL_GetTick();
+
+            /*
+             * Clearing RQCP clears the mailbox's latched result flags on
+             * STM32 bxCAN. Do this only after sampling all result bits.
+             */
+            __HAL_CAN_CLEAR_FLAG(adapter->hcan, rqcp);
+            adapter->completed_mailbox = 0U;
+            adapter->failed_mailbox = 0U;
+            adapter->pending_mailbox = 0U;
+
+            if (!succeeded) {
+                return LINK_STM32_CAN_TX_FAILED;
+            }
+            if (completion_tick_ms != NULL) {
+                *completion_tick_ms = detected_tick_ms;
+            }
+            return LINK_STM32_CAN_TX_COMPLETE;
+        }
+    }
+
     hardware_pending = HAL_CAN_IsTxMessagePending(adapter->hcan, pending);
     if (adapter->failed_mailbox == pending && hardware_pending == 0U) {
         adapter->completed_mailbox = 0U;

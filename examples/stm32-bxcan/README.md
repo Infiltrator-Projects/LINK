@@ -101,11 +101,24 @@ if (!link_stm32_bxcan_example_init_tester(&hcan2, &tester)) {
 }
 ```
 
-## Required HAL callbacks
+## HAL callbacks and the RX-only polling fallback
 
-Forward all callbacks below. Merely accepting a frame into a bxCAN mailbox is
-not a completed ISO-TP transmission; LINK advances timing only after the
-matching HAL completion callback.
+The RX FIFO0 callback is required for interrupt-driven receive. TX-completion,
+abort and error callbacks remain the preferred path because they preserve the
+exact ISR completion timestamp.
+
+LINK 0.15.46 also supports the common Cube configuration seen in issue #34
+where only the RX0 NVIC line is enabled. If no TX ISR runs, bxCAN leaves its
+RQCP/TXOK/ALST/TERR result bits latched; LINK polls those sticky hardware flags
+and conservatively records the current HAL tick as completion. Successful
+frames therefore continue without pretending that mailbox acceptance itself
+means wire completion, while arbitration loss and transmission errors still
+fail explicitly.
+
+If a project enables the CAN TX NVIC/ISR, it must forward the matching callbacks
+below. Do not enable a HAL TX ISR that consumes the result flags while omitting
+the callbacks, because no library can reconstruct information already cleared
+by another ISR.
 
 ```c
 void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
@@ -151,7 +164,10 @@ void HAL_CAN_ErrorCallback(CAN_HandleTypeDef *hcan)
 
 The adapter permits one LINK-owned hardware frame at a time, matches completion
 or abort to the exact HAL mailbox token, snapshots `HAL_GetTick()` in the ISR
-and rejects CAN-FD frames because bxCAN is a Classical-CAN controller.
+when callbacks are available, and otherwise uses the later polling tick from
+the latched bxCAN result flags. That fallback is intentionally conservative:
+it can delay ISO-TP timing but cannot advance it early. CAN-FD frames remain
+rejected because bxCAN is a Classical-CAN controller.
 
 ## Reading the result
 

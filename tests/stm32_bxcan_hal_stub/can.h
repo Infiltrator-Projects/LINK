@@ -62,6 +62,29 @@ typedef struct {
 #define CAN_TX_MAILBOX1 UINT32_C(2)
 #define CAN_TX_MAILBOX2 UINT32_C(4)
 
+#define CAN_FLAG_RQCP0 UINT32_C(0x00000500)
+#define CAN_FLAG_TXOK0 UINT32_C(0x00000501)
+#define CAN_FLAG_ALST0 UINT32_C(0x00000502)
+#define CAN_FLAG_TERR0 UINT32_C(0x00000503)
+#define CAN_FLAG_RQCP1 UINT32_C(0x00000508)
+#define CAN_FLAG_TXOK1 UINT32_C(0x00000509)
+#define CAN_FLAG_ALST1 UINT32_C(0x0000050a)
+#define CAN_FLAG_TERR1 UINT32_C(0x0000050b)
+#define CAN_FLAG_RQCP2 UINT32_C(0x00000510)
+#define CAN_FLAG_TXOK2 UINT32_C(0x00000511)
+#define CAN_FLAG_ALST2 UINT32_C(0x00000512)
+#define CAN_FLAG_TERR2 UINT32_C(0x00000513)
+
+uint32_t link_test_hal_can_get_flag(
+    const CAN_HandleTypeDef *hcan, uint32_t flag);
+void link_test_hal_can_clear_flag(
+    CAN_HandleTypeDef *hcan, uint32_t flag);
+
+#define __HAL_CAN_GET_FLAG(handle, flag) \
+    link_test_hal_can_get_flag((handle), (flag))
+#define __HAL_CAN_CLEAR_FLAG(handle, flag) \
+    link_test_hal_can_clear_flag((handle), (flag))
+
 #define CAN_IT_TX_MAILBOX_EMPTY UINT32_C(0x00000001)
 #define CAN_IT_RX_FIFO0_MSG_PENDING UINT32_C(0x00000002)
 #define CAN_IT_RX_FIFO0_FULL UINT32_C(0x00000004)

@@ -22,6 +22,10 @@ static uint32_t fake_notifications;
 static uint32_t fake_tx_free;
 static uint32_t fake_tx_mailbox;
 static uint32_t fake_tx_pending;
+static uint32_t fake_tx_rqcp;
+static uint32_t fake_tx_ok_flags;
+static uint32_t fake_tx_alst;
+static uint32_t fake_tx_terr;
 static bool fake_filter_configured;
 static bool fake_filter_ok;
 static bool fake_notifications_ok;
@@ -42,6 +46,10 @@ static void reset_fake_hal(void)
     fake_tx_free = 3U;
     fake_tx_mailbox = CAN_TX_MAILBOX1;
     fake_tx_pending = 0U;
+    fake_tx_rqcp = 0U;
+    fake_tx_ok_flags = 0U;
+    fake_tx_alst = 0U;
+    fake_tx_terr = 0U;
     fake_filter_configured = false;
     fake_filter_ok = true;
     fake_notifications_ok = true;
@@ -65,6 +73,75 @@ static void queue_rx(
     fake_rx_headers[index] = *header;
     memcpy(fake_rx_data[index], data, LINK_ISOTP_CLASSIC_CAN_DATA_LENGTH);
     ++fake_rx_head;
+}
+
+static uint32_t fake_flag_mailbox(uint32_t flag)
+{
+    switch (flag) {
+    case CAN_FLAG_RQCP0:
+    case CAN_FLAG_TXOK0:
+    case CAN_FLAG_ALST0:
+    case CAN_FLAG_TERR0:
+        return CAN_TX_MAILBOX0;
+    case CAN_FLAG_RQCP1:
+    case CAN_FLAG_TXOK1:
+    case CAN_FLAG_ALST1:
+    case CAN_FLAG_TERR1:
+        return CAN_TX_MAILBOX1;
+    case CAN_FLAG_RQCP2:
+    case CAN_FLAG_TXOK2:
+    case CAN_FLAG_ALST2:
+    case CAN_FLAG_TERR2:
+        return CAN_TX_MAILBOX2;
+    default:
+        return 0U;
+    }
+}
+
+uint32_t link_test_hal_can_get_flag(
+    const CAN_HandleTypeDef *hcan,
+    uint32_t flag)
+{
+    const uint32_t mailbox = fake_flag_mailbox(flag);
+    if (hcan == NULL || mailbox == 0U) return 0U;
+
+    switch (flag) {
+    case CAN_FLAG_RQCP0:
+    case CAN_FLAG_RQCP1:
+    case CAN_FLAG_RQCP2:
+        return (fake_tx_rqcp & mailbox) != 0U;
+    case CAN_FLAG_TXOK0:
+    case CAN_FLAG_TXOK1:
+    case CAN_FLAG_TXOK2:
+        return (fake_tx_ok_flags & mailbox) != 0U;
+    case CAN_FLAG_ALST0:
+    case CAN_FLAG_ALST1:
+    case CAN_FLAG_ALST2:
+        return (fake_tx_alst & mailbox) != 0U;
+    case CAN_FLAG_TERR0:
+    case CAN_FLAG_TERR1:
+    case CAN_FLAG_TERR2:
+        return (fake_tx_terr & mailbox) != 0U;
+    default:
+        return 0U;
+    }
+}
+
+void link_test_hal_can_clear_flag(
+    CAN_HandleTypeDef *hcan,
+    uint32_t flag)
+{
+    const uint32_t mailbox = fake_flag_mailbox(flag);
+    if (hcan == NULL || mailbox == 0U) return;
+
+    if (flag == CAN_FLAG_RQCP0 ||
+        flag == CAN_FLAG_RQCP1 ||
+        flag == CAN_FLAG_RQCP2) {
+        fake_tx_rqcp &= ~mailbox;
+        fake_tx_ok_flags &= ~mailbox;
+        fake_tx_alst &= ~mailbox;
+        fake_tx_terr &= ~mailbox;
+    }
 }
 
 uint32_t HAL_GetTick(void)
@@ -236,6 +313,58 @@ static int test_classic_tx_completion(void)
     REQUIRE(link_stm32_can_poll_tx_status(
         &channel, &completion_us) == LINK_STM32_CAN_TX_COMPLETE);
     REQUIRE(completion_us == UINT64_C(7000));
+    REQUIRE(link_stm32_can_tx_ready(&channel));
+    return 0;
+}
+
+static int test_polled_tx_completion_without_tx_irq(void)
+{
+    CAN_HandleTypeDef hcan;
+    LinkStm32BxCanHal adapter;
+    LinkStm32CanOps ops;
+    LinkStm32Can channel;
+    LinkIsoTpCanFrame frame;
+    uint64_t completion_us = 0U;
+
+    reset_fake_hal();
+    memset(&hcan, 0, sizeof(hcan));
+    link_stm32_bxcan_hal_init(&adapter, &hcan, 0U, 14U);
+    ops = link_stm32_bxcan_hal_ops(&adapter);
+    REQUIRE(link_stm32_can_init(&channel, &ops));
+
+    memset(&frame, 0, sizeof(frame));
+    frame.can_id = UINT32_C(0x7e0);
+    frame.length = 3U;
+    frame.data[0] = 2U;
+    frame.data[1] = 0x10U;
+    frame.data[2] = 0x01U;
+
+    /*
+     * Reproduce LINK #34: RX IRQ exists, but there is no bxCAN TX NVIC/callback.
+     * Hardware completes mailbox 1 and leaves RQCP/TXOK latched for polling.
+     */
+    REQUIRE(link_stm32_can_send(&channel, &frame));
+    fake_tick = 9U;
+    fake_tx_pending &= ~CAN_TX_MAILBOX1;
+    fake_tx_rqcp |= CAN_TX_MAILBOX1;
+    fake_tx_ok_flags |= CAN_TX_MAILBOX1;
+    REQUIRE(link_stm32_can_poll_tx_status(
+        &channel, &completion_us) == LINK_STM32_CAN_TX_COMPLETE);
+    REQUIRE(completion_us == UINT64_C(9000));
+    REQUIRE(fake_tx_rqcp == 0U);
+    REQUIRE(fake_tx_ok_flags == 0U);
+    REQUIRE(link_stm32_can_tx_ready(&channel));
+
+    /*
+     * The fallback must not turn arbitration/error completion into success.
+     */
+    REQUIRE(link_stm32_can_send(&channel, &frame));
+    fake_tick = 12U;
+    fake_tx_pending &= ~CAN_TX_MAILBOX1;
+    fake_tx_rqcp |= CAN_TX_MAILBOX1;
+    fake_tx_terr |= CAN_TX_MAILBOX1;
+    REQUIRE(link_stm32_can_poll_tx_status(
+        &channel, &completion_us) == LINK_STM32_CAN_TX_FAILED);
     REQUIRE(link_stm32_can_tx_ready(&channel));
     return 0;
 }
@@ -441,6 +570,7 @@ int main(void)
 {
     REQUIRE(test_exact_standard_filters() == 0);
     REQUIRE(test_classic_tx_completion() == 0);
+    REQUIRE(test_polled_tx_completion_without_tx_irq() == 0);
     REQUIRE(test_extended_rx_mapping() == 0);
     REQUIRE(test_failures_and_rejections() == 0);
     REQUIRE(test_vin_example_end_to_end() == 0);

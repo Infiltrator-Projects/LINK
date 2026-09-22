@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.15.46 — 2026-09-22
+
+- Fix LINK issue #34's STM32F103 integration failure when a Cube project enables only the bxCAN RX0 NVIC line: the bxCAN adapter now polls latched RQCP/TXOK/ALST/TERR completion state when no TX callback has run.
+- Preserve strict failure semantics: arbitration loss and transmit-error completions remain failures; a released mailbox without either callback evidence or latched hardware result remains a failure.
+- Add a regression that reproduces the reporter's RX-only interrupt configuration and proves successful polled completion plus failed-error completion.
+- Document TX callbacks as the preferred precise path while supporting the safe RX-only polling configuration used by simpler STM32F103 ports.
+
 ## 0.15.45 — 2026-09-22
 
 - Correct LINK issue #24's STM32C092 server example so the bare target advertises only hardReset and softReset; keyOffOnReset and rapid-power-shutdown operations are no longer able to fall through to an MCU reset.
