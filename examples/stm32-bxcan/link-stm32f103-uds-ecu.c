@@ -62,7 +62,7 @@ static const LinkUdsServerPolicy stm32f103_policies[] = {
         LINK_UDS_SERVICE_CLEAR_DIAGNOSTIC_INFORMATION,
         false, 0U,
         LINK_UDS_SESSION_MASK_ALL,
-        LINK_UDS_SECURITY_LEVEL_MASK_UNSECURED,
+        LINK_UDS_SECURITY_LEVEL_MASK_ALL,
         LINK_UDS_ADDRESSING_MASK_PHYSICAL
     },
     {
