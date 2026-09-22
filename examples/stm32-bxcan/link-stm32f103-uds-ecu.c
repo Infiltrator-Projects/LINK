@@ -39,6 +39,13 @@
 #define LINK_STM32F103_DID_ACTIVE_SESSION UINT16_C(0xf186)
 #define LINK_STM32F103_DID_SYSTEM_SUPPLIER UINT16_C(0xf18a)
 
+#define LINK_STM32F103_SNAPSHOT_DID_SUPPLY_VOLTAGE UINT16_C(0xdf00)
+#define LINK_STM32F103_SNAPSHOT_DID_VEHICLE_SPEED UINT16_C(0xdf01)
+#define LINK_STM32F103_SNAPSHOT_DID_OCCURRENCE_COUNTER UINT16_C(0xdf02)
+#define LINK_STM32F103_SNAPSHOT_DID_FIRST_ODOMETER UINT16_C(0xdf03)
+#define LINK_STM32F103_SNAPSHOT_DID_LAST_ODOMETER UINT16_C(0xdf04)
+#define LINK_STM32F103_SNAPSHOT_DID_TIMESTAMP UINT16_C(0xdd00)
+
 #define LINK_STM32F103_SECURITY_MASK \
     (LINK_UDS_SECURITY_LEVEL_MASK(1U) | LINK_UDS_SECURITY_LEVEL_MASK(2U))
 
@@ -687,6 +694,95 @@ static void stm32f103_sync_dtc_lifecycle(
     ecu->state.dtc_failure_cycles[index] = lifecycle->failure_cycle_count;
 }
 
+static void stm32f103_snapshot_put_u16(
+    uint8_t *payload,
+    size_t *offset,
+    uint16_t value)
+{
+    payload[(*offset)++] = (uint8_t)(value >> 8U);
+    payload[(*offset)++] = (uint8_t)value;
+}
+
+static void stm32f103_snapshot_put_u32(
+    uint8_t *payload,
+    size_t *offset,
+    uint32_t value)
+{
+    payload[(*offset)++] = (uint8_t)(value >> 24U);
+    payload[(*offset)++] = (uint8_t)(value >> 16U);
+    payload[(*offset)++] = (uint8_t)(value >> 8U);
+    payload[(*offset)++] = (uint8_t)value;
+}
+
+static bool stm32f103_encode_workbook_snapshot(
+    LinkStm32F103UdsEcu *ecu,
+    size_t index)
+{
+    LinkStm32F103DtcSnapshotValues values;
+    uint8_t *payload;
+    size_t offset = 0U;
+
+    if (ecu == NULL || index >= LINK_STM32F103_UDS_DTC_COUNT) return false;
+    memset(&values, 0, sizeof(values));
+
+    if (ecu->config.read_dtc_snapshot != NULL) {
+        if (!ecu->config.read_dtc_snapshot(
+                ecu->config.dtc_snapshot_context,
+                stm32f103_dtc_definitions[index].code,
+                &values)) {
+            ecu->dtc_snapshot_available[index] = false;
+            memset(
+                ecu->dtc_snapshot_payload[index], 0,
+                sizeof(ecu->dtc_snapshot_payload[index]));
+            return false;
+        }
+    } else {
+        /*
+         * Deterministic BENCH/REFERENCE values. They prove the exact Sheet 7
+         * wire layout without pretending LINK knows target sensor history.
+         * A real ECU supplies captured/persisted values through the callback.
+         */
+        values.supply_voltage_mv = UINT16_C(12000);
+    }
+
+    payload = ecu->dtc_snapshot_payload[index];
+
+#define SNAPSHOT_DID(did_) \
+    do { \
+        stm32f103_snapshot_put_u16(payload, &offset, (did_)); \
+    } while (0)
+
+    SNAPSHOT_DID(LINK_STM32F103_SNAPSHOT_DID_SUPPLY_VOLTAGE);
+    stm32f103_snapshot_put_u16(payload, &offset, values.supply_voltage_mv);
+
+    SNAPSHOT_DID(LINK_STM32F103_SNAPSHOT_DID_VEHICLE_SPEED);
+    stm32f103_snapshot_put_u16(
+        payload, &offset, values.vehicle_speed_1_256_kph);
+
+    SNAPSHOT_DID(LINK_STM32F103_SNAPSHOT_DID_OCCURRENCE_COUNTER);
+    payload[offset++] = values.occurrence_counter;
+
+    SNAPSHOT_DID(LINK_STM32F103_SNAPSHOT_DID_FIRST_ODOMETER);
+    stm32f103_snapshot_put_u32(payload, &offset, values.first_odometer_5m);
+
+    SNAPSHOT_DID(LINK_STM32F103_SNAPSHOT_DID_LAST_ODOMETER);
+    stm32f103_snapshot_put_u32(payload, &offset, values.last_odometer_5m);
+
+    SNAPSHOT_DID(LINK_STM32F103_SNAPSHOT_DID_TIMESTAMP);
+    payload[offset++] = values.timestamp_second;
+    payload[offset++] = values.timestamp_minute;
+    payload[offset++] = values.timestamp_hour;
+    payload[offset++] = values.timestamp_month;
+    payload[offset++] = values.timestamp_day;
+    payload[offset++] = values.timestamp_year;
+
+#undef SNAPSHOT_DID
+
+    ecu->dtc_snapshot_available[index] =
+        offset == LINK_STM32F103_UDS_SNAPSHOT_PAYLOAD_BYTES;
+    return ecu->dtc_snapshot_available[index];
+}
+
 static void stm32f103_refresh_dtc_store(LinkStm32F103UdsEcu *ecu)
 {
     size_t index;
@@ -721,10 +817,14 @@ static void stm32f103_refresh_dtc_store(LinkStm32F103UdsEcu *ecu)
         detail->functional_group_identifier =
             stm32f103_dtc_definitions[index].functional_group_identifier;
         detail->user_memory_selection = 0x01U;
-        detail->snapshot_record_number = 0x01U;
-        detail->snapshot_identifier_count = 0x01U;
-        detail->snapshot_data = ecu->state.snapshot[index];
-        detail->snapshot_data_length = LINK_STM32F103_UDS_RECORD_BYTES;
+        if (stm32f103_encode_workbook_snapshot(ecu, index)) {
+            detail->snapshot_record_number = 0x01U;
+            detail->snapshot_identifier_count =
+                LINK_STM32F103_UDS_SNAPSHOT_IDENTIFIER_COUNT;
+            detail->snapshot_data = ecu->dtc_snapshot_payload[index];
+            detail->snapshot_data_length =
+                LINK_STM32F103_UDS_SNAPSHOT_PAYLOAD_BYTES;
+        }
         detail->stored_data_record_number = 0x01U;
         detail->stored_data_identifier_count = 0x01U;
         detail->stored_data = ecu->state.stored[index];
