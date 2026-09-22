@@ -213,6 +213,15 @@ typedef struct {
 } LinkUdsServer;
 
 typedef struct {
+    uint8_t record_number;
+    uint8_t identifier_count;
+    const uint8_t *data;
+    size_t data_length;
+} LinkUdsServerDtcSnapshotRecord;
+
+#define LINK_UDS_SERVER_DTC_SNAPSHOT_RECORD_INIT { 0U, 0U, NULL, 0U }
+
+typedef struct {
     uint32_t code;
     uint8_t severity;
     uint8_t functional_unit;
@@ -235,11 +244,19 @@ typedef struct {
     uint8_t ext_data_record_number;
     const uint8_t *ext_data;
     size_t ext_data_length;
+
+    /*
+     * Optional multi-record snapshot view. When non-NULL/non-zero this is
+     * authoritative for 0x19/0x03 and 0x19/0x04. The singular snapshot fields
+     * above remain as the backwards-compatible one-record form.
+     */
+    const LinkUdsServerDtcSnapshotRecord *snapshot_records;
+    size_t snapshot_record_count;
 } LinkUdsServerDtcDetail;
 
 #define LINK_UDS_SERVER_DTC_DETAIL_INIT \
     { 0U, 0U, 0U, 0U, 0U, 0U, false, false, false, 0U, 0U, \
-      0U, 0U, NULL, 0U, 0U, 0U, NULL, 0U, 0U, NULL, 0U }
+      0U, 0U, NULL, 0U, 0U, 0U, NULL, 0U, 0U, NULL, 0U, NULL, 0U }
 
 typedef struct {
     const LinkUdsDtcRecord *records;
