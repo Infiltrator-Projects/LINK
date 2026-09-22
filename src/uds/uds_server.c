@@ -1028,6 +1028,34 @@ static LinkUdsServerHandlerResult uds_dtc_temporal_response(
     return link_uds_server_handler_positive(offset);
 }
 
+static size_t uds_dtc_snapshot_record_count(
+    const LinkUdsServerDtcDetail *detail)
+{
+    if (detail == NULL) return 0U;
+    if (detail->snapshot_records != NULL && detail->snapshot_record_count != 0U)
+        return detail->snapshot_record_count;
+    return detail->snapshot_record_number != 0U ? 1U : 0U;
+}
+
+static bool uds_dtc_snapshot_record_at(
+    const LinkUdsServerDtcDetail *detail,
+    size_t index,
+    LinkUdsServerDtcSnapshotRecord *record)
+{
+    if (detail == NULL || record == NULL) return false;
+    if (detail->snapshot_records != NULL && detail->snapshot_record_count != 0U) {
+        if (index >= detail->snapshot_record_count) return false;
+        *record = detail->snapshot_records[index];
+        return record->record_number != 0U;
+    }
+    if (index != 0U || detail->snapshot_record_number == 0U) return false;
+    record->record_number = detail->snapshot_record_number;
+    record->identifier_count = detail->snapshot_identifier_count;
+    record->data = detail->snapshot_data;
+    record->data_length = detail->snapshot_data_length;
+    return true;
+}
+
 static LinkUdsServerHandlerResult uds_dtc_snapshot_identification_response(
     const LinkUdsServerDtcStore *store, uint8_t subfunction,
     uint8_t *data, size_t capacity)
@@ -1041,15 +1069,23 @@ static LinkUdsServerHandlerResult uds_dtc_snapshot_identification_response(
 
     for (index = 0U; index < store->detail_count; ++index) {
         const LinkUdsServerDtcDetail *detail = &store->details[index];
-        if (detail->snapshot_record_number == 0U ||
-            detail->snapshot_data == NULL ||
-            detail->snapshot_data_length == 0U) {
-            continue;
-        }
-        if (!uds_dtc_put_code(data, capacity, &offset, detail->code) ||
-            !uds_dtc_put_u8(
-                data, capacity, &offset, detail->snapshot_record_number)) {
-            return uds_dtc_too_long();
+        size_t snapshot_index;
+        const size_t snapshot_count = uds_dtc_snapshot_record_count(detail);
+
+        for (snapshot_index = 0U;
+             snapshot_index < snapshot_count;
+             ++snapshot_index) {
+            LinkUdsServerDtcSnapshotRecord snapshot;
+            if (!uds_dtc_snapshot_record_at(
+                    detail, snapshot_index, &snapshot) ||
+                snapshot.data == NULL || snapshot.data_length == 0U) {
+                continue;
+            }
+            if (!uds_dtc_put_code(data, capacity, &offset, detail->code) ||
+                !uds_dtc_put_u8(
+                    data, capacity, &offset, snapshot.record_number)) {
+                return uds_dtc_too_long();
+            }
         }
     }
     return link_uds_server_handler_positive(offset);
@@ -1078,15 +1114,30 @@ static LinkUdsServerHandlerResult uds_dtc_snapshot_by_dtc_response(
     const LinkUdsServerDtcDetail *detail =
         uds_dtc_detail_for_code(store, code);
     size_t offset = 0U;
+    size_t snapshot_index;
+    size_t matches = 0U;
+    const size_t snapshot_count = uds_dtc_snapshot_record_count(detail);
 
-    if (record == NULL || detail == NULL ||
-        detail->snapshot_record_number == 0U ||
-        !uds_dtc_record_number_matches(
-            requested_record, detail->snapshot_record_number) ||
+    if (record == NULL || detail == NULL || snapshot_count == 0U ||
         (user_memory &&
          detail->user_memory_selection != memory_selection)) {
         return uds_dtc_out_of_range();
     }
+
+    for (snapshot_index = 0U;
+         snapshot_index < snapshot_count;
+         ++snapshot_index) {
+        LinkUdsServerDtcSnapshotRecord snapshot;
+        if (!uds_dtc_snapshot_record_at(
+                detail, snapshot_index, &snapshot)) {
+            continue;
+        }
+        if (uds_dtc_record_number_matches(
+                requested_record, snapshot.record_number)) {
+            ++matches;
+        }
+    }
+    if (matches == 0U) return uds_dtc_out_of_range();
 
     if (!uds_dtc_put_u8(data, capacity, &offset, subfunction))
         return uds_dtc_too_long();
@@ -1097,19 +1148,34 @@ static LinkUdsServerHandlerResult uds_dtc_snapshot_by_dtc_response(
     if (!uds_dtc_put_record(data, capacity, &offset, record))
         return uds_dtc_too_long();
 
-    if (detail->snapshot_data == NULL ||
-        detail->snapshot_data_length == 0U) {
-        return link_uds_server_handler_positive(offset);
-    }
+    for (snapshot_index = 0U;
+         snapshot_index < snapshot_count;
+         ++snapshot_index) {
+        LinkUdsServerDtcSnapshotRecord snapshot;
+        if (!uds_dtc_snapshot_record_at(
+                detail, snapshot_index, &snapshot) ||
+            !uds_dtc_record_number_matches(
+                requested_record, snapshot.record_number)) {
+            continue;
+        }
 
-    if (!uds_dtc_put_u8(
-            data, capacity, &offset, detail->snapshot_record_number) ||
-        !uds_dtc_put_u8(
-            data, capacity, &offset, detail->snapshot_identifier_count) ||
-        !uds_dtc_put_bytes(
-            data, capacity, &offset,
-            detail->snapshot_data, detail->snapshot_data_length)) {
-        return uds_dtc_too_long();
+        /*
+         * Preserve the historical behavior for an identified record whose
+         * payload is not yet populated: the DTC/status header is still a
+         * valid positive response, but no snapshot record body is emitted.
+         */
+        if (snapshot.data == NULL || snapshot.data_length == 0U)
+            continue;
+
+        if (!uds_dtc_put_u8(
+                data, capacity, &offset, snapshot.record_number) ||
+            !uds_dtc_put_u8(
+                data, capacity, &offset, snapshot.identifier_count) ||
+            !uds_dtc_put_bytes(
+                data, capacity, &offset,
+                snapshot.data, snapshot.data_length)) {
+            return uds_dtc_too_long();
+        }
     }
     return link_uds_server_handler_positive(offset);
 }
