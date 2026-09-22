@@ -139,6 +139,7 @@ add_library(link-core STATIC
     src/uds/uds.c
     src/uds/uds_services.c
     src/uds/uds_authentication.c
+    src/uds/uds_bootloader.c
     src/uds/uds_server.c
     src/discover/safety.c
     src/discover/sweep.c
@@ -466,6 +467,7 @@ if(BUILD_TESTING AND PROJECT_IS_TOP_LEVEL)
     link_add_test(link-test-diagnostic-request tests/test_diagnostic_request.c link-diagnostic-request)
     link_add_test(link-test-diagnostic-flow tests/test_diagnostic_flow.c link-diagnostic-flow)
     link_add_test(link-test-isotp tests/test_isotp.c link-isotp)
+    link_add_test(link-test-uds-bootloader tests/test_uds_bootloader.c link-uds-bootloader)
     add_executable(link-isotp-vector tools/link-isotp-vector.c)
     target_link_libraries(link-isotp-vector PRIVATE LINK::Core)
     if(MSVC)

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.15.49 — 2026-09-22
+
+- Add a fail-closed UDS OTA/bootloader orchestration core for MBLINK issue #56, mapping the full programming-session -> SecurityAccess -> DTC/communication quiesce -> RequestDownload -> TransferData -> TransferExit -> CheckMemory -> staged reset flow.
+- Add A/B inactive-slot selection, strict transfer sequence/size accounting, monotonic anti-rollback, separate integrity/authenticity verification gates, secure-boot candidate validation and post-boot monotonic-version commit.
+- Keep programming disabled by default and require a complete target backend before arming; LINK contains no STM32 flash addresses, option-byte manipulation or OEM/HSM secrets.
+- Add regression coverage for the complete successful sequence, rollback rejection, block-sequence failure, incomplete transfer rejection and authenticity-failure abort.
+
 ## 0.15.48 — 2026-09-22
 
 - Ship an exact machine-applicable repair for LINK issue #31 against `leoembeddeder/STM32F103TEST` head `5055d58f4f6240488271d85cb177f71337e0cdeb`, covering its remaining 0x19 user-memory, emissions, fault-counter, WWH-OBD and 0x55 defects.
