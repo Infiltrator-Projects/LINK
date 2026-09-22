@@ -123,7 +123,7 @@ bool link_stm32f103_uds_ecu_report_dtc(
     LinkStm32F103UdsEcu *ecu,
     uint32_t code,
     uint8_t status,
-    uint8_t fault_detection_counter,
+    int8_t fault_detection_counter,
     bool permanent_status);
 
 /**
