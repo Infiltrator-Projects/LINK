@@ -43,7 +43,9 @@ typedef struct {
     uint8_t aging_threshold_cycles;
 } LinkUdsDtcLifecycleDefinition;
 
-#define LINK_UDS_DTC_LIFECYCLE_DEFINITION_INIT {     0U, 0U, 0U, 0U,     INT8_C(127), INT8_C(-128),     1U, 1U, 1U, 0U }
+#define LINK_UDS_DTC_LIFECYCLE_DEFINITION_INIT { \
+    0U, 0U, 0U, 0U, 1U, 1U, 1U, 0U \
+}
 
 typedef struct {
     uint8_t status;
@@ -55,7 +57,11 @@ typedef struct {
     bool passed_this_cycle;
 } LinkUdsDtcLifecycleState;
 
-#define LINK_UDS_DTC_LIFECYCLE_STATE_INIT {     LINK_UDS_DTC_STATUS_TEST_NOT_COMPLETED_SINCE_LAST_CLEAR |         LINK_UDS_DTC_STATUS_TEST_NOT_COMPLETED_THIS_OPERATION_CYCLE,     0, 0U, 0U, false, false }
+#define LINK_UDS_DTC_LIFECYCLE_STATE_INIT { \
+    LINK_UDS_DTC_STATUS_TEST_NOT_COMPLETED_SINCE_LAST_CLEAR | \
+        LINK_UDS_DTC_STATUS_TEST_NOT_COMPLETED_THIS_OPERATION_CYCLE, \
+    0, 0U, 0U, false, false, false \
+}
 
 bool link_uds_dtc_lifecycle_definition_valid(
     const LinkUdsDtcLifecycleDefinition *definition);
