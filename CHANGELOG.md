@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.15.59 — 2026-09-22
+
+- Generalise LINK's DTC server model so a single DTC can expose multiple snapshot records instead of being limited to one snapshot record number/payload.
+- Keep the existing singular snapshot fields as a source-compatible fallback while adding the allocation-free `LinkUdsServerDtcSnapshotRecord` view for real multi-record applications.
+- Make ReadDTCInformation 0x19/0x03 enumerate every configured snapshot record and make 0x19/0x04 return one requested record or all records for record selector 0xFF.
+- Add strict regression coverage for three records on one DTC, including record identification, exact record selection, all-record response and unsupported-record rejection.
+- Repair all strict positional initialisers exposed by the ABI extension and qualify the resulting head across the complete LINK CI matrix before release.
+
 ## 0.15.58 — 2026-09-22
 
 - Complete LINK #43's STM32F103 two-level SecurityAccess reference with the requested deterministic 4-byte level-1 seed/key path and a 16-byte AES-CMAC-128 level-2 path backed by target-supplied key material.
