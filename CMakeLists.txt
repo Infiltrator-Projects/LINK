@@ -538,7 +538,7 @@ if(BUILD_TESTING AND PROJECT_IS_TOP_LEVEL)
         platform/stm32/link-stm32-can.c
         platform/stm32/link-stm32-uds.c
         examples/stm32-bxcan/link-stm32-bxcan-hal.c
-        examples/stm32-bxcan/link-stm32-bxcan-example.c)
+        examples/stm32-bxcan/link-stm32-bxcan-tester-example.c)
     target_include_directories(link-test-stm32-bxcan-hal PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/tests/stm32_bxcan_hal_stub"
         "${CMAKE_CURRENT_SOURCE_DIR}/platform/stm32"
