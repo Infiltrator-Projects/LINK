@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.15.51 — 2026-09-22
+
+- Resolve issue #36's tester/server transplant ambiguity by renaming the bxCAN VIN request example and its public example symbols to explicitly say tester/client; the STM32F103 ECU/server remains the separate `link-stm32f103-uds-ecu.c` + `issue-32/Src-main.c` integration.
+- Lock issue #37's exact screenshot sequence into regression coverage: `14 FF FF FF` in DefaultSession returns `7F 14 7F`; after the required session/security sequence the clear returns `54`, `19 01 0D` counts zero fault-state DTCs, while `19 01 FF` can still count cleared definitions via the not-completed bits.
+- Close the remaining MBLINK #27 qualification gap by cross-compiling the exact retained `examples/stm32c092/issue-27/Src-main.c` under Cortex-M0+ CI with Cube-interface stubs.
+
 ## 0.15.50 — 2026-09-22
 
 - Advance the exact nested Infiltratr Common dependency to 1.19.22 / `302c44eb7436803dee020667453a9a0681da8bbf` so every LINK consumer inherits the current bounded-text and durable-POSIX fixes from one tested dependency chain.
