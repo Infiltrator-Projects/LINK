@@ -571,7 +571,7 @@ bool link_stm32f103_uds_ecu_flush(LinkStm32F103UdsEcu *ecu)
 static bool stm32f103_load_state(LinkStm32F103UdsEcu *ecu)
 {
     LinkStm32F103PersistentState candidate;
-    LinkStm32F103PersistentState newest;
+    LinkStm32F103PersistentState newest = {0};
     const LinkStm32F103FlashStore *flash = &ecu->config.flash;
     const size_t count = stm32f103_flash_page_count(flash);
     size_t index;
