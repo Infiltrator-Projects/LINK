@@ -31,9 +31,10 @@ typedef struct {
     uint8_t severity;
     uint8_t functional_unit;
 
-    /* Internal signed debounce model; reported 0x19/0x14 value is positive only. */
-    int8_t failed_threshold;
-    int8_t passed_threshold;
+    /*
+     * Step size for LINK's ISO-scaled reference counter. The wire-scale
+     * thresholds remain fixed at +127 failed and -128 passed.
+     */
     uint8_t increment_step;
     uint8_t decrement_step;
 
@@ -51,6 +52,7 @@ typedef struct {
     uint8_t failure_cycle_count;
     bool tested_this_cycle;
     bool failed_this_cycle;
+    bool passed_this_cycle;
 } LinkUdsDtcLifecycleState;
 
 #define LINK_UDS_DTC_LIFECYCLE_STATE_INIT {     LINK_UDS_DTC_STATUS_TEST_NOT_COMPLETED_SINCE_LAST_CLEAR |         LINK_UDS_DTC_STATUS_TEST_NOT_COMPLETED_THIS_OPERATION_CYCLE,     0, 0U, 0U, false, false }
