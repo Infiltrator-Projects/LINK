@@ -197,25 +197,22 @@ reserves the final two 2 KiB pages of a 512 KiB device.
 
 ## ClearDiagnosticInformation and ReadDTCInformation verification
 
-The STM32F103 ECU protects `0x14 ClearDiagnosticInformation`. In DefaultSession
-`14 FF FF FF` is rejected as `7F 14 7F`
-(`serviceNotSupportedInActiveSession`). A tester must check that response
-before interpreting any following `0x19` result.
+The STM32F103 reference follows the ISO session table for
+`0x14 ClearDiagnosticInformation`: the service is available in the default and
+non-default diagnostic sessions and LINK does not invent a SecurityAccess
+requirement for it. Product/OEM policy can still add a stronger restriction
+outside the portable reference when required.
 
-After the required session/security sequence, a successful all-group clear
-returns `54`. LINK then sets the cleared DTC status to
+A successful all-group clear:
+
+`14 FF FF FF`
+
+returns positive service `54`.
+
+Immediately after that clear LINK sets the DTC status to
 `testNotCompletedSinceLastClear | testNotCompletedThisOperationCycle`
-(`0x50`). Therefore `19 01 FF` can still count the DTC definitions because
-`0x50 & 0xFF != 0`. To verify that fault-indicating state is gone, use a
+(`0x50`). Consequently `19 01 FF` can still count those DTC definitions:
+`0x50 & 0xFF != 0`. To verify that fault-indicating state was cleared, query a
 fault-oriented mask such as `0x0D`
 (`testFailed | pendingDTC | confirmedDTC`); the regression suite requires that
-count to become zero after a successful clear.
-
-
-## DTC monitor lifecycle
-
-The STM32F103 ECU/server now uses LINK's shared DTC lifecycle reference engine
-for FunctionalGroupIdentifier metadata, signed fault-detection-counter
-progression, failed-cycle confirmation and passed-cycle aging. See
-[`docs/UDS-DTC-LIFECYCLE.md`](../../docs/UDS-DTC-LIFECYCLE.md) for the
-protocol/lifecycle boundary and the reference algorithm.
+count to become zero after the successful clear.
