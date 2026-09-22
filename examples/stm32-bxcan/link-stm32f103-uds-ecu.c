@@ -53,10 +53,16 @@ static const uint8_t stm32f103_default_vin[17U] = {
 
 static const LinkUdsServerPolicy stm32f103_policies[] = {
     {
+        /*
+         * ISO 14229 permits ClearDiagnosticInformation in the default and
+         * non-default diagnostic sessions. Do not invent a SecurityAccess
+         * prerequisite in the portable reference. Product/OEM policy may
+         * still add one explicitly above LINK when required.
+         */
         LINK_UDS_SERVICE_CLEAR_DIAGNOSTIC_INFORMATION,
         false, 0U,
-        LINK_UDS_SESSION_MASK_EXTENDED | LINK_UDS_SESSION_MASK_PROGRAMMING,
-        LINK_UDS_SECURITY_LEVEL_MASK(1U),
+        LINK_UDS_SESSION_MASK_ALL,
+        UINT64_C(0),
         LINK_UDS_ADDRESSING_MASK_PHYSICAL
     },
     {
