@@ -110,6 +110,30 @@ static uint32_t test_clock(void *context)
     return ((TestPlatform *)context)->now_ms;
 }
 
+static bool test_snapshot_provider(
+    void *context,
+    uint32_t dtc_code,
+    LinkStm32F103DtcSnapshotValues *values)
+{
+    unsigned int *calls = (unsigned int *)context;
+    if (calls != NULL) (*calls)++;
+    if (values == NULL || dtc_code != UINT32_C(0xf00614)) return false;
+
+    memset(values, 0, sizeof(*values));
+    values->supply_voltage_mv = UINT16_C(0x1234);
+    values->vehicle_speed_1_256_kph = UINT16_C(0x5678);
+    values->occurrence_counter = UINT8_C(0x9a);
+    values->first_odometer_5m = UINT32_C(0x01020304);
+    values->last_odometer_5m = UINT32_C(0x05060708);
+    values->timestamp_second = 1U;
+    values->timestamp_minute = 2U;
+    values->timestamp_hour = 3U;
+    values->timestamp_month = 4U;
+    values->timestamp_day = 5U;
+    values->timestamp_year = 26U;
+    return true;
+}
+
 static LinkStm32F103UdsEcuConfig test_config(TestPlatform *platform)
 {
     LinkStm32F103UdsEcuConfig config;
@@ -988,6 +1012,76 @@ static int test_issue44_workbook_dids(void)
     return 0;
 }
 
+static int test_issue45_workbook_snapshot_record(void)
+{
+    TestPlatform platform;
+    LinkStm32F103UdsEcu ecu;
+    LinkStm32F103UdsEcuConfig config;
+    uint8_t response[128U];
+    size_t response_length = 0U;
+    unsigned int snapshot_calls = 0U;
+    const uint8_t identify[] = {0x19U,0x03U};
+    const uint8_t read_snapshot[] = {
+        0x19U,0x04U,0xf0U,0x06U,0x14U,0x01U
+    };
+    const uint8_t missing_snapshot[] = {
+        0x19U,0x04U,0xf0U,0x06U,0x15U,0x01U
+    };
+    static const uint8_t expected_payload[
+        LINK_STM32F103_UDS_SNAPSHOT_PAYLOAD_BYTES] = {
+        0xdfU,0x00U,0x12U,0x34U,
+        0xdfU,0x01U,0x56U,0x78U,
+        0xdfU,0x02U,0x9aU,
+        0xdfU,0x03U,0x01U,0x02U,0x03U,0x04U,
+        0xdfU,0x04U,0x05U,0x06U,0x07U,0x08U,
+        0xddU,0x00U,0x01U,0x02U,0x03U,0x04U,0x05U,0x1aU
+    };
+
+    memset(&platform, 0, sizeof(platform));
+    memset(platform.page_a, 0xff, sizeof(platform.page_a));
+    memset(platform.page_b, 0xff, sizeof(platform.page_b));
+    config = test_config(&platform);
+    config.read_dtc_snapshot = test_snapshot_provider;
+    config.dtc_snapshot_context = &snapshot_calls;
+
+    CHECK(LINK_STM32F103_UDS_SNAPSHOT_IDENTIFIER_COUNT == 6U);
+    CHECK(sizeof(expected_payload) ==
+          LINK_STM32F103_UDS_SNAPSHOT_PAYLOAD_BYTES);
+    CHECK(link_stm32f103_uds_ecu_init(&ecu, &config));
+    CHECK(snapshot_calls >= LINK_STM32F103_UDS_DTC_COUNT);
+
+    CHECK(expect_positive(
+        &ecu, identify, sizeof(identify),
+        response, sizeof(response), &response_length) == 0);
+    CHECK(response_length == 6U);
+    CHECK(response[0] == 0x59U && response[1] == 0x03U);
+    CHECK(response[2] == 0xf0U && response[3] == 0x06U &&
+          response[4] == 0x14U && response[5] == 0x01U);
+
+    CHECK(expect_positive(
+        &ecu, read_snapshot, sizeof(read_snapshot),
+        response, sizeof(response), &response_length) == 0);
+    CHECK(response_length == 39U);
+    CHECK(response[0] == 0x59U && response[1] == 0x04U);
+    CHECK(response[2] == 0xf0U && response[3] == 0x06U &&
+          response[4] == 0x14U);
+    CHECK(response[5] == (LINK_UDS_DTC_STATUS_TEST_FAILED |
+                           LINK_UDS_DTC_STATUS_CONFIRMED_DTC));
+    CHECK(response[6] == 0x01U);
+    CHECK(response[7] == LINK_STM32F103_UDS_SNAPSHOT_IDENTIFIER_COUNT);
+    CHECK(memcmp(
+        response + 8U, expected_payload, sizeof(expected_payload)) == 0);
+
+    CHECK(link_stm32f103_uds_ecu_handle(
+        &ecu, NULL, missing_snapshot, sizeof(missing_snapshot),
+        response, sizeof(response), &response_length) ==
+        LINK_UDS_SERVER_RESULT_NEGATIVE);
+    CHECK(response_length == 3U &&
+          response[0] == 0x7fU && response[1] == 0x19U &&
+          response[2] == LINK_UDS_NRC_REQUEST_OUT_OF_RANGE);
+    return 0;
+}
+
 static int test_issue46_workbook_routines(void)
 {
     TestPlatform platform;
@@ -1041,6 +1135,7 @@ int main(void)
     CHECK(test_issue42_workbook_dtc_catalogue() == 0);
     CHECK(test_issue43_two_level_security_access() == 0);
     CHECK(test_issue44_workbook_dids() == 0);
+    CHECK(test_issue45_workbook_snapshot_record() == 0);
     CHECK(test_issue46_workbook_routines() == 0);
     CHECK(test_issue37_clear_sequence_and_status_masks() == 0);
     CHECK(test_issue38_dtc_lifecycle_engine() == 0);
