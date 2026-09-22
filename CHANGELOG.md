@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.15.55 — 2026-09-22
+
+- Correct the Common 1.19.23 dependency metadata exposed by the 0.15.54 matrix: the submodule was already pinned to `a9cf2957cffeefe6001830916b8a32c2ef58a551`, while LINK's CMake invariant still named Common 1.19.22 / the previous commit.
+- Carry forward the fully qualified DTC lifecycle engine, STM32 tester/server clarification, clear/session regression, exact issue-27 Cube-main qualification and release-race fix.
+- Keep the dependency invariant strict: configuration fails if either the Common version or exact git revision disagrees with LINK's declared pin.
+
 ## 0.15.54 — 2026-09-22
 
 - Pin LINK to Infiltratr Common 1.19.23 at a9cf2957cffe, preserving the fully qualified 0.15.53 DTC lifecycle and STM32 fixes on the newest shared foundation.
