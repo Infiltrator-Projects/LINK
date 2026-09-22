@@ -35,15 +35,15 @@ static const LinkUdsDtcLifecycleDefinition
 stm32f103_dtc_definitions[LINK_STM32F103_UDS_DTC_COUNT] = {
     {
         UINT32_C(0x123456), 0x33U, 0x20U, 1U,
-        64, -64, 64U, 64U, 2U, 3U
+        64U, 64U, 2U, 3U
     },
     {
         UINT32_C(0xabcdef), 0x33U, 0x40U, 2U,
-        64, -64, 64U, 64U, 2U, 3U
+        64U, 64U, 2U, 3U
     },
     {
         UINT32_C(0xd00d01), 0x33U, 0x80U, 3U,
-        64, -64, 64U, 64U, 2U, 3U
+        64U, 64U, 2U, 3U
     }
 };
 
@@ -282,6 +282,7 @@ static void stm32f103_hydrate_dtc_lifecycle(LinkStm32F103UdsEcu *ecu)
         lifecycle->failure_cycle_count = ecu->state.dtc_failure_cycles[index];
         lifecycle->tested_this_cycle = false;
         lifecycle->failed_this_cycle = false;
+        lifecycle->passed_this_cycle = false;
     }
 }
 
@@ -318,8 +319,13 @@ static void stm32f103_refresh_dtc_store(LinkStm32F103UdsEcu *ecu)
         detail->code = definition->code;
         detail->severity = definition->severity;
         detail->functional_unit = definition->functional_unit;
-        detail->fault_detection_counter =
-            (uint8_t)lifecycle->fault_detection_counter;
+        {
+            uint8_t reportable_counter = 0U;
+            detail->fault_detection_counter =
+                link_uds_dtc_lifecycle_reportable_fault_counter(
+                    lifecycle, &reportable_counter)
+                    ? reportable_counter : 0U;
+        }
         detail->first_test_failed_sequence = (uint32_t)(index + 1U);
         detail->confirmed_sequence = (uint32_t)(index + 2U);
         detail->mirror_memory = index != 2U;
@@ -668,6 +674,8 @@ static LinkUdsServerHandlerResult stm32f103_clear_dtc(
     const LinkUdsServerRequest *request)
 {
     LinkStm32F103PersistentState old_state;
+    LinkUdsDtcLifecycleState
+        old_lifecycle[LINK_STM32F103_UDS_DTC_COUNT];
     uint32_t group;
     size_t index;
     bool matched = false;
@@ -677,6 +685,7 @@ static LinkUdsServerHandlerResult stm32f103_clear_dtc(
             ((uint32_t)request->pdu[2] << 8U) |
             request->pdu[3];
     old_state = ecu->state;
+    memcpy(old_lifecycle, ecu->dtc_lifecycle, sizeof(old_lifecycle));
     for (index = 0U; index < LINK_STM32F103_UDS_DTC_COUNT; ++index) {
         if (!stm32f103_group_matches(group, stm32f103_dtc_codes[index])) {
             continue;
@@ -688,10 +697,12 @@ static LinkUdsServerHandlerResult stm32f103_clear_dtc(
     }
     if (!matched) {
         ecu->state = old_state;
+        memcpy(ecu->dtc_lifecycle, old_lifecycle, sizeof(old_lifecycle));
         return stm32f103_out_of_range();
     }
     if (!link_stm32f103_uds_ecu_flush(ecu)) {
         ecu->state = old_state;
+        memcpy(ecu->dtc_lifecycle, old_lifecycle, sizeof(old_lifecycle));
         stm32f103_refresh_dtc_store(ecu);
         return link_uds_server_handler_negative(
             LINK_UDS_NRC_GENERAL_PROGRAMMING_FAILURE);
@@ -1457,6 +1468,7 @@ bool link_stm32f103_uds_ecu_report_dtc(
                 : 0U;
         ecu->dtc_lifecycle[index].tested_this_cycle = false;
         ecu->dtc_lifecycle[index].failed_this_cycle = false;
+        ecu->dtc_lifecycle[index].passed_this_cycle = false;
         stm32f103_sync_dtc_lifecycle(ecu, index);
         ecu->state.dtc_permanent[index] = permanent_status ? 1U : 0U;
         if (!link_stm32f103_uds_ecu_flush(ecu)) {
