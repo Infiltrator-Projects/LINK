@@ -470,24 +470,11 @@ static int test_issue37_clear_sequence_and_status_masks(void)
     config = test_config(&platform);
     CHECK(link_stm32f103_uds_ecu_init(&ecu, &config));
 
-    CHECK(link_stm32f103_uds_ecu_handle(
-        &ecu, NULL, clear_all, sizeof(clear_all),
-        response, sizeof(response), &response_length) ==
-        LINK_UDS_SERVER_RESULT_NEGATIVE);
-    CHECK(response_length == 3U);
-    CHECK(response[0] == 0x7fU && response[1] == 0x14U &&
-          response[2] == LINK_UDS_NRC_SERVICE_NOT_SUPPORTED_IN_ACTIVE_SESSION);
-
-    CHECK(expect_positive(
-        &ecu, count_all, sizeof(count_all),
-        response, sizeof(response), &response_length) == 0);
-    CHECK(link_uds_decode_read_dtc_information_response(
-        LINK_UDS_DTC_REPORT_NUMBER_BY_STATUS_MASK,
-        response, response_length, &decoded) == LINK_UDS_RESULT_OK);
-    CHECK(decoded.dtc_count_available && decoded.dtc_count == 3U);
-
-    CHECK(enter_programming_and_unlock(
-        &ecu, response, sizeof(response), &response_length) == 0);
+    /*
+     * LINK #40 corrected the reference policy: ISO 14229 permits 0x14 in the
+     * default session, so the all-group clear must succeed without an invented
+     * SecurityAccess prerequisite.
+     */
     CHECK(expect_positive(
         &ecu, clear_all, sizeof(clear_all),
         response, sizeof(response), &response_length) == 0);
@@ -501,6 +488,10 @@ static int test_issue37_clear_sequence_and_status_masks(void)
         response, response_length, &decoded) == LINK_UDS_RESULT_OK);
     CHECK(decoded.dtc_count_available && decoded.dtc_count == 0U);
 
+    /*
+     * FF still matches the not-completed-since-clear and
+     * not-completed-this-cycle bits deliberately set by a successful clear.
+     */
     CHECK(expect_positive(
         &ecu, count_all, sizeof(count_all),
         response, sizeof(response), &response_length) == 0);
@@ -647,11 +638,9 @@ static int test_policy_blocks_unsafe_default_session(void)
     config = test_config(&platform);
     CHECK(link_stm32f103_uds_ecu_init(&ecu, &config));
 
-    CHECK(link_stm32f103_uds_ecu_handle(
-        &ecu, NULL, clear, sizeof(clear),
-        response, sizeof(response), &response_length) ==
-        LINK_UDS_SERVER_RESULT_NEGATIVE);
-    CHECK(response[2] == LINK_UDS_NRC_SERVICE_NOT_SUPPORTED_IN_ACTIVE_SESSION);
+    CHECK(expect_positive(
+        &ecu, clear, sizeof(clear),
+        response, sizeof(response), &response_length) == 0);
 
     CHECK(link_stm32f103_uds_ecu_handle(
         &ecu, NULL, write_memory, sizeof(write_memory),
