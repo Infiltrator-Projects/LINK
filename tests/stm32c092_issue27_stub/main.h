@@ -2,7 +2,6 @@
 #ifndef LINK_TEST_STM32C092_ISSUE27_MAIN_H
 #define LINK_TEST_STM32C092_ISSUE27_MAIN_H
 #include <stdint.h>
-typedef enum { HAL_OK = 0, HAL_ERROR = 1 } HAL_StatusTypeDef;
 typedef struct { uint32_t OscillatorType; uint32_t HSEState; } RCC_OscInitTypeDef;
 typedef struct {
     uint32_t ClockType;
@@ -20,10 +19,11 @@ typedef struct {
 #define RCC_SYSCLKSOURCE_HSE UINT32_C(1)
 #define RCC_SYSCLK_DIV1 UINT32_C(1)
 #define RCC_HCLK_DIV1 UINT32_C(1)
+#define RCC_APB1_DIV1 UINT32_C(1)
 #define __HAL_FLASH_SET_LATENCY(x) ((void)(x))
 void HAL_Init(void);
-HAL_StatusTypeDef HAL_RCC_OscConfig(RCC_OscInitTypeDef *config);
-HAL_StatusTypeDef HAL_RCC_ClockConfig(RCC_ClkInitTypeDef *config, uint32_t latency);
+int HAL_RCC_OscConfig(RCC_OscInitTypeDef *config);
+int HAL_RCC_ClockConfig(RCC_ClkInitTypeDef *config, uint32_t latency);
 void __disable_irq(void);
 void Error_Handler(void);
 #endif
