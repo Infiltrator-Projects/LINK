@@ -35,15 +35,15 @@ static const LinkUdsDtcLifecycleDefinition
 stm32f103_dtc_definitions[LINK_STM32F103_UDS_DTC_COUNT] = {
     {
         UINT32_C(0x123456), 0x33U, 0x20U, 1U,
-        64, -64, 16U, 16U, 2U, 3U
+        64, -64, 64U, 64U, 2U, 3U
     },
     {
         UINT32_C(0xabcdef), 0x33U, 0x40U, 2U,
-        64, -64, 16U, 16U, 2U, 3U
+        64, -64, 64U, 64U, 2U, 3U
     },
     {
         UINT32_C(0xd00d01), 0x33U, 0x80U, 3U,
-        64, -64, 16U, 16U, 2U, 3U
+        64, -64, 64U, 64U, 2U, 3U
     }
 };
 
