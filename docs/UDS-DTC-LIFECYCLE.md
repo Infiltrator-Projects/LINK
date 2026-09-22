@@ -76,6 +76,12 @@ configured aging threshold is reached, `confirmedDTC` is cleared.
 A cycle in which the monitor never reaches fully failed or fully passed does
 not confirm or age the DTC.
 
+The portable definitions contain all eight ISO status bits, but the STM32F103
+reference lifecycle itself owns bits 0 through 6 only. It does not model a
+warning-indicator request, so that application advertises a DTC status
+availability mask of `0x7F`, not `0xFF`. A product that actually owns a
+warning indicator can advertise bit 7 through its own DTC store.
+
 ## ClearDiagnosticInformation
 
 `link_uds_dtc_lifecycle_clear()` resets:
@@ -109,6 +115,15 @@ Monitor samples are **RAM-local**. LINK does not erase/program the STM32 flash
 journal every time a diagnostic monitor runs. The reference ECU persists the
 completed-cycle state once at the operation-cycle boundary, plus explicit
 state-changing diagnostic operations such as ClearDiagnosticInformation.
+
+The flash journal is slot-based and crash-consistent. A slot consumes
+`ceil(sizeof(LinkStm32F103PersistentState) / page_size)` reserved pages; the
+page ring must contain at least two complete slots. LINK erases/programs the
+next complete slot, reads it back and validates the full-state CRC before
+publishing it as the active generation. A torn or corrupt multi-page
+generation is therefore rejected on reboot and the previous valid slot remains
+recoverable. The two-page journal remains a compatibility case when the whole
+state fits in one physical page.
 
 For demonstration, extended-data record 1 contains four application-defined
 bytes:

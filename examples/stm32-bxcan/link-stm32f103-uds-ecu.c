@@ -3,9 +3,10 @@
  * @file link-stm32f103-uds-ecu.c
  * @brief Complete bounded STM32F103 UDS ECU reference application core.
  *
- * The implementation is intentionally target-safe: persistent writes are
- * constrained to two caller-reserved 2 KiB pages and programming services
- * operate on a 256-byte non-executable sandbox. Products can replace those
+ * The implementation is intentionally target-safe: persistent writes use
+ * caller-reserved flash pages arranged as at least two CRC-verified state
+ * slots, and a state slot may span multiple physical pages. Programming
+ * services operate on a 256-byte non-executable sandbox. Products can replace those
  * handlers with real bootloader/application programming after applying their
  * own signing, rollback and flash-layout policy.
  */

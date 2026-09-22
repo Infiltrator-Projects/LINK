@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.15.56 — 2026-09-22
+
+- Resolve LINK #39's remaining storage-capacity defect by changing the STM32F103 journal from one-state-per-page rotation to crash-consistent multi-page generation slots; large persistent state can span as many reserved pages as required, with at least two complete slots retained for rollback.
+- Add forced multi-page regression coverage that writes across two physical pages, reboots successfully, corrupts the newest slot and proves recovery to the previous CRC-valid generation while retaining the existing N-page wear-distribution test.
+- Resolve LINK #40's portable-reference policy mismatch: ClearDiagnosticInformation (0x14) and ReadDTCInformation (0x19) are exercised across Default, Programming, Extended and SafetySystemDiagnostic sessions without an invented SecurityAccess prerequisite; 0x14 is also proven usable after SecurityAccess raises the active level.
+- Resolve LINK #41's STM32F103 status-advertisement mismatch by reporting DTCStatusAvailabilityMask 0x7F because the reference lifecycle owns bits 0..6 but does not model warningIndicatorRequested; generic 0xFF request-mask support is unchanged.
+- Correct the STM32 documentation and issue #37 interpretation carried forward from 0.15.51: a default-session all-group clear now returns positive 0x54 in the portable reference, while the post-clear 0x50 status still means `19 01 FF` can count definitions and a fault-oriented mask such as 0x0D is the correct cleared-fault check.
+- Full pre-release qualification passed on Linux strict C11, ASan/UBSan, Windows strict C11, macOS strict C11, STM32 Cortex-M cross-compile and native Linux adapter-provider coverage before this release metadata was cut.
+
 ## 0.15.55 — 2026-09-22
 
 - Correct the Common 1.19.23 dependency metadata exposed by the 0.15.54 matrix: the submodule was already pinned to `a9cf2957cffeefe6001830916b8a32c2ef58a551`, while LINK's CMake invariant still named Common 1.19.22 / the previous commit.

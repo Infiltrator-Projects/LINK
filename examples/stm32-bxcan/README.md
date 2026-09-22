@@ -187,21 +187,31 @@ than extending the VIN tester into a second ad-hoc protocol stack. See
 The F103 ECU core wires all 27 standard LINK UDS service IDs, routes the full
 ReadDTCInformation surface through the shared rich DTC handler, implements
 persistent ClearDiagnosticInformation state, and stores bounded application
-state in an alternating two-page CRC-protected flash journal. Programming
-services are deliberately limited to a non-executable data sandbox; production
-firmware programming still belongs to the target bootloader/security policy.
+state in a CRC-protected flash journal. The journal supports an arbitrary
+caller-supplied page ring and groups enough consecutive pages into each
+generation slot to hold the complete persistent state. At least two complete
+slots are required, so a larger DTC/state image is no longer restricted to one
+2 KiB page. The previous two-page layout remains the default when the state
+fits in one page. Programming services are deliberately limited to a
+non-executable data sandbox; production firmware programming still belongs to
+the target bootloader/security policy.
 
-The supplied Cube integration targets CAN1 on PA11/PA12 at 500 kbit/s and
-reserves the final two 2 KiB pages of a 512 KiB device.
+The supplied Cube integration targets CAN1 on PA11/PA12 at 500 kbit/s. Its
+minimal default still reserves the final two 2 KiB pages of a 512 KiB device;
+larger applications can provide more reserved page addresses through
+`LinkStm32F103FlashStore.page_addresses/page_count`.
 
 
 ## ClearDiagnosticInformation and ReadDTCInformation verification
 
-The STM32F103 reference follows the ISO session table for
-`0x14 ClearDiagnosticInformation`: the service is available in the default and
-non-default diagnostic sessions and LINK does not invent a SecurityAccess
-requirement for it. Product/OEM policy can still add a stronger restriction
-outside the portable reference when required.
+The STM32F103 reference follows the ISO session/security table for
+`0x14 ClearDiagnosticInformation` and `0x19 ReadDTCInformation`: both are
+available in Default, Programming, Extended and SafetySystemDiagnostic sessions
+without requiring SecurityAccess. The reference explicitly tests 0x14/0x19 at
+security level 0 and 0x14 after SecurityAccess has raised the active level, so
+"not security-gated" cannot accidentally mean "unsecured level only".
+Product/OEM policy can still add a stronger restriction outside the portable
+reference when required.
 
 A successful all-group clear:
 
