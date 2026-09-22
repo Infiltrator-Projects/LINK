@@ -16,22 +16,50 @@
     } \
 } while (0)
 
+#define TEST_STATE_PAGE_C (LINK_STM32F103_UDS_STATE_PAGE_A - UINT32_C(0x1000))
+#define TEST_STATE_PAGE_D (LINK_STM32F103_UDS_STATE_PAGE_A - UINT32_C(0x0800))
+
 typedef struct {
     uint8_t page_a[LINK_STM32F103_FLASH_PAGE_BYTES];
     uint8_t page_b[LINK_STM32F103_FLASH_PAGE_BYTES];
+    uint8_t page_c[LINK_STM32F103_FLASH_PAGE_BYTES];
+    uint8_t page_d[LINK_STM32F103_FLASH_PAGE_BYTES];
+    unsigned int erase_count[4U];
     uint32_t now_ms;
 } TestPlatform;
+
+static const uint32_t test_wear_pages[4U] = {
+    TEST_STATE_PAGE_C,
+    TEST_STATE_PAGE_D,
+    LINK_STM32F103_UDS_STATE_PAGE_A,
+    LINK_STM32F103_UDS_STATE_PAGE_B
+};
 
 static const uint8_t test_security_key[LINK_STM32F103_UDS_SECURITY_KEY_BYTES] = {
     0x2bU,0x7eU,0x15U,0x16U,0x28U,0xaeU,0xd2U,0xa6U,
     0xabU,0xf7U,0x15U,0x88U,0x09U,0xcfU,0x4fU,0x3cU
 };
 
+static int test_page_index(uint32_t address)
+{
+    if (address == TEST_STATE_PAGE_C) return 0;
+    if (address == TEST_STATE_PAGE_D) return 1;
+    if (address == LINK_STM32F103_UDS_STATE_PAGE_A) return 2;
+    if (address == LINK_STM32F103_UDS_STATE_PAGE_B) return 3;
+    return -1;
+}
+
 static uint8_t *test_page(TestPlatform *platform, uint32_t address)
 {
-    if (address == LINK_STM32F103_UDS_STATE_PAGE_A) return platform->page_a;
-    if (address == LINK_STM32F103_UDS_STATE_PAGE_B) return platform->page_b;
-    return NULL;
+    const int index = test_page_index(address);
+    if (platform == NULL) return NULL;
+    switch (index) {
+    case 0: return platform->page_c;
+    case 1: return platform->page_d;
+    case 2: return platform->page_a;
+    case 3: return platform->page_b;
+    default: return NULL;
+    }
 }
 
 static bool test_flash_read(
@@ -50,8 +78,10 @@ static bool test_flash_erase(void *context, uint32_t address)
 {
     TestPlatform *platform = (TestPlatform *)context;
     uint8_t *page = test_page(platform, address);
-    if (page == NULL) return false;
+    const int index = test_page_index(address);
+    if (page == NULL || index < 0) return false;
     memset(page, 0xff, sizeof(platform->page_a));
+    platform->erase_count[(size_t)index]++;
     return true;
 }
 
@@ -381,6 +411,47 @@ static int test_persistence_and_dtc_clear(void)
     return 0;
 }
 
+static int test_n_page_wear_level_rotation(void)
+{
+    TestPlatform platform;
+    LinkStm32F103UdsEcu ecu;
+    LinkStm32F103UdsEcu reloaded;
+    LinkStm32F103UdsEcuConfig config;
+    unsigned int i;
+
+    memset(&platform, 0, sizeof(platform));
+    memset(platform.page_a, 0xff, sizeof(platform.page_a));
+    memset(platform.page_b, 0xff, sizeof(platform.page_b));
+    memset(platform.page_c, 0xff, sizeof(platform.page_c));
+    memset(platform.page_d, 0xff, sizeof(platform.page_d));
+    platform.now_ms = 50U;
+
+    config = test_config(&platform);
+    config.flash.page_addresses = test_wear_pages;
+    config.flash.page_count =
+        sizeof(test_wear_pages) / sizeof(test_wear_pages[0]);
+
+    CHECK(link_stm32f103_uds_ecu_init(&ecu, &config));
+    CHECK(ecu.active_page == TEST_STATE_PAGE_C);
+    CHECK(ecu.state.generation == 1U);
+
+    for (i = 0U; i < 7U; ++i) {
+        CHECK(link_stm32f103_uds_ecu_flush(&ecu));
+    }
+
+    CHECK(ecu.state.generation == 8U);
+    CHECK(ecu.active_page == LINK_STM32F103_UDS_STATE_PAGE_B);
+    CHECK(platform.erase_count[0U] == 2U);
+    CHECK(platform.erase_count[1U] == 2U);
+    CHECK(platform.erase_count[2U] == 2U);
+    CHECK(platform.erase_count[3U] == 2U);
+
+    CHECK(link_stm32f103_uds_ecu_init(&reloaded, &config));
+    CHECK(reloaded.state.generation == ecu.state.generation);
+    CHECK(reloaded.active_page == ecu.active_page);
+    return 0;
+}
+
 static int test_issue37_clear_sequence_and_status_masks(void)
 {
     TestPlatform platform;
@@ -594,6 +665,7 @@ int main(void)
 {
     CHECK(test_all_27_service_surfaces() == 0);
     CHECK(test_persistence_and_dtc_clear() == 0);
+    CHECK(test_n_page_wear_level_rotation() == 0);
     CHECK(test_issue37_clear_sequence_and_status_masks() == 0);
     CHECK(test_issue38_dtc_lifecycle_engine() == 0);
     CHECK(test_policy_blocks_unsafe_default_session() == 0);
