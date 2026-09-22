@@ -1,6 +1,1 @@
-#ifndef LINK_VERSION_H
-#define LINK_VERSION_H
-
-#define LINK_VERSION_STRING "0.15.50"
-
-#endif
+#ifndef LINK_VERSION_H\n#define LINK_VERSION_H\n\n#define LINK_VERSION_STRING "0.15.51"\n\n#endif\n
