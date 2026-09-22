@@ -45,12 +45,20 @@ typedef struct {
      * Legacy two-page mode remains supported through page_a/page_b.
      *
      * For wear-levelled operation, provide page_addresses/page_count with at
-     * least two distinct reserved pages. LINK then rotates each complete,
-     * CRC-verified generation to the next page in the ring instead of
-     * repeatedly erasing the same two pages.
+     * least two crash-consistent state slots. A slot uses as many flash pages
+     * as are required to hold LinkStm32F103PersistentState; LINK rotates each
+     * complete, CRC-verified generation to the next slot instead of repeatedly
+     * erasing the same two pages. This means the persistent state may span
+     * multiple physical pages instead of being artificially capped at one.
      *
-     * The address array is borrowed for the lifetime of the ECU object and
-     * must remain valid while the ECU is in use.
+     * page_addresses defines the ordered pages that make up the slot ring.
+     * The number of usable slots is:
+     *
+     *   page_count / ceil(sizeof(LinkStm32F103PersistentState) / page_size)
+     *
+     * and must be at least two. Any trailing pages that do not form a complete
+     * slot are deliberately ignored. The address array is borrowed for the
+     * lifetime of the ECU object and must remain valid while the ECU is in use.
      */
     uint32_t page_a_address;
     uint32_t page_b_address;

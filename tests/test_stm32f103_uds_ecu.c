@@ -452,6 +452,66 @@ static int test_n_page_wear_level_rotation(void)
     return 0;
 }
 
+static int test_multi_page_persistent_state_slots(void)
+{
+    TestPlatform platform;
+    LinkStm32F103UdsEcu ecu;
+    LinkStm32F103UdsEcu reloaded;
+    LinkStm32F103UdsEcuConfig config;
+
+    memset(&platform, 0, sizeof(platform));
+    memset(platform.page_a, 0xff, sizeof(platform.page_a));
+    memset(platform.page_b, 0xff, sizeof(platform.page_b));
+    memset(platform.page_c, 0xff, sizeof(platform.page_c));
+    memset(platform.page_d, 0xff, sizeof(platform.page_d));
+    platform.now_ms = 75U;
+
+    config = test_config(&platform);
+    config.flash.page_addresses = test_wear_pages;
+    config.flash.page_count =
+        sizeof(test_wear_pages) / sizeof(test_wear_pages[0]);
+    config.flash.page_size = UINT32_C(256);
+
+    CHECK(sizeof(LinkStm32F103PersistentState) > config.flash.page_size);
+    CHECK(sizeof(LinkStm32F103PersistentState) <=
+          (size_t)config.flash.page_size * 2U);
+
+    /*
+     * Four physical pages now form two crash-consistent two-page slots.
+     * Initial publication uses C+D, then the next generation uses A+B.
+     */
+    CHECK(link_stm32f103_uds_ecu_init(&ecu, &config));
+    CHECK(ecu.active_page == TEST_STATE_PAGE_C);
+    CHECK(ecu.state.generation == 1U);
+    CHECK(platform.erase_count[0U] == 1U);
+    CHECK(platform.erase_count[1U] == 1U);
+    CHECK(platform.erase_count[2U] == 0U);
+    CHECK(platform.erase_count[3U] == 0U);
+
+    memset(ecu.state.sandbox, 0x5a, sizeof(ecu.state.sandbox));
+    CHECK(link_stm32f103_uds_ecu_flush(&ecu));
+    CHECK(ecu.active_page == LINK_STM32F103_UDS_STATE_PAGE_A);
+    CHECK(ecu.state.generation == 2U);
+    CHECK(platform.erase_count[2U] == 1U);
+    CHECK(platform.erase_count[3U] == 1U);
+
+    CHECK(link_stm32f103_uds_ecu_init(&reloaded, &config));
+    CHECK(reloaded.active_page == LINK_STM32F103_UDS_STATE_PAGE_A);
+    CHECK(reloaded.state.generation == 2U);
+    CHECK(reloaded.state.sandbox[0U] == 0x5aU);
+    CHECK(reloaded.state.sandbox[sizeof(reloaded.state.sandbox) - 1U] == 0x5aU);
+
+    /*
+     * Corrupt the second page of the newest slot. Its whole-state CRC must
+     * reject that torn/corrupt generation and recover the previous C+D slot.
+     */
+    platform.page_b[0U] ^= UINT8_C(0x01);
+    CHECK(link_stm32f103_uds_ecu_init(&reloaded, &config));
+    CHECK(reloaded.active_page == TEST_STATE_PAGE_C);
+    CHECK(reloaded.state.generation == 1U);
+    return 0;
+}
+
 static int test_issue37_clear_sequence_and_status_masks(void)
 {
     TestPlatform platform;
@@ -620,6 +680,120 @@ static int test_issue38_dtc_lifecycle_engine(void)
     return 0;
 }
 
+static int test_issue40_clear_and_read_dtc_policy(void)
+{
+    TestPlatform platform;
+    LinkStm32F103UdsEcu ecu;
+    LinkStm32F103UdsEcuConfig config;
+    uint8_t response[64U];
+    size_t response_length = 0U;
+    const uint8_t clear[] = {0x14U,0xffU,0xffU,0xffU};
+    const uint8_t read_dtc[] = {0x19U,0x01U,0x01U};
+    const uint8_t extended[] = {0x10U,0x03U};
+    const uint8_t programming[] = {0x10U,0x02U};
+    const uint8_t safety[] = {0x10U,0x04U};
+
+    memset(&platform, 0, sizeof(platform));
+    memset(platform.page_a, 0xff, sizeof(platform.page_a));
+    memset(platform.page_b, 0xff, sizeof(platform.page_b));
+    config = test_config(&platform);
+    CHECK(link_stm32f103_uds_ecu_init(&ecu, &config));
+
+    /* DefaultSession, security level 0. */
+    CHECK(expect_positive(
+        &ecu, read_dtc, sizeof(read_dtc),
+        response, sizeof(response), &response_length) == 0);
+    CHECK(expect_positive(
+        &ecu, clear, sizeof(clear),
+        response, sizeof(response), &response_length) == 0);
+
+    /* ExtendedDiagnosticSession, still security level 0. */
+    CHECK(expect_positive(
+        &ecu, extended, sizeof(extended),
+        response, sizeof(response), &response_length) == 0);
+    CHECK(expect_positive(
+        &ecu, read_dtc, sizeof(read_dtc),
+        response, sizeof(response), &response_length) == 0);
+    CHECK(expect_positive(
+        &ecu, clear, sizeof(clear),
+        response, sizeof(response), &response_length) == 0);
+
+    /* SafetySystemDiagnosticSession, security level 0. */
+    link_uds_server_reset_session(link_stm32f103_uds_ecu_server(&ecu));
+    CHECK(expect_positive(
+        &ecu, safety, sizeof(safety),
+        response, sizeof(response), &response_length) == 0);
+    CHECK(expect_positive(
+        &ecu, read_dtc, sizeof(read_dtc),
+        response, sizeof(response), &response_length) == 0);
+    CHECK(expect_positive(
+        &ecu, clear, sizeof(clear),
+        response, sizeof(response), &response_length) == 0);
+
+    /*
+     * ProgrammingSession with SecurityAccess level 1 proves 0x14 remains
+     * available after unlocking as well; the ALL security mask is not merely
+     * an alias for the unsecured level.
+     */
+    link_uds_server_reset_session(link_stm32f103_uds_ecu_server(&ecu));
+    CHECK(expect_positive(
+        &ecu, extended, sizeof(extended),
+        response, sizeof(response), &response_length) == 0);
+    CHECK(expect_positive(
+        &ecu, programming, sizeof(programming),
+        response, sizeof(response), &response_length) == 0);
+    link_uds_server_reset_session(link_stm32f103_uds_ecu_server(&ecu));
+    CHECK(enter_programming_and_unlock(
+        &ecu, response, sizeof(response), &response_length) == 0);
+    CHECK(expect_positive(
+        &ecu, read_dtc, sizeof(read_dtc),
+        response, sizeof(response), &response_length) == 0);
+    CHECK(expect_positive(
+        &ecu, clear, sizeof(clear),
+        response, sizeof(response), &response_length) == 0);
+    return 0;
+}
+
+static int test_issue41_status_mask_availability(void)
+{
+    TestPlatform platform;
+    LinkStm32F103UdsEcu ecu;
+    LinkStm32F103UdsEcuConfig config;
+    LinkUdsDtcInformationResponse decoded;
+    uint8_t response[64U];
+    size_t response_length = 0U;
+    const uint8_t warning_only[] = {0x19U,0x01U,0x80U};
+    const uint8_t all_statuses[] = {0x19U,0x01U,0xffU};
+
+    memset(&platform, 0, sizeof(platform));
+    memset(platform.page_a, 0xff, sizeof(platform.page_a));
+    memset(platform.page_b, 0xff, sizeof(platform.page_b));
+    config = test_config(&platform);
+    CHECK(link_stm32f103_uds_ecu_init(&ecu, &config));
+
+    CHECK(ecu.dtc_store.status_availability_mask == UINT8_C(0x7f));
+
+    CHECK(expect_positive(
+        &ecu, warning_only, sizeof(warning_only),
+        response, sizeof(response), &response_length) == 0);
+    CHECK(link_uds_decode_read_dtc_information_response(
+        LINK_UDS_DTC_REPORT_NUMBER_BY_STATUS_MASK,
+        response, response_length, &decoded) == LINK_UDS_RESULT_OK);
+    CHECK(decoded.status_availability_mask_available);
+    CHECK(decoded.status_availability_mask == UINT8_C(0x7f));
+    CHECK(decoded.dtc_count_available && decoded.dtc_count == 0U);
+
+    CHECK(expect_positive(
+        &ecu, all_statuses, sizeof(all_statuses),
+        response, sizeof(response), &response_length) == 0);
+    CHECK(link_uds_decode_read_dtc_information_response(
+        LINK_UDS_DTC_REPORT_NUMBER_BY_STATUS_MASK,
+        response, response_length, &decoded) == LINK_UDS_RESULT_OK);
+    CHECK(decoded.status_availability_mask == UINT8_C(0x7f));
+    CHECK(decoded.dtc_count_available && decoded.dtc_count == 3U);
+    return 0;
+}
+
 static int test_policy_blocks_unsafe_default_session(void)
 {
     TestPlatform platform;
@@ -655,8 +829,11 @@ int main(void)
     CHECK(test_all_27_service_surfaces() == 0);
     CHECK(test_persistence_and_dtc_clear() == 0);
     CHECK(test_n_page_wear_level_rotation() == 0);
+    CHECK(test_multi_page_persistent_state_slots() == 0);
     CHECK(test_issue37_clear_sequence_and_status_masks() == 0);
     CHECK(test_issue38_dtc_lifecycle_engine() == 0);
+    CHECK(test_issue40_clear_and_read_dtc_policy() == 0);
+    CHECK(test_issue41_status_mask_availability() == 0);
     CHECK(test_policy_blocks_unsafe_default_session() == 0);
     puts("STM32F103 complete UDS ECU tests passed");
     return EXIT_SUCCESS;

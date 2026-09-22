@@ -295,6 +295,121 @@ static bool stm32f103_flash_page_address(
     return false;
 }
 
+static size_t stm32f103_state_pages_per_slot(
+    const LinkStm32F103FlashStore *flash)
+{
+    const size_t state_bytes = sizeof(LinkStm32F103PersistentState);
+    size_t page_bytes;
+
+    if (flash == NULL || flash->page_size == 0U) return 0U;
+    page_bytes = (size_t)flash->page_size;
+    return state_bytes / page_bytes +
+           ((state_bytes % page_bytes) != 0U ? 1U : 0U);
+}
+
+static size_t stm32f103_state_slot_count(
+    const LinkStm32F103FlashStore *flash)
+{
+    const size_t pages_per_slot = stm32f103_state_pages_per_slot(flash);
+    if (pages_per_slot == 0U) return 0U;
+    return stm32f103_flash_page_count(flash) / pages_per_slot;
+}
+
+static bool stm32f103_state_slot_first_address(
+    const LinkStm32F103FlashStore *flash,
+    size_t slot_index,
+    uint32_t *address)
+{
+    const size_t pages_per_slot = stm32f103_state_pages_per_slot(flash);
+    const size_t slot_count = stm32f103_state_slot_count(flash);
+
+    if (pages_per_slot == 0U || slot_index >= slot_count) return false;
+    return stm32f103_flash_page_address(
+        flash, slot_index * pages_per_slot, address);
+}
+
+static bool stm32f103_read_state_slot(
+    const LinkStm32F103FlashStore *flash,
+    size_t slot_index,
+    LinkStm32F103PersistentState *state)
+{
+    const size_t pages_per_slot = stm32f103_state_pages_per_slot(flash);
+    const size_t slot_count = stm32f103_state_slot_count(flash);
+    uint8_t *bytes = (uint8_t *)state;
+    size_t remaining = sizeof(*state);
+    size_t offset = 0U;
+    size_t page;
+
+    if (flash == NULL || state == NULL ||
+        pages_per_slot == 0U || slot_index >= slot_count) {
+        return false;
+    }
+
+    for (page = 0U; page < pages_per_slot; ++page) {
+        uint32_t address = 0U;
+        const size_t chunk =
+            remaining < (size_t)flash->page_size
+                ? remaining : (size_t)flash->page_size;
+        if (!stm32f103_flash_page_address(
+                flash, slot_index * pages_per_slot + page, &address) ||
+            !flash->read(flash->context, address, bytes + offset, chunk)) {
+            return false;
+        }
+        offset += chunk;
+        remaining -= chunk;
+    }
+    return remaining == 0U;
+}
+
+static bool stm32f103_write_state_slot(
+    const LinkStm32F103FlashStore *flash,
+    size_t slot_index,
+    const LinkStm32F103PersistentState *state)
+{
+    const size_t pages_per_slot = stm32f103_state_pages_per_slot(flash);
+    const size_t slot_count = stm32f103_state_slot_count(flash);
+    const uint8_t *bytes = (const uint8_t *)state;
+    size_t remaining = sizeof(*state);
+    size_t offset = 0U;
+    size_t page;
+
+    if (flash == NULL || state == NULL ||
+        pages_per_slot == 0U || slot_index >= slot_count) {
+        return false;
+    }
+
+    /*
+     * Erase the entire destination slot before programming any part of the
+     * new generation. The previous slot remains untouched until the new full
+     * state has been programmed and CRC-verified, preserving rollback after a
+     * torn multi-page write.
+     */
+    for (page = 0U; page < pages_per_slot; ++page) {
+        uint32_t address = 0U;
+        if (!stm32f103_flash_page_address(
+                flash, slot_index * pages_per_slot + page, &address) ||
+            !flash->erase_page(flash->context, address)) {
+            return false;
+        }
+    }
+
+    for (page = 0U; page < pages_per_slot; ++page) {
+        uint32_t address = 0U;
+        const size_t chunk =
+            remaining < (size_t)flash->page_size
+                ? remaining : (size_t)flash->page_size;
+        if (!stm32f103_flash_page_address(
+                flash, slot_index * pages_per_slot + page, &address) ||
+            !flash->program(
+                flash->context, address, bytes + offset, chunk)) {
+            return false;
+        }
+        offset += chunk;
+        remaining -= chunk;
+    }
+    return remaining == 0U;
+}
+
 static bool stm32f103_generation_newer(uint32_t candidate, uint32_t current)
 {
     return (int32_t)(candidate - current) > 0;
@@ -305,6 +420,8 @@ static bool stm32f103_flash_config_valid(
 {
     const LinkStm32F103FlashStore *flash;
     size_t count;
+    size_t pages_per_slot;
+    size_t slots;
     size_t i;
     size_t j;
 
@@ -317,13 +434,14 @@ static bool stm32f103_flash_config_valid(
     if (flash->read == NULL ||
         flash->erase_page == NULL ||
         flash->program == NULL ||
-        flash->page_size < sizeof(LinkStm32F103PersistentState) ||
         flash->page_size == 0U) {
         return false;
     }
 
     count = stm32f103_flash_page_count(flash);
-    if (count < 2U) return false;
+    pages_per_slot = stm32f103_state_pages_per_slot(flash);
+    slots = stm32f103_state_slot_count(flash);
+    if (count < 2U || pages_per_slot == 0U || slots < 2U) return false;
 
     for (i = 0U; i < count; ++i) {
         uint32_t address_i = 0U;
@@ -428,7 +546,20 @@ static void stm32f103_refresh_dtc_store(LinkStm32F103UdsEcu *ecu)
 
     ecu->dtc_store.records = ecu->dtc_records;
     ecu->dtc_store.record_count = LINK_STM32F103_UDS_DTC_COUNT;
-    ecu->dtc_store.status_availability_mask = LINK_UDS_DTC_STATUS_MASK_ALL;
+    /*
+     * The reference lifecycle owns ISO status bits 0..6. It does not model a
+     * warning-indicator request, so advertising bit 7 as available would be
+     * misleading. Product ECUs that own a warning indicator can provide a
+     * wider availability mask in their own DTC store.
+     */
+    ecu->dtc_store.status_availability_mask =
+        LINK_UDS_DTC_STATUS_TEST_FAILED |
+        LINK_UDS_DTC_STATUS_TEST_FAILED_THIS_OPERATION_CYCLE |
+        LINK_UDS_DTC_STATUS_PENDING_DTC |
+        LINK_UDS_DTC_STATUS_CONFIRMED_DTC |
+        LINK_UDS_DTC_STATUS_TEST_NOT_COMPLETED_SINCE_LAST_CLEAR |
+        LINK_UDS_DTC_STATUS_TEST_FAILED_SINCE_LAST_CLEAR |
+        LINK_UDS_DTC_STATUS_TEST_NOT_COMPLETED_THIS_OPERATION_CYCLE;
     ecu->dtc_store.severity_availability_mask = 0xffU;
     ecu->dtc_store.dtc_format_identifier = 0x01U;
     ecu->dtc_store.details = ecu->dtc_details;
@@ -518,10 +649,10 @@ bool link_stm32f103_uds_ecu_flush(LinkStm32F103UdsEcu *ecu)
     LinkStm32F103PersistentState candidate;
     LinkStm32F103PersistentState verify;
     const LinkStm32F103FlashStore *flash;
-    size_t count;
-    size_t active_index = 0U;
-    size_t target_index = 0U;
-    size_t index;
+    size_t slot_count;
+    size_t active_slot = 0U;
+    size_t target_slot;
+    size_t slot;
     bool active_found = false;
     uint32_t target = 0U;
 
@@ -530,18 +661,21 @@ bool link_stm32f103_uds_ecu_flush(LinkStm32F103UdsEcu *ecu)
     }
 
     flash = &ecu->config.flash;
-    count = stm32f103_flash_page_count(flash);
-    for (index = 0U; index < count; ++index) {
+    slot_count = stm32f103_state_slot_count(flash);
+    for (slot = 0U; slot < slot_count; ++slot) {
         uint32_t address = 0U;
-        if (!stm32f103_flash_page_address(flash, index, &address)) return false;
+        if (!stm32f103_state_slot_first_address(flash, slot, &address)) {
+            return false;
+        }
         if (address == ecu->active_page) {
-            active_index = index;
+            active_slot = slot;
             active_found = true;
             break;
         }
     }
-    target_index = active_found ? (active_index + 1U) % count : 0U;
-    if (!stm32f103_flash_page_address(flash, target_index, &target)) {
+    target_slot = active_found ? (active_slot + 1U) % slot_count : 0U;
+    if (!stm32f103_state_slot_first_address(
+            flash, target_slot, &target)) {
         return false;
     }
 
@@ -552,11 +686,8 @@ bool link_stm32f103_uds_ecu_flush(LinkStm32F103UdsEcu *ecu)
     candidate.crc32 = stm32f103_crc32(
         &candidate, offsetof(LinkStm32F103PersistentState, crc32));
 
-    if (!flash->erase_page(flash->context, target) ||
-        !flash->program(
-            flash->context, target, &candidate, sizeof(candidate)) ||
-        !flash->read(
-            flash->context, target, &verify, sizeof(verify)) ||
+    if (!stm32f103_write_state_slot(flash, target_slot, &candidate) ||
+        !stm32f103_read_state_slot(flash, target_slot, &verify) ||
         !stm32f103_state_valid(&verify) ||
         memcmp(&candidate, &verify, sizeof(candidate)) != 0) {
         return false;
@@ -573,18 +704,19 @@ static bool stm32f103_load_state(LinkStm32F103UdsEcu *ecu)
     LinkStm32F103PersistentState candidate;
     LinkStm32F103PersistentState newest = {0};
     const LinkStm32F103FlashStore *flash = &ecu->config.flash;
-    const size_t count = stm32f103_flash_page_count(flash);
-    size_t index;
+    const size_t slot_count = stm32f103_state_slot_count(flash);
+    size_t slot;
     uint32_t newest_address = 0U;
     bool have_newest = false;
 
-    for (index = 0U; index < count; ++index) {
+    for (slot = 0U; slot < slot_count; ++slot) {
         uint32_t address = 0U;
         bool valid;
 
-        if (!stm32f103_flash_page_address(flash, index, &address)) return false;
-        valid = flash->read(
-                    flash->context, address, &candidate, sizeof(candidate)) &&
+        if (!stm32f103_state_slot_first_address(flash, slot, &address)) {
+            return false;
+        }
+        valid = stm32f103_read_state_slot(flash, slot, &candidate) &&
                 stm32f103_state_valid(&candidate);
         if (!valid) continue;
 
@@ -603,7 +735,8 @@ static bool stm32f103_load_state(LinkStm32F103UdsEcu *ecu)
     }
 
     stm32f103_state_defaults(&ecu->state);
-    if (!stm32f103_flash_page_address(flash, count - 1U, &ecu->active_page)) {
+    if (!stm32f103_state_slot_first_address(
+            flash, slot_count - 1U, &ecu->active_page)) {
         return false;
     }
     return link_stm32f103_uds_ecu_flush(ecu);
