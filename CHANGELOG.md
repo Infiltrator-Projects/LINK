@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.15.47 — 2026-09-22
+
+- Resolve LINK issue #35 by reducing the default STM32 bxCAN integration to the one interrupt LINK actually requires: RX FIFO0 message-pending.
+- Preserve real CAN transmit semantics without TX/error callbacks: LINK polls bxCAN's latched RQCP/TXOK/ALST/TERR result bits, so mailbox admission is never mistaken for wire completion and arbitration/transmit errors remain failures.
+- Remove redundant abort/error forwarding state and callbacks. Projects that deliberately enable the CAN TX IRQ may still forward the three successful mailbox-complete callbacks to preserve the exact ISR completion tick; a released mailbox without successful completion evidence remains a hard failure.
+- Keep the stronger LINK architecture unchanged: exact diagnostic-ID hardware filters, bounded interrupt-to-main-loop RX queuing and ISO-TP/UDS processing outside the ISR remain mandatory.
+- Update the STM32F103 ECU reference and end-to-end VIN regression to use the RX-only default path, proving multi-frame ISO-TP works without TX or error callback plumbing.
+
 ## 0.15.46 — 2026-09-22
 
 - Fix LINK issue #34's STM32F103 integration failure when a Cube project enables only the bxCAN RX0 NVIC line: the bxCAN adapter now polls latched RQCP/TXOK/ALST/TERR completion state when no TX callback has run.
