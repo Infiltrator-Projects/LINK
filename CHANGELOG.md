@@ -157,6 +157,12 @@
 
 This file records user-visible, compatibility, diagnostic-knowledge and validation changes for LINK.
 
+## 0.15.61 — 2026-09-23
+
+- Advance the exact nested Infiltratr Common dependency from 1.19.23 to 1.19.24 at `748e089ae175329471d4cf375522c44081371bd5`.
+- Inherit Common's API-compatible graphics hardening for clipped signed coordinates, alias-safe in-place surface operations and overflow-safe nearest-neighbour scaling without changing LINK's diagnostic or transport contracts.
+- Keep LINK as the sole Common authority for manufacturer products; downstream products continue to pin an exact released LINK revision rather than selecting Common independently.
+
 ## 0.15.38 — 2026-09-21
 
 - Added request-aware ReadDTCInformation response validation so transaction code verifies request-specific echoes instead of accepting a merely parseable byte layout.
