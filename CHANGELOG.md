@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.15.58 — 2026-09-22
+
+- Complete LINK #43's STM32F103 two-level SecurityAccess reference with the requested deterministic 4-byte level-1 seed/key path and a 16-byte AES-CMAC-128 level-2 path backed by target-supplied key material.
+- Complete LINK #44's seven workbook DIDs (F181, F182, F183, F184, F185, F186 and F18A), including a live ActiveDiagnosticSession value and exact regression vectors.
+- Complete LINK #46's routines 0x0202 CheckMemory, 0xFF00 EraseMemory and 0xFF01 CheckProgrammingDependencies. Qualification exposed and fixed a stale-RAM-CRC defect by validating the active persisted journal generation instead.
+- Harden LINK #47's STM32F103 Cube startup ordering so flash journal recovery/schema migration completes before bxCAN is started, avoiding a single-bank flash stall overlapping an already-live CAN receive/response path.
+- Carry forward the 0.15.56/0.15.57 multi-page persistence, corrected 0x14/0x19 policies, status availability mask and exact 66-DTC workbook catalogue.
+- Full LINK CI is green on the qualified pre-release head across STM32 Cortex-M cross-compile, strict Linux/Windows/macOS, ASan/UBSan and native Linux adapter-provider coverage.
+
 ## 0.15.57 — 2026-09-22
 
 - Resolve LINK #42 by replacing the three synthetic STM32F103 DTC placeholders with the exact 66-entry catalogue supplied in the reporter's Diagnostic workbook, cross-checked against an independent implementation of the same sheet.
