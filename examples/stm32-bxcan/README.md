@@ -28,10 +28,11 @@ table; otherwise recalculate the prescaler from the real clock tree.
 | STM32F767 | 54 MHz | 6 | 15 TQ | 2 TQ | 1 TQ | CAN1: bank 0/split 14; CAN2: bank 14/split 14 |
 
 For all three families configure Classical CAN normal mode, automatic
-retransmission enabled, RX FIFO0 message-pending interrupt enabled and the
-corresponding CAN TX/RX IRQs in the NVIC. The adapter installs an exact
-32-bit-list hardware filter for the configured standard response ID and enables
-the TX-completion, abort and error interrupt sources it needs.
+retransmission enabled and the RX FIFO0 message-pending IRQ in the NVIC. LINK's
+default bxCAN path does not require CAN TX or error IRQs. The adapter installs
+an exact 32-bit-list hardware filter for the configured standard response ID,
+drains received frames into LINK's bounded queue and obtains real TX completion
+from bxCAN's latched mailbox result flags.
 
 The default example uses CAN1, filter bank 0 and a CAN1/CAN2 split at bank 14.
 When using CAN2 on F107/F767, set `filter_bank = 14` and retain
@@ -101,73 +102,44 @@ if (!link_stm32_bxcan_example_init_tester(&hcan2, &tester)) {
 }
 ```
 
-## HAL callbacks and the RX-only polling fallback
+## HAL integration: one required callback
 
-The RX FIFO0 callback is required for interrupt-driven receive. TX-completion,
-abort and error callbacks remain the preferred path because they preserve the
-exact ISR completion timestamp.
-
-LINK 0.15.46 also supports the common Cube configuration seen in issue #34
-where only the RX0 NVIC line is enabled. If no TX ISR runs, bxCAN leaves its
-RQCP/TXOK/ALST/TERR result bits latched; LINK polls those sticky hardware flags
-and conservatively records the current HAL tick as completion. Successful
-frames therefore continue without pretending that mailbox acceptance itself
-means wire completion, while arbitration loss and transmission errors still
-fail explicitly.
-
-If a project enables the CAN TX NVIC/ISR, it must forward the matching callbacks
-below. Do not enable a HAL TX ISR that consumes the result flags while omitting
-the callbacks, because no library can reconstruct information already cleared
-by another ISR.
+The default LINK bxCAN integration needs only the receive callback below. The
+ISR drains valid CAN frames into LINK's bounded queue; ISO-TP and UDS continue
+later in normal main-loop processing.
 
 ```c
 void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
 {
     link_stm32_bxcan_example_rx_fifo0_irq(hcan);
 }
-
-void HAL_CAN_TxMailbox0CompleteCallback(CAN_HandleTypeDef *hcan)
-{
-    link_stm32_bxcan_example_tx_complete_irq(hcan, CAN_TX_MAILBOX0);
-}
-
-void HAL_CAN_TxMailbox1CompleteCallback(CAN_HandleTypeDef *hcan)
-{
-    link_stm32_bxcan_example_tx_complete_irq(hcan, CAN_TX_MAILBOX1);
-}
-
-void HAL_CAN_TxMailbox2CompleteCallback(CAN_HandleTypeDef *hcan)
-{
-    link_stm32_bxcan_example_tx_complete_irq(hcan, CAN_TX_MAILBOX2);
-}
-
-void HAL_CAN_TxMailbox0AbortCallback(CAN_HandleTypeDef *hcan)
-{
-    link_stm32_bxcan_example_tx_abort_irq(hcan, CAN_TX_MAILBOX0);
-}
-
-void HAL_CAN_TxMailbox1AbortCallback(CAN_HandleTypeDef *hcan)
-{
-    link_stm32_bxcan_example_tx_abort_irq(hcan, CAN_TX_MAILBOX1);
-}
-
-void HAL_CAN_TxMailbox2AbortCallback(CAN_HandleTypeDef *hcan)
-{
-    link_stm32_bxcan_example_tx_abort_irq(hcan, CAN_TX_MAILBOX2);
-}
-
-void HAL_CAN_ErrorCallback(CAN_HandleTypeDef *hcan)
-{
-    link_stm32_bxcan_example_error_irq(hcan);
-}
 ```
 
-The adapter permits one LINK-owned hardware frame at a time, matches completion
-or abort to the exact HAL mailbox token, snapshots `HAL_GetTick()` in the ISR
-when callbacks are available, and otherwise uses the later polling tick from
-the latched bxCAN result flags. That fallback is intentionally conservative:
-it can delay ISO-TP timing but cannot advance it early. CAN-FD frames remain
-rejected because bxCAN is a Classical-CAN controller.
+No TX or error callback is required. After `HAL_CAN_AddTxMessage()` admits a
+frame to a mailbox, LINK waits for actual hardware completion by polling that
+mailbox's sticky RQCP/TXOK/ALST/TERR result bits. A successful TX is therefore
+not declared merely because the HAL accepted it. Arbitration loss and transmit
+error remain failures, and LINK records the polling tick as a conservative
+completion time.
+
+Projects that deliberately enable the bxCAN TX NVIC may optionally forward the
+three successful mailbox-complete callbacks to preserve the exact ISR tick:
+
+| HAL callback | LINK forward |
+| --- | --- |
+| `HAL_CAN_TxMailbox0CompleteCallback` | `link_stm32_bxcan_example_tx_complete_irq(hcan, CAN_TX_MAILBOX0)` |
+| `HAL_CAN_TxMailbox1CompleteCallback` | `link_stm32_bxcan_example_tx_complete_irq(hcan, CAN_TX_MAILBOX1)` |
+| `HAL_CAN_TxMailbox2CompleteCallback` | `link_stm32_bxcan_example_tx_complete_irq(hcan, CAN_TX_MAILBOX2)` |
+
+Do not enable a HAL TX ISR and then discard its successful mailbox callback:
+the HAL may clear the sticky result bits before LINK polls them. LINK treats a
+released mailbox with neither latched success nor a forwarded success callback
+as a transport failure. Abort/error forwarding is unnecessary.
+
+The default one-callback path therefore keeps the simple MCU port surface
+requested in issue #35 while retaining LINK's stronger transport contract:
+exact diagnostic-ID filtering, queued RX outside ISO-TP processing, and real
+wire-completion-aware timing.
 
 ## Reading the result
 

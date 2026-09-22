@@ -36,7 +36,7 @@ The portable `platform/stm32` layer is not tied to FDCAN. A different STM32 fami
 - report actual TX completion/failure rather than only FIFO admission; and
 - supply a wrapping millisecond clock such as `HAL_GetTick()`.
 
-STM32F103, STM32F107 and STM32F767 use the older bxCAN peripheral rather than the C092 FDCAN block. `examples/stm32-bxcan/` now supplies one concrete CubeF1/CubeF7 HAL binding plus a compiled VIN-over-UDS tester example for all three families. It maps standard and extended Classical-CAN frames, installs exact standard-ID list filters, records real mailbox completion from the HAL callbacks and propagates mailbox abort or CAN error as a transport failure.
+STM32F103, STM32F107 and STM32F767 use the older bxCAN peripheral rather than the C092 FDCAN block. `examples/stm32-bxcan/` supplies one concrete CubeF1/CubeF7 HAL binding plus a compiled VIN-over-UDS tester example for all three families. It maps standard and extended Classical-CAN frames, installs exact standard-ID list filters and defaults to one RX FIFO0 callback. TX completion/failure is recovered from bxCAN's latched mailbox result bits, so ports do not need TX/error callbacks and still never confuse mailbox admission with wire completion. Projects that already enable the TX IRQ may optionally forward the three successful mailbox callbacks for the exact ISR tick.
 
 See `examples/stm32-bxcan/README.md` for exact source/include lists, the complete callback wiring, CAN1/CAN2 filter-bank ownership and separate F103/F107/F767 bit-timing starting points. This completes the implementation requested in LINK issue #4; targets with a different CAN HAL surface still provide their own `LinkStm32CanOps` binding.
 

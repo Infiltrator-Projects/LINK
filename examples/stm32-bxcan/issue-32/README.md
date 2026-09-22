@@ -114,8 +114,11 @@ At a 36 MHz CAN clock, a verified starting point is prescaler 4, BS1 15 TQ,
 BS2 2 TQ, SJW 1 TQ (18 TQ/bit = 500 kbit/s). Recalculate if the actual APB1
 clock differs.
 
-The Cube project must enable CAN RX FIFO0 and TX/error interrupts and forward
-the callbacks shown in `issue-32/Src-main.c`.
+The Cube project needs only the CAN RX FIFO0 message-pending interrupt. The
+supplied `issue-32/Src-main.c` forwards that one receive callback; TX
+completion and failure are recovered by polling bxCAN's latched mailbox result
+flags. TX-complete callbacks remain an optional precision path, not a
+requirement for the reference ECU.
 
 ## Verification
 
