@@ -40,8 +40,22 @@ typedef struct {
     LinkStm32F103FlashReadFn read;
     LinkStm32F103FlashErasePageFn erase_page;
     LinkStm32F103FlashProgramFn program;
+
+    /*
+     * Legacy two-page mode remains supported through page_a/page_b.
+     *
+     * For wear-levelled operation, provide page_addresses/page_count with at
+     * least two distinct reserved pages. LINK then rotates each complete,
+     * CRC-verified generation to the next page in the ring instead of
+     * repeatedly erasing the same two pages.
+     *
+     * The address array is borrowed for the lifetime of the ECU object and
+     * must remain valid while the ECU is in use.
+     */
     uint32_t page_a_address;
     uint32_t page_b_address;
+    const uint32_t *page_addresses;
+    size_t page_count;
     uint32_t page_size;
 } LinkStm32F103FlashStore;
 
