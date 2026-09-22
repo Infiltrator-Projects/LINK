@@ -1047,6 +1047,13 @@ static int test_issue45_workbook_snapshot_record(void)
     CHECK(LINK_STM32F103_UDS_SNAPSHOT_IDENTIFIER_COUNT == 6U);
     CHECK(sizeof(expected_payload) ==
           LINK_STM32F103_UDS_SNAPSHOT_PAYLOAD_BYTES);
+    /*
+     * Workbook snapshot encoding stays in runtime/application-owned storage.
+     * It must not enlarge the flash journal and regress LINK #47's first-boot
+     * response path on the legacy two-page STM32F103 reference.
+     */
+    CHECK(sizeof(LinkStm32F103PersistentState) <=
+          LINK_STM32F103_FLASH_PAGE_BYTES);
     CHECK(link_stm32f103_uds_ecu_init(&ecu, &config));
     CHECK(snapshot_calls >= LINK_STM32F103_UDS_DTC_COUNT);
 
