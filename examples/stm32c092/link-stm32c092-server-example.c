@@ -49,14 +49,14 @@ static const LinkUdsServerDtcDetail example_dtc_details[] = {
         true,true,true,0x33U,0x01U,
         0x01U,0x01U,example_snapshot_1,sizeof(example_snapshot_1),
         0x01U,0x01U,example_stored_1,sizeof(example_stored_1),
-        0x01U,example_ext_1,sizeof(example_ext_1)
+        0x01U,example_ext_1,sizeof(example_ext_1),NULL,0U
     },
     {
         UINT32_C(0xabcdef),0x40U,0x02U,0x10U,0U,2U,
         true,true,false,0x33U,0x01U,
         0x01U,0x01U,example_snapshot_2,sizeof(example_snapshot_2),
         0x01U,0x01U,example_stored_2,sizeof(example_stored_2),
-        0x01U,example_ext_2,sizeof(example_ext_2)
+        0x01U,example_ext_2,sizeof(example_ext_2),NULL,0U
     }
 };
 static const LinkUdsServerDtcStore example_dtc_store = {
