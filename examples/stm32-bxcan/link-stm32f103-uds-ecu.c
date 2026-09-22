@@ -222,9 +222,13 @@ static void stm32f103_state_defaults(LinkStm32F103PersistentState *state)
         LINK_UDS_DTC_STATUS_CONFIRMED_DTC;
     state->dtc_status[1U] = LINK_UDS_DTC_STATUS_CONFIRMED_DTC;
     state->dtc_status[2U] = LINK_UDS_DTC_STATUS_PENDING_DTC;
-    state->dtc_fdc[0U] = 0x20;
-    state->dtc_fdc[1U] = 0x10;
-    state->dtc_fdc[2U] = 0x08;
+    /*
+     * FDC is operation-cycle-local. Persistent default DTC statuses model
+     * historical fault state, while a newly started monitor cycle begins at 0.
+     */
+    state->dtc_fdc[0U] = 0;
+    state->dtc_fdc[1U] = 0;
+    state->dtc_fdc[2U] = 0;
     state->dtc_failure_cycles[0U] = 2U;
     state->dtc_failure_cycles[1U] = 2U;
     state->dtc_failure_cycles[2U] = 1U;
@@ -342,6 +346,12 @@ static void stm32f103_refresh_dtc_store(LinkStm32F103UdsEcu *ecu)
         detail->stored_data_identifier_count = 0x01U;
         detail->stored_data = ecu->state.stored[index];
         detail->stored_data_length = LINK_STM32F103_UDS_RECORD_BYTES;
+        ecu->state.extended[index][0U] = lifecycle->aging_counter;
+        ecu->state.extended[index][1U] = lifecycle->failure_cycle_count;
+        ecu->state.extended[index][2U] =
+            (uint8_t)lifecycle->fault_detection_counter;
+        ecu->state.extended[index][3U] =
+            definition->functional_group_identifier;
         detail->ext_data_record_number = 0x01U;
         detail->ext_data = ecu->state.extended[index];
         detail->ext_data_length = LINK_STM32F103_UDS_RECORD_BYTES;
@@ -1446,7 +1456,7 @@ bool link_stm32f103_uds_ecu_report_dtc(
     LinkStm32F103UdsEcu *ecu,
     uint32_t code,
     uint8_t status,
-    uint8_t fault_detection_counter,
+    int8_t fault_detection_counter,
     bool permanent_status)
 {
     LinkStm32F103PersistentState old_state;
@@ -1460,7 +1470,7 @@ bool link_stm32f103_uds_ecu_report_dtc(
         old_state = ecu->state;
         ecu->dtc_lifecycle[index].status = status;
         ecu->dtc_lifecycle[index].fault_detection_counter =
-            (int8_t)fault_detection_counter;
+            fault_detection_counter;
         ecu->dtc_lifecycle[index].aging_counter = 0U;
         ecu->dtc_lifecycle[index].failure_cycle_count =
             (status & LINK_UDS_DTC_STATUS_CONFIRMED_DTC) != 0U
