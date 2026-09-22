@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "link-stm32-bxcan-hal.h"
-#include "link-stm32-bxcan-example.h"
+#include "link-stm32-bxcan-tester-example.h"
 #include "link-stm32-can.h"
 
 #include <stdbool.h>
@@ -480,12 +480,12 @@ static int test_vin_example_end_to_end(void)
 
     reset_fake_hal();
     memset(&hcan, 0, sizeof(hcan));
-    REQUIRE(link_stm32_bxcan_example_init(&hcan));
-    REQUIRE(link_stm32_bxcan_example_state() ==
-        LINK_STM32_BXCAN_EXAMPLE_READING_VIN);
+    REQUIRE(link_stm32_bxcan_tester_example_init(&hcan));
+    REQUIRE(link_stm32_bxcan_tester_example_state() ==
+        LINK_STM32_BXCAN_TESTER_EXAMPLE_READING_VIN);
     REQUIRE(fake_filter.FilterIdHigh == (UINT32_C(0x7e8) << 5U));
 
-    link_stm32_bxcan_example_process();
+    link_stm32_bxcan_tester_example_process();
     REQUIRE(fake_tx_pending == CAN_TX_MAILBOX1);
     REQUIRE(fake_tx_header.StdId == UINT32_C(0x7e0));
     REQUIRE(fake_tx_header.DLC == 4U);
@@ -498,7 +498,7 @@ static int test_vin_example_end_to_end(void)
     fake_tx_pending = 0U;
     fake_tx_rqcp |= CAN_TX_MAILBOX1;
     fake_tx_ok_flags |= CAN_TX_MAILBOX1;
-    link_stm32_bxcan_example_process();
+    link_stm32_bxcan_tester_example_process();
 
     memset(&header, 0, sizeof(header));
     header.StdId = UINT32_C(0x7e8);
@@ -516,8 +516,8 @@ static int test_vin_example_end_to_end(void)
     data[7] = (uint8_t)vin[2];
     queue_rx(&header, data);
     fake_tick = 10U;
-    link_stm32_bxcan_example_rx_fifo0_irq(&hcan);
-    link_stm32_bxcan_example_process();
+    link_stm32_bxcan_tester_example_rx_fifo0_irq(&hcan);
+    link_stm32_bxcan_tester_example_process();
 
     REQUIRE(fake_tx_pending == CAN_TX_MAILBOX1);
     REQUIRE(fake_tx_header.StdId == UINT32_C(0x7e0));
@@ -528,7 +528,7 @@ static int test_vin_example_end_to_end(void)
     fake_tx_pending = 0U;
     fake_tx_rqcp |= CAN_TX_MAILBOX1;
     fake_tx_ok_flags |= CAN_TX_MAILBOX1;
-    link_stm32_bxcan_example_process();
+    link_stm32_bxcan_tester_example_process();
 
     memset(data, 0, sizeof(data));
     data[0] = 0x21U;
@@ -537,8 +537,8 @@ static int test_vin_example_end_to_end(void)
     }
     queue_rx(&header, data);
     fake_tick = 12U;
-    link_stm32_bxcan_example_rx_fifo0_irq(&hcan);
-    link_stm32_bxcan_example_process();
+    link_stm32_bxcan_tester_example_rx_fifo0_irq(&hcan);
+    link_stm32_bxcan_tester_example_process();
 
     memset(data, 0, sizeof(data));
     data[0] = 0x22U;
@@ -547,15 +547,15 @@ static int test_vin_example_end_to_end(void)
     }
     queue_rx(&header, data);
     fake_tick = 13U;
-    link_stm32_bxcan_example_rx_fifo0_irq(&hcan);
-    link_stm32_bxcan_example_process();
+    link_stm32_bxcan_tester_example_rx_fifo0_irq(&hcan);
+    link_stm32_bxcan_tester_example_process();
 
-    REQUIRE(link_stm32_bxcan_example_state() ==
-        LINK_STM32_BXCAN_EXAMPLE_VIN_READY);
-    REQUIRE(link_stm32_bxcan_example_vin() != NULL);
-    REQUIRE(strcmp(link_stm32_bxcan_example_vin(), vin) == 0);
-    REQUIRE(link_stm32_bxcan_example_negative_response_code() == 0U);
-    REQUIRE(link_stm32_bxcan_example_dropped_frames() == 0U);
+    REQUIRE(link_stm32_bxcan_tester_example_state() ==
+        LINK_STM32_BXCAN_TESTER_EXAMPLE_VIN_READY);
+    REQUIRE(link_stm32_bxcan_tester_example_vin() != NULL);
+    REQUIRE(strcmp(link_stm32_bxcan_tester_example_vin(), vin) == 0);
+    REQUIRE(link_stm32_bxcan_tester_example_negative_response_code() == 0U);
+    REQUIRE(link_stm32_bxcan_tester_example_dropped_frames() == 0U);
     return 0;
 }
 
