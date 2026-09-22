@@ -370,26 +370,21 @@ static void stm32f103_refresh_dtc_store(LinkStm32F103UdsEcu *ecu)
 bool link_stm32f103_uds_ecu_begin_operation_cycle(
     LinkStm32F103UdsEcu *ecu)
 {
-    LinkStm32F103PersistentState old_state;
-    LinkUdsDtcLifecycleState old_lifecycle[LINK_STM32F103_UDS_DTC_COUNT];
     size_t index;
 
     if (ecu == NULL || ecu->state.dtc_setting_enabled == 0U) return false;
-    old_state = ecu->state;
-    memcpy(old_lifecycle, ecu->dtc_lifecycle, sizeof(old_lifecycle));
 
+    /*
+     * Debounce state is operation-cycle-local and changes frequently. Keep it
+     * in RAM while the cycle is active; persistence is performed once at the
+     * completed-cycle boundary rather than erasing flash per monitor sample.
+     */
     for (index = 0U; index < LINK_STM32F103_UDS_DTC_COUNT; ++index) {
         link_uds_dtc_lifecycle_begin_operation_cycle(
             &ecu->dtc_lifecycle[index]);
         stm32f103_sync_dtc_lifecycle(ecu, index);
     }
-
-    if (!link_stm32f103_uds_ecu_flush(ecu)) {
-        ecu->state = old_state;
-        memcpy(ecu->dtc_lifecycle, old_lifecycle, sizeof(old_lifecycle));
-        stm32f103_refresh_dtc_store(ecu);
-        return false;
-    }
+    stm32f103_refresh_dtc_store(ecu);
     return true;
 }
 
@@ -398,16 +393,12 @@ bool link_stm32f103_uds_ecu_report_dtc_test(
     uint32_t code,
     LinkUdsDtcTestResult result)
 {
-    LinkStm32F103PersistentState old_state;
-    LinkUdsDtcLifecycleState old_lifecycle;
     size_t index;
 
     if (ecu == NULL || ecu->state.dtc_setting_enabled == 0U) return false;
     for (index = 0U; index < LINK_STM32F103_UDS_DTC_COUNT; ++index) {
         if (stm32f103_dtc_definitions[index].code != code) continue;
 
-        old_state = ecu->state;
-        old_lifecycle = ecu->dtc_lifecycle[index];
         if (!link_uds_dtc_lifecycle_report_test(
                 &stm32f103_dtc_definitions[index],
                 &ecu->dtc_lifecycle[index],
@@ -415,13 +406,7 @@ bool link_stm32f103_uds_ecu_report_dtc_test(
             return false;
         }
         stm32f103_sync_dtc_lifecycle(ecu, index);
-
-        if (!link_stm32f103_uds_ecu_flush(ecu)) {
-            ecu->state = old_state;
-            ecu->dtc_lifecycle[index] = old_lifecycle;
-            stm32f103_refresh_dtc_store(ecu);
-            return false;
-        }
+        stm32f103_refresh_dtc_store(ecu);
         return true;
     }
     return false;
