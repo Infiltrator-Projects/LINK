@@ -3,6 +3,7 @@
 #define LINK_STM32F103_UDS_ECU_H
 
 #include "link/uds_server.h"
+#include "link/uds_dtc_lifecycle.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -57,7 +58,9 @@ typedef struct {
     uint32_t schema;
     uint32_t generation;
     uint8_t dtc_status[LINK_STM32F103_UDS_DTC_COUNT];
-    uint8_t dtc_fdc[LINK_STM32F103_UDS_DTC_COUNT];
+    int8_t dtc_fdc[LINK_STM32F103_UDS_DTC_COUNT];
+    uint8_t dtc_aging[LINK_STM32F103_UDS_DTC_COUNT];
+    uint8_t dtc_failure_cycles[LINK_STM32F103_UDS_DTC_COUNT];
     uint8_t dtc_permanent[LINK_STM32F103_UDS_DTC_COUNT];
     uint8_t dtc_setting_enabled;
     uint8_t communication_control;
@@ -95,6 +98,7 @@ typedef struct {
     uint32_t transfer_size;
     uint32_t transfer_offset;
     uint8_t transfer_block;
+    LinkUdsDtcLifecycleState dtc_lifecycle[LINK_STM32F103_UDS_DTC_COUNT];
     LinkUdsDtcRecord dtc_records[LINK_STM32F103_UDS_DTC_COUNT];
     LinkUdsServerDtcDetail dtc_details[LINK_STM32F103_UDS_DTC_COUNT];
     LinkUdsServerDtcStore dtc_store;
@@ -121,6 +125,26 @@ bool link_stm32f103_uds_ecu_report_dtc(
     uint8_t status,
     uint8_t fault_detection_counter,
     bool permanent_status);
+
+/**
+ * Begin a new diagnostic operation cycle for every reference DTC.
+ */
+bool link_stm32f103_uds_ecu_begin_operation_cycle(
+    LinkStm32F103UdsEcu *ecu);
+
+/**
+ * Feed one monitor result into the shared DTC lifecycle engine.
+ */
+bool link_stm32f103_uds_ecu_report_dtc_test(
+    LinkStm32F103UdsEcu *ecu,
+    uint32_t code,
+    LinkUdsDtcTestResult result);
+
+/**
+ * Complete the current diagnostic operation cycle and apply confirmation/aging.
+ */
+bool link_stm32f103_uds_ecu_end_operation_cycle(
+    LinkStm32F103UdsEcu *ecu);
 
 bool link_stm32f103_uds_ecu_flush(LinkStm32F103UdsEcu *ecu);
 
