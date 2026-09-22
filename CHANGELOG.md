@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.15.60 — 2026-09-22
+
+- Complete LINK #45's STM32F103 Diagnostic-workbook Freeze Frame Snapshot Record 0x01 with the exact six Sheet 7 identifiers: DF00 supply voltage, DF01 vehicle speed, DF02 occurrence counter, DF03 first-malfunction odometer, DF04 last-malfunction odometer and DD00 malfunction timestamp.
+- Encode the six workbook DIDs as a 31-byte snapshot payload and prove the exact 39-byte 0x19/0x04 positive response, 0x19/0x03 identification and request-out-of-range behavior when a target reports no captured snapshot.
+- Keep real freeze-frame capture and persistence target-owned through a bounded callback instead of fabricating vehicle history in LINK; the reference fallback remains deterministic bench data only.
+- Preserve LINK #47's STM32F103 startup/flash fix by keeping the persistent journal within one 2 KiB page and storing the expanded 31-byte snapshot representation outside the flash journal; add a regression that guards that footprint.
+- Retain 0.15.59's generic multi-snapshot-record server model and qualify the exact workbook integration across strict Linux/Windows/macOS, ASan/UBSan, native Linux providers and STM32 Cortex-M cross-compile before release.
+
 ## 0.15.59 — 2026-09-22
 
 - Generalise LINK's DTC server model so a single DTC can expose multiple snapshot records instead of being limited to one snapshot record number/payload.
