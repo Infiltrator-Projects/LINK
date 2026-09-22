@@ -27,6 +27,9 @@ static int drive_failed_cycle(
     const LinkUdsDtcLifecycleDefinition *def,
     LinkUdsDtcLifecycleState *state)
 {
+    const bool was_test_failed =
+        (state->status & LINK_UDS_DTC_STATUS_TEST_FAILED) != 0U;
+
     link_uds_dtc_lifecycle_begin_operation_cycle(state);
     CHECK(state->fault_detection_counter == 0);
 
@@ -34,7 +37,14 @@ static int drive_failed_cycle(
         def, state, LINK_UDS_DTC_TEST_FAILED));
     CHECK(state->fault_detection_counter == 64);
     CHECK(!state->failed_this_cycle);
-    CHECK((state->status & LINK_UDS_DTC_STATUS_TEST_FAILED) == 0U);
+    /*
+     * testFailed is the last completed monitor state. Beginning a new
+     * operation cycle clears testFailedThisOperationCycle, not testFailed.
+     * A previously failed DTC therefore remains failed until a full pass
+     * reaches the passed debounce threshold.
+     */
+    CHECK(((state->status & LINK_UDS_DTC_STATUS_TEST_FAILED) != 0U) ==
+          was_test_failed);
 
     CHECK(link_uds_dtc_lifecycle_report_test(
         def, state, LINK_UDS_DTC_TEST_FAILED));
@@ -58,6 +68,7 @@ static int drive_passed_cycle(
         def, state, LINK_UDS_DTC_TEST_PASSED));
     CHECK(state->fault_detection_counter == -64);
     CHECK(!state->passed_this_cycle);
+    CHECK((state->status & LINK_UDS_DTC_STATUS_TEST_FAILED) != 0U);
 
     CHECK(link_uds_dtc_lifecycle_report_test(
         def, state, LINK_UDS_DTC_TEST_PASSED));
