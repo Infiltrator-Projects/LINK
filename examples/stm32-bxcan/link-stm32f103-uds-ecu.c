@@ -254,23 +254,86 @@ static void stm32f103_state_defaults(LinkStm32F103PersistentState *state)
     }
 }
 
+static size_t stm32f103_flash_page_count(
+    const LinkStm32F103FlashStore *flash)
+{
+    if (flash != NULL &&
+        flash->page_addresses != NULL &&
+        flash->page_count >= 2U) {
+        return flash->page_count;
+    }
+    return 2U;
+}
+
+static bool stm32f103_flash_page_address(
+    const LinkStm32F103FlashStore *flash,
+    size_t index,
+    uint32_t *address)
+{
+    if (flash == NULL || address == NULL) return false;
+
+    if (flash->page_addresses != NULL && flash->page_count >= 2U) {
+        if (index >= flash->page_count) return false;
+        *address = flash->page_addresses[index];
+        return true;
+    }
+
+    if (index == 0U) {
+        *address = flash->page_a_address;
+        return true;
+    }
+    if (index == 1U) {
+        *address = flash->page_b_address;
+        return true;
+    }
+    return false;
+}
+
+static bool stm32f103_generation_newer(uint32_t candidate, uint32_t current)
+{
+    return (int32_t)(candidate - current) > 0;
+}
+
 static bool stm32f103_flash_config_valid(
     const LinkStm32F103UdsEcuConfig *config)
 {
     const LinkStm32F103FlashStore *flash;
+    size_t count;
+    size_t i;
+    size_t j;
+
     if (config == NULL || config->clock_ms == NULL ||
         config->security_key == NULL) {
         return false;
     }
+
     flash = &config->flash;
-    return flash->read != NULL &&
-           flash->erase_page != NULL &&
-           flash->program != NULL &&
-           flash->page_a_address != flash->page_b_address &&
-           flash->page_size >= sizeof(LinkStm32F103PersistentState) &&
-           flash->page_size != 0U &&
-           (flash->page_a_address % flash->page_size) == 0U &&
-           (flash->page_b_address % flash->page_size) == 0U;
+    if (flash->read == NULL ||
+        flash->erase_page == NULL ||
+        flash->program == NULL ||
+        flash->page_size < sizeof(LinkStm32F103PersistentState) ||
+        flash->page_size == 0U) {
+        return false;
+    }
+
+    count = stm32f103_flash_page_count(flash);
+    if (count < 2U) return false;
+
+    for (i = 0U; i < count; ++i) {
+        uint32_t address_i = 0U;
+        if (!stm32f103_flash_page_address(flash, i, &address_i) ||
+            (address_i % flash->page_size) != 0U) {
+            return false;
+        }
+        for (j = 0U; j < i; ++j) {
+            uint32_t address_j = 0U;
+            if (!stm32f103_flash_page_address(flash, j, &address_j) ||
+                address_i == address_j) {
+                return false;
+            }
+        }
+    }
+    return true;
 }
 
 static void stm32f103_hydrate_dtc_lifecycle(LinkStm32F103UdsEcu *ecu)
@@ -449,12 +512,33 @@ bool link_stm32f103_uds_ecu_flush(LinkStm32F103UdsEcu *ecu)
     LinkStm32F103PersistentState candidate;
     LinkStm32F103PersistentState verify;
     const LinkStm32F103FlashStore *flash;
-    uint32_t target;
+    size_t count;
+    size_t active_index = 0U;
+    size_t target_index = 0U;
+    size_t index;
+    bool active_found = false;
+    uint32_t target = 0U;
 
     if (ecu == NULL || !stm32f103_flash_config_valid(&ecu->config)) {
         return false;
     }
+
     flash = &ecu->config.flash;
+    count = stm32f103_flash_page_count(flash);
+    for (index = 0U; index < count; ++index) {
+        uint32_t address = 0U;
+        if (!stm32f103_flash_page_address(flash, index, &address)) return false;
+        if (address == ecu->active_page) {
+            active_index = index;
+            active_found = true;
+            break;
+        }
+    }
+    target_index = active_found ? (active_index + 1U) % count : 0U;
+    if (!stm32f103_flash_page_address(flash, target_index, &target)) {
+        return false;
+    }
+
     candidate = ecu->state;
     candidate.magic = LINK_STM32F103_STATE_MAGIC;
     candidate.schema = LINK_STM32F103_STATE_SCHEMA;
@@ -462,9 +546,6 @@ bool link_stm32f103_uds_ecu_flush(LinkStm32F103UdsEcu *ecu)
     candidate.crc32 = stm32f103_crc32(
         &candidate, offsetof(LinkStm32F103PersistentState, crc32));
 
-    target = ecu->active_page == flash->page_a_address
-        ? flash->page_b_address
-        : flash->page_a_address;
     if (!flash->erase_page(flash->context, target) ||
         !flash->program(
             flash->context, target, &candidate, sizeof(candidate)) ||
@@ -483,32 +564,42 @@ bool link_stm32f103_uds_ecu_flush(LinkStm32F103UdsEcu *ecu)
 
 static bool stm32f103_load_state(LinkStm32F103UdsEcu *ecu)
 {
-    LinkStm32F103PersistentState state_a;
-    LinkStm32F103PersistentState state_b;
+    LinkStm32F103PersistentState candidate;
+    LinkStm32F103PersistentState newest;
     const LinkStm32F103FlashStore *flash = &ecu->config.flash;
-    bool valid_a;
-    bool valid_b;
+    const size_t count = stm32f103_flash_page_count(flash);
+    size_t index;
+    uint32_t newest_address = 0U;
+    bool have_newest = false;
 
-    valid_a = flash->read(
-        flash->context, flash->page_a_address, &state_a, sizeof(state_a)) &&
-        stm32f103_state_valid(&state_a);
-    valid_b = flash->read(
-        flash->context, flash->page_b_address, &state_b, sizeof(state_b)) &&
-        stm32f103_state_valid(&state_b);
+    for (index = 0U; index < count; ++index) {
+        uint32_t address = 0U;
+        bool valid;
 
-    if (valid_a || valid_b) {
-        if (valid_a && (!valid_b || state_a.generation >= state_b.generation)) {
-            ecu->state = state_a;
-            ecu->active_page = flash->page_a_address;
-        } else {
-            ecu->state = state_b;
-            ecu->active_page = flash->page_b_address;
+        if (!stm32f103_flash_page_address(flash, index, &address)) return false;
+        valid = flash->read(
+                    flash->context, address, &candidate, sizeof(candidate)) &&
+                stm32f103_state_valid(&candidate);
+        if (!valid) continue;
+
+        if (!have_newest ||
+            stm32f103_generation_newer(candidate.generation, newest.generation)) {
+            newest = candidate;
+            newest_address = address;
+            have_newest = true;
         }
+    }
+
+    if (have_newest) {
+        ecu->state = newest;
+        ecu->active_page = newest_address;
         return true;
     }
 
     stm32f103_state_defaults(&ecu->state);
-    ecu->active_page = flash->page_b_address;
+    if (!stm32f103_flash_page_address(flash, count - 1U, &ecu->active_page)) {
+        return false;
+    }
     return link_stm32f103_uds_ecu_flush(ecu);
 }
 
