@@ -358,7 +358,7 @@ jobs:
             platform/stm32/link-stm32-uds.c
             platform/stm32/link-stm32-uds-server.c
             examples/stm32-bxcan/link-stm32-bxcan-hal.c
-            examples/stm32-bxcan/link-stm32-bxcan-example.c
+            examples/stm32-bxcan/link-stm32-bxcan-tester-example.c
             examples/stm32-bxcan/link-stm32f103-uds-ecu.c
           )
           for cpu in cortex-m3 cortex-m7; do
