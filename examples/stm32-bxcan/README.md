@@ -185,7 +185,8 @@ than extending the VIN tester into a second ad-hoc protocol stack. See
 [`issue-32/README.md`](issue-32/README.md).
 
 The F103 ECU core wires all 27 standard LINK UDS service IDs, routes the full
-ReadDTCInformation surface through the shared rich DTC handler, implements
+ReadDTCInformation surface through the shared rich DTC handler, implements the
+66-DTC catalogue supplied with LINK #42's Diagnostic workbook, implements
 persistent ClearDiagnosticInformation state, and stores bounded application
 state in a CRC-protected flash journal. The journal supports an arbitrary
 caller-supplied page ring and groups enough consecutive pages into each
