@@ -512,7 +512,9 @@ if(BUILD_TESTING AND PROJECT_IS_TOP_LEVEL)
     add_executable(link-test-stm32c092-hal
         tests/test_stm32c092_hal.c
         platform/stm32/link-stm32-can.c
-        examples/stm32c092/link-stm32c092-hal.c)
+        platform/stm32/link-stm32-uds-server.c
+        examples/stm32c092/link-stm32c092-hal.c
+        examples/stm32c092/link-stm32c092-server-example.c)
     target_include_directories(link-test-stm32c092-hal PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/tests/stm32c092_hal_stub"
         "${CMAKE_CURRENT_SOURCE_DIR}/platform/stm32"

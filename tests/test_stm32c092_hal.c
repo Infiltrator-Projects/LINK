@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "link-stm32-can.h"
 #include "link-stm32c092-hal.h"
+#include "link-stm32c092-server-example.h"
 
 #include <stdbool.h>
 #include <stdio.h>
@@ -274,11 +275,86 @@ static int test_rx_mapping_and_event_loss(void)
     return 0;
 }
 
+
+static void stage_server_reset_request(uint8_t reset_type)
+{
+    memset(&fake_rx_header, 0, sizeof(fake_rx_header));
+    fake_rx_header.Identifier = LINK_STM32C092_ECU_REQUEST_ID;
+    fake_rx_header.IdType = FDCAN_STANDARD_ID;
+    fake_rx_header.RxFrameType = FDCAN_DATA_FRAME;
+    fake_rx_header.DataLength = FDCAN_DLC_BYTES_8;
+    fake_rx_header.FDFormat = FDCAN_CLASSIC_CAN;
+
+    memset(fake_rx_data, 0xcc, sizeof(fake_rx_data));
+    fake_rx_data[0] = 2U;
+    fake_rx_data[1] = LINK_UDS_SERVICE_ECU_RESET;
+    fake_rx_data[2] = reset_type;
+    fake_rx_available = true;
+}
+
+static void complete_server_example_tx(FDCAN_HandleTypeDef *hfdcan)
+{
+    memset(&fake_tx_event, 0, sizeof(fake_tx_event));
+    fake_tx_event.MessageMarker = fake_tx_header.MessageMarker;
+    fake_tx_event.EventType = FDCAN_TX_EVENT;
+    fake_tx_event_available = true;
+    link_stm32c092_server_example_tx_event_irq(
+        hfdcan, FDCAN_IT_TX_EVT_FIFO_NEW_DATA);
+    link_stm32c092_server_example_process();
+}
+
+static int test_server_example_reset_capabilities(void)
+{
+    FDCAN_HandleTypeDef hfdcan;
+    LinkStm32C092ServerConfig config = LINK_STM32C092_SERVER_CONFIG_INIT;
+    uint8_t reset_type = 0U;
+
+    reset_fake_hal();
+    memset(&hfdcan, 0, sizeof(hfdcan));
+    REQUIRE(link_stm32c092_server_example_init(&hfdcan, &config));
+
+    /*
+     * A bare STM32C092 cannot perform a real ignition off/on cycle. The
+     * example must reject 0x11/0x02 instead of turning it into NVIC reset.
+     */
+    fake_tick = 10U;
+    stage_server_reset_request(LINK_UDS_ECU_RESET_KEY_OFF_ON);
+    link_stm32c092_server_example_rx_fifo0_irq(&hfdcan);
+    link_stm32c092_server_example_process();
+    REQUIRE(fake_tx_data[0] == 3U);
+    REQUIRE(fake_tx_data[1] == 0x7fU);
+    REQUIRE(fake_tx_data[2] == LINK_UDS_SERVICE_ECU_RESET);
+    REQUIRE(fake_tx_data[3] == LINK_UDS_NRC_SUBFUNCTION_NOT_SUPPORTED);
+    complete_server_example_tx(&hfdcan);
+    fake_tick = 100U;
+    REQUIRE(!link_stm32c092_server_example_take_reset(&reset_type));
+
+    /*
+     * hardReset remains supported, but the platform-reset request is not
+     * exposed until the positive 0x51 response has completed and drained.
+     */
+    stage_server_reset_request(LINK_UDS_ECU_RESET_HARD);
+    link_stm32c092_server_example_rx_fifo0_irq(&hfdcan);
+    link_stm32c092_server_example_process();
+    REQUIRE(fake_tx_data[0] == 2U);
+    REQUIRE(fake_tx_data[1] == 0x51U);
+    REQUIRE(fake_tx_data[2] == LINK_UDS_ECU_RESET_HARD);
+    complete_server_example_tx(&hfdcan);
+
+    fake_tick = 149U;
+    REQUIRE(!link_stm32c092_server_example_take_reset(&reset_type));
+    fake_tick = 150U;
+    REQUIRE(link_stm32c092_server_example_take_reset(&reset_type));
+    REQUIRE(reset_type == LINK_UDS_ECU_RESET_HARD);
+    return 0;
+}
+
 int main(void)
 {
     REQUIRE(test_classic_tx_and_completion() == 0);
     REQUIRE(test_dual_physical_functional_filter() == 0);
     REQUIRE(test_can_fd_and_extended_id_mapping() == 0);
     REQUIRE(test_rx_mapping_and_event_loss() == 0);
+    REQUIRE(test_server_example_reset_capabilities() == 0);
     return 0;
 }

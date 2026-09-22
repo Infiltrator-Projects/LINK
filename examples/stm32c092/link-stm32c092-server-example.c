@@ -123,6 +123,20 @@ bool link_stm32c092_server_example_init(
 
     uds_config.enforce_session_sequence = true;
     uds_config.s3_server_timeout_ms = UINT32_C(5000);
+
+    /*
+     * This bare C092 example has a processor-reset primitive only. It can
+     * truthfully demonstrate hardReset and softReset, but it has no ignition
+     * controller for keyOffOnReset and no power-management path for rapid
+     * power shutdown. Never convert those unsupported 0x11 subfunctions into
+     * an MCU reset.
+     */
+    uds_config.supported_ecu_reset_types =
+        LINK_UDS_ECU_RESET_SUPPORT_HARD |
+        LINK_UDS_ECU_RESET_SUPPORT_SOFT;
+    uds_config.rapid_power_shutdown_supported = false;
+    uds_config.rapid_power_shutdown_time_seconds = 0U;
+
     uds_config.clock_ms = link_stm32c092_server_clock_ms;
     uds_config.clock_context = NULL;
 
@@ -179,9 +193,9 @@ void link_stm32c092_server_example_process(void)
         link_uds_server_take_pending_ecu_reset(
             &example_server, &reset_type)) {
         /*
-         * Demonstration policy: all accepted 0x11 reset types map to the MCU
-         * reset after the positive response has completed on CAN. Products
-         * needing different power-management semantics can override 0x11.
+         * Only hardReset/softReset can reach this path in the bare example.
+         * LINK rejects keyOffOnReset and rapid-power-shutdown operations before
+         * they can become a platform reset request.
          */
         example_reset_type = reset_type;
         example_reset_requested_ms = HAL_GetTick();

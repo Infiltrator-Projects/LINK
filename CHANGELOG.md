@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.15.45 — 2026-09-22
+
+- Correct LINK issue #24's STM32C092 server example so the bare target advertises only hardReset and softReset; keyOffOnReset and rapid-power-shutdown operations are no longer able to fall through to an MCU reset.
+- Add an end-to-end fake-FDCAN regression proving 0x11/0x02 returns 7F 11 12 with no deferred reset while 0x11/0x01 still returns 51 01 and exposes the reset only after CAN transmit completion plus the response-drain interval.
+
 ## 0.15.44 — 2026-09-21
 
 - Complete the generic portion of MBLINK issue #63 with a typed ISO 14229-1:2020 Authentication (0x29) codec covering all nine authentication tasks and strict positive-response envelope validation.
