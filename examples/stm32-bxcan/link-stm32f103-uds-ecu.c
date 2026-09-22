@@ -493,6 +493,32 @@ static bool stm32f103_state_slot_first_address(
         flash, slot_index * pages_per_slot, address);
 }
 
+static bool stm32f103_active_persisted_state_valid(
+    const LinkStm32F103UdsEcu *ecu)
+{
+    LinkStm32F103PersistentState persisted;
+    const LinkStm32F103FlashStore *flash;
+    size_t slot_count;
+    size_t slot;
+
+    if (ecu == NULL) return false;
+    flash = &ecu->config.flash;
+    slot_count = stm32f103_state_slot_count(flash);
+
+    for (slot = 0U; slot < slot_count; ++slot) {
+        uint32_t first_address = 0U;
+        if (!stm32f103_state_slot_first_address(
+                flash, slot, &first_address)) {
+            return false;
+        }
+        if (first_address != ecu->active_page) continue;
+        return stm32f103_read_state_slot(
+                   flash, slot, &persisted) &&
+               stm32f103_state_valid(&persisted);
+    }
+    return false;
+}
+
 static bool stm32f103_read_state_slot(
     const LinkStm32F103FlashStore *flash,
     size_t slot_index,
@@ -1363,7 +1389,13 @@ static LinkUdsServerHandlerResult stm32f103_routine(
     switch (routine) {
     case LINK_STM32F103_ROUTINE_INTEGRITY:
     case LINK_STM32F103_ROUTINE_CHECK_MEMORY:
-        status = stm32f103_state_valid(&ecu->state) ? 0U : 1U;
+        /*
+         * The live RAM state may legitimately differ from its last persisted
+         * CRC while monitor state is being refreshed. CheckMemory validates
+         * the active flash journal slot instead of treating a stale in-RAM
+         * CRC as flash corruption.
+         */
+        status = stm32f103_active_persisted_state_valid(ecu) ? 0U : 1U;
         break;
 
     case LINK_STM32F103_ROUTINE_ERASE_MEMORY:
@@ -1386,7 +1418,7 @@ static LinkUdsServerHandlerResult stm32f103_routine(
     case LINK_STM32F103_ROUTINE_CHECK_PROGRAMMING_DEPENDENCIES:
         status =
             ecu->transfer_mode == LINK_STM32F103_TRANSFER_NONE &&
-            stm32f103_state_valid(&ecu->state)
+            stm32f103_active_persisted_state_valid(ecu)
                 ? 0U : 1U;
         break;
 
