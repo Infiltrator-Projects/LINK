@@ -61,8 +61,8 @@ option(LINK_ENABLE_INSTALL
     "Install LINK headers, library and CMake package when LINK is top-level"
     ${PROJECT_IS_TOP_LEVEL})
 
-set(LINK_COMMON_VERSION "1.19.22")
-set(LINK_COMMON_COMMIT "302c44eb7436803dee020667453a9a0681da8bbf")
+set(LINK_COMMON_VERSION "1.19.23")
+set(LINK_COMMON_COMMIT "a9cf2957cffeefe6001830916b8a32c2ef58a551")
 set(LINK_COMMON_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/infiltratr-common")
 
 if(NOT TARGET InfiltratrCommon::Portable)
