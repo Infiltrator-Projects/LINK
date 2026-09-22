@@ -19,7 +19,7 @@
 #include <string.h>
 
 #define LINK_STM32F103_STATE_MAGIC UINT32_C(0x4c4b4631)
-#define LINK_STM32F103_STATE_SCHEMA UINT32_C(2)
+#define LINK_STM32F103_STATE_SCHEMA UINT32_C(3)
 #define LINK_STM32F103_MAX_TRANSFER_CHUNK 64U
 #define LINK_STM32F103_DYNAMIC_DID_MIN UINT16_C(0xf200)
 #define LINK_STM32F103_DYNAMIC_DID_MAX UINT16_C(0xf2ff)
@@ -28,24 +28,150 @@
 #define LINK_STM32F103_SW_DID UINT16_C(0xf187)
 #define LINK_STM32F103_ROUTINE_INTEGRITY UINT16_C(0x0201)
 
-static const uint32_t stm32f103_dtc_codes[LINK_STM32F103_UDS_DTC_COUNT] = {
-    UINT32_C(0x123456), UINT32_C(0xabcdef), UINT32_C(0xd00d01)
-};
-
+/*
+ * LINK #42 workbook catalogue. These 66 definitions replace the previous
+ * three synthetic placeholder DTCs. The identities, names, severity and
+ * functional-unit values were cross-checked against an independent
+ * implementation of the same reporter-supplied Diagnostic workbook.
+ *
+ * U300614/U300615 use functional group 0x33 in the supplied reference data.
+ * The C1006xx safety/chassis records use 0xD0. Debounce, confirmation and
+ * aging thresholds remain explicit LINK reference-policy values.
+ */
 static const LinkUdsDtcLifecycleDefinition
 stm32f103_dtc_definitions[LINK_STM32F103_UDS_DTC_COUNT] = {
-    {
-        UINT32_C(0x123456), 0x33U, 0x20U, 1U,
-        64U, 64U, 2U, 3U
-    },
-    {
-        UINT32_C(0xabcdef), 0x33U, 0x40U, 2U,
-        64U, 64U, 2U, 3U
-    },
-    {
-        UINT32_C(0xd00d01), 0x33U, 0x80U, 3U,
-        64U, 64U, 2U, 3U
-    }
+    { UINT32_C(0xf00614), 0x33U, 0x80U, 0x01U,
+      64U, 64U, 2U, 3U }, /* U300614 ASW_DTC_BatteryVoltHighWarn */
+    { UINT32_C(0xf00615), 0x33U, 0xa0U, 0x01U,
+      64U, 64U, 2U, 3U }, /* U300615 ASW_DTC_BatteryVoltLowWarn */
+    { UINT32_C(0xd00616), 0xd0U, 0x80U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100616 ASW_DTC_BatteryVoltHigh */
+    { UINT32_C(0xd00617), 0xd0U, 0xa0U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100617 ASW_DTC_BatteryVoltLow */
+    { UINT32_C(0xd00618), 0xd0U, 0x80U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100618 ASW_DTC_CanBusOff */
+    { UINT32_C(0xd00619), 0xd0U, 0xa0U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100619 ASW_DTC_SysPrs_SigLost */
+    { UINT32_C(0xd00620), 0xd0U, 0x80U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100620 ASW_DTC_SysPrs_OverLimit */
+    { UINT32_C(0xd00621), 0xd0U, 0xa0U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100621 ASW_DTC_SysPrs_JumpErr */
+    { UINT32_C(0xd00622), 0xd0U, 0x80U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100622 ASW_DTC_AccuPrs_SigLost */
+    { UINT32_C(0xd00623), 0xd0U, 0xa0U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100623 ASW_DTC_AccuPrs_OverLimit */
+    { UINT32_C(0xd00624), 0xd0U, 0x80U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100624 ASW_DTC_AccuPrs_JumpErr */
+    { UINT32_C(0xd00625), 0xd0U, 0xa0U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100625 ASW_DTC_PfsPrs_SigLost */
+    { UINT32_C(0xd00626), 0xd0U, 0x80U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100626 ASW_DTC_PfsPrs_OverLimit */
+    { UINT32_C(0xd00627), 0xd0U, 0xa0U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100627 ASW_DTC_PfsPrs_JumpErr */
+    { UINT32_C(0xd00628), 0xd0U, 0x80U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100628 ASW_DTC_PipeLineErrFL */
+    { UINT32_C(0xd00629), 0xd0U, 0xa0U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100629 ASW_DTC_PipeLineErrFR */
+    { UINT32_C(0xd00630), 0xd0U, 0x80U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100630 ASW_DTC_PipeLineErrRL */
+    { UINT32_C(0xd00631), 0xd0U, 0xa0U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100631 ASW_DTC_PipeLineErrRR */
+    { UINT32_C(0xd00632), 0xd0U, 0x80U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100632 ASW_DTC_WssFL_Err */
+    { UINT32_C(0xd00633), 0xd0U, 0xa0U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100633 ASW_DTC_WssFR_Err */
+    { UINT32_C(0xd00634), 0xd0U, 0x80U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100634 ASW_DTC_WssRL_Err */
+    { UINT32_C(0xd00635), 0xd0U, 0xa0U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100635 ASW_DTC_WssRR_Err */
+    { UINT32_C(0xd00636), 0xd0U, 0x80U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100636 ASW_DTC_AccuLowPrs_Err */
+    { UINT32_C(0xd00637), 0xd0U, 0xa0U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100637 ASW_DTC_AccuPrsHoldErr */
+    { UINT32_C(0xd00638), 0xd0U, 0x80U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100638 ASW_DTC_PconErr */
+    { UINT32_C(0xd00639), 0xd0U, 0xa0U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100639 ASW_DTC_AccuPump_DG */
+    { UINT32_C(0xd00640), 0xd0U, 0x80U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100640 ASW_DTC_PumpMotLockedRotFault */
+    { UINT32_C(0xd00641), 0xd0U, 0xa0U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100641 ASW_DTC_AccuPump_Err */
+    { UINT32_C(0xd00642), 0xd0U, 0x80U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100642 ASW_DTC_PTS_Err */
+    { UINT32_C(0xd00643), 0xd0U, 0xa0U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100643 ASW_DTC_PTS_Chanl_1Err */
+    { UINT32_C(0xd00644), 0xd0U, 0x80U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100644 ASW_DTC_PTS_Chanl_2Err */
+    { UINT32_C(0xd00645), 0xd0U, 0xa0U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100645 ASW_DTC_MC_OutleakFault */
+    { UINT32_C(0xd00646), 0xd0U, 0x80U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100646 ASW_DTC_MC_InleakFault */
+    { UINT32_C(0xd00647), 0xd0U, 0xa0U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100647 ASW_DTC_IMUyawrateSignalErrLevel */
+    { UINT32_C(0xd00648), 0xd0U, 0x80U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100648 ASW_DTC_IMUaySignalErrLevel */
+    { UINT32_C(0xd00649), 0xd0U, 0xa0U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100649 ASW_DTC_IMUaxSignalErrLevel */
+    { UINT32_C(0xd00650), 0xd0U, 0x80U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100650 ASW_DTC_SASSignalErrLevel */
+    { UINT32_C(0xd00651), 0xd0U, 0xa0U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100651 ASW_DTC_BrkConValveDriverFault */
+    { UINT32_C(0xd00652), 0xd0U, 0x80U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100652 ASW_DTC_WhelPrsConValveDriverFault */
+    { UINT32_C(0xd00653), 0xd0U, 0xa0U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100653 ASW_DTC_ISV1_Fault */
+    { UINT32_C(0xd00654), 0xd0U, 0x80U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100654 ASW_DTC_ISV1_OverTempWarn */
+    { UINT32_C(0xd00655), 0xd0U, 0xa0U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100655 ASW_DTC_ISV2_Fault */
+    { UINT32_C(0xd00656), 0xd0U, 0x80U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100656 ASW_DTC_ISV2_OverTempWarn */
+    { UINT32_C(0xd00657), 0xd0U, 0xa0U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100657 ASW_DTC_ISV3_Fault */
+    { UINT32_C(0xd00658), 0xd0U, 0x80U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100658 ASW_DTC_ISV3_OverTempWarn */
+    { UINT32_C(0xd00659), 0xd0U, 0xa0U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100659 ASW_DTC_ISV4_Fault */
+    { UINT32_C(0xd00660), 0xd0U, 0x80U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100660 ASW_DTC_ISV4_OverTempWarn */
+    { UINT32_C(0xd00661), 0xd0U, 0xa0U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100661 ASW_DTC_PAV_Fault */
+    { UINT32_C(0xd00662), 0xd0U, 0x80U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100662 ASW_DTC_PAV_OverTempWarn */
+    { UINT32_C(0xd00663), 0xd0U, 0xa0U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100663 ASW_DTC_PRV_Fault */
+    { UINT32_C(0xd00664), 0xd0U, 0x80U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100664 ASW_DTC_PRV_OverTempWarn */
+    { UINT32_C(0xd00665), 0xd0U, 0xa0U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100665 ASW_DTC_BAV_Fault */
+    { UINT32_C(0xd00666), 0xd0U, 0x80U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100666 ASW_DTC_CSV_Fault */
+    { UINT32_C(0xd00667), 0xd0U, 0xa0U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100667 ASW_DTC_SSV_Fault */
+    { UINT32_C(0xd00668), 0xd0U, 0x80U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100668 ASW_DTC_USV_Fault */
+    { UINT32_C(0xd00669), 0xd0U, 0x80U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100669 ASW_DTC_SASangErr */
+    { UINT32_C(0xd00670), 0xd0U, 0xa0U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100670 ASW_DTC_BrkSwitchErr */
+    { UINT32_C(0xd00671), 0xd0U, 0x80U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100671 ASW_DTC_PowerSysErr */
+    { UINT32_C(0xd00672), 0xd0U, 0xa0U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100672 ASW_DTC_AccPosErr */
+    { UINT32_C(0xd00673), 0xd0U, 0x80U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100673 ASW_DTC_GearPosErr */
+    { UINT32_C(0xd00674), 0xd0U, 0xa0U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100674 ASW_DTC_BtrErr */
+    { UINT32_C(0xd00675), 0xd0U, 0x80U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100675 ASW_DTC_BrkFluidLevel_Low */
+    { UINT32_C(0xd00676), 0xd0U, 0xa0U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100676 ASW_DTC_SeatBltErr */
+    { UINT32_C(0xd00677), 0xd0U, 0x80U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100677 ASW_DTC_DoorsErr */
+    { UINT32_C(0xd00678), 0xd0U, 0xa0U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100678 ASW_DTC_AdasConnectErr */
+    { UINT32_C(0xd00679), 0xd0U, 0x80U, 0x01U,
+      64U, 64U, 2U, 3U }, /* C100679 ASW_DTC_ExternalEPBErr */
 };
 
 static const uint8_t stm32f103_default_vin[17U] = {
@@ -913,7 +1039,7 @@ static LinkUdsServerHandlerResult stm32f103_clear_dtc(
     old_state = ecu->state;
     memcpy(old_lifecycle, ecu->dtc_lifecycle, sizeof(old_lifecycle));
     for (index = 0U; index < LINK_STM32F103_UDS_DTC_COUNT; ++index) {
-        if (!stm32f103_group_matches(group, stm32f103_dtc_codes[index])) {
+        if (!stm32f103_group_matches(group, stm32f103_dtc_definitions[index].code)) {
             continue;
         }
         matched = true;
@@ -1680,7 +1806,7 @@ bool link_stm32f103_uds_ecu_report_dtc(
 
     if (ecu == NULL || ecu->state.dtc_setting_enabled == 0U) return false;
     for (index = 0U; index < LINK_STM32F103_UDS_DTC_COUNT; ++index) {
-        if (stm32f103_dtc_codes[index] != code) continue;
+        if (stm32f103_dtc_definitions[index].code != code) continue;
         LinkUdsDtcLifecycleState old_lifecycle =
             ecu->dtc_lifecycle[index];
         old_state = ecu->state;
