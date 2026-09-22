@@ -353,7 +353,7 @@ static int test_persistence_and_dtc_clear(void)
     LinkStm32F103UdsEcuConfig config;
     uint8_t response[512U];
     size_t response_length = 0U;
-    const uint8_t clear_one[] = {0x14U,0x12U,0x34U,0x56U};
+    const uint8_t clear_one[] = {0x14U,0xf0U,0x06U,0x14U};
     const uint8_t read_did[] = {0x22U,0xf1U,0xa0U};
     const uint8_t read_memory[] = {0x23U,0x11U,0x08U,0x04U};
     const uint8_t write_memory[] = {
@@ -470,7 +470,7 @@ static int test_multi_page_persistent_state_slots(void)
     config.flash.page_addresses = test_wear_pages;
     config.flash.page_count =
         sizeof(test_wear_pages) / sizeof(test_wear_pages[0]);
-    config.flash.page_size = UINT32_C(256);
+    config.flash.page_size = UINT32_C(1024);
 
     CHECK(sizeof(LinkStm32F103PersistentState) > config.flash.page_size);
     CHECK(sizeof(LinkStm32F103PersistentState) <=
@@ -509,6 +509,49 @@ static int test_multi_page_persistent_state_slots(void)
     CHECK(link_stm32f103_uds_ecu_init(&reloaded, &config));
     CHECK(reloaded.active_page == TEST_STATE_PAGE_C);
     CHECK(reloaded.state.generation == 1U);
+    return 0;
+}
+
+static int test_issue42_workbook_dtc_catalogue(void)
+{
+    TestPlatform platform;
+    LinkStm32F103UdsEcu ecu;
+    LinkStm32F103UdsEcuConfig config;
+    uint8_t response[512U];
+    size_t response_length = 0U;
+    const uint8_t supported[] = {0x19U,0x0aU};
+    const size_t first = 3U;
+    const size_t last = 3U + ((LINK_STM32F103_UDS_DTC_COUNT - 1U) * 4U);
+
+    memset(&platform, 0, sizeof(platform));
+    memset(platform.page_a, 0xff, sizeof(platform.page_a));
+    memset(platform.page_b, 0xff, sizeof(platform.page_b));
+    config = test_config(&platform);
+
+    CHECK(LINK_STM32F103_UDS_DTC_COUNT == 66U);
+    CHECK(LINK_UDS_DTC_MAX_RECORDS >= LINK_STM32F103_UDS_DTC_COUNT);
+    CHECK(link_stm32f103_uds_ecu_init(&ecu, &config));
+
+    CHECK(ecu.dtc_details[0U].code == UINT32_C(0xf00614));
+    CHECK(ecu.dtc_details[1U].code == UINT32_C(0xf00615));
+    CHECK(ecu.dtc_details[2U].code == UINT32_C(0xd00616));
+    CHECK(ecu.dtc_details[65U].code == UINT32_C(0xd00679));
+    CHECK(ecu.dtc_details[0U].functional_group_identifier == 0x33U);
+    CHECK(ecu.dtc_details[1U].functional_group_identifier == 0x33U);
+    CHECK(ecu.dtc_details[2U].functional_group_identifier == 0xd0U);
+
+    CHECK(expect_positive(
+        &ecu, supported, sizeof(supported),
+        response, sizeof(response), &response_length) == 0);
+    CHECK(response_length == 3U + (66U * 4U));
+    CHECK(response[0] == 0x59U && response[1] == 0x0aU);
+    CHECK(response[2] == UINT8_C(0x7f));
+    CHECK(response[first] == 0xf0U &&
+          response[first + 1U] == 0x06U &&
+          response[first + 2U] == 0x14U);
+    CHECK(response[last] == 0xd0U &&
+          response[last + 1U] == 0x06U &&
+          response[last + 2U] == 0x79U);
     return 0;
 }
 
@@ -558,7 +601,7 @@ static int test_issue37_clear_sequence_and_status_masks(void)
     CHECK(link_uds_decode_read_dtc_information_response(
         LINK_UDS_DTC_REPORT_NUMBER_BY_STATUS_MASK,
         response, response_length, &decoded) == LINK_UDS_RESULT_OK);
-    CHECK(decoded.dtc_count_available && decoded.dtc_count == 3U);
+    CHECK(decoded.dtc_count_available && decoded.dtc_count == LINK_STM32F103_UDS_DTC_COUNT);
     return 0;
 }
 
@@ -571,7 +614,7 @@ static int test_issue38_dtc_lifecycle_engine(void)
     size_t response_length = 0U;
     const uint8_t clear_all[] = {0x14U,0xffU,0xffU,0xffU};
     const uint8_t read_fdc[] = {0x19U,0x14U};
-    const uint32_t code = UINT32_C(0x123456);
+    const uint32_t code = UINT32_C(0xf00614);
     uint32_t persisted_generation;
 
     memset(&platform, 0, sizeof(platform));
@@ -608,8 +651,8 @@ static int test_issue38_dtc_lifecycle_engine(void)
         response, sizeof(response), &response_length) == 0);
     CHECK(response_length == 6U);
     CHECK(response[0] == 0x59U && response[1] == 0x14U);
-    CHECK(response[2] == 0x12U && response[3] == 0x34U &&
-          response[4] == 0x56U && response[5] == 64U);
+    CHECK(response[2] == 0xf0U && response[3] == 0x06U &&
+          response[4] == 0x14U && response[5] == 64U);
 
     /* The next failed execution in the same cycle reaches +127. */
     CHECK(link_stm32f103_uds_ecu_report_dtc_test(
@@ -830,6 +873,7 @@ int main(void)
     CHECK(test_persistence_and_dtc_clear() == 0);
     CHECK(test_n_page_wear_level_rotation() == 0);
     CHECK(test_multi_page_persistent_state_slots() == 0);
+    CHECK(test_issue42_workbook_dtc_catalogue() == 0);
     CHECK(test_issue37_clear_sequence_and_status_masks() == 0);
     CHECK(test_issue38_dtc_lifecycle_engine() == 0);
     CHECK(test_issue40_clear_and_read_dtc_policy() == 0);
