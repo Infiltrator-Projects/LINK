@@ -327,6 +327,7 @@ jobs:
             src/uds/uds.c
             src/uds/uds_services.c
             src/uds/uds_authentication.c
+            src/uds/uds_dtc_lifecycle.c
             src/uds/uds_server.c
             src/infiltratr-common/src/core.c
             platform/stm32/link-stm32-can.c
@@ -366,6 +367,7 @@ jobs:
             src/uds/uds.c
             src/uds/uds_services.c
             src/uds/uds_authentication.c
+            src/uds/uds_dtc_lifecycle.c
             src/uds/uds_server.c
             src/infiltratr-common/src/core.c
             platform/stm32/link-stm32-can.c
