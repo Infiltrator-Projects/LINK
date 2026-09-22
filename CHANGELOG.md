@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.15.54 — 2026-09-22
+
+- Pin LINK to Infiltratr Common 1.19.23 at a9cf2957cffe, preserving the fully qualified 0.15.53 DTC lifecycle and STM32 fixes on the newest shared foundation.
+- No LINK protocol semantics are changed by this release; it is the canonical dependency-qualified head for downstream vehicle products.
+
 ## 0.15.53 — 2026-09-22
 
 - Publish the fully qualified follow-up to 0.15.52 after correcting the DTC lifecycle regression expectations and MSVC status-mask warnings found by the full cross-platform matrix.
