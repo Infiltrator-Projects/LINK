@@ -140,6 +140,7 @@ add_library(link-core STATIC
     src/uds/uds_services.c
     src/uds/uds_authentication.c
     src/uds/uds_bootloader.c
+    src/uds/uds_dtc_lifecycle.c
     src/uds/uds_server.c
     src/discover/safety.c
     src/discover/sweep.c
@@ -593,6 +594,7 @@ if(BUILD_TESTING AND PROJECT_IS_TOP_LEVEL)
     link_add_test(link-test-uds-authentication tests/test_uds_authentication.c link-uds-authentication)
     link_add_test(link-test-ardep-uds-reference tests/test_ardep_uds_reference.c link-ardep-uds-reference)
     link_add_test(link-test-uds-dtc tests/test_uds_dtc.c link-uds-dtc)
+    link_add_test(link-test-uds-dtc-lifecycle tests/test_uds_dtc_lifecycle.c link-uds-dtc-lifecycle)
     link_add_test(link-test-uds-server tests/test_uds_server.c link-uds-server)
     link_add_test(link-test-discover-safety tests/test_discover_safety.c link-discover-safety)
     link_add_test(link-test-discover-sweep tests/test_discover_sweep.c link-discover-sweep)
