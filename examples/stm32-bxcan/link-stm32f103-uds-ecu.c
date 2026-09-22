@@ -493,6 +493,11 @@ static bool stm32f103_state_slot_first_address(
         flash, slot_index * pages_per_slot, address);
 }
 
+static bool stm32f103_read_state_slot(
+    const LinkStm32F103FlashStore *flash,
+    size_t slot_index,
+    LinkStm32F103PersistentState *state);
+
 static bool stm32f103_active_persisted_state_valid(
     const LinkStm32F103UdsEcu *ecu)
 {
