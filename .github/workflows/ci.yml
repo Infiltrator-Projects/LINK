@@ -342,6 +342,20 @@ jobs:
           done
           arm-none-eabi-size build-stm32-arm/*.o
 
+      - name: Compile exact STM32C092 issue-27 Cube main
+        shell: bash
+        run: |
+          set -euo pipefail
+          flags=(
+            -mcpu=cortex-m0plus -mthumb -std=c11 -ffreestanding
+            -Wall -Wextra -Wpedantic -Wshadow -Wformat=2
+            -Wstrict-prototypes -Wmissing-prototypes -Werror
+            -Iinclude -Iplatform/stm32 -Iexamples/stm32c092
+            -Itests/stm32c092_issue27_stub -Itests/stm32c092_hal_stub
+            -Isrc/infiltratr-common/include
+          )
+          arm-none-eabi-gcc "${flags[@]}"             -c examples/stm32c092/issue-27/Src-main.c             -o build-stm32-arm/issue27_Src-main.o
+
       - name: Cross-compile STM32F103/F107/F767 bxCAN source set
         shell: bash
         run: |
