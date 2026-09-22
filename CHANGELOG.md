@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.15.50 — 2026-09-22
+
+- Advance the exact nested Infiltratr Common dependency to 1.19.22 / `302c44eb7436803dee020667453a9a0681da8bbf` so every LINK consumer inherits the current bounded-text and durable-POSIX fixes from one tested dependency chain.
+- Keep LINK as the sole Common authority for MBLINK, JAGLINK, BMWLINK, AUDILINK and FORDLINK; product repositories continue to pin LINK rather than selecting an independent Common revision.
+
 ## 0.15.49 — 2026-09-22
 
 - Add a fail-closed UDS OTA/bootloader orchestration core for MBLINK issue #56, mapping the full programming-session -> SecurityAccess -> DTC/communication quiesce -> RequestDownload -> TransferData -> TransferExit -> CheckMemory -> staged reset flow.
