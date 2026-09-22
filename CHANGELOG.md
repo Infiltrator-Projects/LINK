@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.15.57 — 2026-09-22
+
+- Resolve LINK #42 by replacing the three synthetic STM32F103 DTC placeholders with the exact 66-entry catalogue supplied in the reporter's Diagnostic workbook, cross-checked against an independent implementation of the same sheet.
+- Preserve the workbook-derived DTC identities from U300614/U300615 through C100616..C100679, with the corresponding severity/functional-unit metadata and 0x33/0xD0 functional-group mapping rather than inventing additional definitions.
+- Raise the allocation-free DTC decode record capacity from 64 to 128 so LINK can consume its own 66-entry supported-DTC response without truncation.
+- Bump the STM32F103 persistent-state schema because the DTC arrays now contain 66 entries; old three-entry journal generations are rejected cleanly and a fresh state is published.
+- Extend regression coverage to prove the 66-entry 0x19/0x0A response, exact first/last DTC identities and catalogue size, while retaining lifecycle, clear/status-mask and multi-page crash-recovery tests.
+
 ## 0.15.56 — 2026-09-22
 
 - Resolve LINK #39's remaining storage-capacity defect by changing the STM32F103 journal from one-state-per-page rotation to crash-consistent multi-page generation slots; large persistent state can span as many reserved pages as required, with at least two complete slots retained for rollback.
