@@ -450,6 +450,7 @@ static int test_issue38_dtc_lifecycle_engine(void)
     const uint8_t clear_all[] = {0x14U,0xffU,0xffU,0xffU};
     const uint8_t read_fdc[] = {0x19U,0x14U};
     const uint32_t code = UINT32_C(0x123456);
+    uint32_t persisted_generation;
 
     memset(&platform, 0, sizeof(platform));
     memset(platform.page_a, 0xff, sizeof(platform.page_a));
@@ -464,6 +465,7 @@ static int test_issue38_dtc_lifecycle_engine(void)
 
     CHECK(ecu.dtc_details[0U].functional_group_identifier == 0x33U);
     CHECK(ecu.dtc_lifecycle[0U].status == 0x50U);
+    persisted_generation = ecu.state.generation;
 
     /*
      * A partial monitor failure is prefailed only. It is visible through
@@ -477,6 +479,7 @@ static int test_issue38_dtc_lifecycle_engine(void)
            LINK_UDS_DTC_STATUS_TEST_FAILED) == 0U);
     CHECK((ecu.dtc_lifecycle[0U].status &
            LINK_UDS_DTC_STATUS_PENDING_DTC) == 0U);
+    CHECK(ecu.state.generation == persisted_generation);
 
     CHECK(expect_positive(
         &ecu, read_fdc, sizeof(read_fdc),
@@ -494,7 +497,10 @@ static int test_issue38_dtc_lifecycle_engine(void)
            LINK_UDS_DTC_STATUS_TEST_FAILED) != 0U);
     CHECK((ecu.dtc_lifecycle[0U].status &
            LINK_UDS_DTC_STATUS_PENDING_DTC) != 0U);
+    CHECK(ecu.state.generation == persisted_generation);
     CHECK(link_stm32f103_uds_ecu_end_operation_cycle(&ecu));
+    CHECK(ecu.state.generation > persisted_generation);
+    persisted_generation = ecu.state.generation;
     CHECK(ecu.dtc_lifecycle[0U].failure_cycle_count == 1U);
     CHECK((ecu.dtc_lifecycle[0U].status &
            LINK_UDS_DTC_STATUS_CONFIRMED_DTC) == 0U);
@@ -540,6 +546,10 @@ static int test_issue38_dtc_lifecycle_engine(void)
 
     CHECK(ecu.dtc_lifecycle[0U].aging_counter == 3U);
     CHECK(ecu.dtc_lifecycle[0U].fault_detection_counter == -128);
+    CHECK(ecu.state.extended[0U][0U] == 3U);
+    CHECK(ecu.state.extended[0U][1U] == 0U);
+    CHECK(ecu.state.extended[0U][2U] == UINT8_C(0x80));
+    CHECK(ecu.state.extended[0U][3U] == 0x33U);
     CHECK((ecu.dtc_lifecycle[0U].status &
            LINK_UDS_DTC_STATUS_PENDING_DTC) == 0U);
     CHECK((ecu.dtc_lifecycle[0U].status &
