@@ -5,4 +5,5 @@
 #include "../../src/uds/uds_services.c"
 #include "../../src/uds/uds_authentication.c"
 #include "../../src/uds/uds_bootloader.c"
+#include "../../src/uds/uds_dtc_lifecycle.c"
 #include "../../src/uds/uds_server.c"
