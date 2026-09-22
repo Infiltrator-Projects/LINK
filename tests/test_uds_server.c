@@ -864,6 +864,95 @@ static int test_dtc_rich_all_subfunctions(void)
     return 0;
 }
 
+static int test_dtc_multiple_snapshot_records(void)
+{
+    static const LinkUdsDtcRecord records[] = {
+        { UINT32_C(0x123456), LINK_UDS_DTC_STATUS_CONFIRMED_DTC }
+    };
+    static const uint8_t snap_1[] = { UINT8_C(0x11), UINT8_C(0x12) };
+    static const uint8_t snap_2[] = { UINT8_C(0x21), UINT8_C(0x22) };
+    static const uint8_t snap_3[] = { UINT8_C(0x31), UINT8_C(0x32) };
+    static const LinkUdsServerDtcSnapshotRecord snapshots[] = {
+        { UINT8_C(0x01), UINT8_C(0x01), snap_1, sizeof(snap_1) },
+        { UINT8_C(0x02), UINT8_C(0x01), snap_2, sizeof(snap_2) },
+        { UINT8_C(0x06), UINT8_C(0x01), snap_3, sizeof(snap_3) }
+    };
+    static const LinkUdsServerDtcDetail details[] = {
+        {
+            .code = UINT32_C(0x123456),
+            .severity = UINT8_C(0x20),
+            .functional_unit = UINT8_C(0x01),
+            .functional_group_identifier = UINT8_C(0x33),
+            .snapshot_records = snapshots,
+            .snapshot_record_count = sizeof(snapshots) / sizeof(snapshots[0])
+        }
+    };
+    LinkUdsServerDtcStore store = {
+        records, 1U, LINK_UDS_DTC_STATUS_MASK_ALL, 0xffU, 0x01U,
+        details, 1U, 0x04U
+    };
+    LinkUdsServer server;
+    LinkUdsServerConfig config = LINK_UDS_SERVER_CONFIG_INIT;
+    uint8_t response[64U];
+    size_t length = 0U;
+    const uint8_t identify[] = { 0x19U, 0x03U };
+    const uint8_t record_2[] = {
+        0x19U, 0x04U, 0x12U, 0x34U, 0x56U, 0x02U
+    };
+    const uint8_t all_records[] = {
+        0x19U, 0x04U, 0x12U, 0x34U, 0x56U, 0xffU
+    };
+    const uint8_t unknown_record[] = {
+        0x19U, 0x04U, 0x12U, 0x34U, 0x56U, 0x03U
+    };
+
+    CHECK(link_uds_server_init(&server, &config));
+    CHECK(link_uds_server_set_handler(
+        &server, 0x19U, link_uds_server_dtc_handler, &store));
+
+    CHECK(link_uds_server_handle(
+              &server, identify, sizeof(identify),
+              response, sizeof(response), &length) ==
+          LINK_UDS_SERVER_RESULT_POSITIVE);
+    CHECK(length == 14U);
+    CHECK(response[0] == 0x59U && response[1] == 0x03U);
+    CHECK(response[2] == 0x12U && response[3] == 0x34U &&
+          response[4] == 0x56U && response[5] == 0x01U);
+    CHECK(response[6] == 0x12U && response[7] == 0x34U &&
+          response[8] == 0x56U && response[9] == 0x02U);
+    CHECK(response[10] == 0x12U && response[11] == 0x34U &&
+          response[12] == 0x56U && response[13] == 0x06U);
+
+    CHECK(link_uds_server_handle(
+              &server, record_2, sizeof(record_2),
+              response, sizeof(response), &length) ==
+          LINK_UDS_SERVER_RESULT_POSITIVE);
+    CHECK(length == 10U);
+    CHECK(response[0] == 0x59U && response[1] == 0x04U);
+    CHECK(response[2] == 0x12U && response[3] == 0x34U &&
+          response[4] == 0x56U &&
+          response[5] == LINK_UDS_DTC_STATUS_CONFIRMED_DTC);
+    CHECK(response[6] == 0x02U && response[7] == 0x01U &&
+          response[8] == 0x21U && response[9] == 0x22U);
+
+    CHECK(link_uds_server_handle(
+              &server, all_records, sizeof(all_records),
+              response, sizeof(response), &length) ==
+          LINK_UDS_SERVER_RESULT_POSITIVE);
+    CHECK(length == 18U);
+    CHECK(response[6] == 0x01U && response[10] == 0x02U &&
+          response[14] == 0x06U);
+
+    CHECK(link_uds_server_handle(
+              &server, unknown_record, sizeof(unknown_record),
+              response, sizeof(response), &length) ==
+          LINK_UDS_SERVER_RESULT_NEGATIVE);
+    CHECK(length == 3U && response[0] == 0x7fU &&
+          response[1] == 0x19U &&
+          response[2] == LINK_UDS_NRC_REQUEST_OUT_OF_RANGE);
+    return 0;
+}
+
 static int test_dtc_empty_supported_and_history(void)
 {
     static const LinkUdsDtcRecord records[] = {
@@ -1062,6 +1151,7 @@ int main(void)
     if (test_security_access_config_validation() != 0) return EXIT_FAILURE;
     if (test_dtc_all_subfunctions() != 0) return EXIT_FAILURE;
     if (test_dtc_rich_all_subfunctions() != 0) return EXIT_FAILURE;
+    if (test_dtc_multiple_snapshot_records() != 0) return EXIT_FAILURE;
     if (test_dtc_empty_supported_and_history() != 0) return EXIT_FAILURE;
     if (test_negative_paths() != 0) return EXIT_FAILURE;
     puts("uds server tests passed");
