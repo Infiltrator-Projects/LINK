@@ -131,3 +131,21 @@ LINK issue #31 can be closed only after one of these is true:
 Until then LINK can prove the correct implementation and provide the migration,
 but it cannot truthfully claim the independently owned repository or board is
 fixed.
+
+
+## Prepared machine-applicable repair
+
+LINK now ships `STM32F103TEST-5055d58-0x19-fix.patch` beside this note. It is
+generated against the exact audited external head `5055d58f4f6240488271d85cb177f71337e0cdeb` and repairs the
+external 0x19 implementation itself: 0x12/0x13 emissions reports, live 0x14
+fault-detection counters, honest empty 0x15/0x55 permanent-DTC reports when no
+permanent backing exists, the 0x17 response-family error, 0x18/0x19
+MemorySelection echoes, user-memory addressing/filtering, the 0x42 WWH-OBD
+fixed envelope, and the missing 0x55 dispatch.
+
+The connected GitHub installation currently reports `push: true` for the
+external repository, but both Git-data and Contents API writes return
+`403 Resource not accessible by integration`. The patch is therefore the
+exact reproducible repair deliverable until effective write permission exists
+or the external owner applies it. Issue #31 must not be described as physically
+retested or externally merged until that happens.

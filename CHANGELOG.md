@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.15.48 — 2026-09-22
+
+- Ship an exact machine-applicable repair for LINK issue #31 against `leoembeddeder/STM32F103TEST` head `5055d58f4f6240488271d85cb177f71337e0cdeb`, covering its remaining 0x19 user-memory, emissions, fault-counter, WWH-OBD and 0x55 defects.
+- Record that external repository metadata advertises push permission while actual Git and Contents writes are rejected with HTTP 403, so LINK no longer conflates a prepared external repair with a merged/physically retested one.
+
 ## 0.15.47 — 2026-09-22
 
 - Resolve LINK issue #35 by reducing the default STM32 bxCAN integration to the one interrupt LINK actually requires: RX FIFO0 message-pending.
