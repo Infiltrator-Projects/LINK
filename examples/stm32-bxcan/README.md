@@ -7,13 +7,29 @@ LINK issue #4. It supports STM32F103, STM32F107 and STM32F767 through the CAN
 HAL API shared by STM32CubeF1 and STM32CubeF7.
 
 `link-stm32-bxcan-hal.c` binds the Cube-generated `CAN_HandleTypeDef` to
-`LinkStm32CanOps`. `link-stm32-bxcan-example.c` is a complete allocation-free
+`LinkStm32CanOps`. `link-stm32-bxcan-tester-example.c` is a complete allocation-free
 UDS tester/client: it sends `22 F1 90` on `0x7E0`, accepts the ECU response on
 `0x7E8`, performs ISO-TP reassembly and exposes the 17-byte VIN.
 
 The MCU still requires an external CAN transceiver and the correct board-level
 pin, clock and interrupt configuration. LINK does not replace Cube's generated
 GPIO, RCC, CAN MSP or NVIC setup.
+
+## Choose the role first: tester/client or ECU/server
+
+There are two deliberately different examples in this directory tree:
+
+- `link-stm32-bxcan-tester-example.c` is a **tester/client**. It transmits a
+  diagnostic request such as `22 F1 90` and waits for another ECU at 0x7E8 to
+  answer. It will never behave as the ECU that sends that response.
+- `link-stm32f103-uds-ecu.c` together with `issue-32/Src-main.c` is the
+  **STM32F103 ECU/server**. It receives requests at 0x7E0/0x7DF and produces UDS
+  responses at 0x7E8.
+
+Do not transplant the tester example into a project whose requirement is
+"STM32F103 acts as the ECU/server". Issue #36 showed that the previous generic
+file name made these opposite roles too easy to confuse.
+
 
 ## Cube configuration by family
 
@@ -48,7 +64,7 @@ LINK/src/uds/uds_services.c
 LINK/platform/stm32/link-stm32-can.c
 LINK/platform/stm32/link-stm32-uds.c
 LINK/examples/stm32-bxcan/link-stm32-bxcan-hal.c
-LINK/examples/stm32-bxcan/link-stm32-bxcan-example.c
+LINK/examples/stm32-bxcan/link-stm32-bxcan-tester-example.c
 LINK/src/infiltratr-common/src/core.c
 ```
 
@@ -72,16 +88,16 @@ Add the LINK header in a Cube `USER CODE` include section. Initialise LINK only
 after Cube has configured the selected CAN peripheral:
 
 ```c
-#include "link-stm32-bxcan-example.h"
+#include "link-stm32-bxcan-tester-example.h"
 
 MX_CAN1_Init();
 
-if (!link_stm32_bxcan_example_init(&hcan1)) {
+if (!link_stm32_bxcan_tester_example_init(&hcan1)) {
     Error_Handler();
 }
 
 while (1) {
-    link_stm32_bxcan_example_process();
+    link_stm32_bxcan_tester_example_process();
 }
 ```
 
@@ -97,7 +113,7 @@ tester.filter_bank = 14U;          /* CAN2 on a 14/14 split */
 tester.slave_start_filter_bank = 14U;
 tester.read_vin_on_init = true;
 
-if (!link_stm32_bxcan_example_init_tester(&hcan2, &tester)) {
+if (!link_stm32_bxcan_tester_example_init_tester(&hcan2, &tester)) {
     Error_Handler();
 }
 ```
@@ -111,7 +127,7 @@ later in normal main-loop processing.
 ```c
 void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
 {
-    link_stm32_bxcan_example_rx_fifo0_irq(hcan);
+    link_stm32_bxcan_tester_example_rx_fifo0_irq(hcan);
 }
 ```
 
@@ -127,9 +143,9 @@ three successful mailbox-complete callbacks to preserve the exact ISR tick:
 
 | HAL callback | LINK forward |
 | --- | --- |
-| `HAL_CAN_TxMailbox0CompleteCallback` | `link_stm32_bxcan_example_tx_complete_irq(hcan, CAN_TX_MAILBOX0)` |
-| `HAL_CAN_TxMailbox1CompleteCallback` | `link_stm32_bxcan_example_tx_complete_irq(hcan, CAN_TX_MAILBOX1)` |
-| `HAL_CAN_TxMailbox2CompleteCallback` | `link_stm32_bxcan_example_tx_complete_irq(hcan, CAN_TX_MAILBOX2)` |
+| `HAL_CAN_TxMailbox0CompleteCallback` | `link_stm32_bxcan_tester_example_tx_complete_irq(hcan, CAN_TX_MAILBOX0)` |
+| `HAL_CAN_TxMailbox1CompleteCallback` | `link_stm32_bxcan_tester_example_tx_complete_irq(hcan, CAN_TX_MAILBOX1)` |
+| `HAL_CAN_TxMailbox2CompleteCallback` | `link_stm32_bxcan_tester_example_tx_complete_irq(hcan, CAN_TX_MAILBOX2)` |
 
 Do not enable a HAL TX ISR and then discard its successful mailbox callback:
 the HAL may clear the sticky result bits before LINK polls them. LINK treats a
@@ -144,15 +160,15 @@ wire-completion-aware timing.
 ## Reading the result
 
 ```c
-if (link_stm32_bxcan_example_state() ==
-    LINK_STM32_BXCAN_EXAMPLE_VIN_READY) {
-    const char *vin = link_stm32_bxcan_example_vin();
+if (link_stm32_bxcan_tester_example_state() ==
+    LINK_STM32_BXCAN_TESTER_EXAMPLE_VIN_READY) {
+    const char *vin = link_stm32_bxcan_tester_example_vin();
 }
 ```
 
 A normal UDS negative response is exposed through
-`link_stm32_bxcan_example_negative_response_code()`. Queue overflow is visible
-through `link_stm32_bxcan_example_dropped_frames()`.
+`link_stm32_bxcan_tester_example_negative_response_code()`. Queue overflow is visible
+through `link_stm32_bxcan_tester_example_dropped_frames()`.
 
 Host tests validate the HAL mapping, exact physical/functional filters,
 standard and extended IDs, remote-frame rejection, mailbox-specific completion,
@@ -177,3 +193,20 @@ firmware programming still belongs to the target bootloader/security policy.
 
 The supplied Cube integration targets CAN1 on PA11/PA12 at 500 kbit/s and
 reserves the final two 2 KiB pages of a 512 KiB device.
+
+
+## ClearDiagnosticInformation and ReadDTCInformation verification
+
+The STM32F103 ECU protects `0x14 ClearDiagnosticInformation`. In DefaultSession
+`14 FF FF FF` is rejected as `7F 14 7F`
+(`serviceNotSupportedInActiveSession`). A tester must check that response
+before interpreting any following `0x19` result.
+
+After the required session/security sequence, a successful all-group clear
+returns `54`. LINK then sets the cleared DTC status to
+`testNotCompletedSinceLastClear | testNotCompletedThisOperationCycle`
+(`0x50`). Therefore `19 01 FF` can still count the DTC definitions because
+`0x50 & 0xFF != 0`. To verify that fault-indicating state is gone, use a
+fault-oriented mask such as `0x0D`
+(`testFailed | pendingDTC | confirmedDTC`); the regression suite requires that
+count to become zero after a successful clear.
