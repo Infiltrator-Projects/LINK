@@ -133,12 +133,22 @@ static bool uds_init(void)
     ecu_config.clock_ms = ecu_clock_ms;
     ecu_config.security_key = demo_security_key;
 
+    /*
+     * Initialise and recover the flash-backed ECU state before CAN is started.
+     * STM32F103 single-bank flash erase/program stalls instruction fetches;
+     * starting bxCAN first can therefore accept a diagnostic frame and then
+     * starve its ISR/response path while a first-boot/schema-migration journal
+     * write is still in progress.
+     */
+    if (!link_stm32f103_uds_ecu_init(&uds_ecu, &ecu_config)) {
+        return false;
+    }
+
     link_stm32_bxcan_hal_init(&uds_hal, &hcan1, 0U, 14U);
     ops = link_stm32_bxcan_hal_ops(&uds_hal);
     if (!link_stm32_can_init(&uds_can, &ops) ||
         !link_stm32_bxcan_hal_start_standard_dual(
-            &uds_hal, UINT32_C(0x7e0), UINT32_C(0x7df)) ||
-        !link_stm32f103_uds_ecu_init(&uds_ecu, &ecu_config)) {
+            &uds_hal, UINT32_C(0x7e0), UINT32_C(0x7df))) {
         return false;
     }
 
