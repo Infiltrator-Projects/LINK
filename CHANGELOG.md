@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.15.53 — 2026-09-22
+
+- Publish the fully qualified follow-up to 0.15.52 after correcting the DTC lifecycle regression expectations and MSVC status-mask warnings found by the full cross-platform matrix.
+- Retain the new configurable DTC lifecycle engine requested in issue #38: functional-group metadata, ISO-scaled fault-detection counters, confirmation-cycle tracking, aging counters, clear/reset semantics and STM32F103 persistence/integration.
+- Retain the issue #36 tester/server role split, issue #37 clear/session regression and exact STM32C092 issue-27 Cube-main cross-compile qualification.
+- The complete LINK CI matrix is green on the exact pre-release head across Ubuntu, macOS, Windows, ASan/UBSan, STM32/Cortex-M and native Linux provider coverage.
+
 ## 0.15.52 — 2026-09-22
 
 - Implement LINK issue #38's missing DTC lifecycle layer as a portable allocation-free reference engine instead of leaving 0x19 as response framing over manually injected status bytes.
