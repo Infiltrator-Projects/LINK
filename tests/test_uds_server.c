@@ -751,14 +751,14 @@ static int test_dtc_rich_all_subfunctions(void)
             true,true,true,0x33U,0x01U,
             0x01U,0x01U,snapshot_1,sizeof(snapshot_1),
             0x01U,0x01U,stored_1,sizeof(stored_1),
-            0x01U,ext_1,sizeof(ext_1)
+            0x01U,ext_1,sizeof(ext_1),NULL,0U
         },
         {
             UINT32_C(0xabcdef),0x40U,0x02U,0x10U,0U,2U,
             true,true,false,0x33U,0x01U,
             0x01U,0x01U,snapshot_2,sizeof(snapshot_2),
             0x01U,0x01U,stored_2,sizeof(stored_2),
-            0x01U,ext_2,sizeof(ext_2)
+            0x01U,ext_2,sizeof(ext_2),NULL,0U
         }
     };
     LinkUdsServerDtcStore store = {
@@ -966,14 +966,14 @@ static int test_dtc_empty_supported_and_history(void)
             true,true,true,0x33U,0x01U,
             0x01U,0U,NULL,0U,
             0x01U,0U,NULL,0U,
-            0x01U,NULL,0U
+            0x01U,NULL,0U,NULL,0U
         },
         {
             UINT32_C(0x222222),0x40U,0x02U,0U,2U,2U,
             false,true,false,0x33U,0x01U,
             0U,0U,NULL,0U,
             0U,0U,NULL,0U,
-            0x90U,obd_ext,sizeof(obd_ext)
+            0x90U,obd_ext,sizeof(obd_ext),NULL,0U
         }
     };
     LinkUdsServerDtcStore store = {
