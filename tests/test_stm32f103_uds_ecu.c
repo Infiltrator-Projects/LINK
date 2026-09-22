@@ -949,8 +949,8 @@ static int test_issue44_workbook_dids(void)
 
     CHECK(expect_positive(&ecu, f181, sizeof(f181),
         response, sizeof(response), &response_length) == 0);
-    CHECK(response_length == 20U);
-    CHECK(memcmp(response + 3U, "ER0101-000000-REV00", 17U) == 0);
+    CHECK(response_length == 22U);
+    CHECK(memcmp(response + 3U, "ER0101-000000-REV00", 19U) == 0);
 
     CHECK(expect_positive(&ecu, f182, sizeof(f182),
         response, sizeof(response), &response_length) == 0);
