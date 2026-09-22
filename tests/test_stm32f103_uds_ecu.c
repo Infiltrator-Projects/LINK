@@ -156,8 +156,9 @@ static int enter_programming_and_unlock(
     const uint8_t extended[] = {0x10U,0x03U};
     const uint8_t programming[] = {0x10U,0x02U};
     const uint8_t seed_request[] = {0x27U,0x01U};
-    uint8_t key_request[18U] = {0x27U,0x02U};
-    uint8_t tag[LINK_AES_CMAC_TAG_BYTES];
+    const uint8_t key_request[] = {
+        0x27U,0x02U,0x87U,0x65U,0x43U,0x21U
+    };
 
     CHECK(expect_positive(
         ecu, extended, sizeof(extended),
@@ -168,11 +169,9 @@ static int enter_programming_and_unlock(
     CHECK(expect_positive(
         ecu, seed_request, sizeof(seed_request),
         response, response_capacity, response_length) == 0);
-    CHECK(*response_length == 18U);
-    CHECK(link_aes_cmac_128(
-        test_security_key, response + 2U,
-        LINK_STM32F103_UDS_SECURITY_SEED_BYTES, tag));
-    memcpy(key_request + 2U, tag, sizeof(tag));
+    CHECK(*response_length == 6U);
+    CHECK(response[2] == 0x12U && response[3] == 0x34U &&
+          response[4] == 0x56U && response[5] == 0x78U);
     CHECK(expect_positive(
         ecu, key_request, sizeof(key_request),
         response, response_capacity, response_length) == 0);
@@ -867,6 +866,172 @@ static int test_policy_blocks_unsafe_default_session(void)
     return 0;
 }
 
+
+static int test_issue43_two_level_security_access(void)
+{
+    TestPlatform platform;
+    LinkStm32F103UdsEcu ecu;
+    LinkStm32F103UdsEcuConfig config;
+    uint8_t response[64U];
+    size_t response_length = 0U;
+    const uint8_t extended[] = {0x10U,0x03U};
+    const uint8_t level1_seed[] = {0x27U,0x01U};
+    const uint8_t level1_key[] = {
+        0x27U,0x02U,0x87U,0x65U,0x43U,0x21U
+    };
+    const uint8_t level2_seed[] = {0x27U,0x03U};
+    uint8_t level2_key[18U] = {0x27U,0x04U};
+    uint8_t tag[LINK_AES_CMAC_TAG_BYTES];
+
+    memset(&platform, 0, sizeof(platform));
+    memset(platform.page_a, 0xff, sizeof(platform.page_a));
+    memset(platform.page_b, 0xff, sizeof(platform.page_b));
+    config = test_config(&platform);
+    CHECK(link_stm32f103_uds_ecu_init(&ecu, &config));
+
+    CHECK(expect_positive(
+        &ecu, extended, sizeof(extended),
+        response, sizeof(response), &response_length) == 0);
+
+    CHECK(expect_positive(
+        &ecu, level1_seed, sizeof(level1_seed),
+        response, sizeof(response), &response_length) == 0);
+    CHECK(response_length == 6U);
+    CHECK(response[2] == 0x12U && response[3] == 0x34U &&
+          response[4] == 0x56U && response[5] == 0x78U);
+    CHECK(expect_positive(
+        &ecu, level1_key, sizeof(level1_key),
+        response, sizeof(response), &response_length) == 0);
+    CHECK(link_uds_server_active_security_level(
+        link_stm32f103_uds_ecu_server(&ecu)) == 1U);
+
+    link_uds_server_reset_session(link_stm32f103_uds_ecu_server(&ecu));
+    CHECK(expect_positive(
+        &ecu, extended, sizeof(extended),
+        response, sizeof(response), &response_length) == 0);
+    CHECK(expect_positive(
+        &ecu, level2_seed, sizeof(level2_seed),
+        response, sizeof(response), &response_length) == 0);
+    CHECK(response_length == 18U);
+    CHECK(link_aes_cmac_128(
+        test_security_key, response + 2U, 16U, tag));
+    memcpy(level2_key + 2U, tag, sizeof(tag));
+    CHECK(expect_positive(
+        &ecu, level2_key, sizeof(level2_key),
+        response, sizeof(response), &response_length) == 0);
+    CHECK(link_uds_server_active_security_level(
+        link_stm32f103_uds_ecu_server(&ecu)) == 2U);
+
+    return 0;
+}
+
+static int test_issue44_workbook_dids(void)
+{
+    TestPlatform platform;
+    LinkStm32F103UdsEcu ecu;
+    LinkStm32F103UdsEcuConfig config;
+    uint8_t response[64U];
+    size_t response_length = 0U;
+    const uint8_t f181[] = {0x22U,0xf1U,0x81U};
+    const uint8_t f182[] = {0x22U,0xf1U,0x82U};
+    const uint8_t f183[] = {0x22U,0xf1U,0x83U};
+    const uint8_t f184[] = {0x22U,0xf1U,0x84U};
+    const uint8_t f185[] = {0x22U,0xf1U,0x85U};
+    const uint8_t f186[] = {0x22U,0xf1U,0x86U};
+    const uint8_t f18a[] = {0x22U,0xf1U,0x8aU};
+    const uint8_t extended[] = {0x10U,0x03U};
+
+    memset(&platform, 0, sizeof(platform));
+    memset(platform.page_a, 0xff, sizeof(platform.page_a));
+    memset(platform.page_b, 0xff, sizeof(platform.page_b));
+    config = test_config(&platform);
+    CHECK(link_stm32f103_uds_ecu_init(&ecu, &config));
+
+    CHECK(expect_positive(&ecu, f181, sizeof(f181),
+        response, sizeof(response), &response_length) == 0);
+    CHECK(response_length == 20U);
+    CHECK(memcmp(response + 3U, "ER0101-000000-REV00", 17U) == 0);
+
+    CHECK(expect_positive(&ecu, f182, sizeof(f182),
+        response, sizeof(response), &response_length) == 0);
+    CHECK(response_length == 11U);
+    CHECK(memcmp(response + 3U, "UdsBt.01", 8U) == 0);
+
+    CHECK(expect_positive(&ecu, f183, sizeof(f183),
+        response, sizeof(response), &response_length) == 0);
+    CHECK(response_length == 4U && response[3] == 12U);
+
+    CHECK(expect_positive(&ecu, f184, sizeof(f184),
+        response, sizeof(response), &response_length) == 0);
+    CHECK(response_length == 4U && response[3] == 13U);
+
+    CHECK(expect_positive(&ecu, f185, sizeof(f185),
+        response, sizeof(response), &response_length) == 0);
+    CHECK(response_length == 12U);
+    CHECK(memcmp(response + 3U, "HIBV3.5.0", 9U) == 0);
+
+    CHECK(expect_positive(&ecu, f186, sizeof(f186),
+        response, sizeof(response), &response_length) == 0);
+    CHECK(response_length == 4U && response[3] == LINK_UDS_SESSION_DEFAULT);
+
+    CHECK(expect_positive(&ecu, extended, sizeof(extended),
+        response, sizeof(response), &response_length) == 0);
+    CHECK(expect_positive(&ecu, f186, sizeof(f186),
+        response, sizeof(response), &response_length) == 0);
+    CHECK(response[3] == LINK_UDS_SESSION_EXTENDED);
+
+    CHECK(expect_positive(&ecu, f18a, sizeof(f18a),
+        response, sizeof(response), &response_length) == 0);
+    CHECK(response_length == 15U);
+    CHECK(memcmp(response + 3U, "HIB01-TW0000", 12U) == 0);
+
+    return 0;
+}
+
+static int test_issue46_workbook_routines(void)
+{
+    TestPlatform platform;
+    LinkStm32F103UdsEcu ecu;
+    LinkStm32F103UdsEcuConfig config;
+    uint8_t response[64U];
+    size_t response_length = 0U;
+    const uint8_t check_memory[] = {0x31U,0x01U,0x02U,0x02U};
+    const uint8_t erase_memory[] = {0x31U,0x01U,0xffU,0x00U};
+    const uint8_t erase_result[] = {0x31U,0x03U,0xffU,0x00U};
+    const uint8_t check_dependencies[] = {0x31U,0x01U,0xffU,0x01U};
+
+    memset(&platform, 0, sizeof(platform));
+    memset(platform.page_a, 0xff, sizeof(platform.page_a));
+    memset(platform.page_b, 0xff, sizeof(platform.page_b));
+    config = test_config(&platform);
+    CHECK(link_stm32f103_uds_ecu_init(&ecu, &config));
+    CHECK(enter_programming_and_unlock(
+        &ecu, response, sizeof(response), &response_length) == 0);
+
+    CHECK(expect_positive(
+        &ecu, check_memory, sizeof(check_memory),
+        response, sizeof(response), &response_length) == 0);
+    CHECK(response_length == 5U && response[4] == 0U);
+
+    ecu.state.sandbox[0U] = 0x00U;
+    CHECK(expect_positive(
+        &ecu, erase_memory, sizeof(erase_memory),
+        response, sizeof(response), &response_length) == 0);
+    CHECK(ecu.state.sandbox[0U] == 0xffU);
+
+    CHECK(expect_positive(
+        &ecu, erase_result, sizeof(erase_result),
+        response, sizeof(response), &response_length) == 0);
+    CHECK(response_length == 5U && response[4] == 0U);
+
+    CHECK(expect_positive(
+        &ecu, check_dependencies, sizeof(check_dependencies),
+        response, sizeof(response), &response_length) == 0);
+    CHECK(response_length == 5U && response[4] == 0U);
+
+    return 0;
+}
+
 int main(void)
 {
     CHECK(test_all_27_service_surfaces() == 0);
@@ -874,6 +1039,9 @@ int main(void)
     CHECK(test_n_page_wear_level_rotation() == 0);
     CHECK(test_multi_page_persistent_state_slots() == 0);
     CHECK(test_issue42_workbook_dtc_catalogue() == 0);
+    CHECK(test_issue43_two_level_security_access() == 0);
+    CHECK(test_issue44_workbook_dids() == 0);
+    CHECK(test_issue46_workbook_routines() == 0);
     CHECK(test_issue37_clear_sequence_and_status_masks() == 0);
     CHECK(test_issue38_dtc_lifecycle_engine() == 0);
     CHECK(test_issue40_clear_and_read_dtc_policy() == 0);
