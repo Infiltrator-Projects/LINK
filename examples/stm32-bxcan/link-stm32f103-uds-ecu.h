@@ -24,6 +24,8 @@ extern "C" {
 #define LINK_STM32F103_UDS_DID_BYTES 16U
 #define LINK_STM32F103_UDS_SANDBOX_BYTES 256U
 #define LINK_STM32F103_UDS_RECORD_BYTES 4U
+#define LINK_STM32F103_UDS_SNAPSHOT_IDENTIFIER_COUNT 6U
+#define LINK_STM32F103_UDS_SNAPSHOT_PAYLOAD_BYTES 31U
 #define LINK_STM32F103_UDS_SECURITY_KEY_BYTES 16U
 #define LINK_STM32F103_UDS_SECURITY_SEED_BYTES 16U
 
@@ -34,6 +36,39 @@ typedef bool (*LinkStm32F103FlashErasePageFn)(
 typedef bool (*LinkStm32F103FlashProgramFn)(
     void *context, uint32_t address, const void *data, size_t length);
 typedef uint32_t (*LinkStm32F103ClockMsFn)(void *context);
+
+/*
+ * Diagnostic-sheet Freeze Frame Snapshot record 0x01 values.
+ *
+ * The workbook defines six identifiers:
+ *   DF00 supply voltage (mV)
+ *   DF01 vehicle speed (1/256 km/h)
+ *   DF02 occurrence counter
+ *   DF03 first malfunction odometer (5 m units)
+ *   DF04 last malfunction odometer (5 m units)
+ *   DD00 malfunction timestamp (second, minute, hour, month, day, year)
+ *
+ * LINK owns UDS encoding. The target/application owns capture and persistence
+ * of the real freeze-frame values.
+ */
+typedef struct {
+    uint16_t supply_voltage_mv;
+    uint16_t vehicle_speed_1_256_kph;
+    uint8_t occurrence_counter;
+    uint32_t first_odometer_5m;
+    uint32_t last_odometer_5m;
+    uint8_t timestamp_second;
+    uint8_t timestamp_minute;
+    uint8_t timestamp_hour;
+    uint8_t timestamp_month;
+    uint8_t timestamp_day;
+    uint8_t timestamp_year;
+} LinkStm32F103DtcSnapshotValues;
+
+typedef bool (*LinkStm32F103DtcSnapshotReadFn)(
+    void *context,
+    uint32_t dtc_code,
+    LinkStm32F103DtcSnapshotValues *values);
 
 typedef struct {
     void *context;
@@ -73,6 +108,15 @@ typedef struct {
     void *clock_context;
     const uint8_t *vin;
     const uint8_t *security_key;
+
+    /*
+     * Optional application-owned freeze-frame provider. When supplied, false
+     * means that DTC currently has no captured snapshot and 0x19/0x04 reports
+     * no record for it. When omitted, the reference ECU exposes deterministic
+     * bench values so the six-DID workbook framing is testable out of the box.
+     */
+    LinkStm32F103DtcSnapshotReadFn read_dtc_snapshot;
+    void *dtc_snapshot_context;
 } LinkStm32F103UdsEcuConfig;
 
 typedef struct {
@@ -123,6 +167,9 @@ typedef struct {
     LinkUdsDtcLifecycleState dtc_lifecycle[LINK_STM32F103_UDS_DTC_COUNT];
     LinkUdsDtcRecord dtc_records[LINK_STM32F103_UDS_DTC_COUNT];
     LinkUdsServerDtcDetail dtc_details[LINK_STM32F103_UDS_DTC_COUNT];
+    uint8_t dtc_snapshot_payload[LINK_STM32F103_UDS_DTC_COUNT]
+                                [LINK_STM32F103_UDS_SNAPSHOT_PAYLOAD_BYTES];
+    bool dtc_snapshot_available[LINK_STM32F103_UDS_DTC_COUNT];
     LinkUdsServerDtcStore dtc_store;
 } LinkStm32F103UdsEcu;
 
