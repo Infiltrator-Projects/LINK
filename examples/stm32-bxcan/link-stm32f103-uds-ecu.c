@@ -27,6 +27,20 @@
 #define LINK_STM32F103_VIN_DID UINT16_C(0xf190)
 #define LINK_STM32F103_SW_DID UINT16_C(0xf187)
 #define LINK_STM32F103_ROUTINE_INTEGRITY UINT16_C(0x0201)
+#define LINK_STM32F103_ROUTINE_CHECK_MEMORY UINT16_C(0x0202)
+#define LINK_STM32F103_ROUTINE_ERASE_MEMORY UINT16_C(0xff00)
+#define LINK_STM32F103_ROUTINE_CHECK_PROGRAMMING_DEPENDENCIES UINT16_C(0xff01)
+
+#define LINK_STM32F103_DID_SPARE_PART_NUMBER UINT16_C(0xf181)
+#define LINK_STM32F103_DID_BOOT_SW_IDENTIFIER UINT16_C(0xf182)
+#define LINK_STM32F103_DID_ECU_SW_NUMBER UINT16_C(0xf183)
+#define LINK_STM32F103_DID_APP_SW_NUMBER UINT16_C(0xf184)
+#define LINK_STM32F103_DID_HW_NUMBER UINT16_C(0xf185)
+#define LINK_STM32F103_DID_ACTIVE_SESSION UINT16_C(0xf186)
+#define LINK_STM32F103_DID_SYSTEM_SUPPLIER UINT16_C(0xf18a)
+
+#define LINK_STM32F103_SECURITY_MASK \
+    (LINK_UDS_SECURITY_LEVEL_MASK(1U) | LINK_UDS_SECURITY_LEVEL_MASK(2U))
 
 /*
  * LINK #42 workbook catalogue. These 66 definitions replace the previous
@@ -178,6 +192,30 @@ static const uint8_t stm32f103_default_vin[17U] = {
     'L','I','N','K','S','T','M','3','2','F','1','0','3','0','0','1','A'
 };
 
+static const uint8_t stm32f103_spare_part_number[] =
+    "ER0101-000000-REV00";
+static const uint8_t stm32f103_boot_sw_identifier[] = "UdsBt.01";
+static const uint8_t stm32f103_ecu_sw_number[] = {12U};
+static const uint8_t stm32f103_app_sw_number[] = {13U};
+static const uint8_t stm32f103_hw_number[] = "HIBV3.5.0";
+static const uint8_t stm32f103_system_supplier[] = "HIB01-TW0000";
+
+/*
+ * Deterministic DEBUG/REFERENCE SecurityAccess values requested in LINK #43.
+ * These are intentionally fixed for bench interoperability and MUST NOT be
+ * treated as production vehicle secrets.
+ */
+static const uint8_t stm32f103_level1_seed[4U] = {
+    0x12U, 0x34U, 0x56U, 0x78U
+};
+static const uint8_t stm32f103_level1_key[4U] = {
+    0x87U, 0x65U, 0x43U, 0x21U
+};
+static const uint8_t stm32f103_level2_seed[16U] = {
+    0x6bU,0xc1U,0xbeU,0xe2U,0x2eU,0x40U,0x9fU,0x96U,
+    0xe9U,0x3dU,0x7eU,0x11U,0x73U,0x93U,0x17U,0x2aU
+};
+
 static const LinkUdsServerPolicy stm32f103_policies[] = {
     {
         /*
@@ -196,112 +234,112 @@ static const LinkUdsServerPolicy stm32f103_policies[] = {
         LINK_UDS_SERVICE_COMMUNICATION_CONTROL,
         false, 0U,
         LINK_UDS_SESSION_MASK_EXTENDED | LINK_UDS_SESSION_MASK_PROGRAMMING,
-        LINK_UDS_SECURITY_LEVEL_MASK(1U),
+        LINK_STM32F103_SECURITY_MASK,
         LINK_UDS_ADDRESSING_MASK_PHYSICAL
     },
     {
         LINK_UDS_SERVICE_DYNAMICALLY_DEFINE_DATA_IDENTIFIER,
         false, 0U,
         LINK_UDS_SESSION_MASK_EXTENDED | LINK_UDS_SESSION_MASK_PROGRAMMING,
-        LINK_UDS_SECURITY_LEVEL_MASK(1U),
+        LINK_STM32F103_SECURITY_MASK,
         LINK_UDS_ADDRESSING_MASK_PHYSICAL
     },
     {
         LINK_UDS_SERVICE_ACCESS_TIMING_PARAMETER,
         false, 0U,
         LINK_UDS_SESSION_MASK_EXTENDED | LINK_UDS_SESSION_MASK_PROGRAMMING,
-        LINK_UDS_SECURITY_LEVEL_MASK(1U),
+        LINK_STM32F103_SECURITY_MASK,
         LINK_UDS_ADDRESSING_MASK_PHYSICAL
     },
     {
         LINK_UDS_SERVICE_RESPONSE_ON_EVENT,
         false, 0U,
         LINK_UDS_SESSION_MASK_EXTENDED | LINK_UDS_SESSION_MASK_PROGRAMMING,
-        LINK_UDS_SECURITY_LEVEL_MASK(1U),
+        LINK_STM32F103_SECURITY_MASK,
         LINK_UDS_ADDRESSING_MASK_PHYSICAL
     },
     {
         LINK_UDS_SERVICE_LINK_CONTROL,
         false, 0U,
         LINK_UDS_SESSION_MASK_EXTENDED | LINK_UDS_SESSION_MASK_PROGRAMMING,
-        LINK_UDS_SECURITY_LEVEL_MASK(1U),
+        LINK_STM32F103_SECURITY_MASK,
         LINK_UDS_ADDRESSING_MASK_PHYSICAL
     },
     {
         LINK_UDS_SERVICE_WRITE_DATA_BY_IDENTIFIER,
         false, 0U,
         LINK_UDS_SESSION_MASK_EXTENDED | LINK_UDS_SESSION_MASK_PROGRAMMING,
-        LINK_UDS_SECURITY_LEVEL_MASK(1U),
+        LINK_STM32F103_SECURITY_MASK,
         LINK_UDS_ADDRESSING_MASK_PHYSICAL
     },
     {
         LINK_UDS_SERVICE_INPUT_OUTPUT_CONTROL_BY_IDENTIFIER,
         false, 0U,
         LINK_UDS_SESSION_MASK_EXTENDED | LINK_UDS_SESSION_MASK_PROGRAMMING,
-        LINK_UDS_SECURITY_LEVEL_MASK(1U),
+        LINK_STM32F103_SECURITY_MASK,
         LINK_UDS_ADDRESSING_MASK_PHYSICAL
     },
     {
         LINK_UDS_SERVICE_ROUTINE_CONTROL,
         false, 0U,
         LINK_UDS_SESSION_MASK_EXTENDED | LINK_UDS_SESSION_MASK_PROGRAMMING,
-        LINK_UDS_SECURITY_LEVEL_MASK(1U),
+        LINK_STM32F103_SECURITY_MASK,
         LINK_UDS_ADDRESSING_MASK_PHYSICAL
     },
     {
         LINK_UDS_SERVICE_REQUEST_DOWNLOAD,
         false, 0U,
         LINK_UDS_SESSION_MASK_PROGRAMMING,
-        LINK_UDS_SECURITY_LEVEL_MASK(1U),
+        LINK_STM32F103_SECURITY_MASK,
         LINK_UDS_ADDRESSING_MASK_PHYSICAL
     },
     {
         LINK_UDS_SERVICE_REQUEST_UPLOAD,
         false, 0U,
         LINK_UDS_SESSION_MASK_PROGRAMMING,
-        LINK_UDS_SECURITY_LEVEL_MASK(1U),
+        LINK_STM32F103_SECURITY_MASK,
         LINK_UDS_ADDRESSING_MASK_PHYSICAL
     },
     {
         LINK_UDS_SERVICE_TRANSFER_DATA,
         false, 0U,
         LINK_UDS_SESSION_MASK_PROGRAMMING,
-        LINK_UDS_SECURITY_LEVEL_MASK(1U),
+        LINK_STM32F103_SECURITY_MASK,
         LINK_UDS_ADDRESSING_MASK_PHYSICAL
     },
     {
         LINK_UDS_SERVICE_REQUEST_TRANSFER_EXIT,
         false, 0U,
         LINK_UDS_SESSION_MASK_PROGRAMMING,
-        LINK_UDS_SECURITY_LEVEL_MASK(1U),
+        LINK_STM32F103_SECURITY_MASK,
         LINK_UDS_ADDRESSING_MASK_PHYSICAL
     },
     {
         LINK_UDS_SERVICE_REQUEST_FILE_TRANSFER,
         false, 0U,
         LINK_UDS_SESSION_MASK_PROGRAMMING,
-        LINK_UDS_SECURITY_LEVEL_MASK(1U),
+        LINK_STM32F103_SECURITY_MASK,
         LINK_UDS_ADDRESSING_MASK_PHYSICAL
     },
     {
         LINK_UDS_SERVICE_WRITE_MEMORY_BY_ADDRESS,
         false, 0U,
         LINK_UDS_SESSION_MASK_PROGRAMMING,
-        LINK_UDS_SECURITY_LEVEL_MASK(1U),
+        LINK_STM32F103_SECURITY_MASK,
         LINK_UDS_ADDRESSING_MASK_PHYSICAL
     },
     {
         LINK_UDS_SERVICE_SECURED_DATA_TRANSMISSION,
         false, 0U,
         LINK_UDS_SESSION_MASK_EXTENDED | LINK_UDS_SESSION_MASK_PROGRAMMING,
-        LINK_UDS_SECURITY_LEVEL_MASK(1U),
+        LINK_STM32F103_SECURITY_MASK,
         LINK_UDS_ADDRESSING_MASK_PHYSICAL
     },
     {
         LINK_UDS_SERVICE_CONTROL_DTC_SETTING,
         false, 0U,
         LINK_UDS_SESSION_MASK_EXTENDED | LINK_UDS_SESSION_MASK_PROGRAMMING,
-        LINK_UDS_SECURITY_LEVEL_MASK(1U),
+        LINK_STM32F103_SECURITY_MASK,
         LINK_UDS_ADDRESSING_MASK_PHYSICAL
     }
 };
@@ -972,6 +1010,7 @@ static LinkUdsServerHandlerResult stm32f103_read_did(
 {
     uint16_t did;
     const uint8_t *data = NULL;
+    uint8_t scalar_data[1U];
     size_t data_length = 0U;
     size_t offset = 0U;
 
@@ -987,6 +1026,28 @@ static LinkUdsServerHandlerResult stm32f103_read_did(
     } else if (did == LINK_STM32F103_SW_DID) {
         data = (const uint8_t *)LINK_VERSION_STRING;
         data_length = sizeof(LINK_VERSION_STRING) - 1U;
+    } else if (did == LINK_STM32F103_DID_SPARE_PART_NUMBER) {
+        data = stm32f103_spare_part_number;
+        data_length = sizeof(stm32f103_spare_part_number) - 1U;
+    } else if (did == LINK_STM32F103_DID_BOOT_SW_IDENTIFIER) {
+        data = stm32f103_boot_sw_identifier;
+        data_length = sizeof(stm32f103_boot_sw_identifier) - 1U;
+    } else if (did == LINK_STM32F103_DID_ECU_SW_NUMBER) {
+        data = stm32f103_ecu_sw_number;
+        data_length = sizeof(stm32f103_ecu_sw_number);
+    } else if (did == LINK_STM32F103_DID_APP_SW_NUMBER) {
+        data = stm32f103_app_sw_number;
+        data_length = sizeof(stm32f103_app_sw_number);
+    } else if (did == LINK_STM32F103_DID_HW_NUMBER) {
+        data = stm32f103_hw_number;
+        data_length = sizeof(stm32f103_hw_number) - 1U;
+    } else if (did == LINK_STM32F103_DID_ACTIVE_SESSION) {
+        scalar_data[0U] = link_uds_server_active_session(&ecu->server);
+        data = scalar_data;
+        data_length = sizeof(scalar_data);
+    } else if (did == LINK_STM32F103_DID_SYSTEM_SUPPLIER) {
+        data = stm32f103_system_supplier;
+        data_length = sizeof(stm32f103_system_supplier) - 1U;
     } else if (ecu->state.dynamic_defined != 0U &&
                did == ecu->state.dynamic_did) {
         if (ecu->state.dynamic_source_did == LINK_STM32F103_VIN_DID) {
@@ -1288,23 +1349,58 @@ static LinkUdsServerHandlerResult stm32f103_routine(
     uint8_t *response,
     size_t capacity)
 {
+    LinkStm32F103PersistentState old_state;
     uint16_t routine;
+    uint8_t status = 0U;
+
     if (request->pdu_length < 4U) return stm32f103_bad_length();
     routine = (uint16_t)(((uint16_t)request->pdu[2] << 8U) | request->pdu[3]);
-    if (routine != LINK_STM32F103_ROUTINE_INTEGRITY) {
-        return stm32f103_out_of_range();
-    }
     if (request->subfunction < 1U || request->subfunction > 3U) {
         return link_uds_server_handler_negative(
             LINK_UDS_NRC_SUBFUNCTION_NOT_SUPPORTED);
     }
+
+    switch (routine) {
+    case LINK_STM32F103_ROUTINE_INTEGRITY:
+    case LINK_STM32F103_ROUTINE_CHECK_MEMORY:
+        status = stm32f103_state_valid(&ecu->state) ? 0U : 1U;
+        break;
+
+    case LINK_STM32F103_ROUTINE_ERASE_MEMORY:
+        /*
+         * Reference-target safety boundary: "EraseMemory" erases only the
+         * non-executable programming sandbox, never application/boot flash.
+         */
+        if (request->subfunction == 1U) {
+            old_state = ecu->state;
+            memset(ecu->state.sandbox, 0xff, sizeof(ecu->state.sandbox));
+            if (!link_stm32f103_uds_ecu_flush(ecu)) {
+                ecu->state = old_state;
+                stm32f103_refresh_dtc_store(ecu);
+                return link_uds_server_handler_negative(
+                    LINK_UDS_NRC_GENERAL_PROGRAMMING_FAILURE);
+            }
+        }
+        break;
+
+    case LINK_STM32F103_ROUTINE_CHECK_PROGRAMMING_DEPENDENCIES:
+        status =
+            ecu->transfer_mode == LINK_STM32F103_TRANSFER_NONE &&
+            stm32f103_state_valid(&ecu->state)
+                ? 0U : 1U;
+        break;
+
+    default:
+        return stm32f103_out_of_range();
+    }
+
     if (capacity < 4U) {
         return link_uds_server_handler_negative(LINK_UDS_NRC_RESPONSE_TOO_LONG);
     }
     response[0] = request->subfunction;
     response[1] = request->pdu[2];
     response[2] = request->pdu[3];
-    response[3] = stm32f103_state_valid(&ecu->state) ? 0U : 1U;
+    response[3] = status;
     return link_uds_server_handler_positive(4U);
 }
 
@@ -1664,34 +1760,34 @@ static LinkUdsServerHandlerResult stm32f103_security_seed(
     size_t seed_capacity)
 {
     LinkStm32F103UdsEcu *ecu = (LinkStm32F103UdsEcu *)context;
-    uint32_t now;
-    size_t index;
+    const uint8_t *selected_seed;
+    size_t selected_length;
 
     if (ecu == NULL || seed == NULL ||
-        security_level != 1U ||
         request_record_length != 0U ||
         request_record != NULL) {
         return link_uds_server_handler_negative(
             LINK_UDS_NRC_REQUEST_OUT_OF_RANGE);
     }
-    if (seed_capacity < LINK_STM32F103_UDS_SECURITY_SEED_BYTES) {
+
+    if (security_level == 1U) {
+        selected_seed = stm32f103_level1_seed;
+        selected_length = sizeof(stm32f103_level1_seed);
+    } else if (security_level == 2U) {
+        selected_seed = stm32f103_level2_seed;
+        selected_length = sizeof(stm32f103_level2_seed);
+    } else {
+        return link_uds_server_handler_negative(
+            LINK_UDS_NRC_REQUEST_OUT_OF_RANGE);
+    }
+
+    if (seed_capacity < selected_length) {
         return link_uds_server_handler_negative(LINK_UDS_NRC_RESPONSE_TOO_LONG);
     }
-    now = ecu->config.clock_ms(ecu->config.clock_context);
-    for (index = 0U;
-         index < LINK_STM32F103_UDS_SECURITY_SEED_BYTES;
-         ++index) {
-        const unsigned int shift = (unsigned int)(index % 4U) * 8U;
-        ecu->security_seed[index] =
-            (uint8_t)((ecu->state.generation >> shift) ^
-                      (now >> shift) ^
-                      (uint32_t)(0xa5U + (uint8_t)(index * 17U)));
-    }
-    memcpy(
-        seed, ecu->security_seed,
-        LINK_STM32F103_UDS_SECURITY_SEED_BYTES);
-    return link_uds_server_handler_positive(
-        LINK_STM32F103_UDS_SECURITY_SEED_BYTES);
+    memset(ecu->security_seed, 0, sizeof(ecu->security_seed));
+    memcpy(ecu->security_seed, selected_seed, selected_length);
+    memcpy(seed, selected_seed, selected_length);
+    return link_uds_server_handler_positive(selected_length);
 }
 
 static bool stm32f103_security_verify(
@@ -1701,13 +1797,25 @@ static bool stm32f103_security_verify(
     size_t key_length)
 {
     LinkStm32F103UdsEcu *ecu = (LinkStm32F103UdsEcu *)context;
-    return ecu != NULL &&
-           security_level == 1U &&
+
+    if (ecu == NULL || key == NULL) return false;
+
+    if (security_level == 1U) {
+        uint8_t difference = 0U;
+        size_t index;
+        if (key_length != sizeof(stm32f103_level1_key)) return false;
+        for (index = 0U; index < sizeof(stm32f103_level1_key); ++index) {
+            difference |= (uint8_t)(key[index] ^ stm32f103_level1_key[index]);
+        }
+        return difference == 0U;
+    }
+
+    return security_level == 2U &&
            key_length == LINK_AES_CMAC_TAG_BYTES &&
            link_aes_cmac_128_verify(
                ecu->config.security_key,
-               ecu->security_seed,
-               sizeof(ecu->security_seed),
+               stm32f103_level2_seed,
+               sizeof(stm32f103_level2_seed),
                key);
 }
 
