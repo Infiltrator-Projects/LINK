@@ -439,6 +439,83 @@ static int test_issue37_clear_sequence_and_status_masks(void)
     return 0;
 }
 
+static int test_issue38_dtc_lifecycle_engine(void)
+{
+    TestPlatform platform;
+    LinkStm32F103UdsEcu ecu;
+    LinkStm32F103UdsEcuConfig config;
+    uint8_t response[64U];
+    size_t response_length = 0U;
+    const uint8_t clear_all[] = {0x14U,0xffU,0xffU,0xffU};
+    const uint8_t read_fdc[] = {0x19U,0x14U};
+    const uint32_t code = UINT32_C(0x123456);
+
+    memset(&platform, 0, sizeof(platform));
+    memset(platform.page_a, 0xff, sizeof(platform.page_a));
+    memset(platform.page_b, 0xff, sizeof(platform.page_b));
+    config = test_config(&platform);
+    CHECK(link_stm32f103_uds_ecu_init(&ecu, &config));
+    CHECK(enter_programming_and_unlock(
+        &ecu, response, sizeof(response), &response_length) == 0);
+    CHECK(expect_positive(
+        &ecu, clear_all, sizeof(clear_all),
+        response, sizeof(response), &response_length) == 0);
+
+    CHECK(ecu.dtc_details[0U].functional_group_identifier == 0x33U);
+    CHECK(ecu.dtc_lifecycle[0U].status == 0x50U);
+
+    /* First failed operation cycle: prefailed, pending, FDC +64. */
+    CHECK(link_stm32f103_uds_ecu_begin_operation_cycle(&ecu));
+    CHECK(link_stm32f103_uds_ecu_report_dtc_test(
+        &ecu, code, LINK_UDS_DTC_TEST_FAILED));
+    CHECK(link_stm32f103_uds_ecu_end_operation_cycle(&ecu));
+    CHECK(ecu.dtc_lifecycle[0U].fault_detection_counter == 64);
+    CHECK((ecu.dtc_lifecycle[0U].status &
+           LINK_UDS_DTC_STATUS_PENDING_DTC) != 0U);
+    CHECK((ecu.dtc_lifecycle[0U].status &
+           LINK_UDS_DTC_STATUS_CONFIRMED_DTC) == 0U);
+
+    CHECK(expect_positive(
+        &ecu, read_fdc, sizeof(read_fdc),
+        response, sizeof(response), &response_length) == 0);
+    CHECK(response_length == 6U);
+    CHECK(response[0] == 0x59U && response[1] == 0x14U);
+    CHECK(response[2] == 0x12U && response[3] == 0x34U &&
+          response[4] == 0x56U && response[5] == 64U);
+
+    /* Second failed cycle saturates at +127 and confirms the DTC. */
+    CHECK(link_stm32f103_uds_ecu_begin_operation_cycle(&ecu));
+    CHECK(link_stm32f103_uds_ecu_report_dtc_test(
+        &ecu, code, LINK_UDS_DTC_TEST_FAILED));
+    CHECK(link_stm32f103_uds_ecu_end_operation_cycle(&ecu));
+    CHECK(ecu.dtc_lifecycle[0U].fault_detection_counter == 127);
+    CHECK((ecu.dtc_lifecycle[0U].status &
+           LINK_UDS_DTC_STATUS_CONFIRMED_DTC) != 0U);
+
+    /* +127 is fully failed, so 0x19/0x14 no longer reports it as prefailed. */
+    CHECK(expect_positive(
+        &ecu, read_fdc, sizeof(read_fdc),
+        response, sizeof(response), &response_length) == 0);
+    CHECK(response_length == 2U);
+    CHECK(response[0] == 0x59U && response[1] == 0x14U);
+
+    /* Three completed pass cycles age the confirmed DTC out. */
+    for (unsigned int cycle = 0U; cycle < 3U; ++cycle) {
+        CHECK(link_stm32f103_uds_ecu_begin_operation_cycle(&ecu));
+        CHECK(link_stm32f103_uds_ecu_report_dtc_test(
+            &ecu, code, LINK_UDS_DTC_TEST_PASSED));
+        CHECK(link_stm32f103_uds_ecu_end_operation_cycle(&ecu));
+    }
+    CHECK(ecu.dtc_lifecycle[0U].aging_counter == 3U);
+    CHECK(ecu.dtc_lifecycle[0U].fault_detection_counter == -65);
+    CHECK((ecu.dtc_lifecycle[0U].status &
+           LINK_UDS_DTC_STATUS_PENDING_DTC) == 0U);
+    CHECK((ecu.dtc_lifecycle[0U].status &
+           LINK_UDS_DTC_STATUS_CONFIRMED_DTC) == 0U);
+
+    return 0;
+}
+
 static int test_policy_blocks_unsafe_default_session(void)
 {
     TestPlatform platform;
@@ -476,6 +553,7 @@ int main(void)
     CHECK(test_all_27_service_surfaces() == 0);
     CHECK(test_persistence_and_dtc_clear() == 0);
     CHECK(test_issue37_clear_sequence_and_status_masks() == 0);
+    CHECK(test_issue38_dtc_lifecycle_engine() == 0);
     CHECK(test_policy_blocks_unsafe_default_session() == 0);
     puts("STM32F103 complete UDS ECU tests passed");
     return EXIT_SUCCESS;
