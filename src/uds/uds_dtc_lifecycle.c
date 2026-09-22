@@ -48,7 +48,7 @@ void link_uds_dtc_lifecycle_begin_operation_cycle(
     LinkUdsDtcLifecycleState *state)
 {
     if (state == NULL) return;
-    state->status &= (uint8_t)~LINK_UDS_DTC_STATUS_TEST_FAILED_THIS_OPERATION_CYCLE;
+    state->status &= (uint8_t)(UINT8_C(0xff) ^ LINK_UDS_DTC_STATUS_TEST_FAILED_THIS_OPERATION_CYCLE);
     state->status |= LINK_UDS_DTC_STATUS_TEST_NOT_COMPLETED_THIS_OPERATION_CYCLE;
     state->fault_detection_counter = 0;
     state->tested_this_cycle = false;
@@ -70,9 +70,9 @@ bool link_uds_dtc_lifecycle_report_test(
 
     state->tested_this_cycle = true;
     state->status &=
-        (uint8_t)~LINK_UDS_DTC_STATUS_TEST_NOT_COMPLETED_THIS_OPERATION_CYCLE;
+        (uint8_t)(UINT8_C(0xff) ^ LINK_UDS_DTC_STATUS_TEST_NOT_COMPLETED_THIS_OPERATION_CYCLE);
     state->status &=
-        (uint8_t)~LINK_UDS_DTC_STATUS_TEST_NOT_COMPLETED_SINCE_LAST_CLEAR;
+        (uint8_t)(UINT8_C(0xff) ^ LINK_UDS_DTC_STATUS_TEST_NOT_COMPLETED_SINCE_LAST_CLEAR);
 
     if (result == LINK_UDS_DTC_TEST_FAILED) {
         state->fault_detection_counter = saturating_add(
@@ -94,7 +94,7 @@ bool link_uds_dtc_lifecycle_report_test(
         state->fault_detection_counter, definition->decrement_step);
     if (state->fault_detection_counter == INT8_MIN) {
         state->passed_this_cycle = true;
-        state->status &= (uint8_t)~LINK_UDS_DTC_STATUS_TEST_FAILED;
+        state->status &= (uint8_t)(UINT8_C(0xff) ^ LINK_UDS_DTC_STATUS_TEST_FAILED);
     }
     return true;
 }
@@ -123,7 +123,7 @@ bool link_uds_dtc_lifecycle_end_operation_cycle(
     if (!state->passed_this_cycle) return true;
 
     state->failure_cycle_count = 0U;
-    state->status &= (uint8_t)~LINK_UDS_DTC_STATUS_PENDING_DTC;
+    state->status &= (uint8_t)(UINT8_C(0xff) ^ LINK_UDS_DTC_STATUS_PENDING_DTC);
 
     if ((state->status & LINK_UDS_DTC_STATUS_CONFIRMED_DTC) != 0U &&
         definition->aging_threshold_cycles != 0U) {
@@ -131,7 +131,7 @@ bool link_uds_dtc_lifecycle_end_operation_cycle(
             state->aging_counter++;
         }
         if (state->aging_counter >= definition->aging_threshold_cycles) {
-            state->status &= (uint8_t)~LINK_UDS_DTC_STATUS_CONFIRMED_DTC;
+            state->status &= (uint8_t)(UINT8_C(0xff) ^ LINK_UDS_DTC_STATUS_CONFIRMED_DTC);
             state->aging_counter = definition->aging_threshold_cycles;
         }
     } else if ((state->status & LINK_UDS_DTC_STATUS_CONFIRMED_DTC) == 0U) {
