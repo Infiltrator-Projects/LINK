@@ -255,9 +255,7 @@ static int test_exact_standard_filters(void)
     REQUIRE(fake_filter.FilterActivation == ENABLE);
     REQUIRE(fake_filter.FilterBank == 3U);
     REQUIRE(fake_filter.SlaveStartFilterBank == 14U);
-    REQUIRE((fake_notifications & CAN_IT_RX_FIFO0_MSG_PENDING) != 0U);
-    REQUIRE((fake_notifications & CAN_IT_TX_MAILBOX_EMPTY) != 0U);
-    REQUIRE((fake_notifications & CAN_IT_ERROR) != 0U);
+    REQUIRE(fake_notifications == CAN_IT_RX_FIFO0_MSG_PENDING);
 
     reset_fake_hal();
     link_stm32_bxcan_hal_init(&adapter, &hcan, 14U, 14U);
@@ -437,15 +435,10 @@ static int test_failures_and_rejections(void)
     REQUIRE(link_stm32_can_send(&channel, &frame));
     REQUIRE(fake_tx_header.ExtId == UINT32_C(0x18daf110));
     REQUIRE(fake_tx_header.IDE == CAN_ID_EXT);
-    fake_tx_pending &= ~CAN_TX_MAILBOX1;
-    link_stm32_bxcan_hal_tx_abort_irq(&adapter, CAN_TX_MAILBOX1);
-    REQUIRE(link_stm32_can_poll_tx_status(
-        &channel, NULL) == LINK_STM32_CAN_TX_FAILED);
-
-    REQUIRE(link_stm32_can_send(&channel, &frame));
-    link_stm32_bxcan_hal_error_irq(&adapter);
-    REQUIRE(link_stm32_can_poll_tx_status(
-        &channel, NULL) == LINK_STM32_CAN_TX_PENDING);
+    /*
+     * If a HAL TX/error ISR consumed the sticky result bits without forwarding
+     * a successful completion callback, a released mailbox is still failure.
+     */
     fake_tx_pending &= ~CAN_TX_MAILBOX1;
     REQUIRE(link_stm32_can_poll_tx_status(
         &channel, NULL) == LINK_STM32_CAN_TX_FAILED);
@@ -503,8 +496,8 @@ static int test_vin_example_end_to_end(void)
 
     fake_tick = 1U;
     fake_tx_pending = 0U;
-    link_stm32_bxcan_example_tx_complete_irq(
-        &hcan, CAN_TX_MAILBOX1);
+    fake_tx_rqcp |= CAN_TX_MAILBOX1;
+    fake_tx_ok_flags |= CAN_TX_MAILBOX1;
     link_stm32_bxcan_example_process();
 
     memset(&header, 0, sizeof(header));
@@ -533,8 +526,8 @@ static int test_vin_example_end_to_end(void)
     REQUIRE(fake_tx_data[2] == 0U);
     fake_tick = 11U;
     fake_tx_pending = 0U;
-    link_stm32_bxcan_example_tx_complete_irq(
-        &hcan, CAN_TX_MAILBOX1);
+    fake_tx_rqcp |= CAN_TX_MAILBOX1;
+    fake_tx_ok_flags |= CAN_TX_MAILBOX1;
     link_stm32_bxcan_example_process();
 
     memset(data, 0, sizeof(data));

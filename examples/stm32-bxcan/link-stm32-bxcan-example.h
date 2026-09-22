@@ -52,10 +52,6 @@ void link_stm32_bxcan_example_rx_fifo0_irq(CAN_HandleTypeDef *hcan);
 void link_stm32_bxcan_example_tx_complete_irq(
     CAN_HandleTypeDef *hcan,
     uint32_t mailbox);
-void link_stm32_bxcan_example_tx_abort_irq(
-    CAN_HandleTypeDef *hcan,
-    uint32_t mailbox);
-void link_stm32_bxcan_example_error_irq(CAN_HandleTypeDef *hcan);
 
 LinkStm32BxCanExampleState link_stm32_bxcan_example_state(void);
 const char *link_stm32_bxcan_example_vin(void);

@@ -204,22 +204,6 @@ void link_stm32_bxcan_example_tx_complete_irq(
     }
 }
 
-void link_stm32_bxcan_example_tx_abort_irq(
-    CAN_HandleTypeDef *hcan,
-    uint32_t mailbox)
-{
-    if (hcan != NULL && hcan == example_hal.hcan) {
-        link_stm32_bxcan_hal_tx_abort_irq(&example_hal, mailbox);
-    }
-}
-
-void link_stm32_bxcan_example_error_irq(CAN_HandleTypeDef *hcan)
-{
-    if (hcan != NULL && hcan == example_hal.hcan) {
-        link_stm32_bxcan_hal_error_irq(&example_hal);
-    }
-}
-
 LinkStm32BxCanExampleState link_stm32_bxcan_example_state(void)
 {
     return example_state;

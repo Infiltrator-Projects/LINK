@@ -26,7 +26,6 @@ typedef struct {
     uint32_t slave_start_filter_bank;
     volatile uint32_t pending_mailbox;
     volatile uint32_t completed_mailbox;
-    volatile uint32_t failed_mailbox;
     volatile uint32_t completed_tick_ms;
 } LinkStm32BxCanHal;
 
@@ -48,10 +47,6 @@ bool link_stm32_bxcan_hal_start_standard_dual(
 void link_stm32_bxcan_hal_tx_complete_irq(
     LinkStm32BxCanHal *adapter,
     uint32_t mailbox);
-void link_stm32_bxcan_hal_tx_abort_irq(
-    LinkStm32BxCanHal *adapter,
-    uint32_t mailbox);
-void link_stm32_bxcan_hal_error_irq(LinkStm32BxCanHal *adapter);
 
 #ifdef __cplusplus
 }

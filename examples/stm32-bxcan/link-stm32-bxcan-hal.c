@@ -89,7 +89,6 @@ static bool link_stm32_bxcan_send(
     header.TransmitGlobalTime = DISABLE;
 
     adapter->completed_mailbox = 0U;
-    adapter->failed_mailbox = 0U;
     adapter->completed_tick_ms = 0U;
     if (HAL_CAN_AddTxMessage(
             adapter->hcan, &header, frame->data, &mailbox) != HAL_OK ||
@@ -163,7 +162,6 @@ static LinkStm32CanTxStatus link_stm32_bxcan_tx_status(
             *completion_tick_ms = adapter->completed_tick_ms;
         }
         adapter->completed_mailbox = 0U;
-        adapter->failed_mailbox = 0U;
         adapter->pending_mailbox = 0U;
         return LINK_STM32_CAN_TX_COMPLETE;
     }
@@ -200,7 +198,6 @@ static LinkStm32CanTxStatus link_stm32_bxcan_tx_status(
              */
             __HAL_CAN_CLEAR_FLAG(adapter->hcan, rqcp);
             adapter->completed_mailbox = 0U;
-            adapter->failed_mailbox = 0U;
             adapter->pending_mailbox = 0U;
 
             if (!succeeded) {
@@ -214,21 +211,16 @@ static LinkStm32CanTxStatus link_stm32_bxcan_tx_status(
     }
 
     hardware_pending = HAL_CAN_IsTxMessagePending(adapter->hcan, pending);
-    if (adapter->failed_mailbox == pending && hardware_pending == 0U) {
-        adapter->completed_mailbox = 0U;
-        adapter->failed_mailbox = 0U;
-        adapter->pending_mailbox = 0U;
-        return LINK_STM32_CAN_TX_FAILED;
-    }
     if (hardware_pending != 0U) {
         return LINK_STM32_CAN_TX_PENDING;
     }
 
-    /* A released mailbox without its matching completion callback is a
-     * terminal failure. This covers abort/error callbacks and incomplete
-     * application callback wiring without inventing a completion timestamp. */
+    /*
+     * A released mailbox without successful completion evidence is a terminal
+     * failure. This also covers an application HAL TX/error ISR consuming the
+     * sticky result flags without forwarding a matching success callback.
+     */
     adapter->completed_mailbox = 0U;
-    adapter->failed_mailbox = 0U;
     adapter->pending_mailbox = 0U;
     return LINK_STM32_CAN_TX_FAILED;
 }
@@ -274,16 +266,14 @@ static bool link_stm32_bxcan_hal_start_standard_filter(
     uint32_t second_id)
 {
     CAN_FilterTypeDef filter;
-    const uint32_t notifications =
-        CAN_IT_RX_FIFO0_MSG_PENDING |
-        CAN_IT_RX_FIFO0_FULL |
-        CAN_IT_RX_FIFO0_OVERRUN |
-        CAN_IT_TX_MAILBOX_EMPTY |
-        CAN_IT_ERROR_WARNING |
-        CAN_IT_ERROR_PASSIVE |
-        CAN_IT_BUSOFF |
-        CAN_IT_LAST_ERROR_CODE |
-        CAN_IT_ERROR;
+    /*
+     * RX delivery is the only interrupt required by the default LINK bxCAN
+     * path. TX completion/failure is recovered from bxCAN's sticky mailbox
+     * result flags in tx_status(), keeping Cube integration to one callback.
+     * Projects that intentionally enable the CAN TX IRQ may still forward the
+     * successful mailbox callbacks for an exact interrupt-time completion tick.
+     */
+    const uint32_t notifications = CAN_IT_RX_FIFO0_MSG_PENDING;
 
     if (adapter == NULL || adapter->hcan == NULL ||
         receive_id > UINT32_C(0x7ff) ||
@@ -344,21 +334,4 @@ void link_stm32_bxcan_hal_tx_complete_irq(
     }
     adapter->completed_tick_ms = HAL_GetTick();
     adapter->completed_mailbox = mailbox;
-}
-
-void link_stm32_bxcan_hal_tx_abort_irq(
-    LinkStm32BxCanHal *adapter,
-    uint32_t mailbox)
-{
-    if (adapter != NULL && adapter->pending_mailbox != 0U &&
-        mailbox == adapter->pending_mailbox) {
-        adapter->failed_mailbox = mailbox;
-    }
-}
-
-void link_stm32_bxcan_hal_error_irq(LinkStm32BxCanHal *adapter)
-{
-    if (adapter != NULL && adapter->pending_mailbox != 0U) {
-        adapter->failed_mailbox = adapter->pending_mailbox;
-    }
 }
