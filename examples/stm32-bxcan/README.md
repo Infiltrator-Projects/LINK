@@ -210,3 +210,12 @@ returns `54`. LINK then sets the cleared DTC status to
 fault-oriented mask such as `0x0D`
 (`testFailed | pendingDTC | confirmedDTC`); the regression suite requires that
 count to become zero after a successful clear.
+
+
+## DTC monitor lifecycle
+
+The STM32F103 ECU/server now uses LINK's shared DTC lifecycle reference engine
+for FunctionalGroupIdentifier metadata, signed fault-detection-counter
+progression, failed-cycle confirmation and passed-cycle aging. See
+[`docs/UDS-DTC-LIFECYCLE.md`](../../docs/UDS-DTC-LIFECYCLE.md) for the
+protocol/lifecycle boundary and the reference algorithm.
