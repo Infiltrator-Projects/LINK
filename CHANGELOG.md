@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.15.52 — 2026-09-22
+
+- Implement LINK issue #38's missing DTC lifecycle layer as a portable allocation-free reference engine instead of leaving 0x19 as response framing over manually injected status bytes.
+- Add FunctionalGroupIdentifier/severity/functional-unit definition metadata, signed ISO-scaled fault-detection-counter progression, per-operation-cycle FDC reset, prefailed (+1..+126) reporting, +127 failed-state transition, failed-cycle confirmation and configurable passed-cycle aging.
+- Keep the OEM boundary explicit: ISO-visible state is shared, while counter step sizes, confirmation thresholds and aging policy remain configurable product policy rather than being falsely labelled universal or Mercedes-specific.
+- Integrate the shared lifecycle into the STM32F103 ECU/server reference, bump its persisted-state schema, expose begin/report/end operation-cycle APIs and make ClearDiagnosticInformation reset lifecycle/aging state atomically.
+- Avoid flash-endurance damage by keeping monitor samples in RAM and committing the reference journal at operation-cycle completion rather than erasing/programming flash for every test execution.
+- Expose the reference lifecycle through application-defined extended-data record 1 (aging count, failed-cycle count, signed FDC byte, FunctionalGroupIdentifier) and add end-to-end 0x19/0x14, confirmation, aging, persistence-boundary and clear regressions.
+- Document the distinction between UDS DTC report framing and manufacturer/product diagnostic-monitor policy in `docs/UDS-DTC-LIFECYCLE.md`.
+
 ## 0.15.51 — 2026-09-22
 
 - Resolve issue #36's tester/server transplant ambiguity by renaming the bxCAN VIN request example and its public example symbols to explicitly say tester/client; the STM32F103 ECU/server remains the separate `link-stm32f103-uds-ecu.c` + `issue-32/Src-main.c` integration.
