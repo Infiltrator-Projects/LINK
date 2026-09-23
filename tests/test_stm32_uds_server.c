@@ -167,8 +167,12 @@ int main(void)
     request.data[1] = 0x10U;
     request.data[2] = 0x01U;
     mock_push(&mock, &request);
-    link_stm32_can_rx_isr(&channel);
 
+    /*
+     * Reproduce LINK #47's permanent-silence failure mode: the frame is
+     * already present in the controller-facing RX source, but the target RX
+     * callback never fires. The server poll must still drain it and answer.
+     */
     CHECK(poll_until_complete(&transport, &mock) == 0);
     CHECK(mock.tx_count == 1U);
     CHECK(mock.tx[0].can_id == 0x7e8U);

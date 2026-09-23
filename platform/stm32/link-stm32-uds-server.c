@@ -555,6 +555,16 @@ LinkStm32UdsServerResult link_stm32_uds_server_poll(
         return LINK_STM32_UDS_SERVER_RESULT_FAILED_STATE;
     }
 
+    /*
+     * Keep the interrupt path as the low-latency producer, but also drain the
+     * controller from the main-loop poll. Some real Cube projects have valid
+     * bxCAN/FDCAN traffic in the hardware FIFO while the expected RX callback
+     * is delayed or never delivered. LinkStm32Can's drain entry is explicitly
+     * re-entrancy guarded, so the IRQ and fallback may safely coexist without
+     * creating two concurrent HAL receive producers.
+     */
+    link_stm32_can_rx_isr(transport->channel);
+
     result = link_stm32_uds_server_poll_tx_completion(transport);
     if (transport->state == LINK_STM32_UDS_SERVER_FAILED ||
         result == LINK_STM32_UDS_SERVER_RESULT_REQUEST_COMPLETE) {
