@@ -114,8 +114,12 @@ At a 36 MHz CAN clock, a verified starting point is prescaler 4, BS1 15 TQ,
 BS2 2 TQ, SJW 1 TQ (18 TQ/bit = 500 kbit/s). Recalculate if the actual APB1
 clock differs.
 
-The Cube project needs only the CAN RX FIFO0 message-pending interrupt. The
-supplied `issue-32/Src-main.c` forwards that one receive callback; TX
+The normal low-latency path uses the CAN RX FIFO0 message-pending interrupt.
+The supplied `issue-32/Src-main.c` forwards that receive callback, while the
+shared UDS-server poll also performs a guarded main-loop RX drain. This fallback
+keeps a valid request from becoming permanent silence if a Cube RX callback is
+delayed or not delivered on a target; the interrupt remains recommended so
+arrival timing is captured promptly and hardware FIFO pressure stays low. TX
 completion and failure are recovered by polling bxCAN's latched mailbox result
 flags. TX-complete callbacks remain an optional precision path, not a
 requirement for the reference ECU.

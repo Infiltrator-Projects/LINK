@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.15.62 — 2026-09-23
+
+- Harden LINK #47's STM32 UDS server receive path against a delayed or missing Cube RX callback by opportunistically draining the controller from `link_stm32_uds_server_poll()` as well as from the normal interrupt path.
+- Preserve the interrupt as the low-latency producer while relying on the existing re-entrancy guard so IRQ and main-loop drains cannot enter the HAL receive callback concurrently.
+- Add an end-to-end regression reproducing the reporter's permanent-silence shape: a valid 0x7E0 DiagnosticSessionControl request is present in the controller-facing RX source, no RX callback fires, and LINK must still transmit the 0x7E8 response.
+- Retain the earlier STM32F103 single-bank-flash startup fix: flash-backed ECU recovery still completes before bxCAN is started in the canonical issue-32 integration.
+- Reconcile changelog ordering so the 0.15.61 Common 1.19.24 release is recorded in chronological position instead of appearing in a duplicated lower section.
+
+## 0.15.61 — 2026-09-23
+
+- Advance the exact nested Infiltratr Common dependency from 1.19.23 to 1.19.24 at `748e089ae175329471d4cf375522c44081371bd5`.
+- Inherit Common's API-compatible graphics hardening for clipped signed coordinates, alias-safe in-place surface operations and overflow-safe nearest-neighbour scaling without changing LINK's diagnostic or transport contracts.
+- Keep LINK as the sole Common authority for manufacturer products; downstream products continue to pin an exact released LINK revision rather than selecting Common independently.
+
 ## 0.15.60 — 2026-09-22
 
 - Complete LINK #45's STM32F103 Diagnostic-workbook Freeze Frame Snapshot Record 0x01 with the exact six Sheet 7 identifiers: DF00 supply voltage, DF01 vehicle speed, DF02 occurrence counter, DF03 first-malfunction odometer, DF04 last-malfunction odometer and DD00 malfunction timestamp.
@@ -154,14 +168,6 @@
 - Repair the Win32 Discover About metadata initializer after the shared About model gained a Build field; use designated initializers so future model growth cannot silently shift identity fields.
 - Give native Windows Discover surfaces an explicit build identity while preserving the shared Website, Credits, Licence and Close structure.
 
-
-This file records user-visible, compatibility, diagnostic-knowledge and validation changes for LINK.
-
-## 0.15.61 — 2026-09-23
-
-- Advance the exact nested Infiltratr Common dependency from 1.19.23 to 1.19.24 at `748e089ae175329471d4cf375522c44081371bd5`.
-- Inherit Common's API-compatible graphics hardening for clipped signed coordinates, alias-safe in-place surface operations and overflow-safe nearest-neighbour scaling without changing LINK's diagnostic or transport contracts.
-- Keep LINK as the sole Common authority for manufacturer products; downstream products continue to pin an exact released LINK revision rather than selecting Common independently.
 
 ## 0.15.38 — 2026-09-21
 
