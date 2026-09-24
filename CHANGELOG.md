@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.15.65 - 2026-09-24
+
+- Align the shared Linux vehicle titlebar with the 44 px publisher desktop chrome height.
+- Preserve manufacturer accents, diagnostics, transport behaviour, dependencies and platform architecture unchanged.
+
 ## 0.15.64 - 2026-09-24
 
 - Align shared Linux vehicle navigation rows with the suite-wide 6 px compact corner radius.

@@ -102,7 +102,7 @@ static const char link_gtk_base_css[] =
     ".link-settings-title { font-weight: 800; }"
     ".link-settings-description { opacity: 0.68; font-size: 11px; }"
     ".link-settings-dropdown { min-width: 230px; }"
-    ".link-titlebar { min-height: 38px; }"
+    ".link-titlebar { min-height: 44px; }"
     ".link-titlebar-label { font-weight: 700; }"
     ".link-connection-bar { padding: 12px 14px; border: 1px solid transparent; border-radius: 14px; }"
     ".link-device-row { min-height: 38px; }"
