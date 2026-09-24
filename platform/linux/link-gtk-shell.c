@@ -110,7 +110,7 @@ static const char link_gtk_base_css[] =
     ".link-adapter-combo { min-width: 220px; font-size: 13px; }"
     ".link-toolbar-button { min-height: 30px; padding: 5px 12px; border-radius: 6px; font-size: 13px; font-weight: 700; }"
     ".link-link-button { min-width: 92px; padding: 7px 18px; border-radius: 10px; font-size: 13px; font-weight: 800; }"
-    ".link-save-session-button { padding: 7px 14px; font-size: 13px; font-weight: 700; }"
+    ".link-save-session-button { min-height: 30px; padding: 5px 12px; border-radius: 6px; font-size: 13px; font-weight: 700; }"
     ".link-connection-status { font-weight: 700; padding: 6px 10px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.14); }"
     ".link-status-online { background: rgba(82,151,105,0.10); border-color: rgba(99,171,124,0.46); }"
     ".link-status-offline { background: rgba(209,158,71,0.08); border-color: rgba(209,158,71,0.34); }"

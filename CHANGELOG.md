@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.15.76 - 2026-09-25
+
+- Align the shared Linux Save Session action with the 30 px / 6 px publisher control geometry used by adjacent toolbar actions.
+- Preserve manufacturer accents, diagnostics, transports, safety policy, dependencies and platform architecture unchanged.
+
+
 ## 0.15.75 - 2026-09-25
 
 - Give shared Linux vehicle-shell toolbar buttons the suite-wide 6 px compact control radius.
