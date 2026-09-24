@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.15.75 - 2026-09-25
+
+- Give shared Linux vehicle-shell toolbar buttons the suite-wide 6 px compact control radius.
+- Preserve manufacturer accents, diagnostics, transports, safety policy, dependencies and platform architecture unchanged.
+
+
 ## 0.15.74 - 2026-09-25
 
 - Align shared Linux status-chip padding with the suite-wide 6 px / 10 px compact status rhythm.
