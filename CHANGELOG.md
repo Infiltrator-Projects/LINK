@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.15.72 - 2026-09-25
+
+- Align shared Linux vehicle-shell toolbar buttons with the suite-wide 30 px desktop control height.
+- Preserve automotive product accents, connection behaviour, diagnostics, dependencies and Common APIs unchanged.
+
+
 ## 0.15.71 — 2026-09-25
 
 - Align shared Linux vehicle page summaries with the suite-wide 12 px hero-subtitle scale.

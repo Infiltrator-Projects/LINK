@@ -108,7 +108,7 @@ static const char link_gtk_base_css[] =
     ".link-device-row { min-height: 38px; }"
     ".link-toolbar-label { opacity: 0.78; font-size: 12px; font-weight: 700; }"
     ".link-adapter-combo { min-width: 220px; font-size: 13px; }"
-    ".link-toolbar-button { min-height: 34px; padding: 5px 12px; font-size: 13px; font-weight: 700; }"
+    ".link-toolbar-button { min-height: 30px; padding: 5px 12px; font-size: 13px; font-weight: 700; }"
     ".link-link-button { min-width: 92px; padding: 7px 18px; border-radius: 10px; font-size: 13px; font-weight: 800; }"
     ".link-save-session-button { padding: 7px 14px; font-size: 13px; font-weight: 700; }"
     ".link-connection-status { font-weight: 700; padding: 6px 10px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.14); }"
