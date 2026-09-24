@@ -14,7 +14,7 @@ permissions:
 jobs:
   portable-core:
     name: ${{ matrix.os }} / strict C11
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.os == 'ubuntu-24.04' && (startsWith(github.event.head_commit.message, 'Release ') && 'ubuntu-24.04' || 'linux-native') || matrix.os }}
     timeout-minutes: 20
     strategy:
       fail-fast: false
@@ -242,8 +242,8 @@ jobs:
           Write-Host "LINK scanner: $($link.FullName)"
 
   linux-native-adapters:
-    name: Ubuntu / native Linux adapter providers
-    runs-on: ubuntu-24.04
+    name: Linux / native adapter providers
+    runs-on: ${{ startsWith(github.event.head_commit.message, 'Release ') && 'ubuntu-24.04' || 'linux-native' }}
     timeout-minutes: 20
     steps:
       - name: Checkout
@@ -396,7 +396,7 @@ jobs:
 
   sanitizers:
     name: Linux / ASan + UBSan
-    runs-on: ubuntu-24.04
+    runs-on: ${{ startsWith(github.event.head_commit.message, 'Release ') && 'ubuntu-24.04' || 'linux-native' }}
     timeout-minutes: 20
     steps:
       - name: Checkout
