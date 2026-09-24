@@ -9,8 +9,8 @@ on:
 permissions:
   contents: read
 
-# Required build and release checks use hosted Linux so offline local runners
-# cannot block publication. These jobs do not require attached vehicle hardware.
+# Development Linux checks prefer the organisation's linux-native pool.
+# Release commits stay on hosted Linux so an offline local runner cannot block publication.
 jobs:
   portable-core:
     name: ${{ matrix.os }} / strict C11
