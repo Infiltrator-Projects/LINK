@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.15.63 — 2026-09-24
+
+- Add the publisher-wide 3 px selected-navigation edge to the shared Linux GTK shell while preserving LINK's automotive palette and layout.
+- Keep diagnostic, transport, safety, protocol and dependency behaviour unchanged.
+
+
 ## 0.15.62 — 2026-09-23
 
 - Harden LINK #47's STM32 UDS server receive path against a delayed or missing Cube RX callback by opportunistically draining the controller from `link_stm32_uds_server_poll()` as well as from the normal interrupt path.
