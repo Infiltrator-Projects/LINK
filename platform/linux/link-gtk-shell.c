@@ -95,7 +95,7 @@ static const char link_gtk_base_css[] =
     ".link-nav-icon { min-width: 26px; min-height: 26px; }"
     ".link-nav-row:hover { background: rgba(255,255,255,0.055); border-color: rgba(255,255,255,0.10); }"
     ".link-nav-row:selected { background: rgba(255,255,255,0.105); border-color: rgba(255,255,255,0.24); border-left-width: 3px; }"
-    ".link-about-button { margin-top: 6px; min-height: 30px; padding: 5px 14px; }"
+    ".link-about-button { margin-top: 6px; min-height: 30px; padding: 5px 14px; border-radius: 6px; }"
     ".link-language-label { opacity: 0.72; font-size: 11px; font-weight: 700; }"
     ".link-settings-row { padding: 8px 0; }"
     ".link-settings-copy { margin-right: 18px; }"

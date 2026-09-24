@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.15.73 - 2026-09-25
+
+- Give the shared Linux About action the suite-wide 6 px compact control radius while retaining its existing 30 px height.
+- Preserve manufacturer accents, diagnostics, transports, safety policy, dependencies and platform architecture unchanged.
+
 ## 0.15.72 - 2026-09-25
 
 - Align shared Linux vehicle-shell toolbar buttons with the suite-wide 30 px desktop control height.
