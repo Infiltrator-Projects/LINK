@@ -124,7 +124,7 @@ static const char link_gtk_base_css[] =
     ".link-content-title { font-size: 28px; font-weight: 900; }"
     ".link-content-summary { opacity: 0.76; font-size: 14px; }"
     ".link-detail-row { padding: 4px 0; }"
-    ".link-card { border: 1px solid transparent; border-radius: 18px; padding: 20px; }"
+    ".link-card { border: 1px solid transparent; border-radius: 12px; padding: 20px; }"
     ".link-card-kicker { font-size: 10px; font-weight: 800; letter-spacing: 2px; }"
     ".link-card-title { font-size: 20px; font-weight: 800; }"
     ".link-status-chip { padding: 7px 11px; border-radius: 999px; border: 1px solid transparent; font-weight: 700; }"
