@@ -90,7 +90,7 @@ static const char link_gtk_base_css[] =
     ".link-brand-header { padding: 2px 0 10px 0; }"
     ".link-nav-scroll, .link-content-scroll { background: transparent; border: none; }"
     ".link-nav-list { background: transparent; padding: 2px 0; }"
-    ".link-nav-row { margin: 3px 0; padding: 6px 8px; border-radius: 10px; border: 1px solid transparent; background: transparent; }"
+    ".link-nav-row { margin: 3px 0; padding: 6px 8px; border-radius: 6px; border: 1px solid transparent; background: transparent; }"
     ".link-nav-row-content { min-height: 42px; }"
     ".link-nav-icon { min-width: 26px; min-height: 26px; }"
     ".link-nav-row:hover { background: rgba(255,255,255,0.055); border-color: rgba(255,255,255,0.10); }"

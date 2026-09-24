@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.15.64 - 2026-09-24
+
+- Align shared Linux vehicle navigation rows with the suite-wide 6 px compact corner radius.
+- Preserve manufacturer accents, diagnostics, transport behaviour, dependencies and platform architecture unchanged.
+
 ## 0.15.63 — 2026-09-24
 
 - Add the publisher-wide 3 px selected-navigation edge to the shared Linux GTK shell while preserving LINK's automotive palette and layout.
