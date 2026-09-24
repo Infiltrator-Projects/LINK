@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.15.71 — 2026-09-25
+
+- Align shared Linux vehicle page summaries with the suite-wide 12 px hero-subtitle scale.
+- Preserve manufacturer accents, diagnostic semantics, transport behaviour, dependencies and platform architecture unchanged.
+
 ## 0.15.70 — 2026-09-25
 
 - Align the shared Linux vehicle-card interior padding with the suite-wide 18 px card rhythm.
