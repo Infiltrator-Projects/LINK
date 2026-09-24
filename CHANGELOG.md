@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.15.67 - 2026-09-24
+
+- Align the shared Linux About action with the 30 px publisher desktop control height.
+- Preserve manufacturer accents, diagnostic behaviour, transports, safety policy, dependencies and platform architecture unchanged.
+
 ## 0.15.66 - 2026-09-24
 
 - Align shared Linux vehicle navigation rows with the suite-wide 8 px side-margin rhythm.
