@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.15.70 — 2026-09-25
+
+- Align the shared Linux vehicle-card interior padding with the suite-wide 18 px card rhythm.
+- Preserve manufacturer accents, diagnostic semantics, transport behaviour, dependencies and platform architecture unchanged.
+
+
 ## 0.15.69 - 2026-09-24
 
 - Align ordinary shared Linux vehicle cards with the 12 px publisher card radius.
