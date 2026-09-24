@@ -159,7 +159,7 @@ jobs:
           fi
           grep -Fq 'gtk_widget_set_hexpand(shell->device_combo, TRUE);' platform/linux/link-gtk-shell.c
           grep -Fq 'gtk_widget_set_halign(shell->device_combo, GTK_ALIGN_FILL);' platform/linux/link-gtk-shell.c
-          grep -Fq '.link-card { border: 1px solid transparent; border-radius: 18px; padding: 20px; }' platform/linux/link-gtk-shell.c
+          grep -Fq '.link-card { border: 1px solid transparent; border-radius: 12px; padding: 20px; }' platform/linux/link-gtk-shell.c
           grep -Fq '.link-link-button { min-width: 92px; padding: 7px 18px; border-radius: 10px; font-size: 13px; font-weight: 800; }' platform/linux/link-gtk-shell.c
           grep -Fq 'gtk_window_set_titlebar(shell->window, titlebar);' platform/linux/link-gtk-shell.c
           grep -Fq 'gtk_header_bar_set_show_title_buttons(GTK_HEADER_BAR(titlebar), TRUE);' platform/linux/link-gtk-shell.c
