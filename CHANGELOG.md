@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.15.68 - 2026-09-24
+
+- Align the shared Linux connection bar with the 12 px publisher card radius.
+- Preserve manufacturer accents, diagnostics, transports, safety policy, dependencies and platform architecture unchanged.
+
+
 ## 0.15.67 - 2026-09-24
 
 - Align the shared Linux About action with the 30 px publisher desktop control height.
