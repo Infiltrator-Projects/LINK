@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.15.77 - 2026-09-25
+
+- Align the shared Linux vehicle-shell default window with the suite-wide 1220×780 desktop geometry.
+- Preserve manufacturer accents, diagnostics, transports, safety policy, dependencies and platform architecture unchanged.
+
 ## 0.15.76 - 2026-09-25
 
 - Align the shared Linux Save Session action with the 30 px / 6 px publisher control geometry used by adjacent toolbar actions.
