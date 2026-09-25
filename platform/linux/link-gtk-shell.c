@@ -2070,7 +2070,7 @@ static void activate(GtkApplication *application, gpointer user_data)
         strncmp(link_i18n_selected_locale(), "ar", 2U) == 0 ? GTK_TEXT_DIR_RTL : GTK_TEXT_DIR_LTR);
     gtk_window_set_title(shell->window,
                          link_gtk_i18n_translate_text(d->window_title));
-    gtk_window_set_default_size(shell->window, 1240, 800);
+    gtk_window_set_default_size(shell->window, 1220, 780);
     gtk_window_set_resizable(shell->window, TRUE);
     if (d->brand_name != NULL && d->brand_name[0] != '\0') {
         char *icon_name = g_ascii_strdown(d->brand_name, -1);
