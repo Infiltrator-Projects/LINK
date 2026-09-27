@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.15.78 - 2026-09-28
+
+- Recover timed-out Apple diagnostic requests in every standard diagnostic phase by resynchronising the ELM327 and retrying the exact in-flight command without discarding discovery, VIN, DTC, readiness or freeze-frame progress.
+- Record timeout, resynchronisation and retry lifecycle evidence, including iOS Low Power Mode and battery state at the failure boundary, so exported evidence can distinguish transport/session faults from host power conditions.
+- Keep the existing bounded live-data and manufacturer recovery paths while removing the generic reconnect-only timeout dead end seen in real MBLINK 0.7.203 vehicle evidence.
+
 ## 0.15.77 - 2026-09-25
 
 - Align the shared Linux vehicle-shell default window with the suite-wide 1220×780 desktop geometry.

@@ -22,6 +22,8 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)setOBDProtocolText:(NSString *)protocolText;
 - (void)recordTransportStateName:(NSString *)stateName
                       statusText:(NSString *)statusText;
+- (void)recordDiagnosticEventName:(NSString *)eventName
+                           detail:(NSString *)detail;
 - (void)recordNativeTransportBytes:(const uint8_t *)data size:(size_t)size;
 - (BOOL)recordTranscriptCommand:(const char *)command
                      resultCode:(uint32_t)resultCode

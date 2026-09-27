@@ -5,6 +5,11 @@
 #import "LinkApplePollingCoordinator.h"
 #import "LinkAppleTelemetryRecorder.h"
 
+#import <TargetConditionals.h>
+#if TARGET_OS_IOS
+#import <UIKit/UIKit.h>
+#endif
+
 #import "link/diagnostic_capability.h"
 #import "link/dtc_knowledge.h"
 #import "link/elm327.h"
@@ -43,6 +48,8 @@
 - (void)finishManufacturerRecovery;
 - (void)beginLiveRecovery;
 - (void)finishLiveRecovery;
+- (void)beginDiagnosticRecovery;
+- (void)finishDiagnosticRecovery;
 - (void)beginDiagnosticFlowAfterSessionStart;
 - (void)processCompletedResponse;
 - (BOOL)applyFlowEvent:(const LinkDiagnosticFlowEvent *)event;
@@ -61,6 +68,10 @@
     BOOL _manufacturerRecoveryActive;
     BOOL _liveRecoveryActive;
     NSUInteger _consecutiveLiveTimeouts;
+    BOOL _diagnosticRecoveryActive;
+    NSUInteger _consecutiveDiagnosticTimeouts;
+    NSString *_diagnosticRecoveryCommand;
+    uint64_t _diagnosticRecoveryTimeoutMs;
     LinkDiagnosticFlow _flow;
     LinkDiagnosticFlowConfig _flowConfig;
 
@@ -81,6 +92,50 @@ static uint64_t LinkAppleMonotonicMilliseconds(void)
     const double milliseconds = uptime * 1000.0;
     return milliseconds >= (double)UINT64_MAX
         ? UINT64_MAX : (uint64_t)milliseconds;
+}
+
+static uint64_t LinkAppleDiagnosticRecoveryTimeout(
+    const LinkDiagnosticFlow *flow)
+{
+    if (flow == NULL) return LINK_DIAGNOSTIC_FLOW_DEFAULT_QUERY_TIMEOUT_MS;
+    switch (flow->stage) {
+    case LINK_DIAGNOSTIC_FLOW_INITIALIZING:
+    case LINK_DIAGNOSTIC_FLOW_CONFIGURING_PID_DISCOVERY_HEADERS:
+    case LINK_DIAGNOSTIC_FLOW_RESTORING_PID_DISCOVERY_HEADERS:
+    case LINK_DIAGNOSTIC_FLOW_RESTORING_AFTER_MANUFACTURER:
+    case LINK_DIAGNOSTIC_FLOW_CONFIGURING_LIVE_HEADERS:
+        return flow->config.init_timeout_ms;
+    case LINK_DIAGNOSTIC_FLOW_READING_LIVE:
+        return flow->config.live_timeout_ms;
+    default:
+        return flow->config.query_timeout_ms;
+    }
+}
+
+static NSString *LinkApplePowerStateDetail(void)
+{
+    NSProcessInfo *processInfo = NSProcessInfo.processInfo;
+    NSString *lowPower = processInfo.lowPowerModeEnabled ? @"on" : @"off";
+#if TARGET_OS_IOS
+    UIDevice *device = UIDevice.currentDevice;
+    device.batteryMonitoringEnabled = YES;
+    float level = device.batteryLevel;
+    NSString *battery = level >= 0.0f
+        ? [NSString stringWithFormat:@"%.0f", (double)level * 100.0]
+        : @"unknown";
+    NSString *state = @"unknown";
+    switch (device.batteryState) {
+    case UIDeviceBatteryStateUnplugged: state = @"unplugged"; break;
+    case UIDeviceBatteryStateCharging: state = @"charging"; break;
+    case UIDeviceBatteryStateFull: state = @"full"; break;
+    case UIDeviceBatteryStateUnknown: break;
+    }
+    return [NSString stringWithFormat:
+        @"low_power_mode=%@ battery_percent=%@ battery_state=%@",
+        lowPower, battery, state];
+#else
+    return [NSString stringWithFormat:@"low_power_mode=%@", lowPower];
+#endif
 }
 
 
@@ -751,6 +806,10 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
     _manufacturerRecoveryActive = NO;
     _liveRecoveryActive = NO;
     _consecutiveLiveTimeouts = 0U;
+    _diagnosticRecoveryActive = NO;
+    _consecutiveDiagnosticTimeouts = 0U;
+    _diagnosticRecoveryCommand = nil;
+    _diagnosticRecoveryTimeoutMs = 0U;
 
     (void)link_diagnostic_flow_init(&_flow, &_flowConfig);
     if (![_telemetryRecorder prepareForStart]) {
@@ -857,6 +916,10 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
     _manufacturerRecoveryActive = NO;
     _liveRecoveryActive = NO;
     _consecutiveLiveTimeouts = 0U;
+    _diagnosticRecoveryActive = NO;
+    _consecutiveDiagnosticTimeouts = 0U;
+    _diagnosticRecoveryCommand = nil;
+    _diagnosticRecoveryTimeoutMs = 0U;
     _simulated = NO;
     self.nativeAdapterConnected = NO;
     self.active = NO;
@@ -1098,6 +1161,133 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
     [self driveDiagnosticFlow];
 }
 
+- (void)beginDiagnosticRecovery
+{
+    LinkElm327SessionOpResult sessionResult;
+    const char *command;
+
+    if (_diagnosticRecoveryActive || !_sessionRunner.isInitialized ||
+        !_flow.awaiting_response) {
+        return;
+    }
+
+    command = [_sessionRunner currentCommand];
+    if (command == NULL || command[0] == '\0') {
+        _flow.elm_failure = LINK_ELM327_RESULT_MORE_DATA;
+        link_diagnostic_flow_fail(
+            &_flow, LINK_DIAGNOSTIC_FLOW_RESULT_ELM_ERROR);
+        [self setSharedStatus:
+            @"Diagnostic request timed out without a recoverable command"];
+        return;
+    }
+
+    ++_consecutiveDiagnosticTimeouts;
+    NSString *stage = LinkAppleStringFromCString(
+        link_diagnostic_flow_stage_name(_flow.stage));
+    NSString *power = LinkApplePowerStateDetail();
+    NSString *commandText = LinkAppleStringFromCString(command);
+    [_telemetryRecorder recordDiagnosticEventName:@"request_timeout"
+        detail:[NSString stringWithFormat:
+            @"stage=%@ command=%@ timeout_ms=%llu %@",
+            stage, commandText,
+            (unsigned long long)LinkAppleDiagnosticRecoveryTimeout(&_flow),
+            power]];
+
+    if (_consecutiveDiagnosticTimeouts > 3U) {
+        _flow.elm_failure = LINK_ELM327_RESULT_MORE_DATA;
+        link_diagnostic_flow_fail(
+            &_flow, LINK_DIAGNOSTIC_FLOW_RESULT_ELM_ERROR);
+        [_telemetryRecorder recordDiagnosticEventName:@"recovery_abandoned"
+            detail:[NSString stringWithFormat:
+                @"stage=%@ command=%@ consecutive_timeouts=%lu",
+                stage, commandText,
+                (unsigned long)_consecutiveDiagnosticTimeouts]];
+        [self setSharedStatus:
+            @"Repeated diagnostic timeouts; reconnect required"];
+        return;
+    }
+
+    _diagnosticRecoveryCommand = commandText;
+    _diagnosticRecoveryTimeoutMs = LinkAppleDiagnosticRecoveryTimeout(&_flow);
+    _diagnosticRecoveryActive = YES;
+    self.ready = NO;
+    if (LinkAppleFlowIsFaultScan(&_flow))
+        self.faultScanStatusText =
+            @"Fault scan interrupted; resynchronising adapter";
+
+    sessionResult = [_sessionRunner
+        beginResynchronizationAt:LinkAppleMonotonicMilliseconds()
+                             timeout:UINT64_C(2500)];
+    if (sessionResult != LINK_ELM327_SESSION_OP_OK) {
+        _diagnosticRecoveryActive = NO;
+        link_diagnostic_flow_fail(
+            &_flow, LINK_DIAGNOSTIC_FLOW_RESULT_ELM_ERROR);
+        [_telemetryRecorder recordDiagnosticEventName:@"resynchronisation_failed"
+            detail:[NSString stringWithFormat:@"stage=%@ command=%@ result=%@",
+                stage, commandText,
+                LinkAppleStringFromCString(
+                    link_elm327_session_op_result_name(sessionResult))]];
+        [self setSharedStatus:[NSString stringWithFormat:
+            @"Diagnostic timeout recovery could not start: %@",
+            LinkAppleStringFromCString(
+                link_elm327_session_op_result_name(sessionResult))]];
+        return;
+    }
+
+    [_telemetryRecorder recordDiagnosticEventName:@"resynchronisation_started"
+        detail:[NSString stringWithFormat:@"stage=%@ command=%@ %@",
+            stage, commandText, power]];
+    [self setSharedStatus:
+        @"Diagnostic request timed out; resynchronising adapter"];
+}
+
+- (void)finishDiagnosticRecovery
+{
+    if (!_diagnosticRecoveryActive || _diagnosticRecoveryCommand.length == 0U)
+        return;
+
+    NSString *command = _diagnosticRecoveryCommand;
+    uint64_t timeoutMs = _diagnosticRecoveryTimeoutMs;
+    NSString *stage = LinkAppleStringFromCString(
+        link_diagnostic_flow_stage_name(_flow.stage));
+
+    [_telemetryRecorder recordDiagnosticEventName:@"resynchronised"
+        detail:[NSString stringWithFormat:@"stage=%@ command=%@",
+            stage, command]];
+
+    LinkElm327SessionOpResult result = [_sessionRunner
+        beginCommand:command.UTF8String
+                 now:LinkAppleMonotonicMilliseconds()
+             timeout:timeoutMs];
+    if (result != LINK_ELM327_SESSION_OP_OK) {
+        _diagnosticRecoveryActive = NO;
+        _diagnosticRecoveryCommand = nil;
+        _diagnosticRecoveryTimeoutMs = 0U;
+        link_diagnostic_flow_fail(
+            &_flow, LINK_DIAGNOSTIC_FLOW_RESULT_ELM_ERROR);
+        [_telemetryRecorder recordDiagnosticEventName:@"retry_failed"
+            detail:[NSString stringWithFormat:@"stage=%@ command=%@ result=%@",
+                stage, command,
+                LinkAppleStringFromCString(
+                    link_elm327_session_op_result_name(result))]];
+        [self setSharedStatus:[NSString stringWithFormat:
+            @"Adapter recovered but diagnostic retry could not start: %@",
+            LinkAppleStringFromCString(
+                link_elm327_session_op_result_name(result))]];
+        return;
+    }
+
+    [_telemetryRecorder recordDiagnosticEventName:@"retry_started"
+        detail:[NSString stringWithFormat:
+            @"stage=%@ command=%@ timeout_ms=%llu",
+            stage, command, (unsigned long long)timeoutMs]];
+    _diagnosticRecoveryActive = NO;
+    _diagnosticRecoveryCommand = nil;
+    _diagnosticRecoveryTimeoutMs = 0U;
+    [self setSharedStatus:
+        @"Adapter recovered; retrying diagnostic request"];
+}
+
 - (void)beginLiveRecovery
 {
     LinkElm327SessionOpResult sessionResult;
@@ -1177,6 +1367,10 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
             dispatch_async(dispatch_get_main_queue(), ^{
                 [self finishLiveRecovery];
             });
+        } else if (_diagnosticRecoveryActive) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [self finishDiagnosticRecovery];
+            });
         }
         return;
     }
@@ -1198,21 +1392,33 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
                 @"Adapter resynchronisation timed out; reconnect required"];
             return;
         }
+        if (_diagnosticRecoveryActive) {
+            _diagnosticRecoveryActive = NO;
+            [_telemetryRecorder recordDiagnosticEventName:
+                @"resynchronisation_timeout"
+                detail:[NSString stringWithFormat:@"command=%@ %@",
+                    _diagnosticRecoveryCommand != nil
+                        ? _diagnosticRecoveryCommand : @"unknown",
+                    LinkApplePowerStateDetail()]];
+            _diagnosticRecoveryCommand = nil;
+            _diagnosticRecoveryTimeoutMs = 0U;
+            self.ready = NO;
+            _flow.elm_failure = runner.elmResult;
+            link_diagnostic_flow_fail(
+                &_flow, LINK_DIAGNOSTIC_FLOW_RESULT_ELM_ERROR);
+            [self setSharedStatus:
+                @"Adapter resynchronisation timed out; reconnect required"];
+            return;
+        }
         if (_flow.stage == LINK_DIAGNOSTIC_FLOW_READING_LIVE) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 [self beginLiveRecovery];
             });
             return;
         }
-        if (LinkAppleFlowIsFaultScan(&_flow))
-            self.faultScanStatusText =
-                @"Fault scan timed out; reconnect required";
-        self.ready = NO;
-        _flow.elm_failure = runner.elmResult;
-        link_diagnostic_flow_fail(
-            &_flow, LINK_DIAGNOSTIC_FLOW_RESULT_ELM_ERROR);
-        [self setSharedStatus:
-            @"Diagnostic request timed out; reconnect to resynchronise"];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self beginDiagnosticRecovery];
+        });
         return;
     }
 
@@ -1228,6 +1434,16 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
             return;
         }
         if (_manufacturerRecoveryActive) _manufacturerRecoveryActive = NO;
+        if (_diagnosticRecoveryActive) {
+            [_telemetryRecorder recordDiagnosticEventName:@"resynchronisation_failed"
+                detail:[NSString stringWithFormat:@"command=%@ result=%@ %@",
+                    _diagnosticRecoveryCommand != nil
+                        ? _diagnosticRecoveryCommand : @"unknown",
+                    reason, LinkApplePowerStateDetail()]];
+            _diagnosticRecoveryActive = NO;
+            _diagnosticRecoveryCommand = nil;
+            _diagnosticRecoveryTimeoutMs = 0U;
+        }
         if (LinkAppleFlowIsFaultScan(&_flow)) {
             self.faultScanStatusText = [NSString stringWithFormat:
                 @"Fault scan adapter error: %@", reason];
@@ -1263,6 +1479,8 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
         [self failWithStatus:@"Diagnostic response was unavailable"];
         return;
     }
+
+    _consecutiveDiagnosticTimeouts = 0U;
 
     if (![_telemetryRecorder
             recordTranscriptCommand:[_sessionRunner currentCommand]

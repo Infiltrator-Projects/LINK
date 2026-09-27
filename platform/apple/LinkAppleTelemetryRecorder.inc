@@ -189,6 +189,18 @@ static void LinkAppleTelemetryNativeStreamEvent(
         "BLE", stateName.UTF8String, statusText.UTF8String);
 }
 
+- (void)recordDiagnosticEventName:(NSString *)eventName
+                           detail:(NSString *)detail
+{
+    if (!_recorder.started || _recorder.finished || eventName.length == 0U)
+        return;
+    NSString *safeDetail = detail != nil ? detail : @"";
+    (void)link_telemetry_recorder_record_response_named(
+        &_recorder,
+        LinkAppleTelemetryElapsedMilliseconds(_sessionMonotonicStartMs),
+        "DIAG_EVENT", eventName.UTF8String, safeDetail.UTF8String);
+}
+
 - (void)recordNativeTransportBytes:(const uint8_t *)data size:(size_t)size
 {
     if (data == NULL || size == 0U || !_recorder.started || _recorder.finished)
