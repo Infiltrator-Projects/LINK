@@ -22,9 +22,6 @@ jobs:
         os: [ubuntu-24.04, macos-latest, windows-latest]
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
       - name: Provide Git on self-hosted Linux
         if: runner.os == 'Linux' && runner.environment == 'self-hosted'
         shell: bash
@@ -39,6 +36,9 @@ jobs:
           "$root/usr/bin/git" --version
           echo "$root/usr/bin" >> "$GITHUB_PATH"
           echo "GIT_EXEC_PATH=$root/usr/lib/git-core" >> "$GITHUB_ENV"
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Enforce main-only automatic release policy
         shell: bash
@@ -261,8 +261,6 @@ jobs:
     runs-on: ${{ startsWith(github.event.head_commit.message, 'Release ') && 'ubuntu-24.04' || 'linux-native' }}
     timeout-minutes: 20
     steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Provide Git on self-hosted Linux
         if: runner.environment == 'self-hosted'
         shell: bash
@@ -277,6 +275,8 @@ jobs:
           "$root/usr/bin/git" --version
           echo "$root/usr/bin" >> "$GITHUB_PATH"
           echo "GIT_EXEC_PATH=$root/usr/lib/git-core" >> "$GITHUB_ENV"
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install native transport build dependencies
         if: runner.environment == 'github-hosted'
         run: |
@@ -428,8 +428,6 @@ jobs:
     runs-on: ${{ startsWith(github.event.head_commit.message, 'Release ') && 'ubuntu-24.04' || 'linux-native' }}
     timeout-minutes: 20
     steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Provide Git on self-hosted Linux
         if: runner.environment == 'self-hosted'
         shell: bash
@@ -444,6 +442,8 @@ jobs:
           "$root/usr/bin/git" --version
           echo "$root/usr/bin" >> "$GITHUB_PATH"
           echo "GIT_EXEC_PATH=$root/usr/lib/git-core" >> "$GITHUB_ENV"
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Initialise Common
         shell: bash
         run: git submodule update --init src/infiltratr-common
