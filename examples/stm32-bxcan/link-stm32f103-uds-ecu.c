@@ -11,6 +11,7 @@
  * own signing, rollback and flash-layout policy.
  */
 #include "link-stm32f103-uds-ecu.h"
+#include "link/flash_journal.h"
 
 #include "link/aes_cmac.h"
 #include "link/version.h"
@@ -432,235 +433,68 @@ static void stm32f103_state_defaults(LinkStm32F103PersistentState *state)
     }
 }
 
-static size_t stm32f103_flash_page_count(
-    const LinkStm32F103FlashStore *flash)
+static LinkFlashJournal stm32f103_journal(
+    const LinkStm32F103FlashStore *flash, uint32_t legacy_pages[2])
 {
-    if (flash != NULL &&
-        flash->page_addresses != NULL &&
-        flash->page_count >= 2U) {
-        return flash->page_count;
-    }
-    return 2U;
+    LinkFlashJournal journal = {0};
+    legacy_pages[0] = flash->page_a_address;
+    legacy_pages[1] = flash->page_b_address;
+    journal.context = flash->context;
+    journal.read = flash->read;
+    journal.erase_page = flash->erase_page;
+    journal.program = flash->program;
+    journal.page_addresses = flash->page_addresses != NULL &&
+        flash->page_count >= 2U ? flash->page_addresses : legacy_pages;
+    journal.page_count = flash->page_addresses != NULL &&
+        flash->page_count >= 2U ? flash->page_count : 2U;
+    journal.page_size = flash->page_size;
+    journal.record_size = sizeof(LinkStm32F103PersistentState);
+    return journal;
 }
 
-static bool stm32f103_flash_page_address(
-    const LinkStm32F103FlashStore *flash,
-    size_t index,
-    uint32_t *address)
+static bool stm32f103_journal_state_valid(const void *record, void *context)
 {
-    if (flash == NULL || address == NULL) return false;
-
-    if (flash->page_addresses != NULL && flash->page_count >= 2U) {
-        if (index >= flash->page_count) return false;
-        *address = flash->page_addresses[index];
-        return true;
-    }
-
-    if (index == 0U) {
-        *address = flash->page_a_address;
-        return true;
-    }
-    if (index == 1U) {
-        *address = flash->page_b_address;
-        return true;
-    }
-    return false;
+    (void)context;
+    return stm32f103_state_valid(
+        (const LinkStm32F103PersistentState *)record);
 }
 
-static size_t stm32f103_state_pages_per_slot(
-    const LinkStm32F103FlashStore *flash)
+static uint32_t stm32f103_journal_generation(
+    const void *record, void *context)
 {
-    const size_t state_bytes = sizeof(LinkStm32F103PersistentState);
-    size_t page_bytes;
-
-    if (flash == NULL || flash->page_size == 0U) return 0U;
-    page_bytes = (size_t)flash->page_size;
-    return state_bytes / page_bytes +
-           ((state_bytes % page_bytes) != 0U ? 1U : 0U);
-}
-
-static size_t stm32f103_state_slot_count(
-    const LinkStm32F103FlashStore *flash)
-{
-    const size_t pages_per_slot = stm32f103_state_pages_per_slot(flash);
-    if (pages_per_slot == 0U) return 0U;
-    return stm32f103_flash_page_count(flash) / pages_per_slot;
-}
-
-static bool stm32f103_state_slot_first_address(
-    const LinkStm32F103FlashStore *flash,
-    size_t slot_index,
-    uint32_t *address)
-{
-    const size_t pages_per_slot = stm32f103_state_pages_per_slot(flash);
-    const size_t slot_count = stm32f103_state_slot_count(flash);
-
-    if (pages_per_slot == 0U || slot_index >= slot_count) return false;
-    return stm32f103_flash_page_address(
-        flash, slot_index * pages_per_slot, address);
-}
-
-static bool stm32f103_read_state_slot(
-    const LinkStm32F103FlashStore *flash,
-    size_t slot_index,
-    LinkStm32F103PersistentState *state);
-
-static bool stm32f103_active_persisted_state_valid(
-    const LinkStm32F103UdsEcu *ecu)
-{
-    LinkStm32F103PersistentState persisted;
-    const LinkStm32F103FlashStore *flash;
-    size_t slot_count;
-    size_t slot;
-
-    if (ecu == NULL) return false;
-    flash = &ecu->config.flash;
-    slot_count = stm32f103_state_slot_count(flash);
-
-    for (slot = 0U; slot < slot_count; ++slot) {
-        uint32_t first_address = 0U;
-        if (!stm32f103_state_slot_first_address(
-                flash, slot, &first_address)) {
-            return false;
-        }
-        if (first_address != ecu->active_page) continue;
-        return stm32f103_read_state_slot(
-                   flash, slot, &persisted) &&
-               stm32f103_state_valid(&persisted);
-    }
-    return false;
-}
-
-static bool stm32f103_read_state_slot(
-    const LinkStm32F103FlashStore *flash,
-    size_t slot_index,
-    LinkStm32F103PersistentState *state)
-{
-    const size_t pages_per_slot = stm32f103_state_pages_per_slot(flash);
-    const size_t slot_count = stm32f103_state_slot_count(flash);
-    uint8_t *bytes = (uint8_t *)state;
-    size_t remaining = sizeof(*state);
-    size_t offset = 0U;
-    size_t page;
-
-    if (flash == NULL || state == NULL ||
-        pages_per_slot == 0U || slot_index >= slot_count) {
-        return false;
-    }
-
-    for (page = 0U; page < pages_per_slot; ++page) {
-        uint32_t address = 0U;
-        const size_t chunk =
-            remaining < (size_t)flash->page_size
-                ? remaining : (size_t)flash->page_size;
-        if (!stm32f103_flash_page_address(
-                flash, slot_index * pages_per_slot + page, &address) ||
-            !flash->read(flash->context, address, bytes + offset, chunk)) {
-            return false;
-        }
-        offset += chunk;
-        remaining -= chunk;
-    }
-    return remaining == 0U;
-}
-
-static bool stm32f103_write_state_slot(
-    const LinkStm32F103FlashStore *flash,
-    size_t slot_index,
-    const LinkStm32F103PersistentState *state)
-{
-    const size_t pages_per_slot = stm32f103_state_pages_per_slot(flash);
-    const size_t slot_count = stm32f103_state_slot_count(flash);
-    const uint8_t *bytes = (const uint8_t *)state;
-    size_t remaining = sizeof(*state);
-    size_t offset = 0U;
-    size_t page;
-
-    if (flash == NULL || state == NULL ||
-        pages_per_slot == 0U || slot_index >= slot_count) {
-        return false;
-    }
-
-    /*
-     * Erase the entire destination slot before programming any part of the
-     * new generation. The previous slot remains untouched until the new full
-     * state has been programmed and CRC-verified, preserving rollback after a
-     * torn multi-page write.
-     */
-    for (page = 0U; page < pages_per_slot; ++page) {
-        uint32_t address = 0U;
-        if (!stm32f103_flash_page_address(
-                flash, slot_index * pages_per_slot + page, &address) ||
-            !flash->erase_page(flash->context, address)) {
-            return false;
-        }
-    }
-
-    for (page = 0U; page < pages_per_slot; ++page) {
-        uint32_t address = 0U;
-        const size_t chunk =
-            remaining < (size_t)flash->page_size
-                ? remaining : (size_t)flash->page_size;
-        if (!stm32f103_flash_page_address(
-                flash, slot_index * pages_per_slot + page, &address) ||
-            !flash->program(
-                flash->context, address, bytes + offset, chunk)) {
-            return false;
-        }
-        offset += chunk;
-        remaining -= chunk;
-    }
-    return remaining == 0U;
-}
-
-static bool stm32f103_generation_newer(uint32_t candidate, uint32_t current)
-{
-    return (int32_t)(candidate - current) > 0;
+    (void)context;
+    return ((const LinkStm32F103PersistentState *)record)->generation;
 }
 
 static bool stm32f103_flash_config_valid(
     const LinkStm32F103UdsEcuConfig *config)
 {
-    const LinkStm32F103FlashStore *flash;
-    size_t count;
-    size_t pages_per_slot;
-    size_t slots;
-    size_t i;
-    size_t j;
-
+    uint32_t legacy_pages[2];
+    LinkFlashJournal journal;
     if (config == NULL || config->clock_ms == NULL ||
-        config->security_key == NULL) {
-        return false;
-    }
+        config->security_key == NULL) return false;
+    journal = stm32f103_journal(&config->flash, legacy_pages);
+    return link_flash_journal_valid(&journal);
+}
 
-    flash = &config->flash;
-    if (flash->read == NULL ||
-        flash->erase_page == NULL ||
-        flash->program == NULL ||
-        flash->page_size == 0U) {
-        return false;
-    }
-
-    count = stm32f103_flash_page_count(flash);
-    pages_per_slot = stm32f103_state_pages_per_slot(flash);
-    slots = stm32f103_state_slot_count(flash);
-    if (count < 2U || pages_per_slot == 0U || slots < 2U) return false;
-
-    for (i = 0U; i < count; ++i) {
-        uint32_t address_i = 0U;
-        if (!stm32f103_flash_page_address(flash, i, &address_i) ||
-            (address_i % flash->page_size) != 0U) {
+static bool stm32f103_active_persisted_state_valid(
+    const LinkStm32F103UdsEcu *ecu)
+{
+    LinkStm32F103PersistentState persisted;
+    uint32_t legacy_pages[2];
+    LinkFlashJournal journal;
+    size_t slot;
+    if (ecu == NULL) return false;
+    journal = stm32f103_journal(&ecu->config.flash, legacy_pages);
+    for (slot = 0U; slot < link_flash_journal_slot_count(&journal); ++slot) {
+        uint32_t address;
+        if (!link_flash_journal_slot_address(&journal, slot, &address))
             return false;
-        }
-        for (j = 0U; j < i; ++j) {
-            uint32_t address_j = 0U;
-            if (!stm32f103_flash_page_address(flash, j, &address_j) ||
-                address_i == address_j) {
-                return false;
-            }
-        }
+        if (address == ecu->active_page)
+            return link_flash_journal_read(&journal, slot, &persisted) &&
+                   stm32f103_state_valid(&persisted);
     }
-    return true;
+    return false;
 }
 
 static void stm32f103_hydrate_dtc_lifecycle(LinkStm32F103UdsEcu *ecu)
@@ -944,97 +778,44 @@ bool link_stm32f103_uds_ecu_flush(LinkStm32F103UdsEcu *ecu)
 {
     LinkStm32F103PersistentState candidate;
     LinkStm32F103PersistentState verify;
-    const LinkStm32F103FlashStore *flash;
-    size_t slot_count;
-    size_t active_slot = 0U;
-    size_t target_slot;
+    uint32_t legacy_pages[2];
+    LinkFlashJournal journal;
     size_t slot;
-    bool active_found = false;
-    uint32_t target = 0U;
-
-    if (ecu == NULL || !stm32f103_flash_config_valid(&ecu->config)) {
+    uint32_t address;
+    if (ecu == NULL || !stm32f103_flash_config_valid(&ecu->config))
         return false;
-    }
-
-    flash = &ecu->config.flash;
-    slot_count = stm32f103_state_slot_count(flash);
-    for (slot = 0U; slot < slot_count; ++slot) {
-        uint32_t address = 0U;
-        if (!stm32f103_state_slot_first_address(flash, slot, &address)) {
-            return false;
-        }
-        if (address == ecu->active_page) {
-            active_slot = slot;
-            active_found = true;
-            break;
-        }
-    }
-    target_slot = active_found ? (active_slot + 1U) % slot_count : 0U;
-    if (!stm32f103_state_slot_first_address(
-            flash, target_slot, &target)) {
+    journal = stm32f103_journal(&ecu->config.flash, legacy_pages);
+    if (!link_flash_journal_next(&journal, ecu->active_page, &slot, &address))
         return false;
-    }
-
     candidate = ecu->state;
     candidate.magic = LINK_STM32F103_STATE_MAGIC;
     candidate.schema = LINK_STM32F103_STATE_SCHEMA;
     candidate.generation++;
     candidate.crc32 = stm32f103_crc32(
         &candidate, offsetof(LinkStm32F103PersistentState, crc32));
-
-    if (!stm32f103_write_state_slot(flash, target_slot, &candidate) ||
-        !stm32f103_read_state_slot(flash, target_slot, &verify) ||
-        !stm32f103_state_valid(&verify) ||
-        memcmp(&candidate, &verify, sizeof(candidate)) != 0) {
-        return false;
-    }
-
+    if (!link_flash_journal_write(
+            &journal, slot, &candidate, &verify,
+            stm32f103_journal_state_valid, NULL)) return false;
     ecu->state = candidate;
-    ecu->active_page = target;
+    ecu->active_page = address;
     stm32f103_refresh_dtc_store(ecu);
     return true;
 }
 
 static bool stm32f103_load_state(LinkStm32F103UdsEcu *ecu)
 {
-    LinkStm32F103PersistentState candidate;
-    LinkStm32F103PersistentState newest = {0};
-    const LinkStm32F103FlashStore *flash = &ecu->config.flash;
-    const size_t slot_count = stm32f103_state_slot_count(flash);
-    size_t slot;
-    uint32_t newest_address = 0U;
-    bool have_newest = false;
-
-    for (slot = 0U; slot < slot_count; ++slot) {
-        uint32_t address = 0U;
-        bool valid;
-
-        if (!stm32f103_state_slot_first_address(flash, slot, &address)) {
-            return false;
-        }
-        valid = stm32f103_read_state_slot(flash, slot, &candidate) &&
-                stm32f103_state_valid(&candidate);
-        if (!valid) continue;
-
-        if (!have_newest ||
-            stm32f103_generation_newer(candidate.generation, newest.generation)) {
-            newest = candidate;
-            newest_address = address;
-            have_newest = true;
-        }
-    }
-
-    if (have_newest) {
-        ecu->state = newest;
-        ecu->active_page = newest_address;
-        return true;
-    }
-
+    LinkStm32F103PersistentState scratch;
+    uint32_t legacy_pages[2];
+    LinkFlashJournal journal =
+        stm32f103_journal(&ecu->config.flash, legacy_pages);
+    if (link_flash_journal_latest(
+            &journal, &ecu->state, &scratch,
+            stm32f103_journal_state_valid, stm32f103_journal_generation,
+            NULL, &ecu->active_page)) return true;
     stm32f103_state_defaults(&ecu->state);
-    if (!stm32f103_state_slot_first_address(
-            flash, slot_count - 1U, &ecu->active_page)) {
-        return false;
-    }
+    if (!link_flash_journal_slot_address(
+            &journal, link_flash_journal_slot_count(&journal) - 1U,
+            &ecu->active_page)) return false;
     return link_stm32f103_uds_ecu_flush(ecu);
 }
 

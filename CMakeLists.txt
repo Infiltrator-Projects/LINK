@@ -115,6 +115,7 @@ add_library(link-core STATIC
     src/core/diagnostic_flow.c
     src/core/diagnostic_capability.c
     src/core/isotp.c
+    src/core/flash_journal.c
     src/core/parameter.c
     src/core/selection.c
     src/core/dashboard.c
@@ -555,6 +556,15 @@ if(BUILD_TESTING AND PROJECT_IS_TOP_LEVEL)
         target_link_options(link-test-stm32-bxcan-hal PRIVATE -fsanitize=address,undefined)
     endif()
     add_test(NAME link-stm32-bxcan-hal COMMAND link-test-stm32-bxcan-hal)
+
+    add_executable(link-test-flash-journal tests/test_flash_journal.c)
+    target_link_libraries(link-test-flash-journal PRIVATE LINK::Core)
+    if(MSVC)
+        target_compile_options(link-test-flash-journal PRIVATE /W4 /WX /utf-8)
+    else()
+        target_compile_options(link-test-flash-journal PRIVATE ${LINK_WARNING_FLAGS})
+    endif()
+    add_test(NAME link-flash-journal COMMAND link-test-flash-journal)
 
     add_executable(link-test-stm32f103-uds-ecu
         tests/test_stm32f103_uds_ecu.c
