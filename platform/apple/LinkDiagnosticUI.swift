@@ -1674,6 +1674,8 @@ final class LinkConnectionPickerViewController: UITableViewController,
     private var central: CBCentralManager?
     private var adaptersByIdentifier = [String: LinkNearbyAdapter]()
     private var adapterDiscoveryOrder = [String]()
+    private var scanGeneration = 0
+    private var scanHasTimedOut = false
 
     private var nearbyAdapters: [LinkNearbyAdapter] {
         adapterDiscoveryOrder.compactMap { adaptersByIdentifier[$0] }
@@ -1698,6 +1700,8 @@ final class LinkConnectionPickerViewController: UITableViewController,
     override func viewDidLoad() {
         super.viewDidLoad()
         title = "Connect"
+        tableView.rowHeight = UITableView.automaticDimension
+        tableView.estimatedRowHeight = 72
         navigationItem.leftBarButtonItem = UIBarButtonItem(
             barButtonSystemItem: .cancel,
             target: self,
@@ -1723,7 +1727,8 @@ final class LinkConnectionPickerViewController: UITableViewController,
         label.font = UIFont.preferredFont(forTextStyle: .footnote)
         label.text = """
         Current vehicle: \(vehicleText)
-        Choose the adapter fitted to the vehicle. The live VIN is always read after connection and remains authoritative.
+        Choose the adapter fitted to the vehicle. The live VIN is always read after connection.
+        This list shows Bluetooth Low Energy devices reported to the app. A Bluetooth Classic adapter paired in iPhone Settings cannot appear here.
         """
 
         let width = max(view.bounds.width - 40, 280)
@@ -1799,11 +1804,10 @@ final class LinkConnectionPickerViewController: UITableViewController,
         if indexPath.section == nearbySection {
             let devices = nearbyAdapters
             guard !devices.isEmpty else {
-                cell.textLabel?.text = central?.state == .poweredOn
-                    ? "Scanning for nearby devices…"
-                    : "Bluetooth unavailable or waiting…"
-                cell.detailTextLabel?.text =
-                    "Adapters appear here as iPhone discovers them"
+                let emptyState = emptyScanMessage
+                cell.textLabel?.text = emptyState.title
+                cell.detailTextLabel?.text = emptyState.detail
+                cell.detailTextLabel?.numberOfLines = 0
                 cell.selectionStyle = .none
                 return cell
             }
@@ -1869,6 +1873,27 @@ final class LinkConnectionPickerViewController: UITableViewController,
         }
     }
 
+    private var emptyScanMessage: (title: String, detail: String) {
+        switch central?.state {
+        case .poweredOn:
+            return scanHasTimedOut
+                ? ("No BLE devices found",
+                   "Check adapter power and BLE mode, then tap Scan Again. Bluetooth Classic devices are not available through this picker.")
+                : ("Scanning for nearby BLE devices…",
+                   "Keep the adapter powered and nearby. Unnamed devices will also appear.")
+        case .poweredOff:
+            return ("Bluetooth is off", "Turn on Bluetooth in iPhone Settings, then return here.")
+        case .unauthorized:
+            return ("Bluetooth access denied", "Allow Bluetooth for this app in iPhone Settings, then try again.")
+        case .unsupported:
+            return ("Bluetooth unavailable", "This device does not support Bluetooth Low Energy.")
+        case .resetting, .unknown, .none:
+            return ("Waiting for Bluetooth…", "iPhone is preparing its Bluetooth radio.")
+        @unknown default:
+            return ("Bluetooth unavailable", "Try Scan Again after checking Bluetooth in Settings.")
+        }
+    }
+
     func centralManager(
         _ central: CBCentralManager,
         didDiscover peripheral: CBPeripheral,
@@ -1905,9 +1930,20 @@ final class LinkConnectionPickerViewController: UITableViewController,
     private func startScan() {
         guard let central, central.state == .poweredOn else { return }
         central.stopScan()
+        scanGeneration += 1
+        let generation = scanGeneration
+        scanHasTimedOut = false
+        tableView.reloadSections(IndexSet(integer: nearbySection), with: .none)
         central.scanForPeripherals(
             withServices: nil,
             options: [CBCentralManagerScanOptionAllowDuplicatesKey: true])
+        DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in
+            guard let self, self.scanGeneration == generation,
+                  self.central?.state == .poweredOn,
+                  self.adaptersByIdentifier.isEmpty else { return }
+            self.scanHasTimedOut = true
+            self.tableView.reloadSections(IndexSet(integer: self.nearbySection), with: .none)
+        }
     }
 
     @objc private func scanAgain() {
