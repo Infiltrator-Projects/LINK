@@ -313,6 +313,20 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends libbluetooth-dev libglib2.0-dev libusb-1.0-0-dev libgtk-4-dev pkg-config
+      - name: Bootstrap BlueZ headers for self-hosted Linux
+        if: runner.environment == 'self-hosted'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if test -f /usr/include/bluetooth/bluetooth.h; then exit 0; fi
+          root="$RUNNER_TEMP/bluez-dev"
+          mkdir -p "$root/packages"
+          cd "$root/packages"
+          apt-get download libbluetooth-dev
+          dpkg-deb -x ./*.deb "$root"
+          test -f "$root/usr/include/bluetooth/bluetooth.h"
+          echo "CMAKE_INCLUDE_PATH=$root/usr/include" >> "$GITHUB_ENV"
+          echo "CPATH=$root/usr/include${CPATH:+:$CPATH}" >> "$GITHUB_ENV"
       - name: Bootstrap libusb development files for self-hosted Linux
         if: runner.environment == 'self-hosted'
         shell: bash
