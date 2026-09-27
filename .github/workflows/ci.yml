@@ -25,6 +25,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - name: Provide Git on self-hosted Linux
+        if: runner.os == 'Linux' && runner.environment == 'self-hosted'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if command -v git >/dev/null; then exit 0; fi
+          root="$RUNNER_TEMP/link-git"
+          mkdir -p "$root/packages"
+          cd "$root/packages"
+          apt-get download git
+          dpkg-deb -x ./*.deb "$root"
+          "$root/usr/bin/git" --version
+          echo "$root/usr/bin" >> "$GITHUB_PATH"
+          echo "GIT_EXEC_PATH=$root/usr/lib/git-core" >> "$GITHUB_ENV"
+
       - name: Enforce main-only automatic release policy
         shell: bash
         run: |
@@ -248,6 +263,20 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Provide Git on self-hosted Linux
+        if: runner.environment == 'self-hosted'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if command -v git >/dev/null; then exit 0; fi
+          root="$RUNNER_TEMP/link-git"
+          mkdir -p "$root/packages"
+          cd "$root/packages"
+          apt-get download git
+          dpkg-deb -x ./*.deb "$root"
+          "$root/usr/bin/git" --version
+          echo "$root/usr/bin" >> "$GITHUB_PATH"
+          echo "GIT_EXEC_PATH=$root/usr/lib/git-core" >> "$GITHUB_ENV"
       - name: Install native transport build dependencies
         if: runner.environment == 'github-hosted'
         run: |
@@ -401,6 +430,20 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Provide Git on self-hosted Linux
+        if: runner.environment == 'self-hosted'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if command -v git >/dev/null; then exit 0; fi
+          root="$RUNNER_TEMP/link-git"
+          mkdir -p "$root/packages"
+          cd "$root/packages"
+          apt-get download git
+          dpkg-deb -x ./*.deb "$root"
+          "$root/usr/bin/git" --version
+          echo "$root/usr/bin" >> "$GITHUB_PATH"
+          echo "GIT_EXEC_PATH=$root/usr/lib/git-core" >> "$GITHUB_ENV"
       - name: Initialise Common
         shell: bash
         run: git submodule update --init src/infiltratr-common
