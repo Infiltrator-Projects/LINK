@@ -21,7 +21,10 @@
 
 #include <string.h>
 
-extern CAN_HandleTypeDef hcan1;
+#ifndef LINK_STM32F103_CAN_HANDLE
+#define LINK_STM32F103_CAN_HANDLE hcan1
+#endif
+extern CAN_HandleTypeDef LINK_STM32F103_CAN_HANDLE;
 
 static LinkStm32BxCanHal uds_hal;
 static LinkStm32Can uds_can;
@@ -144,7 +147,8 @@ static bool uds_init(void)
         return false;
     }
 
-    link_stm32_bxcan_hal_init(&uds_hal, &hcan1, 0U, 14U);
+    link_stm32_bxcan_hal_init(
+        &uds_hal, &LINK_STM32F103_CAN_HANDLE, 0U, 14U);
     ops = link_stm32_bxcan_hal_ops(&uds_hal);
     if (!link_stm32_can_init(&uds_can, &ops) ||
         !link_stm32_bxcan_hal_start_standard_dual(
@@ -212,8 +216,8 @@ int main(void)
     }
 }
 
-void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
+void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *callback_hcan)
 {
-    if (hcan == &hcan1) link_stm32_can_rx_isr(&uds_can);
+    if (callback_hcan == &LINK_STM32F103_CAN_HANDLE)
+        link_stm32_can_rx_isr(&uds_can);
 }
-
