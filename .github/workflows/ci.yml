@@ -40,6 +40,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - name: Provide CMake on self-hosted Linux
+        if: runner.os == 'Linux' && runner.environment == 'self-hosted'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if command -v cmake >/dev/null; then exit 0; fi
+          root="$RUNNER_TEMP/link-cmake"
+          mkdir -p "$root/packages"
+          cd "$root/packages"
+          apt-get download cmake cmake-data
+          for deb in ./*.deb; do dpkg-deb -x "$deb" "$root"; done
+          "$root/usr/bin/cmake" --version
+          echo "$root/usr/bin" >> "$GITHUB_PATH"
+
       - name: Enforce main-only automatic release policy
         shell: bash
         run: |
@@ -277,6 +291,19 @@ jobs:
           echo "GIT_EXEC_PATH=$root/usr/lib/git-core" >> "$GITHUB_ENV"
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Provide CMake on self-hosted Linux
+        if: runner.environment == 'self-hosted'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if command -v cmake >/dev/null; then exit 0; fi
+          root="$RUNNER_TEMP/link-cmake"
+          mkdir -p "$root/packages"
+          cd "$root/packages"
+          apt-get download cmake cmake-data
+          for deb in ./*.deb; do dpkg-deb -x "$deb" "$root"; done
+          "$root/usr/bin/cmake" --version
+          echo "$root/usr/bin" >> "$GITHUB_PATH"
       - name: Install native transport build dependencies
         if: runner.environment == 'github-hosted'
         run: |
@@ -444,6 +471,19 @@ jobs:
           echo "GIT_EXEC_PATH=$root/usr/lib/git-core" >> "$GITHUB_ENV"
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Provide CMake on self-hosted Linux
+        if: runner.environment == 'self-hosted'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if command -v cmake >/dev/null; then exit 0; fi
+          root="$RUNNER_TEMP/link-cmake"
+          mkdir -p "$root/packages"
+          cd "$root/packages"
+          apt-get download cmake cmake-data
+          for deb in ./*.deb; do dpkg-deb -x "$deb" "$root"; done
+          "$root/usr/bin/cmake" --version
+          echo "$root/usr/bin" >> "$GITHUB_PATH"
       - name: Initialise Common
         shell: bash
         run: git submodule update --init src/infiltratr-common
