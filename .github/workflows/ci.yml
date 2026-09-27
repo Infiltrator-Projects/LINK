@@ -49,10 +49,12 @@ jobs:
           root="$RUNNER_TEMP/link-cmake"
           mkdir -p "$root/packages"
           cd "$root/packages"
-          apt-get download cmake cmake-data
+          apt-get download cmake cmake-data librhash0
           for deb in ./*.deb; do dpkg-deb -x "$deb" "$root"; done
+          export LD_LIBRARY_PATH="$root/usr/lib/x86_64-linux-gnu${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
           "$root/usr/bin/cmake" --version
           echo "$root/usr/bin" >> "$GITHUB_PATH"
+          echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH" >> "$GITHUB_ENV"
 
       - name: Enforce main-only automatic release policy
         shell: bash
@@ -300,10 +302,12 @@ jobs:
           root="$RUNNER_TEMP/link-cmake"
           mkdir -p "$root/packages"
           cd "$root/packages"
-          apt-get download cmake cmake-data
+          apt-get download cmake cmake-data librhash0
           for deb in ./*.deb; do dpkg-deb -x "$deb" "$root"; done
+          export LD_LIBRARY_PATH="$root/usr/lib/x86_64-linux-gnu${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
           "$root/usr/bin/cmake" --version
           echo "$root/usr/bin" >> "$GITHUB_PATH"
+          echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH" >> "$GITHUB_ENV"
       - name: Install native transport build dependencies
         if: runner.environment == 'github-hosted'
         run: |
@@ -480,10 +484,12 @@ jobs:
           root="$RUNNER_TEMP/link-cmake"
           mkdir -p "$root/packages"
           cd "$root/packages"
-          apt-get download cmake cmake-data
+          apt-get download cmake cmake-data librhash0
           for deb in ./*.deb; do dpkg-deb -x "$deb" "$root"; done
+          export LD_LIBRARY_PATH="$root/usr/lib/x86_64-linux-gnu${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
           "$root/usr/bin/cmake" --version
           echo "$root/usr/bin" >> "$GITHUB_PATH"
+          echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH" >> "$GITHUB_ENV"
       - name: Initialise Common
         shell: bash
         run: git submodule update --init src/infiltratr-common
