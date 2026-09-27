@@ -274,82 +274,15 @@ jobs:
 
   linux-native-adapters:
     name: Linux / native adapter providers
-    runs-on: ${{ startsWith(github.event.head_commit.message, 'Release ') && 'ubuntu-24.04' || 'linux-native' }}
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - name: Provide Git on self-hosted Linux
-        if: runner.environment == 'self-hosted'
-        shell: bash
-        run: |
-          set -euo pipefail
-          if command -v git >/dev/null; then exit 0; fi
-          root="$RUNNER_TEMP/link-git"
-          mkdir -p "$root/packages"
-          cd "$root/packages"
-          apt-get download git
-          dpkg-deb -x ./*.deb "$root"
-          "$root/usr/bin/git" --version
-          echo "$root/usr/bin" >> "$GITHUB_PATH"
-          echo "GIT_EXEC_PATH=$root/usr/lib/git-core" >> "$GITHUB_ENV"
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Provide CMake on self-hosted Linux
-        if: runner.environment == 'self-hosted'
-        shell: bash
-        run: |
-          set -euo pipefail
-          if command -v cmake >/dev/null; then exit 0; fi
-          root="$RUNNER_TEMP/link-cmake"
-          mkdir -p "$root/packages"
-          cd "$root/packages"
-          apt-get download cmake cmake-data librhash0 libjsoncpp25 libuv1t64
-          for deb in ./*.deb; do dpkg-deb -x "$deb" "$root"; done
-          export LD_LIBRARY_PATH="$root/usr/lib/x86_64-linux-gnu${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-          "$root/usr/bin/cmake" --version
-          echo "$root/usr/bin" >> "$GITHUB_PATH"
-          echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH" >> "$GITHUB_ENV"
       - name: Install native transport build dependencies
-        if: runner.environment == 'github-hosted'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends libbluetooth-dev libglib2.0-dev libusb-1.0-0-dev libgtk-4-dev pkg-config
-      - name: Bootstrap BlueZ headers for self-hosted Linux
-        if: runner.environment == 'self-hosted'
-        shell: bash
-        run: |
-          set -euo pipefail
-          if test -f /usr/include/bluetooth/bluetooth.h; then exit 0; fi
-          root="$RUNNER_TEMP/bluez-dev"
-          mkdir -p "$root/packages"
-          cd "$root/packages"
-          apt-get download libbluetooth-dev
-          dpkg-deb -x ./*.deb "$root"
-          test -f "$root/usr/include/bluetooth/bluetooth.h"
-          echo "CMAKE_INCLUDE_PATH=$root/usr/include" >> "$GITHUB_ENV"
-          echo "CPATH=$root/usr/include${CPATH:+:$CPATH}" >> "$GITHUB_ENV"
-      - name: Bootstrap libusb development files for self-hosted Linux
-        if: runner.environment == 'self-hosted'
-        shell: bash
-        run: |
-          set -euo pipefail
-          if pkg-config --exists libusb-1.0; then
-            exit 0
-          fi
-          root="$RUNNER_TEMP/libusb-dev"
-          dl="$RUNNER_TEMP/libusb-download"
-          rm -rf "$root" "$dl"
-          mkdir -p "$root" "$dl"
-          cd "$dl"
-          apt-get download libusb-1.0-0 libusb-1.0-0-dev
-          for deb in ./*.deb; do
-            dpkg-deb -x "$deb" "$root"
-          done
-          pc="$(find "$root/usr/lib" -path '*/pkgconfig/libusb-1.0.pc' -print -quit)"
-          test -n "$pc"
-          sed -i "s|^prefix=/usr$|prefix=$root/usr|" "$pc"
-          libdir="$(dirname "$(dirname "$pc")")"
-          echo "PKG_CONFIG_PATH=$(dirname "$pc")${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}" >> "$GITHUB_ENV"
-          echo "LD_LIBRARY_PATH=$libdir${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" >> "$GITHUB_ENV"
       - name: Initialise Common
         shell: bash
         run: git submodule update --init src/infiltratr-common
