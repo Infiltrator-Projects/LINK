@@ -1490,7 +1490,13 @@ private struct LinkDashboardGaugeTile: View {
     let parameter: LinkDiagnosticParameter
     let showDetails: Bool
 
-    private var fraction: Double { parameter.dashboardFraction ?? 0.0 }
+    /*
+     * A dial is a presentation choice, not a promise that every signal has a
+     * continuous engineering range. Bounded numeric signals get a progress
+     * arc; discrete/structured/raw signals keep the circular dial bezel and
+     * value without inventing a scale.
+     */
+    private var fraction: Double? { parameter.dashboardFraction }
 
     var body: some View {
         VStack(spacing: 8) {
@@ -1512,13 +1518,15 @@ private struct LinkDashboardGaugeTile: View {
                         style: StrokeStyle(lineWidth: 7, lineCap: .round))
                     .rotationEffect(.degrees(135))
                     .padding(4)
-                Circle()
-                    .trim(from: 0.0, to: 0.75 * fraction)
-                    .stroke(
-                        parameter.hasLiveValue ? theme.accent : theme.mutedText,
-                        style: StrokeStyle(lineWidth: 7, lineCap: .round))
-                    .rotationEffect(.degrees(135))
-                    .padding(4)
+                if let fraction {
+                    Circle()
+                        .trim(from: 0.0, to: 0.75 * fraction)
+                        .stroke(
+                            parameter.hasLiveValue ? theme.accent : theme.mutedText,
+                            style: StrokeStyle(lineWidth: 7, lineCap: .round))
+                        .rotationEffect(.degrees(135))
+                        .padding(4)
+                }
 
                 VStack(spacing: 2) {
                     Text(parameter.presentationValue)
@@ -1580,11 +1588,13 @@ struct LinkDashboardMetric: View {
         case .numbers:
             LinkMetricTile(parameter: parameter)
         case .dials:
-            if parameter.dashboardDialSupported {
-                LinkDashboardGaugeTile(parameter: parameter, showDetails: false)
-            } else {
-                LinkMetricTile(parameter: parameter)
-            }
+            /*
+             * Dials mode is visually strict: every enabled measurement is
+             * rendered as a dial. Signals without a trustworthy min/max range
+             * use an unscaled circular bezel rather than silently reverting to
+             * the Numbers card.
+             */
+            LinkDashboardGaugeTile(parameter: parameter, showDetails: false)
         case .combined:
             if parameter.dashboardDialSupported {
                 LinkDashboardGaugeTile(parameter: parameter, showDetails: true)
