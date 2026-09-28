@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.15.79 - 2026-09-29
+
+- Make Apple Dashboard Dials mode visually strict: every enabled measurement now remains a circular dial instead of silently falling back to a rectangular Numbers card.
+- Keep source-backed bounded numeric gauges unchanged, while discrete, structured and raw values use an unscaled circular bezel with no invented min/max range or progress fraction.
+
 ## 0.15.78 - 2026-09-28
 
 - Recover timed-out Apple diagnostic requests in every standard diagnostic phase by resynchronising the ELM327 and retrying the exact in-flight command without discarding discovery, VIN, DTC, readiness or freeze-frame progress.
