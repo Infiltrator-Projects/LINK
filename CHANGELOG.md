@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.15.80 - 2026-09-29
+
+- Separate STM32F103 multi-page flash-journal validation from CAN/ISO-TP/UDS with a standalone four-page hardware exercise that performs two complete wear-level rotations, read-back validation and reboot recovery.
+- Cross-compile the standalone STM32F103 journal exercise and core with ARM GCC under strict warnings in CI so the hardware test cannot silently decay.
+- Prove every supported UDS ReadDTCInformation request form (0x19 subfunctions 0x01..0x19, 0x42 and 0x55) is flash read-only by asserting persistent state, journal bytes, erase calls and program calls remain unchanged.
+
 ## 0.15.79 - 2026-09-29
 
 - Make Apple Dashboard Dials mode visually strict: every enabled measurement now remains a circular dial instead of silently falling back to a rectangular Numbers card.
