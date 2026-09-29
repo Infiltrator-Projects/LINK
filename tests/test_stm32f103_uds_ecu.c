@@ -535,6 +535,93 @@ static int test_multi_page_persistent_state_slots(void)
     return 0;
 }
 
+static int test_read_dtc_is_flash_read_only(void)
+{
+    TestPlatform platform;
+    LinkStm32F103UdsEcu ecu;
+    LinkStm32F103UdsEcuConfig config;
+    LinkStm32F103PersistentState state_before;
+    uint8_t page_a_before[LINK_STM32F103_FLASH_PAGE_BYTES];
+    uint8_t page_b_before[LINK_STM32F103_FLASH_PAGE_BYTES];
+    unsigned int erase_before[4U];
+    uint8_t response[512U];
+    size_t response_length = 0U;
+    size_t index;
+
+    const uint8_t r01[] = {0x19U,0x01U,0xffU};
+    const uint8_t r02[] = {0x19U,0x02U,0xffU};
+    const uint8_t r03[] = {0x19U,0x03U};
+    const uint8_t r04[] = {0x19U,0x04U,0xf0U,0x06U,0x14U,0x01U};
+    const uint8_t r05[] = {0x19U,0x05U,0x01U};
+    const uint8_t r06[] = {0x19U,0x06U,0xf0U,0x06U,0x14U,0x01U};
+    const uint8_t r07[] = {0x19U,0x07U,0xffU,0xffU};
+    const uint8_t r08[] = {0x19U,0x08U,0xffU,0xffU};
+    const uint8_t r09[] = {0x19U,0x09U,0xf0U,0x06U,0x14U};
+    const uint8_t r0a[] = {0x19U,0x0aU};
+    const uint8_t r0b[] = {0x19U,0x0bU};
+    const uint8_t r0c[] = {0x19U,0x0cU};
+    const uint8_t r0d[] = {0x19U,0x0dU};
+    const uint8_t r0e[] = {0x19U,0x0eU};
+    const uint8_t r0f[] = {0x19U,0x0fU,0xffU};
+    const uint8_t r10[] = {0x19U,0x10U,0xf0U,0x06U,0x14U,0x01U};
+    const uint8_t r11[] = {0x19U,0x11U,0xffU};
+    const uint8_t r12[] = {0x19U,0x12U,0xffU};
+    const uint8_t r13[] = {0x19U,0x13U,0xffU};
+    const uint8_t r14[] = {0x19U,0x14U};
+    const uint8_t r15[] = {0x19U,0x15U};
+    const uint8_t r16[] = {0x19U,0x16U,0x01U};
+    const uint8_t r17[] = {0x19U,0x17U,0xffU,0x01U};
+    const uint8_t r18[] = {0x19U,0x18U,0xf0U,0x06U,0x14U,0x01U,0x01U};
+    const uint8_t r19[] = {0x19U,0x19U,0xf0U,0x06U,0x14U,0x01U,0x01U};
+    const uint8_t r42[] = {0x19U,0x42U,0x33U,0xffU,0xffU};
+    const uint8_t r55[] = {0x19U,0x55U,0x33U};
+    struct ReadDtcCase {
+        const uint8_t *pdu;
+        size_t length;
+    };
+    const struct ReadDtcCase cases[] = {
+        {r01,sizeof(r01)},{r02,sizeof(r02)},{r03,sizeof(r03)},
+        {r04,sizeof(r04)},{r05,sizeof(r05)},{r06,sizeof(r06)},
+        {r07,sizeof(r07)},{r08,sizeof(r08)},{r09,sizeof(r09)},
+        {r0a,sizeof(r0a)},{r0b,sizeof(r0b)},{r0c,sizeof(r0c)},
+        {r0d,sizeof(r0d)},{r0e,sizeof(r0e)},{r0f,sizeof(r0f)},
+        {r10,sizeof(r10)},{r11,sizeof(r11)},{r12,sizeof(r12)},
+        {r13,sizeof(r13)},{r14,sizeof(r14)},{r15,sizeof(r15)},
+        {r16,sizeof(r16)},{r17,sizeof(r17)},{r18,sizeof(r18)},
+        {r19,sizeof(r19)},{r42,sizeof(r42)},{r55,sizeof(r55)}
+    };
+
+    memset(&platform, 0, sizeof(platform));
+    memset(platform.page_a, 0xff, sizeof(platform.page_a));
+    memset(platform.page_b, 0xff, sizeof(platform.page_b));
+    config = test_config(&platform);
+    CHECK(link_stm32f103_uds_ecu_init(&ecu, &config));
+
+    state_before = ecu.state;
+    memcpy(page_a_before, platform.page_a, sizeof(page_a_before));
+    memcpy(page_b_before, platform.page_b, sizeof(page_b_before));
+    memcpy(erase_before, platform.erase_count, sizeof(erase_before));
+
+    /*
+     * LINK #50: ReadDTCInformation is a read-only service. No 0x19
+     * subfunction may erase/program the STM32F103 persistence journal or
+     * mutate the persistent state merely because DTC data was requested.
+     */
+    for (index = 0U; index < sizeof(cases) / sizeof(cases[0]); ++index) {
+        LinkUdsServerResult result = link_stm32f103_uds_ecu_handle(
+            &ecu, NULL, cases[index].pdu, cases[index].length,
+            response, sizeof(response), &response_length);
+        CHECK(result == LINK_UDS_SERVER_RESULT_POSITIVE ||
+              result == LINK_UDS_SERVER_RESULT_NEGATIVE);
+    }
+
+    CHECK(memcmp(&ecu.state, &state_before, sizeof(state_before)) == 0);
+    CHECK(memcmp(platform.page_a, page_a_before, sizeof(page_a_before)) == 0);
+    CHECK(memcmp(platform.page_b, page_b_before, sizeof(page_b_before)) == 0);
+    CHECK(memcmp(platform.erase_count, erase_before, sizeof(erase_before)) == 0);
+    return 0;
+}
+
 static int test_issue42_workbook_dtc_catalogue(void)
 {
     TestPlatform platform;
@@ -1139,6 +1226,7 @@ int main(void)
     CHECK(test_persistence_and_dtc_clear() == 0);
     CHECK(test_n_page_wear_level_rotation() == 0);
     CHECK(test_multi_page_persistent_state_slots() == 0);
+    CHECK(test_read_dtc_is_flash_read_only() == 0);
     CHECK(test_issue42_workbook_dtc_catalogue() == 0);
     CHECK(test_issue43_two_level_security_access() == 0);
     CHECK(test_issue44_workbook_dids() == 0);
