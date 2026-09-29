@@ -25,6 +25,7 @@ typedef struct {
     uint8_t page_c[LINK_STM32F103_FLASH_PAGE_BYTES];
     uint8_t page_d[LINK_STM32F103_FLASH_PAGE_BYTES];
     unsigned int erase_count[4U];
+    unsigned int program_count[4U];
     uint32_t now_ms;
 } TestPlatform;
 
@@ -95,6 +96,11 @@ static bool test_flash_program(
 
     if (page == NULL || data == NULL || length > sizeof(platform->page_a)) {
         return false;
+    }
+    {
+        const int page_index = test_page_index(address);
+        if (page_index < 0) return false;
+        platform->program_count[(size_t)page_index]++;
     }
     for (index = 0U; index < length; ++index) {
         if ((uint8_t)(page[index] | bytes[index]) != page[index]) {
@@ -544,6 +550,7 @@ static int test_read_dtc_is_flash_read_only(void)
     uint8_t page_a_before[LINK_STM32F103_FLASH_PAGE_BYTES];
     uint8_t page_b_before[LINK_STM32F103_FLASH_PAGE_BYTES];
     unsigned int erase_before[4U];
+    unsigned int program_before[4U];
     uint8_t response[512U];
     size_t response_length = 0U;
     size_t index;
@@ -601,6 +608,7 @@ static int test_read_dtc_is_flash_read_only(void)
     memcpy(page_a_before, platform.page_a, sizeof(page_a_before));
     memcpy(page_b_before, platform.page_b, sizeof(page_b_before));
     memcpy(erase_before, platform.erase_count, sizeof(erase_before));
+    memcpy(program_before, platform.program_count, sizeof(program_before));
 
     /*
      * LINK #50: ReadDTCInformation is a read-only service. No 0x19
@@ -619,6 +627,8 @@ static int test_read_dtc_is_flash_read_only(void)
     CHECK(memcmp(platform.page_a, page_a_before, sizeof(page_a_before)) == 0);
     CHECK(memcmp(platform.page_b, page_b_before, sizeof(page_b_before)) == 0);
     CHECK(memcmp(platform.erase_count, erase_before, sizeof(erase_before)) == 0);
+    CHECK(memcmp(platform.program_count, program_before,
+                 sizeof(program_before)) == 0);
     return 0;
 }
 
