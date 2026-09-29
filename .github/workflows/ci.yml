@@ -401,6 +401,25 @@ jobs:
             arm-none-eabi-size "$output"/*.o
           done
 
+      - name: Compile standalone STM32F103 flash journal exercise
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build-stm32-flash-journal
+          flags=(
+            -mcpu=cortex-m3 -mthumb -std=c11 -ffreestanding
+            -Wall -Wextra -Wpedantic -Wshadow -Wformat=2
+            -Wstrict-prototypes -Wmissing-prototypes -Werror
+            -Iinclude -Itests/stm32_flash_journal_stub
+          )
+          arm-none-eabi-gcc "${flags[@]}" \
+            -c examples/stm32-bxcan/flash-journal-standalone/Src-main.c \
+            -o build-stm32-flash-journal/Src-main.o
+          arm-none-eabi-gcc "${flags[@]}" \
+            -c src/core/flash_journal.c \
+            -o build-stm32-flash-journal/flash_journal.o
+          arm-none-eabi-size build-stm32-flash-journal/*.o
+
   sanitizers:
     name: Linux / ASan + UBSan
     runs-on: ${{ startsWith(github.event.head_commit.message, 'Release ') && 'ubuntu-24.04' || 'bigbedroom' }}
