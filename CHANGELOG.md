@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.15.86 - 2026-09-30
+
+- Make the aggregate startup readiness snapshot use the same deterministic preferred responder as the responder-attributed structured view (7E8 when present), so arrival order cannot make a secondary ECU define the vehicle-wide readiness summary.
+- Retain the 0.15.85 one-shot per-responder startup PID 01 capture and header-preservation work unchanged.
+
 ## 0.15.85 - 2026-09-30
 
 - Retain responder CAN headers from capability discovery into the startup fault/readiness context when a product already requests attributed live responses, avoiding an unnecessary ATH0/ATH1 round trip.

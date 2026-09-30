@@ -399,7 +399,20 @@ static LinkDiagnosticFlowResult flow_accept_readiness(
             event->decoded = decoded_responders.entries[primary].decoded;
         }
 
-        result = link_obd2_decode_readiness(response, &flow->readiness);
+        if (event->responder_decoded.count != 0U &&
+            event->decoded.raw_length >= 4U) {
+            /*
+             * The aggregate readiness view must use the same deterministic
+             * preferred responder as the attributed structured view. Otherwise
+             * arrival order could make a secondary ECU overwrite the primary
+             * 7E8 readiness state.
+             */
+            result = link_obd2_decode_readiness_payload(
+                event->decoded.raw, event->decoded.raw_length,
+                &flow->readiness);
+        } else {
+            result = link_obd2_decode_readiness(response, &flow->readiness);
+        }
         if (result == LINK_OBD2_RESULT_OK) {
             flow->readiness_available = true;
         } else if (link_obd2_is_negative_response(
