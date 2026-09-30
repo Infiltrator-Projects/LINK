@@ -1623,8 +1623,8 @@ LinkObd2Result link_obd2_decode_dtcs(
         size_t line_length = end == NULL ? strlen(cursor) : (size_t)(end - cursor);
         uint8_t bytes[OBD2_MAX_LINE_BYTES];
         size_t byte_count = 0U;
-        result = obd2_parse_hex_line(cursor, line_length, bytes,
-                                     sizeof(bytes), &byte_count);
+        result = obd2_parse_data_line(cursor, line_length, bytes,
+                                      sizeof(bytes), &byte_count);
         if (result != LINK_OBD2_RESULT_OK) return result;
         if (byte_count >= 1U && bytes[0] == response_service) {
             matched = true;
@@ -1677,7 +1677,7 @@ bool link_obd2_is_negative_response(
         uint8_t bytes[OBD2_MAX_LINE_BYTES];
         size_t byte_count = 0U;
 
-        result = obd2_parse_hex_line(
+        result = obd2_parse_data_line(
             cursor, line_length, bytes, sizeof(bytes), &byte_count);
         if (result != LINK_OBD2_RESULT_OK || byte_count != 3U ||
             bytes[0] != UINT8_C(0x7f) || bytes[1] != request_service) {
