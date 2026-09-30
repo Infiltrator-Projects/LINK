@@ -65,6 +65,8 @@ grep -Fq 'link_scheduler_enabled_standard_count(&_flow.scheduler)' "$controller"
 grep -Fq 'pollingFieldMaskForPID' platform/apple/LinkDiagnosticsController.h
 grep -Fq 'link_polling_policy_set_field_mask' platform/apple/LinkApplePollingCoordinator.inc
 grep -Fq 'Do not decode a field the user did not select' "$controller"
+grep -Fq 'A field-mask edit on an active source changes decode policy, not wire work.' "$polling_coordinator"
+grep -Fq 'if (!wasSourceEnabled && sourceEnabled)' "$polling_coordinator"
 grep -Fq 'completedStage == LINK_DIAGNOSTIC_FLOW_CONFIGURING_LIVE_HEADERS' "$controller"
 grep -Fq '[self applyPollingPreferencesToScheduler];' "$controller"
 grep -Fq 'private var adapterDiscoveryOrder = [String]()' "$ui"
