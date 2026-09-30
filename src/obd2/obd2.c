@@ -1308,29 +1308,42 @@ LinkObd2Result link_obd2_decode_freeze_pid(
     return obd2_decode_sample_data(pid, data, length, sample);
 }
 
+LinkObd2Result link_obd2_decode_readiness_payload(
+    const uint8_t *data,
+    size_t data_length,
+    LinkObd2Readiness *readiness)
+{
+    LinkObd2Readiness decoded;
+    if (data == NULL || readiness == NULL)
+        return LINK_OBD2_RESULT_INVALID_ARGUMENT;
+    if (data_length < 4U)
+        return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
+
+    memset(&decoded, 0, sizeof(decoded));
+    memcpy(decoded.raw, data, sizeof(decoded.raw));
+    decoded.mil_on = (data[0] & UINT8_C(0x80)) != 0U;
+    decoded.confirmed_dtc_count = data[0] & UINT8_C(0x7f);
+    decoded.compression_ignition = (data[1] & UINT8_C(0x08)) != 0U;
+    decoded.continuous_supported = data[1] & UINT8_C(0x07);
+    decoded.continuous_incomplete =
+        (data[1] >> 4U) & UINT8_C(0x07);
+    decoded.noncontinuous_supported = data[2];
+    decoded.noncontinuous_incomplete = data[3];
+    *readiness = decoded;
+    return LINK_OBD2_RESULT_OK;
+}
+
 LinkObd2Result link_obd2_decode_readiness(
     const LinkElm327Response *response, LinkObd2Readiness *readiness)
 {
     uint8_t data[8];
     size_t length = 0U;
     LinkObd2Result result;
-    LinkObd2Readiness decoded;
     if (readiness == NULL) return LINK_OBD2_RESULT_INVALID_ARGUMENT;
     result = obd2_find_pid_payload(response, 0x41U, 0x01U, false, 0U,
                                    data, sizeof(data), &length);
     if (result != LINK_OBD2_RESULT_OK) return result;
-    if (length < 4U) return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
-    memset(&decoded, 0, sizeof(decoded));
-    memcpy(decoded.raw, data, sizeof(decoded.raw));
-    decoded.mil_on = (data[0] & 0x80U) != 0U;
-    decoded.confirmed_dtc_count = data[0] & 0x7fU;
-    decoded.compression_ignition = (data[1] & 0x08U) != 0U;
-    decoded.continuous_supported = data[1] & 0x07U;
-    decoded.continuous_incomplete = (data[1] >> 4U) & 0x07U;
-    decoded.noncontinuous_supported = data[2];
-    decoded.noncontinuous_incomplete = data[3];
-    *readiness = decoded;
-    return LINK_OBD2_RESULT_OK;
+    return link_obd2_decode_readiness_payload(data, length, readiness);
 }
 
 LinkObd2Result link_obd2_decode_vin_pdu(

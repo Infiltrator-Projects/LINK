@@ -23,6 +23,23 @@ NS_ASSUME_NONNULL_BEGIN
 
 @class LinkDiagnosticsController;
 
+/**
+ * One independently selectable user-facing value carried by Mode 01 PID 01.
+ *
+ * Every snapshot has sourcePID == 0x01. Product faces may expose these values
+ * separately while issuing only one physical 01 01 request.
+ */
+@interface LinkReadinessFieldSnapshot : NSObject
+@property(nonatomic, copy) NSString *stableKey;
+@property(nonatomic, copy) NSString *shortName;
+@property(nonatomic, copy) NSString *title;
+@property(nonatomic, copy) NSString *formattedValue;
+@property(nonatomic) uint8_t sourcePID;
+@property(nonatomic) BOOL valueAvailable;
+@property(nonatomic) BOOL numericValueAvailable;
+@property(nonatomic) double numericValue;
+@end
+
 @protocol LinkDiagnosticsControllerDelegate <NSObject>
 - (void)linkDiagnosticsControllerDidUpdate:(LinkDiagnosticsController *)controller;
 @optional
@@ -150,6 +167,8 @@ NS_ASSUME_NONNULL_BEGIN
 - (nullable NSString *)structuredDisplayValueForPID:(uint8_t)pid;
 /** Complete raw payload for the latest structured SAE PID sample. */
 - (nullable NSString *)structuredRawHexForPID:(uint8_t)pid;
+/** Stable logical fields decoded from Mode 01 PID 01. */
+- (NSArray<LinkReadinessFieldSnapshot *> *)readinessFieldSnapshots;
 
 /**
  * Format one raw five-character SAE-style DTC for presentation without
@@ -263,6 +282,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (NSArray<NSNumber *> *)displayRangeForPID:(uint8_t)pid;
 - (nullable NSString *)structuredDisplayValueForPID:(uint8_t)pid;
 - (nullable NSString *)structuredRawHexForPID:(uint8_t)pid;
+- (NSArray<LinkReadinessFieldSnapshot *> *)readinessFieldSnapshots;
 - (NSString *)dtcDisplayTextForCode:(NSString *)code;
 - (BOOL)supportsPID:(uint8_t)pid;
 - (BOOL)favouriteForPID:(uint8_t)pid;

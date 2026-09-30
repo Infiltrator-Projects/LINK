@@ -787,6 +787,31 @@ static void test_vin_response_variants(void)
           "reject zero byte embedded inside VIN data");
 }
 
+static void test_readiness_payload(void)
+{
+    static const uint8_t captured[4] = {
+        UINT8_C(0x00), UINT8_C(0x06), UINT8_C(0x80), UINT8_C(0x00)
+    };
+    LinkObd2Readiness readiness;
+
+    check(link_obd2_decode_readiness_payload(
+              captured, sizeof(captured), &readiness) ==
+              LINK_OBD2_RESULT_OK &&
+              !readiness.mil_on &&
+              readiness.confirmed_dtc_count == 0U &&
+              !readiness.compression_ignition &&
+              readiness.continuous_supported == UINT8_C(0x06) &&
+              readiness.continuous_incomplete == 0U &&
+              readiness.noncontinuous_supported == UINT8_C(0x80) &&
+              readiness.noncontinuous_incomplete == 0U,
+          "decode captured PID 01 payload 00 06 80 00");
+
+    check(link_obd2_decode_readiness_payload(
+              captured, 3U, &readiness) ==
+              LINK_OBD2_RESULT_MALFORMED_RESPONSE,
+          "reject truncated PID 01 readiness payload");
+}
+
 static void test_negative_response(void)
 {
     LinkElm327Response response;
@@ -808,6 +833,7 @@ int main(void)
     test_requests();
     test_live_and_capabilities();
     test_vin_response_variants();
+    test_readiness_payload();
     test_negative_response();
 
     if (failures != 0) {

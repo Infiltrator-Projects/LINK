@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.15.81 - 2026-09-30
+
+- Decode Mode 01 PID 0x01 from its four-byte live payload as standards-backed readiness state instead of leaving selected telemetry as an opaque raw bitmap.
+- Expose stable logical PID 0x01 fields for Apple product faces: MIL state, confirmed emissions DTC count, ignition-layout flag and every readiness monitor, while all enabled fields continue to share one underlying 01 01 request.
+- Keep unsupported and opposite-layout monitors explicit as Not supported / Not applicable, and prefer the latest live PID 0x01 payload over the startup readiness snapshot.
+- Regress the captured 00 06 80 00 payload as MIL off, zero confirmed DTCs, fuel/comprehensive monitors supported and complete, and EGR/VVT supported and complete.
+
 ## 0.15.80 - 2026-09-29
 
 - Separate STM32F103 multi-page flash-journal validation from CAN/ISO-TP/UDS with a standalone four-page hardware exercise that performs two complete wear-level rotations, read-back validation and reboot recovery.

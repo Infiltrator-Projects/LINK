@@ -24,6 +24,9 @@
 
 #include <stdint.h>
 
+@implementation LinkReadinessFieldSnapshot
+@end
+
 @interface LinkDiagnosticsController () <LinkBLETransportDelegate, LinkAppleSessionRunnerDelegate>
 @property(nonatomic, copy, readwrite) NSString *statusText;
 @property(nonatomic, copy, readwrite, nullable) NSString *peripheralName;
@@ -516,27 +519,192 @@ static void LinkAppleAppendReadinessMonitor(
         @"%s · %@", name, incomplete ? @"not ready" : @"ready"]];
 }
 
+- (BOOL)currentReadiness:(LinkObd2Readiness *)readiness
+{
+    if (readiness == NULL) return NO;
+
+    LinkStructuredTelemetrySample live;
+    if ([self latestStructuredSampleForPID:UINT8_C(0x01) sample:&live] &&
+        link_obd2_decode_readiness_payload(
+            live.decoded.raw, live.decoded.raw_length, readiness) ==
+            LINK_OBD2_RESULT_OK) {
+        return YES;
+    }
+
+    const LinkObd2Readiness *captured =
+        link_diagnostic_flow_readiness(&_flow);
+    if (captured == NULL) return NO;
+    *readiness = *captured;
+    return YES;
+}
+
+static LinkReadinessFieldSnapshot *LinkAppleReadinessField(
+    NSString *stableKey,
+    NSString *shortName,
+    NSString *title,
+    BOOL valueAvailable,
+    NSString *formattedValue,
+    BOOL numericValueAvailable,
+    double numericValue)
+{
+    LinkReadinessFieldSnapshot *snapshot =
+        [[LinkReadinessFieldSnapshot alloc] init];
+    snapshot.stableKey = stableKey;
+    snapshot.shortName = shortName;
+    snapshot.title = title;
+    snapshot.formattedValue = formattedValue;
+    snapshot.sourcePID = UINT8_C(0x01);
+    snapshot.valueAvailable = valueAvailable;
+    snapshot.numericValueAvailable = numericValueAvailable;
+    snapshot.numericValue = numericValue;
+    return snapshot;
+}
+
+static NSString *LinkAppleReadinessMonitorValue(
+    BOOL haveReadiness,
+    BOOL applicable,
+    bool supported,
+    bool incomplete)
+{
+    if (!haveReadiness) return @"Waiting for sample";
+    if (!applicable) return @"Not applicable";
+    if (!supported) return @"Not supported";
+    return incomplete ? @"Not ready" : @"Ready";
+}
+
+- (NSArray<LinkReadinessFieldSnapshot *> *)readinessFieldSnapshots
+{
+    LinkObd2Readiness readiness;
+    const BOOL have = [self currentReadiness:&readiness];
+    NSMutableArray<LinkReadinessFieldSnapshot *> *values =
+        [[NSMutableArray alloc] initWithCapacity:19U];
+
+#define APPEND_FIELD(KEY, SHORT, TITLE, AVAILABLE, TEXT, NUMERIC, NUMBER) \
+    [values addObject:LinkAppleReadinessField( \
+        (KEY), (SHORT), (TITLE), (AVAILABLE), (TEXT), (NUMERIC), (NUMBER))]
+
+#define APPEND_CONTINUOUS(KEY, SHORT, TITLE, BIT) do { \
+    const uint8_t mask = (uint8_t)(UINT8_C(1) << (BIT)); \
+    APPEND_FIELD((KEY), (SHORT), (TITLE), have, \
+        LinkAppleReadinessMonitorValue( \
+            have, YES, \
+            have && (readiness.continuous_supported & mask) != 0U, \
+            have && (readiness.continuous_incomplete & mask) != 0U), \
+        NO, 0.0); \
+} while (0)
+
+#define APPEND_NONCONTINUOUS(KEY, SHORT, TITLE, BIT, APPLICABLE) do { \
+    const uint8_t mask = (uint8_t)(UINT8_C(1) << (BIT)); \
+    APPEND_FIELD((KEY), (SHORT), (TITLE), have, \
+        LinkAppleReadinessMonitorValue( \
+            have, (APPLICABLE), \
+            have && (readiness.noncontinuous_supported & mask) != 0U, \
+            have && (readiness.noncontinuous_incomplete & mask) != 0U), \
+        NO, 0.0); \
+} while (0)
+
+    APPEND_FIELD(
+        @"obd2.readiness.mil", @"MIL",
+        @"Malfunction indicator lamp (MIL)",
+        have,
+        have ? (readiness.mil_on ? @"On" : @"Off") : @"Waiting for sample",
+        have,
+        have && readiness.mil_on ? 1.0 : 0.0);
+    APPEND_FIELD(
+        @"obd2.readiness.confirmed_dtc_count", @"DTC COUNT",
+        @"Confirmed emissions DTC count",
+        have,
+        have ? [NSString stringWithFormat:@"%u",
+            (unsigned int)readiness.confirmed_dtc_count]
+             : @"Waiting for sample",
+        have,
+        have ? (double)readiness.confirmed_dtc_count : 0.0);
+    APPEND_FIELD(
+        @"obd2.readiness.ignition_type", @"IGNITION",
+        @"Readiness monitor ignition layout",
+        have,
+        have ? (readiness.compression_ignition
+                    ? @"Compression ignition" : @"Spark ignition")
+             : @"Waiting for sample",
+        NO, 0.0);
+
+    APPEND_CONTINUOUS(
+        @"obd2.readiness.misfire", @"MISFIRE", @"Misfire monitor", 0U);
+    APPEND_CONTINUOUS(
+        @"obd2.readiness.fuel_system", @"FUEL MON", @"Fuel system monitor", 1U);
+    APPEND_CONTINUOUS(
+        @"obd2.readiness.comprehensive_components", @"COMP MON",
+        @"Comprehensive components monitor", 2U);
+
+    const BOOL spark = have && !readiness.compression_ignition;
+    APPEND_NONCONTINUOUS(
+        @"obd2.readiness.catalyst", @"CAT MON", @"Catalyst monitor", 0U, spark);
+    APPEND_NONCONTINUOUS(
+        @"obd2.readiness.heated_catalyst", @"HCAT MON",
+        @"Heated catalyst monitor", 1U, spark);
+    APPEND_NONCONTINUOUS(
+        @"obd2.readiness.evaporative_system", @"EVAP MON",
+        @"Evaporative system monitor", 2U, spark);
+    APPEND_NONCONTINUOUS(
+        @"obd2.readiness.secondary_air", @"AIR MON",
+        @"Secondary air monitor", 3U, spark);
+    APPEND_NONCONTINUOUS(
+        @"obd2.readiness.ac_refrigerant", @"A/C MON",
+        @"A/C refrigerant monitor", 4U, spark);
+    APPEND_NONCONTINUOUS(
+        @"obd2.readiness.oxygen_sensor", @"O2 MON",
+        @"Oxygen sensor monitor", 5U, spark);
+    APPEND_NONCONTINUOUS(
+        @"obd2.readiness.oxygen_sensor_heater", @"O2 HTR",
+        @"Oxygen sensor heater monitor", 6U, spark);
+
+    const BOOL compression = have && readiness.compression_ignition;
+    APPEND_NONCONTINUOUS(
+        @"obd2.readiness.nmhc_catalyst", @"NMHC MON",
+        @"NMHC catalyst monitor", 0U, compression);
+    APPEND_NONCONTINUOUS(
+        @"obd2.readiness.nox_scr", @"NOX/SCR",
+        @"NOx / SCR monitor", 1U, compression);
+    APPEND_NONCONTINUOUS(
+        @"obd2.readiness.boost_pressure", @"BOOST MON",
+        @"Boost pressure monitor", 3U, compression);
+    APPEND_NONCONTINUOUS(
+        @"obd2.readiness.exhaust_gas_sensor", @"EGS MON",
+        @"Exhaust gas sensor monitor", 5U, compression);
+    APPEND_NONCONTINUOUS(
+        @"obd2.readiness.particulate_filter", @"PM MON",
+        @"Particulate filter monitor", 6U, compression);
+
+    APPEND_NONCONTINUOUS(
+        @"obd2.readiness.egr_vvt", @"EGR/VVT",
+        @"EGR / VVT monitor", 7U, YES);
+
+#undef APPEND_NONCONTINUOUS
+#undef APPEND_CONTINUOUS
+#undef APPEND_FIELD
+
+    return [values copy];
+}
+
 - (NSString *)readinessStatusText
 {
-    const LinkObd2Readiness *readiness =
-        link_diagnostic_flow_readiness(&_flow);
-    if (!_flow.readiness_attempted)
-        return @"Not collected";
-    if (readiness == NULL)
-        return @"Unavailable / unsupported";
+    LinkObd2Readiness readiness;
+    if (![self currentReadiness:&readiness]) {
+        return _flow.readiness_attempted
+            ? @"Unavailable / unsupported" : @"Not collected";
+    }
     return [NSString stringWithFormat:
         @"%@ · %u confirmed DTC%@ · %@ ignition",
-        readiness->mil_on ? @"MIL on" : @"MIL off",
-        (unsigned int)readiness->confirmed_dtc_count,
-        readiness->confirmed_dtc_count == 1U ? @"" : @"s",
-        readiness->compression_ignition ? @"compression" : @"spark"];
+        readiness.mil_on ? @"MIL on" : @"MIL off",
+        (unsigned int)readiness.confirmed_dtc_count,
+        readiness.confirmed_dtc_count == 1U ? @"" : @"s",
+        readiness.compression_ignition ? @"compression" : @"spark"];
 }
 
 - (NSArray<NSString *> *)readinessMonitorStatus
 {
-    const LinkObd2Readiness *readiness =
-        link_diagnostic_flow_readiness(&_flow);
-    if (readiness == NULL) return @[];
+    LinkObd2Readiness readiness;
+    if (![self currentReadiness:&readiness]) return @[];
 
     NSMutableArray<NSString *> *rows = [[NSMutableArray alloc] init];
     static const char *continuousNames[3] = {
@@ -545,8 +713,8 @@ static void LinkAppleAppendReadinessMonitor(
     for (unsigned int bit = 0U; bit < 3U; ++bit) {
         LinkAppleAppendReadinessMonitor(
             rows, continuousNames[bit],
-            (readiness->continuous_supported & (1U << bit)) != 0U,
-            (readiness->continuous_incomplete & (1U << bit)) != 0U);
+            (readiness.continuous_supported & (1U << bit)) != 0U,
+            (readiness.continuous_incomplete & (1U << bit)) != 0U);
     }
 
     static const char *sparkNames[8] = {
@@ -560,13 +728,13 @@ static void LinkAppleAppendReadinessMonitor(
         "Particulate filter", "EGR / VVT"
     };
     const char *const *names =
-        readiness->compression_ignition ? dieselNames : sparkNames;
+        readiness.compression_ignition ? dieselNames : sparkNames;
     for (unsigned int bit = 0U; bit < 8U; ++bit) {
         if (strcmp(names[bit], "Reserved") == 0) continue;
         LinkAppleAppendReadinessMonitor(
             rows, names[bit],
-            (readiness->noncontinuous_supported & (1U << bit)) != 0U,
-            (readiness->noncontinuous_incomplete & (1U << bit)) != 0U);
+            (readiness.noncontinuous_supported & (1U << bit)) != 0U,
+            (readiness.noncontinuous_incomplete & (1U << bit)) != 0U);
     }
     return [rows copy];
 }
@@ -2110,6 +2278,10 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
 - (nullable NSString *)structuredRawHexForPID:(uint8_t)pid
 {
     return [_shared structuredRawHexForPID:pid];
+}
+- (NSArray<LinkReadinessFieldSnapshot *> *)readinessFieldSnapshots
+{
+    return [_shared readinessFieldSnapshots];
 }
 - (NSString *)dtcDisplayTextForCode:(NSString *)code
 {

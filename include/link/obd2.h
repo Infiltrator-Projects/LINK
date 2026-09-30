@@ -205,6 +205,17 @@ typedef struct {
     uint8_t raw[4];
 } LinkObd2Readiness;
 
+/**
+ * Decode the four data bytes returned by Mode 01 PID 01.
+ *
+ * This payload-level API is used when a live telemetry sample has already had
+ * its 41 01 response header removed.
+ */
+LinkObd2Result link_obd2_decode_readiness_payload(
+    const uint8_t *data,
+    size_t data_length,
+    LinkObd2Readiness *readiness);
+
 typedef struct {
     bool confirmed;
     bool acknowledge_readiness_reset;
