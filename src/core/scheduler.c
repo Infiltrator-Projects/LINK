@@ -131,6 +131,7 @@ void link_polling_policy_init(LinkPollingPolicy *policy, bool enabled_by_default
     if (policy == NULL) return;
     for (pid = 0U; pid < LINK_OBD2_PID_COUNT; ++pid) {
         policy->pid_enabled[pid] = enabled_by_default;
+        policy->pid_selection_set[pid] = false;
         policy->field_mask[pid] = UINT64_C(0);
     }
 }
@@ -147,6 +148,7 @@ void link_polling_policy_set_enabled(
 {
     if (policy == NULL) return;
     policy->pid_enabled[pid] = enabled;
+    policy->pid_selection_set[pid] = true;
 }
 
 void link_polling_policy_set_field_mask(
@@ -168,6 +170,17 @@ size_t link_polling_policy_apply_to_scheduler(
     size_t index;
     size_t enabled_count = 0U;
     if (policy == NULL || scheduler == NULL) return 0U;
+
+    for (index = 1U; index < LINK_OBD2_PID_COUNT; ++index) {
+        const uint8_t pid = (uint8_t)index;
+        if ((pid & UINT8_C(0x1f)) == 0U ||
+            !((policy->pid_selection_set[pid] && policy->pid_enabled[pid]) ||
+              policy->field_mask[pid] != UINT64_C(0)) ||
+            link_obd2_pid_definition(UINT8_C(0x01), pid) == NULL) continue;
+        /* add is idempotent: direct and logical-field choices share one job. */
+        (void)link_scheduler_add(scheduler, pid, 3000U,
+                                LINK_SCHEDULER_PRIORITY_LOW, 0U);
+    }
 
     for (index = 0U; index < scheduler->count; ++index) {
         LinkSchedulerItem *item = &scheduler->items[index];

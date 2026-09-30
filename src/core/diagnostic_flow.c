@@ -795,7 +795,9 @@ static LinkDiagnosticFlowResult flow_accept_live_sample(
     }
     result = link_obd2_decode_live_pid_payload_responders(
         response, flow->active_pid, &decoded_responders);
-    if (result == LINK_OBD2_RESULT_UNSUPPORTED_PID) {
+    if (result == LINK_OBD2_RESULT_UNSUPPORTED_PID ||
+        (result == LINK_OBD2_RESULT_UNEXPECTED_RESPONSE &&
+         link_obd2_is_negative_response(response, UINT8_C(0x01), NULL))) {
         event->kind = LINK_DIAGNOSTIC_FLOW_EVENT_LIVE_UNSUPPORTED;
         event->sample.pid = flow->active_pid;
         return LINK_DIAGNOSTIC_FLOW_RESULT_OK;

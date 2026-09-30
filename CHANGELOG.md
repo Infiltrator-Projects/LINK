@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.15.87 - 2026-09-30
+
+- Decode headered Mode 03/07/0A replies with their CAN DTC count and reassemble ISO-TP fault lists per responder; retain legacy uncounted decoding and the header-aware negative-response fix.
+- Let explicit documented Mode 01 selections create polling jobs even when missing from the advertised bitmap, without enabling unselected requests or duplicating shared source reads.
+- Continue polling after a service-01 negative response and regress startup through readiness, recurring attributed samples and manufacturer handoff with both empty and populated fault lists.
+
 ## 0.15.86 - 2026-09-30
 
 - Make the aggregate startup readiness snapshot use the same deterministic preferred responder as the responder-attributed structured view (7E8 when present), so arrival order cannot make a secondary ECU define the vehicle-wide readiness summary.

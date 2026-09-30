@@ -851,6 +851,56 @@ static void test_readiness_payload(void)
     }
 }
 
+static void test_can_dtc_payloads(void)
+{
+    static const struct {
+        const char *wire;
+        LinkObd2DtcKind kind;
+        size_t count;
+        const char *first;
+        const char *last;
+    } cases[] = {
+        {"7E8 02 43 00\r7E9 02 43 00\r>", LINK_OBD2_DTC_STORED, 0U, "", ""},
+        {"7E8 04 43 01 01 33\r>", LINK_OBD2_DTC_STORED, 1U, "P0133", "P0133"},
+        {"7E8 04 43 01 01 00 00 00 00\r>", LINK_OBD2_DTC_STORED, 1U, "P0100", "P0100"},
+        {"18 DA F1 10 04 47 01 C1 23\r>", LINK_OBD2_DTC_PENDING, 1U, "U0123", "U0123"},
+        {"18DAF110044701C123\r>", LINK_OBD2_DTC_PENDING, 1U, "U0123", "U0123"},
+        {"7E9 04 4A 01 02 00\r>", LINK_OBD2_DTC_PERMANENT, 1U, "P0200", "P0200"},
+        {"7E8 10 0C 43 05 01 00 02 00\r"
+         "7E9 04 43 01 01 33\r"
+         "7E8 21 03 00 04 00 05 00 00\r>", LINK_OBD2_DTC_STORED, 6U, "P0133", "P0500"},
+        {"00C\r0:43 05 01 00 02 00\r1:03 00 04 00 05 00\r>", LINK_OBD2_DTC_STORED, 5U, "P0100", "P0500"},
+        {"43 01 01 33\r>", LINK_OBD2_DTC_STORED, 1U, "P0133", "P0133"},
+        /* Headerless legacy ISO/J1850 replies contain pairs without a count. */
+        {"43 01 33 C1 23 00 00\r>", LINK_OBD2_DTC_STORED, 2U, "P0133", "U0123"},
+        {"47 02 00\r>", LINK_OBD2_DTC_PENDING, 1U, "P0200", "P0200"}
+    };
+    static const char *malformed[] = {
+        "7E8 04 43 02 01 33\r>", /* count exceeds complete payload */
+        "7E8 10 0C 43 05 01 00 02 00\r>", /* incomplete transfer */
+        "7E8 10 0C 43 05 01 00 02 00\r7E8 22 03 00 04 00 05 00 00\r>"
+    };
+    for (size_t i = 0U; i < sizeof(cases) / sizeof(cases[0]); ++i) {
+        LinkElm327Response response = parse_response("03", cases[i].wire);
+        LinkObd2DtcList list = {0};
+        check(link_obd2_decode_dtcs(&response, cases[i].kind, &list) ==
+                  LINK_OBD2_RESULT_OK && list.count == cases[i].count,
+              cases[i].wire);
+        if (list.count != 0U) {
+            check(strcmp(list.entries[0].code, cases[i].first) == 0 &&
+                  strcmp(list.entries[list.count - 1U].code, cases[i].last) == 0,
+                  "CAN DTC count is not decoded as a fault code");
+        }
+    }
+    for (size_t i = 0U; i < sizeof(malformed) / sizeof(malformed[0]); ++i) {
+        LinkElm327Response response = parse_response("03", malformed[i]);
+        LinkObd2DtcList list = {0};
+        check(link_obd2_decode_dtcs(&response, LINK_OBD2_DTC_STORED, &list) ==
+                  LINK_OBD2_RESULT_MALFORMED_RESPONSE && list.count == 0U,
+              "incomplete/corrupt CAN DTC replies never publish partial faults");
+    }
+}
+
 static void test_negative_response(void)
 {
     LinkElm327Response response;
@@ -874,6 +924,7 @@ int main(void)
     test_vin_response_variants();
     test_readiness_payload();
     test_negative_response();
+    test_can_dtc_payloads();
 
     if (failures != 0) {
         fprintf(stderr, "%d OBD-II test(s) failed\n", failures);

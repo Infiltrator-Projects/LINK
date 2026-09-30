@@ -99,6 +99,37 @@ int main(void)
         CHECK(link_scheduler_enabled_standard_count(&scheduler) == 0U);
     }
 
+    {
+        LinkPollingPolicy policy;
+        LinkScheduler scheduler;
+        link_polling_policy_init(&policy, true);
+        link_scheduler_init(&scheduler);
+        CHECK(link_scheduler_add_external(&scheduler, 1U, 1000U,
+            LINK_SCHEDULER_PRIORITY_HIGH, 0U) == LINK_SCHEDULER_RESULT_OK);
+        CHECK(link_polling_policy_apply_to_scheduler(&policy, &scheduler) == 0U);
+        CHECK(scheduler.count == 1U); /* Defaults cannot probe the catalogue. */
+        link_polling_policy_set_field_mask(&policy, 0x69U, 0U);
+        CHECK(link_polling_policy_apply_to_scheduler(&policy, &scheduler) == 0U);
+        link_polling_policy_set_enabled(&policy, 0x69U, true);
+        CHECK(link_polling_policy_apply_to_scheduler(&policy, &scheduler) == 1U);
+        CHECK(scheduler.count == 2U && scheduler.items[1].pid == 0x69U);
+        link_polling_policy_set_field_mask(&policy, 0x69U, 3U);
+        CHECK(link_polling_policy_apply_to_scheduler(&policy, &scheduler) == 1U);
+        CHECK(scheduler.count == 2U); /* All fields share the existing source. */
+        link_polling_policy_set_enabled(&policy, 0x69U, false);
+        CHECK(link_polling_policy_apply_to_scheduler(&policy, &scheduler) == 1U);
+        link_polling_policy_set_field_mask(&policy, 0x69U, 0U);
+        CHECK(link_polling_policy_apply_to_scheduler(&policy, &scheduler) == 0U);
+        CHECK(!scheduler.items[1].enabled && scheduler.items[0].enabled);
+        link_polling_policy_set_field_mask(&policy, 0x7CU, 1U);
+        CHECK(link_polling_policy_apply_to_scheduler(&policy, &scheduler) == 1U);
+        CHECK(scheduler.count == 3U && scheduler.items[2].pid == 0x7CU);
+        link_polling_policy_set_enabled(&policy, 0x20U, true);
+        link_polling_policy_set_enabled(&policy, 0xFFU, true);
+        CHECK(link_polling_policy_apply_to_scheduler(&policy, &scheduler) == 1U);
+        CHECK(scheduler.count == 3U); /* No bitmap or undefined requests. */
+    }
+
     puts("LINK vehicle-scoped parameter selection passed");
     return 0;
 }

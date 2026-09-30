@@ -36,7 +36,7 @@
 
     const BOOL sourceEnabled =
         link_polling_policy_is_enabled(&_policy, pid) ? YES : NO;
-    (void)link_scheduler_set_enabled(&flow->scheduler, pid, sourceEnabled);
+    [self applyToFlow:flow];
 
     if (!active || flow->awaiting_response || manufacturerExtensionActive ||
         (flow->stage != LINK_DIAGNOSTIC_FLOW_LIVE &&
@@ -64,10 +64,10 @@
     link_polling_policy_set_enabled(&_policy, pid, enabled ? true : false);
     if (flow == NULL) return LinkApplePollingUpdateDispositionNone;
 
-    /* Capability may not have created this scheduler entry yet; retention is authoritative. */
+    /* Explicit documented choices may be absent from the capability bitmap. */
     const BOOL sourceEnabled =
         link_polling_policy_is_enabled(&_policy, pid) ? YES : NO;
-    (void)link_scheduler_set_enabled(&flow->scheduler, pid, sourceEnabled);
+    [self applyToFlow:flow];
 
     if (!active || flow->awaiting_response || manufacturerExtensionActive ||
         (flow->stage != LINK_DIAGNOSTIC_FLOW_LIVE &&

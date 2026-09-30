@@ -4,6 +4,7 @@
  * @brief Portable standard OBD-II request and decoding engine.
  */
 #include "link/obd2.h"
+#include "link/isotp.h"
 
 #include "infiltratr/arithmetic.h"
 #include "infiltratr/core.h"
@@ -241,7 +242,7 @@ static LinkObd2Result obd2_parse_data_line_with_responder(
     const char *line, size_t line_length,
     uint8_t *bytes, size_t bytes_size, size_t *byte_count,
     bool *responder_id_available, uint32_t *responder_id,
-    bool *extended_id)
+    bool *extended_id, bool strip_can_length, bool *can_header)
 {
     size_t first = 0U;
     size_t last = line_length;
@@ -257,6 +258,7 @@ static LinkObd2Result obd2_parse_data_line_with_responder(
     if (responder_id_available != NULL) *responder_id_available = false;
     if (responder_id != NULL) *responder_id = 0U;
     if (extended_id != NULL) *extended_id = false;
+    if (can_header != NULL) *can_header = false;
 
     while (first < last && obd2_space(line[first])) first++;
     while (last > first && obd2_space(line[last - 1U])) last--;
@@ -287,6 +289,28 @@ static LinkObd2Result obd2_parse_data_line_with_responder(
             line + first, last - first, bytes, bytes_size, byte_count);
         if (result != LINK_OBD2_RESULT_OK) return result;
 
+        /* Standard 29-bit OBD CAN headers also appear as four spaced bytes
+         * or as eight nibbles glued to the payload when ATS0 is active. */
+        if (*byte_count >= 6U && bytes[0] == UINT8_C(0x18) &&
+            bytes[1] == UINT8_C(0xda)) {
+            const uint32_t identifier = ((uint32_t)bytes[0] << 24U) |
+                ((uint32_t)bytes[1] << 16U) | ((uint32_t)bytes[2] << 8U) |
+                (uint32_t)bytes[3];
+            *byte_count -= 4U;
+            memmove(bytes, bytes + 4U, *byte_count);
+            if (can_header != NULL) *can_header = true;
+            if (responder_id_available != NULL) *responder_id_available = true;
+            if (responder_id != NULL) *responder_id = identifier;
+            if (extended_id != NULL) *extended_id = true;
+            if (strip_can_length && bytes[0] <= 8U &&
+                (size_t)bytes[0] <= *byte_count - 1U) {
+                const size_t declared = bytes[0];
+                memmove(bytes, bytes + 1U, declared);
+                *byte_count = declared;
+            }
+            return LINK_OBD2_RESULT_OK;
+        }
+
         /*
          * ISO 9141-2 with ATH1 returns:
          *   48 6B <source> <OBD payload...> <additive checksum>
@@ -310,6 +334,7 @@ static LinkObd2Result obd2_parse_data_line_with_responder(
         return LINK_OBD2_RESULT_OK;
     }
     if (data_start >= last) return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
+    if (can_header != NULL) *can_header = true;
 
     if (responder_id_available != NULL || responder_id != NULL ||
         extended_id != NULL) {
@@ -333,7 +358,7 @@ static LinkObd2Result obd2_parse_data_line_with_responder(
      * CAN responses with headers normally include a DLC byte immediately
      * after the identifier. Remove it only when it is self-consistent.
      */
-    if (*byte_count >= 2U && bytes[0] <= 8U &&
+    if (strip_can_length && *byte_count >= 2U && bytes[0] <= 8U &&
         (size_t)bytes[0] <= *byte_count - 1U) {
         const size_t declared = (size_t)bytes[0];
         memmove(bytes, bytes + 1U, declared);
@@ -348,7 +373,7 @@ static LinkObd2Result obd2_parse_data_line(
 {
     return obd2_parse_data_line_with_responder(
         line, line_length, bytes, bytes_size, byte_count,
-        NULL, NULL, NULL);
+        NULL, NULL, NULL, true, NULL);
 }
 
 static bool obd2_parse_indexed_length(
@@ -621,9 +646,8 @@ static LinkObd2Result obd2_append_dtc_pairs(
     }
 
     /*
-     * Some vehicle ECUs report an empty Mode 03/07/0A list as a single
-     * trailing 00 after the positive-response service byte (for example
-     * "43 00"). That byte is padding/no-code evidence, not half of a DTC.
+     * Retain legacy uncounted replies with a lone zero padding byte.
+     * Counted CAN payloads are validated before reaching this pair decoder.
      * Accept only a lone trailing zero when the payload length is odd; any
      * non-zero orphan byte remains malformed.
      */
@@ -1035,7 +1059,7 @@ LinkObd2Result link_obd2_accept_supported_pid_responders(
             goto next_supported_line;
         result = obd2_parse_data_line_with_responder(
             cursor, line_length, bytes, sizeof(bytes), &byte_count,
-            &responder_available, &responder_id, &extended_id);
+            &responder_available, &responder_id, &extended_id, true, NULL);
         if (result != LINK_OBD2_RESULT_OK) return result;
         if (byte_count >= 6U &&
             bytes[0] == UINT8_C(0x41) &&
@@ -1140,7 +1164,7 @@ LinkObd2Result link_obd2_decode_live_pid_payload_responders(
             goto next_structured_line;
         result = obd2_parse_data_line_with_responder(
             cursor, line_length, bytes, sizeof(bytes), &byte_count,
-            &responder_available, &responder, &responder_extended);
+            &responder_available, &responder, &responder_extended, true, NULL);
         if (result != LINK_OBD2_RESULT_OK) {
             size_t declared = 0U;
             if (obd2_parse_indexed_length(
@@ -1588,6 +1612,26 @@ LinkObd2Result link_obd2_decode_dtc_pair(
     return LINK_OBD2_RESULT_OK;
 }
 
+static LinkObd2Result obd2_append_dtc_payload(
+    const uint8_t *bytes, size_t length, bool can_payload,
+    LinkObd2DtcKind kind, LinkObd2DtcList *list)
+{
+    /* CAN carries a DTC count after the service; ISO/J1850 carries pairs
+     * directly. Headerless counted replies have an even, count-exact length. */
+    if (can_payload || (length >= 2U &&
+            length == 2U + (size_t)bytes[1] * 2U)) {
+        size_t required;
+        if (length < 2U) return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
+        required = 2U + (size_t)bytes[1] * 2U;
+        if (required > length) return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
+        for (size_t i = required; i < length; ++i) {
+            if (bytes[i] != 0U) return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
+        }
+        return obd2_append_dtc_pairs(bytes, required, 2U, kind, list);
+    }
+    return obd2_append_dtc_pairs(bytes, length, 1U, kind, list);
+}
+
 LinkObd2Result link_obd2_decode_dtcs(
     const LinkElm327Response *response, LinkObd2DtcKind kind,
     LinkObd2DtcList *list)
@@ -1600,6 +1644,11 @@ LinkObd2Result link_obd2_decode_dtcs(
     bool indexed_found = false;
     bool matched = false;
     LinkObd2Result result;
+    struct {
+        LinkIsoTpRx receiver;
+        uint8_t payload[OBD2_MAX_MESSAGE_BYTES];
+    } can_responders[LINK_OBD2_MAX_RESPONDER_SAMPLES] = {0};
+    size_t can_responder_count = 0U;
 
     if (list == NULL || response_service == 0U) return LINK_OBD2_RESULT_INVALID_ARGUMENT;
     result = obd2_collect_indexed_message(response, indexed, sizeof(indexed),
@@ -1609,7 +1658,7 @@ LinkObd2Result link_obd2_decode_dtcs(
         if (indexed_length < 1U || indexed[0] != response_service) {
             return LINK_OBD2_RESULT_UNEXPECTED_RESPONSE;
         }
-        result = obd2_append_dtc_pairs(indexed, indexed_length, 1U, kind, &decoded);
+        result = obd2_append_dtc_payload(indexed, indexed_length, false, kind, &decoded);
         if (result != LINK_OBD2_RESULT_OK) return result;
         *list = decoded;
         return LINK_OBD2_RESULT_OK;
@@ -1623,16 +1672,74 @@ LinkObd2Result link_obd2_decode_dtcs(
         size_t line_length = end == NULL ? strlen(cursor) : (size_t)(end - cursor);
         uint8_t bytes[OBD2_MAX_LINE_BYTES];
         size_t byte_count = 0U;
-        result = obd2_parse_data_line(cursor, line_length, bytes,
-                                      sizeof(bytes), &byte_count);
+        uint32_t responder = 0U;
+        bool extended = false;
+        bool can_header = false;
+        const uint8_t *payload = bytes;
+        size_t payload_length;
+        result = obd2_parse_data_line_with_responder(
+            cursor, line_length, bytes, sizeof(bytes), &byte_count,
+            NULL, &responder, &extended, false, &can_header);
         if (result != LINK_OBD2_RESULT_OK) return result;
-        if (byte_count >= 1U && bytes[0] == response_service) {
+        payload_length = byte_count;
+        if (can_header && byte_count != 0U && bytes[0] < UINT8_C(0x40)) {
+            size_t slot;
+            LinkIsoTpCanFrame frame = {0};
+            LinkIsoTpCanFrame ignored_flow_control;
+            bool ignored_flow_control_ready;
+            LinkIsoTpResult transport_result;
+            for (slot = 0U; slot < can_responder_count; ++slot) {
+                const LinkIsoTpAddress *address =
+                    &can_responders[slot].receiver.config.address;
+                if (address->rx_can_id == responder &&
+                    address->rx_extended_id == extended) break;
+            }
+            if (slot == can_responder_count) {
+                LinkIsoTpRxConfig config = {0};
+                if (slot >= LINK_OBD2_MAX_RESPONDER_SAMPLES)
+                    return LINK_OBD2_RESULT_BUFFER_TOO_SMALL;
+                config.address.rx_can_id = responder;
+                config.address.rx_extended_id = extended;
+                config.consecutive_timeout_us = UINT64_C(1000000);
+                if (link_isotp_rx_init(&can_responders[slot].receiver,
+                        &config, can_responders[slot].payload,
+                        sizeof(can_responders[slot].payload)) !=
+                    LINK_ISOTP_RESULT_OK)
+                    return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
+                ++can_responder_count;
+            }
+            if (byte_count > LINK_ISOTP_CLASSIC_CAN_DATA_LENGTH)
+                return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
+            if (can_responders[slot].receiver.state == LINK_ISOTP_RX_COMPLETE)
+                link_isotp_rx_reset(&can_responders[slot].receiver);
+            frame.can_id = responder;
+            frame.extended_id = extended;
+            frame.length = (uint8_t)byte_count;
+            memcpy(frame.data, bytes, byte_count);
+            /* ELM already handled flow control. Reuse LINK's receiver only to
+             * validate/reassemble the captured frames, separately per ECU. */
+            transport_result = link_isotp_rx_feed(
+                &can_responders[slot].receiver, &frame, 0U,
+                &ignored_flow_control, &ignored_flow_control_ready);
+            if (transport_result == LINK_ISOTP_RESULT_OK) goto next_dtc_line;
+            if (transport_result != LINK_ISOTP_RESULT_COMPLETE)
+                return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
+            payload = link_isotp_rx_payload(
+                &can_responders[slot].receiver, &payload_length);
+        }
+        if (payload_length >= 1U && payload[0] == response_service) {
             matched = true;
-            result = obd2_append_dtc_pairs(bytes, byte_count, 1U, kind, &decoded);
+            result = obd2_append_dtc_payload(
+                payload, payload_length, can_header, kind, &decoded);
             if (result != LINK_OBD2_RESULT_OK) return result;
         }
+next_dtc_line:
         if (end == NULL) break;
         cursor = end + 1;
+    }
+    for (size_t i = 0U; i < can_responder_count; ++i) {
+        if (can_responders[i].receiver.state == LINK_ISOTP_RX_RECEIVING)
+            return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
     }
     if (!matched) return LINK_OBD2_RESULT_UNEXPECTED_RESPONSE;
     *list = decoded;

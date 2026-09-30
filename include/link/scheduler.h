@@ -80,6 +80,7 @@ typedef struct {
  */
 typedef struct {
     bool pid_enabled[LINK_OBD2_PID_COUNT];
+    bool pid_selection_set[LINK_OBD2_PID_COUNT];
     uint64_t field_mask[LINK_OBD2_PID_COUNT];
 } LinkPollingPolicy;
 
@@ -106,6 +107,8 @@ LinkSchedulerResult link_scheduler_set_enabled(LinkScheduler *scheduler, uint8_t
  * Retain standard PID choices independently of scheduler construction. A
  * product may set choices before discovery; applying the policy later changes
  * only standard OBD-II scheduler items and never touches external/OEM jobs.
+ * Explicit selections also create missing documented Mode 01 jobs, regardless
+ * of the ECU's capability bitmap. Defaults alone never expand that bitmap.
  */
 void link_polling_policy_init(LinkPollingPolicy *policy, bool enabled_by_default);
 /** True when the source PID must be polled for a direct or logical-field choice. */
