@@ -70,9 +70,17 @@ typedef struct {
     uint64_t pause_started_ms;
 } LinkScheduler;
 
-/** Retained user policy for standard OBD-II PID polling. */
+/**
+ * Retained user policy for standard OBD-II polling.
+ *
+ * pid_enabled[] represents a direct whole-PID choice. field_mask[] represents
+ * independently selectable logical values carried by the same source PID.
+ * A source request is enabled when either the direct PID or at least one field
+ * bit is enabled, so several logical values never create duplicate wire polls.
+ */
 typedef struct {
     bool pid_enabled[LINK_OBD2_PID_COUNT];
+    uint64_t field_mask[LINK_OBD2_PID_COUNT];
 } LinkPollingPolicy;
 
 typedef struct {
@@ -100,8 +108,15 @@ LinkSchedulerResult link_scheduler_set_enabled(LinkScheduler *scheduler, uint8_t
  * only standard OBD-II scheduler items and never touches external/OEM jobs.
  */
 void link_polling_policy_init(LinkPollingPolicy *policy, bool enabled_by_default);
+/** True when the source PID must be polled for a direct or logical-field choice. */
 bool link_polling_policy_is_enabled(const LinkPollingPolicy *policy, uint8_t pid);
 void link_polling_policy_set_enabled(LinkPollingPolicy *policy, uint8_t pid, bool enabled);
+/** Replace the selected logical-field mask for one physical source PID. */
+void link_polling_policy_set_field_mask(
+    LinkPollingPolicy *policy, uint8_t pid, uint64_t field_mask);
+/** Selected logical fields for one physical source PID. */
+uint64_t link_polling_policy_field_mask(
+    const LinkPollingPolicy *policy, uint8_t pid);
 size_t link_polling_policy_apply_to_scheduler(const LinkPollingPolicy *policy, LinkScheduler *scheduler);
 size_t link_scheduler_enabled_standard_count(const LinkScheduler *scheduler);
 

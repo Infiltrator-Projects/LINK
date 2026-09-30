@@ -129,13 +129,17 @@ void link_polling_policy_init(LinkPollingPolicy *policy, bool enabled_by_default
 {
     size_t pid;
     if (policy == NULL) return;
-    for (pid = 0U; pid < LINK_OBD2_PID_COUNT; ++pid)
+    for (pid = 0U; pid < LINK_OBD2_PID_COUNT; ++pid) {
         policy->pid_enabled[pid] = enabled_by_default;
+        policy->field_mask[pid] = UINT64_C(0);
+    }
 }
 
 bool link_polling_policy_is_enabled(const LinkPollingPolicy *policy, uint8_t pid)
 {
-    return policy != NULL && policy->pid_enabled[pid];
+    return policy != NULL &&
+        (policy->pid_enabled[pid] ||
+         policy->field_mask[pid] != UINT64_C(0));
 }
 
 void link_polling_policy_set_enabled(
@@ -143,6 +147,19 @@ void link_polling_policy_set_enabled(
 {
     if (policy == NULL) return;
     policy->pid_enabled[pid] = enabled;
+}
+
+void link_polling_policy_set_field_mask(
+    LinkPollingPolicy *policy, uint8_t pid, uint64_t field_mask)
+{
+    if (policy == NULL) return;
+    policy->field_mask[pid] = field_mask;
+}
+
+uint64_t link_polling_policy_field_mask(
+    const LinkPollingPolicy *policy, uint8_t pid)
+{
+    return policy != NULL ? policy->field_mask[pid] : UINT64_C(0);
 }
 
 size_t link_polling_policy_apply_to_scheduler(
@@ -156,7 +173,7 @@ size_t link_polling_policy_apply_to_scheduler(
         LinkSchedulerItem *item = &scheduler->items[index];
         if (item->kind != LINK_SCHEDULER_ITEM_PARAMETER || !item->pid_valid)
             continue;
-        item->enabled = policy->pid_enabled[item->pid];
+        item->enabled = link_polling_policy_is_enabled(policy, item->pid);
         if (item->enabled) ++enabled_count;
     }
     return enabled_count;

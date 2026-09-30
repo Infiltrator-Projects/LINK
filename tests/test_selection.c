@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "link/selection.h"
+#include "link/scheduler.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -62,6 +63,41 @@ int main(void)
     CHECK(!link_parameter_selection_set_vehicle(
         &selection,
         "THIS-VEHICLE-IDENTIFIER-IS-DELIBERATELY-LONGER-THAN-THE-SHARED-CAPACITY-AND-MUST-FAIL"));
+
+    {
+        LinkPollingPolicy policy;
+        LinkScheduler scheduler;
+        const uint8_t source_pid = UINT8_C(0x01);
+        const uint64_t first_field = UINT64_C(1) << 0U;
+        const uint64_t second_field = UINT64_C(1) << 18U;
+
+        link_polling_policy_init(&policy, false);
+        link_scheduler_init(&scheduler);
+        CHECK(link_scheduler_add(
+            &scheduler, source_pid, 1000U,
+            LINK_SCHEDULER_PRIORITY_NORMAL, 0U) ==
+            LINK_SCHEDULER_RESULT_OK);
+
+        link_polling_policy_set_field_mask(&policy, source_pid, first_field);
+        CHECK(link_polling_policy_is_enabled(&policy, source_pid));
+        CHECK(link_polling_policy_field_mask(&policy, source_pid) == first_field);
+        CHECK(link_polling_policy_apply_to_scheduler(&policy, &scheduler) == 1U);
+        CHECK(link_scheduler_enabled_standard_count(&scheduler) == 1U);
+
+        link_polling_policy_set_field_mask(
+            &policy, source_pid, first_field | second_field);
+        CHECK(link_polling_policy_apply_to_scheduler(&policy, &scheduler) == 1U);
+        CHECK(link_scheduler_enabled_standard_count(&scheduler) == 1U);
+
+        link_polling_policy_set_field_mask(&policy, source_pid, second_field);
+        CHECK(link_polling_policy_apply_to_scheduler(&policy, &scheduler) == 1U);
+        CHECK(link_scheduler_enabled_standard_count(&scheduler) == 1U);
+
+        link_polling_policy_set_field_mask(&policy, source_pid, UINT64_C(0));
+        CHECK(!link_polling_policy_is_enabled(&policy, source_pid));
+        CHECK(link_polling_policy_apply_to_scheduler(&policy, &scheduler) == 0U);
+        CHECK(link_scheduler_enabled_standard_count(&scheduler) == 0U);
+    }
 
     puts("LINK vehicle-scoped parameter selection passed");
     return 0;
