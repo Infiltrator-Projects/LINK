@@ -576,18 +576,12 @@ static LinkReadinessFieldSnapshot *LinkAppleReadinessField(
     return snapshot;
 }
 
-- (NSArray<LinkReadinessFieldSnapshot *> *)readinessFieldSnapshots
+static NSArray<LinkReadinessFieldSnapshot *> *
+LinkAppleReadinessFieldSnapshots(
+    const uint8_t *payload,
+    size_t payloadLength,
+    uint64_t selectedMask)
 {
-    LinkStructuredTelemetrySample sample;
-    const uint8_t *payload = NULL;
-    size_t payloadLength = 0U;
-    if ([self latestStructuredSampleForPID:UINT8_C(0x01) sample:&sample]) {
-        payload = sample.decoded.raw;
-        payloadLength = sample.decoded.raw_length;
-    }
-
-    const uint64_t selectedMask =
-        [_pollingCoordinator fieldMaskForPID:UINT8_C(0x01)];
     NSMutableArray<LinkReadinessFieldSnapshot *> *values =
         [[NSMutableArray alloc] initWithCapacity:
             (NSUInteger)LINK_OBD2_READINESS_FIELD_COUNT];
@@ -649,7 +643,44 @@ static LinkReadinessFieldSnapshot *LinkAppleReadinessField(
         @"obd2.readiness.egr_vvt", @"EGR/VVT", @"EGR / VVT monitor");
 
 #undef APPEND_READINESS
+
     return [values copy];
+}
+
+- (NSArray<LinkReadinessFieldSnapshot *> *)readinessFieldSnapshots
+{
+    LinkStructuredTelemetrySample sample;
+    const uint8_t *payload = NULL;
+    size_t payloadLength = 0U;
+    if ([self latestStructuredSampleForPID:UINT8_C(0x01) sample:&sample]) {
+        payload = sample.decoded.raw;
+        payloadLength = sample.decoded.raw_length;
+    }
+
+    return LinkAppleReadinessFieldSnapshots(
+        payload, payloadLength,
+        [_pollingCoordinator fieldMaskForPID:UINT8_C(0x01)]);
+}
+
+- (NSArray<LinkReadinessFieldSnapshot *> *)
+    readinessFieldSnapshotsForResponderCANIdentifier:
+        (uint32_t)responderCANIdentifier
+                                           extendedID:(BOOL)extendedID
+                                            fieldMask:(uint64_t)fieldMask
+{
+    LinkStructuredTelemetrySample sample;
+    const uint8_t *payload = NULL;
+    size_t payloadLength = 0U;
+    if ([_telemetryRecorder
+            latestStructuredSampleForPID:UINT8_C(0x01)
+            responderCANIdentifier:responderCANIdentifier
+            extendedID:extendedID
+            sample:&sample]) {
+        payload = sample.decoded.raw;
+        payloadLength = sample.decoded.raw_length;
+    }
+
+    return LinkAppleReadinessFieldSnapshots(payload, payloadLength, fieldMask);
 }
 
 - (NSString *)readinessStatusText
@@ -2274,6 +2305,17 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
 - (NSArray<LinkReadinessFieldSnapshot *> *)readinessFieldSnapshots
 {
     return [_shared readinessFieldSnapshots];
+}
+- (NSArray<LinkReadinessFieldSnapshot *> *)
+    readinessFieldSnapshotsForResponderCANIdentifier:
+        (uint32_t)responderCANIdentifier
+                                           extendedID:(BOOL)extendedID
+                                            fieldMask:(uint64_t)fieldMask
+{
+    return [_shared
+        readinessFieldSnapshotsForResponderCANIdentifier:responderCANIdentifier
+        extendedID:extendedID
+        fieldMask:fieldMask];
 }
 - (NSString *)dtcDisplayTextForCode:(NSString *)code
 {

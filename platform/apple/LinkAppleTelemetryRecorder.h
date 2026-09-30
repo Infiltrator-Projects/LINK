@@ -34,6 +34,10 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (BOOL)latestStructuredSampleForPID:(uint8_t)pid
                               sample:(LinkStructuredTelemetrySample *)sample;
+- (BOOL)latestStructuredSampleForPID:(uint8_t)pid
+                     responderCANIdentifier:(uint32_t)responderCANIdentifier
+                                  extendedID:(BOOL)extendedID
+                                      sample:(LinkStructuredTelemetrySample *)sample;
 - (NSUInteger)recordedSampleCount;
 - (NSArray<NSNumber *> *)recentValuesForPID:(uint8_t)pid
                                       limit:(NSUInteger)limit;

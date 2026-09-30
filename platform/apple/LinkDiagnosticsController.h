@@ -171,6 +171,12 @@ NS_ASSUME_NONNULL_BEGIN
 - (nullable NSString *)structuredRawHexForPID:(uint8_t)pid;
 /** Stable logical fields decoded from Mode 01 PID 01. */
 - (NSArray<LinkReadinessFieldSnapshot *> *)readinessFieldSnapshots;
+/** PID 01 logical fields for one exact physical CAN responder. */
+- (NSArray<LinkReadinessFieldSnapshot *> *)
+    readinessFieldSnapshotsForResponderCANIdentifier:
+        (uint32_t)responderCANIdentifier
+                                           extendedID:(BOOL)extendedID
+                                            fieldMask:(uint64_t)fieldMask;
 
 /**
  * Format one raw five-character SAE-style DTC for presentation without
@@ -288,6 +294,12 @@ NS_ASSUME_NONNULL_BEGIN
 - (nullable NSString *)structuredDisplayValueForPID:(uint8_t)pid;
 - (nullable NSString *)structuredRawHexForPID:(uint8_t)pid;
 - (NSArray<LinkReadinessFieldSnapshot *> *)readinessFieldSnapshots;
+/** PID 01 logical fields for one exact physical CAN responder. */
+- (NSArray<LinkReadinessFieldSnapshot *> *)
+    readinessFieldSnapshotsForResponderCANIdentifier:
+        (uint32_t)responderCANIdentifier
+                                           extendedID:(BOOL)extendedID
+                                            fieldMask:(uint64_t)fieldMask;
 - (NSString *)dtcDisplayTextForCode:(NSString *)code;
 - (BOOL)supportsPID:(uint8_t)pid;
 - (BOOL)favouriteForPID:(uint8_t)pid;

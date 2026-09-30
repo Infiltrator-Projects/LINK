@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.15.84 - 2026-09-30
+
+- Add exact-responder structured-sample lookup on Apple so standard OBD values can remain attributed to the physical ECU that returned them instead of being flattened into one vehicle-wide value.
+- Add responder-specific Mode 01 PID 01 logical snapshots with a caller-supplied field mask. A functional `01 01` request can still collect several ECU replies while each controller decodes and publishes only the logical fields selected for that responder.
+- Preserve the aggregate readiness API and complete raw evidence recording for generic products; responder scoping changes product selection and presentation ownership without discarding diagnostic evidence.
+
 ## 0.15.83 - 2026-09-30
 
 - Make logical-field selection changes transition-aware: adding or removing fields from an already-polled source no longer restarts the live flow or creates an immediate extra transaction.

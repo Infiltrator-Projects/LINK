@@ -378,6 +378,33 @@ static void LinkAppleTelemetryNativeStreamEvent(
     return NO;
 }
 
+- (BOOL)latestStructuredSampleForPID:(uint8_t)pid
+                     responderCANIdentifier:(uint32_t)responderCANIdentifier
+                                  extendedID:(BOOL)extendedID
+                                      sample:(LinkStructuredTelemetrySample *)sample
+{
+    const uint32_t maximumIdentifier = extendedID
+        ? UINT32_C(0x1fffffff) : UINT32_C(0x7ff);
+    const size_t count =
+        link_structured_telemetry_store_history_count(&_structuredTelemetry);
+    if (sample == NULL || responderCANIdentifier > maximumIdentifier) return NO;
+
+    for (size_t index = count; index != 0U; --index) {
+        LinkStructuredTelemetrySample candidate;
+        if (link_structured_telemetry_store_history_at(
+                &_structuredTelemetry, index - 1U, &candidate) &&
+            candidate.decoded.definition != NULL &&
+            candidate.decoded.definition->pid == pid &&
+            candidate.responder_id_available &&
+            candidate.responder_id == responderCANIdentifier &&
+            candidate.extended_id == extendedID) {
+            *sample = candidate;
+            return YES;
+        }
+    }
+    return NO;
+}
+
 - (NSUInteger)recordedSampleCount
 {
     uint64_t total = link_telemetry_store_total_sample_count(&_telemetry);
