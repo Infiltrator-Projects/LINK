@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.15.82 - 2026-09-30
+
+- Separate logical standard-OBD field selection from physical PID scheduling: a per-PID 64-bit field mask enables one source request whenever any constituent value is selected, so multiple logical values never multiply wire polls.
+- Add selective Mode 01 PID 0x01 extraction for MIL, confirmed emissions DTC count, ignition layout and each readiness monitor. Unselected fields are not decoded merely because their bytes arrive in the shared response.
+- Expose source-field masks through the Apple product facade and give PID 0x01 readiness snapshots stable field indices and selection state.
+- Keep diagnostic-context readiness separate from live polling and add regressions proving one or several selected PID 0x01 fields still schedule exactly one physical 01 01 request.
+
 ## 0.15.81 - 2026-09-30
 
 - Decode Mode 01 PID 0x01 from its four-byte live payload as standards-backed readiness state instead of leaving selected telemetry as an opaque raw bitmap.
