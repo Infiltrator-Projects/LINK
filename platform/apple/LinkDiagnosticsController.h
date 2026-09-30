@@ -35,6 +35,8 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic, copy) NSString *title;
 @property(nonatomic, copy) NSString *formattedValue;
 @property(nonatomic) uint8_t sourcePID;
+@property(nonatomic) uint8_t fieldIndex;
+@property(nonatomic) BOOL pollingEnabled;
 @property(nonatomic) BOOL valueAvailable;
 @property(nonatomic) BOOL numericValueAvailable;
 @property(nonatomic) double numericValue;
@@ -203,6 +205,9 @@ NS_ASSUME_NONNULL_BEGIN
  */
 - (BOOL)pollingEnabledForPID:(uint8_t)pid;
 - (void)setPollingEnabled:(BOOL)enabled forPID:(uint8_t)pid;
+/** Logical-field selection mask sharing this physical source PID. */
+- (uint64_t)pollingFieldMaskForPID:(uint8_t)pid;
+- (void)setPollingFieldMask:(uint64_t)fieldMask forPID:(uint8_t)pid;
 /** Immutable byte snapshot for non-blocking export/write paths. */
 - (nullable NSData *)csvDataSnapshot;
 - (nullable NSString *)csvSnapshot;
@@ -289,6 +294,8 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)setFavourite:(BOOL)favourite forPID:(uint8_t)pid;
 - (BOOL)pollingEnabledForPID:(uint8_t)pid;
 - (void)setPollingEnabled:(BOOL)enabled forPID:(uint8_t)pid;
+- (uint64_t)pollingFieldMaskForPID:(uint8_t)pid;
+- (void)setPollingFieldMask:(uint64_t)fieldMask forPID:(uint8_t)pid;
 - (nullable NSData *)csvDataSnapshot;
 - (nullable NSString *)csvSnapshot;
 - (const LinkDiagnosticFlow * _Nullable)diagnosticFlow;

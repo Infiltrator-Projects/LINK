@@ -18,6 +18,37 @@
     return link_polling_policy_is_enabled(&_policy, pid) ? YES : NO;
 }
 
+- (uint64_t)fieldMaskForPID:(uint8_t)pid
+{
+    return link_polling_policy_field_mask(&_policy, pid);
+}
+
+- (LinkApplePollingUpdateDisposition)setFieldMask:(uint64_t)fieldMask
+                                           forPID:(uint8_t)pid
+                                             flow:(LinkDiagnosticFlow *)flow
+                                           active:(BOOL)active
+                      manufacturerExtensionActive:(BOOL)manufacturerExtensionActive
+{
+    link_polling_policy_set_field_mask(&_policy, pid, fieldMask);
+    if (flow == NULL) return LinkApplePollingUpdateDispositionNone;
+
+    const BOOL sourceEnabled =
+        link_polling_policy_is_enabled(&_policy, pid) ? YES : NO;
+    (void)link_scheduler_set_enabled(&flow->scheduler, pid, sourceEnabled);
+
+    if (!active || flow->awaiting_response || manufacturerExtensionActive ||
+        (flow->stage != LINK_DIAGNOSTIC_FLOW_LIVE &&
+         flow->stage != LINK_DIAGNOSTIC_FLOW_READING_LIVE)) {
+        return LinkApplePollingUpdateDispositionNone;
+    }
+
+    if (sourceEnabled)
+        return LinkApplePollingUpdateDispositionRestartLiveFlow;
+    return link_scheduler_enabled_standard_count(&flow->scheduler) == 0U
+        ? LinkApplePollingUpdateDispositionBecameIdle
+        : LinkApplePollingUpdateDispositionNone;
+}
+
 - (LinkApplePollingUpdateDisposition)setEnabled:(BOOL)enabled
                                          forPID:(uint8_t)pid
                                            flow:(LinkDiagnosticFlow *)flow
@@ -28,7 +59,9 @@
     if (flow == NULL) return LinkApplePollingUpdateDispositionNone;
 
     /* Capability may not have created this scheduler entry yet; retention is authoritative. */
-    (void)link_scheduler_set_enabled(&flow->scheduler, pid, enabled);
+    const BOOL sourceEnabled =
+        link_polling_policy_is_enabled(&_policy, pid) ? YES : NO;
+    (void)link_scheduler_set_enabled(&flow->scheduler, pid, sourceEnabled);
 
     if (!active || flow->awaiting_response || manufacturerExtensionActive ||
         (flow->stage != LINK_DIAGNOSTIC_FLOW_LIVE &&
@@ -36,7 +69,7 @@
         return LinkApplePollingUpdateDispositionNone;
     }
 
-    if (enabled) return LinkApplePollingUpdateDispositionRestartLiveFlow;
+    if (sourceEnabled) return LinkApplePollingUpdateDispositionRestartLiveFlow;
     return link_scheduler_enabled_standard_count(&flow->scheduler) == 0U
         ? LinkApplePollingUpdateDispositionBecameIdle
         : LinkApplePollingUpdateDispositionNone;
