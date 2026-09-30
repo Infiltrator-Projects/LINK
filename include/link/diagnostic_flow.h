@@ -159,6 +159,8 @@ typedef struct {
     bool protocol_probe_attempted;
     bool protocol_probe_pending;
     bool protocol_probe_active;
+    /** True while ELM response headers are enabled for responder attribution. */
+    bool response_headers_enabled;
     LinkObd2PidSet supported_pids;
     LinkObd2ResponderPidSetList supported_pid_responders;
     char standard_vin[LINK_OBD2_VIN_LENGTH + 1U];

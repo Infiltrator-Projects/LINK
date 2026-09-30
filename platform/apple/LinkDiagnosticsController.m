@@ -1762,11 +1762,19 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
         break;
     }
 
-    case LINK_DIAGNOSTIC_FLOW_EVENT_READINESS:
+    case LINK_DIAGNOSTIC_FLOW_EVENT_READINESS: {
+        if (event->responder_decoded.count != 0U) {
+            NSString *recordingError = [_telemetryRecorder recordFlowEvent:event];
+            if (recordingError != nil) {
+                [self failWithStatus:recordingError];
+                return NO;
+            }
+        }
         self.faultScanStatusText = _flow.readiness_available
             ? @"Fault inventory complete · readiness captured"
             : @"Fault inventory complete · readiness unavailable";
         break;
+    }
 
     case LINK_DIAGNOSTIC_FLOW_EVENT_FREEZE_FRAME_SAMPLE:
         self.faultScanStatusText = event->context_response_available
@@ -1775,6 +1783,13 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
         break;
 
     case LINK_DIAGNOSTIC_FLOW_EVENT_DIAGNOSTIC_CONTEXT_COMPLETE:
+        if (event->responder_decoded.count != 0U) {
+            NSString *recordingError = [_telemetryRecorder recordFlowEvent:event];
+            if (recordingError != nil) {
+                [self failWithStatus:recordingError];
+                return NO;
+            }
+        }
         self.faultScanStatusText = [NSString stringWithFormat:
             @"Complete · %lu stored · %lu pending · %lu permanent · readiness %@ · freeze-frame %@",
             (unsigned long)self.storedDTCs.count,

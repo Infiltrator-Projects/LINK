@@ -322,7 +322,7 @@ static void LinkAppleTelemetryNativeStreamEvent(
         return nil;
     }
 
-    if (event->kind == LINK_DIAGNOSTIC_FLOW_EVENT_LIVE_STRUCTURED) {
+    if (event->responder_decoded.count != 0U) {
         for (size_t responderIndex = 0U;
              responderIndex < event->responder_decoded.count;
              ++responderIndex) {

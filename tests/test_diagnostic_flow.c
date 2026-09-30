@@ -405,6 +405,7 @@ static int test_manufacturer_extension_after_standard_vin(void)
     config.manufacturer_extension_after_standard_vin = true;
     config.restore_adapter_after_manufacturer_extension = true;
     config.preserve_pid_discovery_response_headers = true;
+    config.preserve_live_response_headers = true;
     CHECK(link_diagnostic_flow_init(&flow, &config) ==
           LINK_DIAGNOSTIC_FLOW_RESULT_OK);
     CHECK(link_diagnostic_flow_start(&flow) == LINK_DIAGNOSTIC_FLOW_RESULT_OK);
@@ -454,17 +455,8 @@ static int test_manufacturer_extension_after_standard_vin(void)
               &flow, &response, 530U, &event) ==
           LINK_DIAGNOSTIC_FLOW_RESULT_OK);
     CHECK(event.kind == LINK_DIAGNOSTIC_FLOW_EVENT_PID_DISCOVERY_COMPLETE);
-    CHECK(flow.stage ==
-          LINK_DIAGNOSTIC_FLOW_RESTORING_PID_DISCOVERY_HEADERS);
-
-    CHECK(link_diagnostic_flow_next_action(&flow, 540U, &action) ==
-          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
-    CHECK(strcmp(action.command, "ATH0") == 0);
-    response = response_ok(NULL, true);
-    CHECK(link_diagnostic_flow_accept_response(
-              &flow, &response, 540U, &event) ==
-          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
     CHECK(flow.stage == LINK_DIAGNOSTIC_FLOW_SCANNING_STORED_DTCS);
+    CHECK(flow.response_headers_enabled);
     CHECK(flow.standard_vin_attempted);
     return 0;
 }
@@ -786,14 +778,19 @@ static int test_readiness_and_freeze_context(void)
     CHECK(link_diagnostic_flow_next_action(&flow, 100U, &action) ==
           LINK_DIAGNOSTIC_FLOW_RESULT_OK);
     CHECK(strcmp(action.command, "0101") == 0);
-    response = response_ok("4101810F8000", false);
+    response = response_ok(
+        "7E9 06 41 01 81 04 00 00\n"
+        "7E8 06 41 01 00 06 80 00", false);
     CHECK(link_diagnostic_flow_accept_response(
               &flow, &response, 100U, &event) ==
           LINK_DIAGNOSTIC_FLOW_RESULT_OK);
     CHECK(event.kind == LINK_DIAGNOSTIC_FLOW_EVENT_READINESS);
     CHECK(flow.readiness_available);
-    CHECK(flow.readiness.mil_on);
-    CHECK(flow.readiness.confirmed_dtc_count == 1U);
+    CHECK(event.responder_decoded.count == 2U);
+    CHECK(event.responder_decoded.entries[0].responder_id_available);
+    CHECK(event.responder_decoded.entries[1].responder_id_available);
+    CHECK(!flow.readiness.mil_on);
+    CHECK(flow.readiness.confirmed_dtc_count == 0U);
     CHECK(flow.freeze_frame_requested);
     CHECK(flow.stage == LINK_DIAGNOSTIC_FLOW_READING_FREEZE_FRAME);
 

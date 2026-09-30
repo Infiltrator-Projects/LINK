@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.15.85 - 2026-09-30
+
+- Retain responder CAN headers from capability discovery into the startup fault/readiness context when a product already requests attributed live responses, avoiding an unnecessary ATH0/ATH1 round trip.
+- Preserve every physical ECU response to the single startup Mode 01 PID 01 request in the diagnostic-flow event and Apple structured store, so products can show per-controller MIL, DTC-count, ignition-layout and readiness state without live polling.
+- Regress two simultaneous 7E8/7E9 readiness replies and deterministic aggregate selection while keeping the existing generic readiness API intact.
+
 ## 0.15.84 - 2026-09-30
 
 - Add exact-responder structured-sample lookup on Apple so standard OBD values can remain attributed to the physical ECU that returned them instead of being flattened into one vehicle-wide value.

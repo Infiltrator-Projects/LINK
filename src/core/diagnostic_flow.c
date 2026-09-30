@@ -348,7 +348,8 @@ static void flow_finish_standard_context(
     if (flow->config.manufacturer_extension_after_standard_dtcs) {
         flow->stage = LINK_DIAGNOSTIC_FLOW_MANUFACTURER_EXTENSION;
         event->became_ready = false;
-    } else if (flow->config.preserve_live_response_headers) {
+    } else if (flow->config.preserve_live_response_headers &&
+               !flow->response_headers_enabled) {
         flow->stage = LINK_DIAGNOSTIC_FLOW_CONFIGURING_LIVE_HEADERS;
         event->became_ready = false;
     } else {
@@ -372,6 +373,32 @@ static LinkDiagnosticFlowResult flow_accept_readiness(
         response->result != LINK_ELM327_RESULT_NO_DATA;
 
     if (event->context_response_available) {
+        LinkObd2ResponderDecodedPidList decoded_responders = {0};
+        const LinkObd2Result attributed_result =
+            link_obd2_decode_live_pid_payload_responders(
+                response, UINT8_C(0x01), &decoded_responders);
+        if (attributed_result == LINK_OBD2_RESULT_OK &&
+            decoded_responders.count != 0U) {
+            size_t primary = 0U;
+            for (size_t index = 1U;
+                 index < decoded_responders.count; ++index) {
+                const LinkObd2ResponderDecodedPid *candidate =
+                    &decoded_responders.entries[index];
+                const LinkObd2ResponderDecodedPid *current =
+                    &decoded_responders.entries[primary];
+                if (candidate->responder_id_available &&
+                    link_diagnostic_response_route_preferred(
+                        candidate->responder_id, candidate->extended_id,
+                        current->responder_id_available,
+                        current->responder_id, current->extended_id,
+                        UINT32_C(0x7e8), false)) {
+                    primary = index;
+                }
+            }
+            event->responder_decoded = decoded_responders;
+            event->decoded = decoded_responders.entries[primary].decoded;
+        }
+
         result = link_obd2_decode_readiness(response, &flow->readiness);
         if (result == LINK_OBD2_RESULT_OK) {
             flow->readiness_available = true;
@@ -524,6 +551,9 @@ static LinkDiagnosticFlowResult flow_accept_initialization(
         return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
     }
 
+    /* The canonical ELM initialisation sequence includes ATH0. */
+    flow->response_headers_enabled = false;
+
     if (stage == LINK_DIAGNOSTIC_FLOW_RESTORING_AFTER_MANUFACTURER) {
         /* Manufacturer probing may change adapter state; resume only after the
          * standard ELM setup has been replayed in full. */
@@ -532,7 +562,9 @@ static LinkDiagnosticFlowResult flow_accept_initialization(
                 ? LINK_DIAGNOSTIC_FLOW_CONFIGURING_LIVE_HEADERS
                 : LINK_DIAGNOSTIC_FLOW_LIVE;
         } else if (flow->standard_dtc_inventory_complete) {
-            flow->stage = LINK_DIAGNOSTIC_FLOW_READING_READINESS;
+            flow->stage = flow->config.preserve_live_response_headers
+                ? LINK_DIAGNOSTIC_FLOW_CONFIGURING_LIVE_HEADERS
+                : LINK_DIAGNOSTIC_FLOW_READING_READINESS;
         } else if (flow->config.manufacturer_extension_after_standard_vin &&
                    flow->standard_vin_attempted) {
             flow->supported_pid_base = 0x00U;
@@ -567,6 +599,7 @@ static LinkDiagnosticFlowResult flow_accept_pid_discovery_header_configuration(
                 ? response->result
                 : LINK_ELM327_RESULT_MALFORMED_RESPONSE);
     }
+    flow->response_headers_enabled = enabling;
     flow->stage = enabling
         ? LINK_DIAGNOSTIC_FLOW_DISCOVERING_PIDS
         : (flow->standard_vin_attempted
@@ -586,7 +619,12 @@ static LinkDiagnosticFlowResult flow_accept_live_header_configuration(
                 ? response->result
                 : LINK_ELM327_RESULT_MALFORMED_RESPONSE);
     }
-    flow->stage = LINK_DIAGNOSTIC_FLOW_LIVE;
+    flow->response_headers_enabled = true;
+    flow->stage =
+        flow->standard_dtc_inventory_complete &&
+        !flow->standard_diagnostic_context_complete
+            ? LINK_DIAGNOSTIC_FLOW_READING_READINESS
+            : LINK_DIAGNOSTIC_FLOW_LIVE;
     return LINK_DIAGNOSTIC_FLOW_RESULT_OK;
 }
 
@@ -610,11 +648,18 @@ static LinkDiagnosticFlowResult flow_accept_pid_discovery(
     if (has_more && flow->supported_pid_base <= 0xc0U) {
         flow->supported_pid_base = (uint8_t)(flow->supported_pid_base + 0x20U);
     } else {
-        flow->stage = flow->config.preserve_pid_discovery_response_headers
-            ? LINK_DIAGNOSTIC_FLOW_RESTORING_PID_DISCOVERY_HEADERS
-            : (flow->standard_vin_attempted
-                ? LINK_DIAGNOSTIC_FLOW_SCANNING_STORED_DTCS
-                : LINK_DIAGNOSTIC_FLOW_READING_STANDARD_VIN);
+        const bool retain_headers_for_startup_context =
+            flow->config.preserve_pid_discovery_response_headers &&
+            flow->config.preserve_live_response_headers &&
+            flow->standard_vin_attempted &&
+            flow->response_headers_enabled;
+        flow->stage =
+            flow->config.preserve_pid_discovery_response_headers &&
+            !retain_headers_for_startup_context
+                ? LINK_DIAGNOSTIC_FLOW_RESTORING_PID_DISCOVERY_HEADERS
+                : (flow->standard_vin_attempted
+                    ? LINK_DIAGNOSTIC_FLOW_SCANNING_STORED_DTCS
+                    : LINK_DIAGNOSTIC_FLOW_READING_STANDARD_VIN);
         event->kind = LINK_DIAGNOSTIC_FLOW_EVENT_PID_DISCOVERY_COMPLETE;
         flow_request_protocol_probe(flow);
     }
@@ -1134,7 +1179,9 @@ LinkDiagnosticFlowResult link_diagnostic_flow_resume_after_manufacturer(
             ? LINK_DIAGNOSTIC_FLOW_CONFIGURING_LIVE_HEADERS
             : LINK_DIAGNOSTIC_FLOW_LIVE;
     } else if (flow->standard_dtc_inventory_complete) {
-        flow->stage = LINK_DIAGNOSTIC_FLOW_READING_READINESS;
+        flow->stage = flow->config.preserve_live_response_headers
+            ? LINK_DIAGNOSTIC_FLOW_CONFIGURING_LIVE_HEADERS
+            : LINK_DIAGNOSTIC_FLOW_READING_READINESS;
     } else if (flow->config.manufacturer_extension_after_standard_vin &&
                flow->standard_vin_attempted) {
         flow->supported_pid_base = 0x00U;
