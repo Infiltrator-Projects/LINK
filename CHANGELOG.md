@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.15.83 - 2026-09-30
+
+- Make logical-field selection changes transition-aware: adding or removing fields from an already-polled source no longer restarts the live flow or creates an immediate extra transaction.
+- Treat the legacy whole-PID flag and logical-field mask as one effective source state, so clearing the old flag while selected fields remain is a wire no-op.
+- Start a source only when its effective selection changes from empty to non-empty, and stop/idle it only when the final direct or logical selection is removed.
+
 ## 0.15.82 - 2026-09-30
 
 - Separate logical standard-OBD field selection from physical PID scheduling: a per-PID 64-bit field mask enables one source request whenever any constituent value is selected, so multiple logical values never multiply wire polls.
