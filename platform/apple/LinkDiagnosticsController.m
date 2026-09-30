@@ -610,13 +610,15 @@ static NSString *LinkAppleReadinessMonitorValue(
         have ? (readiness.mil_on ? @"On" : @"Off") : @"Waiting for sample",
         have,
         have && readiness.mil_on ? 1.0 : 0.0);
+    NSString *confirmedDtcText = have
+        ? [NSString stringWithFormat:@"%u",
+            (unsigned int)readiness.confirmed_dtc_count]
+        : @"Waiting for sample";
     APPEND_FIELD(
         @"obd2.readiness.confirmed_dtc_count", @"DTC COUNT",
         @"Confirmed emissions DTC count",
         have,
-        have ? [NSString stringWithFormat:@"%u",
-            (unsigned int)readiness.confirmed_dtc_count]
-             : @"Waiting for sample",
+        confirmedDtcText,
         have,
         have ? (double)readiness.confirmed_dtc_count : 0.0);
     APPEND_FIELD(
