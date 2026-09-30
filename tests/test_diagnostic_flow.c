@@ -458,6 +458,40 @@ static int test_manufacturer_extension_after_standard_vin(void)
     CHECK(flow.stage == LINK_DIAGNOSTIC_FLOW_SCANNING_STORED_DTCS);
     CHECK(flow.response_headers_enabled);
     CHECK(flow.standard_vin_attempted);
+
+    /* Regression: with ATH1 retained, DTC responses still have CAN framing.
+     * MBLINK 0.7.261 stopped after Mode 03 here instead of reaching polling. */
+    CHECK(link_diagnostic_flow_next_action(&flow, 540U, &action) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(strcmp(action.command, "03") == 0);
+    response = response_ok(
+        "7E8 02 43 00\n"
+        "7E9 02 43 00", false);
+    CHECK(link_diagnostic_flow_accept_response(
+              &flow, &response, 540U, &event) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(event.kind == LINK_DIAGNOSTIC_FLOW_EVENT_DTC_LIST);
+    CHECK(event.dtc_list != NULL && event.dtc_list->count == 0U);
+
+    CHECK(link_diagnostic_flow_next_action(&flow, 550U, &action) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(strcmp(action.command, "07") == 0);
+    response = response_ok("7E8 03 7F 07 11", false);
+    CHECK(link_diagnostic_flow_accept_response(
+              &flow, &response, 550U, &event) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(event.dtc_negative_response);
+
+    CHECK(link_diagnostic_flow_next_action(&flow, 560U, &action) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(strcmp(action.command, "0A") == 0);
+    response = response_ok("7E8 03 7F 0A 22", false);
+    CHECK(link_diagnostic_flow_accept_response(
+              &flow, &response, 560U, &event) ==
+          LINK_DIAGNOSTIC_FLOW_RESULT_OK);
+    CHECK(event.dtc_negative_response);
+    CHECK(flow.standard_dtc_inventory_complete);
+    CHECK(flow.stage == LINK_DIAGNOSTIC_FLOW_READING_READINESS);
     return 0;
 }
 
