@@ -1340,7 +1340,7 @@ LinkObd2Result link_obd2_decode_readiness_field_payload(
     LinkObd2ReadinessFieldValue *value)
 {
     bool compression;
-    uint8_t support_mask;
+    uint8_t support_mask = UINT8_C(0);
     uint8_t incomplete_mask;
 
     if (data == NULL || value == NULL ||
