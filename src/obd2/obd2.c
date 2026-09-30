@@ -1308,6 +1308,145 @@ LinkObd2Result link_obd2_decode_freeze_pid(
     return obd2_decode_sample_data(pid, data, length, sample);
 }
 
+static void obd2_readiness_field_text(
+    LinkObd2ReadinessFieldValue *value, const char *text)
+{
+    if (value == NULL) return;
+    value->value_available = true;
+    infiltratr_copy_string(value->text, sizeof(value->text), text);
+}
+
+static void obd2_readiness_monitor_field(
+    LinkObd2ReadinessFieldValue *value,
+    bool applicable,
+    bool supported,
+    bool incomplete)
+{
+    if (!applicable) {
+        obd2_readiness_field_text(value, "Not applicable");
+        return;
+    }
+    if (!supported) {
+        obd2_readiness_field_text(value, "Not supported");
+        return;
+    }
+    obd2_readiness_field_text(value, incomplete ? "Not ready" : "Ready");
+}
+
+LinkObd2Result link_obd2_decode_readiness_field_payload(
+    const uint8_t *data,
+    size_t data_length,
+    LinkObd2ReadinessField field,
+    LinkObd2ReadinessFieldValue *value)
+{
+    bool compression;
+    uint8_t support_mask;
+    uint8_t incomplete_mask;
+
+    if (data == NULL || value == NULL ||
+        field < LINK_OBD2_READINESS_FIELD_MIL ||
+        field >= LINK_OBD2_READINESS_FIELD_COUNT) {
+        return LINK_OBD2_RESULT_INVALID_ARGUMENT;
+    }
+    if (data_length < 4U)
+        return LINK_OBD2_RESULT_MALFORMED_RESPONSE;
+
+    memset(value, 0, sizeof(*value));
+    compression = (data[1] & UINT8_C(0x08)) != 0U;
+
+    switch (field) {
+    case LINK_OBD2_READINESS_FIELD_MIL:
+        value->value_available = true;
+        value->numeric_value_available = true;
+        value->numeric_value =
+            (data[0] & UINT8_C(0x80)) != 0U ? 1.0 : 0.0;
+        infiltratr_copy_string(
+            value->text, sizeof(value->text),
+            value->numeric_value != 0.0 ? "On" : "Off");
+        return LINK_OBD2_RESULT_OK;
+
+    case LINK_OBD2_READINESS_FIELD_CONFIRMED_DTC_COUNT:
+        value->value_available = true;
+        value->numeric_value_available = true;
+        value->numeric_value =
+            (double)(data[0] & UINT8_C(0x7f));
+        (void)snprintf(
+            value->text, sizeof(value->text), "%u",
+            (unsigned int)(data[0] & UINT8_C(0x7f)));
+        return LINK_OBD2_RESULT_OK;
+
+    case LINK_OBD2_READINESS_FIELD_IGNITION_TYPE:
+        obd2_readiness_field_text(
+            value, compression ? "Compression ignition" : "Spark ignition");
+        return LINK_OBD2_RESULT_OK;
+
+    case LINK_OBD2_READINESS_FIELD_MISFIRE:
+    case LINK_OBD2_READINESS_FIELD_FUEL_SYSTEM:
+    case LINK_OBD2_READINESS_FIELD_COMPREHENSIVE_COMPONENTS: {
+        const unsigned int bit =
+            (unsigned int)field -
+            (unsigned int)LINK_OBD2_READINESS_FIELD_MISFIRE;
+        support_mask = (uint8_t)(UINT8_C(1) << bit);
+        incomplete_mask = (uint8_t)(UINT8_C(0x10) << bit);
+        obd2_readiness_monitor_field(
+            value, true,
+            (data[1] & support_mask) != 0U,
+            (data[1] & incomplete_mask) != 0U);
+        return LINK_OBD2_RESULT_OK;
+    }
+
+    case LINK_OBD2_READINESS_FIELD_CATALYST:
+    case LINK_OBD2_READINESS_FIELD_HEATED_CATALYST:
+    case LINK_OBD2_READINESS_FIELD_EVAPORATIVE_SYSTEM:
+    case LINK_OBD2_READINESS_FIELD_SECONDARY_AIR:
+    case LINK_OBD2_READINESS_FIELD_AC_REFRIGERANT:
+    case LINK_OBD2_READINESS_FIELD_OXYGEN_SENSOR:
+    case LINK_OBD2_READINESS_FIELD_OXYGEN_SENSOR_HEATER: {
+        const unsigned int bit =
+            (unsigned int)field -
+            (unsigned int)LINK_OBD2_READINESS_FIELD_CATALYST;
+        support_mask = (uint8_t)(UINT8_C(1) << bit);
+        obd2_readiness_monitor_field(
+            value, !compression,
+            (data[2] & support_mask) != 0U,
+            (data[3] & support_mask) != 0U);
+        return LINK_OBD2_RESULT_OK;
+    }
+
+    case LINK_OBD2_READINESS_FIELD_NMHC_CATALYST:
+        support_mask = UINT8_C(0x01);
+        break;
+    case LINK_OBD2_READINESS_FIELD_NOX_SCR:
+        support_mask = UINT8_C(0x02);
+        break;
+    case LINK_OBD2_READINESS_FIELD_BOOST_PRESSURE:
+        support_mask = UINT8_C(0x08);
+        break;
+    case LINK_OBD2_READINESS_FIELD_EXHAUST_GAS_SENSOR:
+        support_mask = UINT8_C(0x20);
+        break;
+    case LINK_OBD2_READINESS_FIELD_PARTICULATE_FILTER:
+        support_mask = UINT8_C(0x40);
+        break;
+    case LINK_OBD2_READINESS_FIELD_EGR_VVT:
+        support_mask = UINT8_C(0x80);
+        obd2_readiness_monitor_field(
+            value, true,
+            (data[2] & support_mask) != 0U,
+            (data[3] & support_mask) != 0U);
+        return LINK_OBD2_RESULT_OK;
+
+    case LINK_OBD2_READINESS_FIELD_COUNT:
+        return LINK_OBD2_RESULT_INVALID_ARGUMENT;
+    }
+
+    obd2_readiness_monitor_field(
+        value, compression,
+        (data[2] & support_mask) != 0U,
+        (data[3] & support_mask) != 0U);
+    return LINK_OBD2_RESULT_OK;
+}
+
 LinkObd2Result link_obd2_decode_readiness_payload(
     const uint8_t *data,
     size_t data_length,

@@ -206,6 +206,56 @@ typedef struct {
 } LinkObd2Readiness;
 
 /**
+ * Logical values carried by the shared Mode 01 PID 01 response.
+ *
+ * The field index is stable and may be represented by one bit in a source-PID
+ * selection mask. Every field still shares one physical 01 01 request.
+ */
+typedef enum {
+    LINK_OBD2_READINESS_FIELD_MIL = 0,
+    LINK_OBD2_READINESS_FIELD_CONFIRMED_DTC_COUNT,
+    LINK_OBD2_READINESS_FIELD_IGNITION_TYPE,
+    LINK_OBD2_READINESS_FIELD_MISFIRE,
+    LINK_OBD2_READINESS_FIELD_FUEL_SYSTEM,
+    LINK_OBD2_READINESS_FIELD_COMPREHENSIVE_COMPONENTS,
+    LINK_OBD2_READINESS_FIELD_CATALYST,
+    LINK_OBD2_READINESS_FIELD_HEATED_CATALYST,
+    LINK_OBD2_READINESS_FIELD_EVAPORATIVE_SYSTEM,
+    LINK_OBD2_READINESS_FIELD_SECONDARY_AIR,
+    LINK_OBD2_READINESS_FIELD_AC_REFRIGERANT,
+    LINK_OBD2_READINESS_FIELD_OXYGEN_SENSOR,
+    LINK_OBD2_READINESS_FIELD_OXYGEN_SENSOR_HEATER,
+    LINK_OBD2_READINESS_FIELD_NMHC_CATALYST,
+    LINK_OBD2_READINESS_FIELD_NOX_SCR,
+    LINK_OBD2_READINESS_FIELD_BOOST_PRESSURE,
+    LINK_OBD2_READINESS_FIELD_EXHAUST_GAS_SENSOR,
+    LINK_OBD2_READINESS_FIELD_PARTICULATE_FILTER,
+    LINK_OBD2_READINESS_FIELD_EGR_VVT,
+    LINK_OBD2_READINESS_FIELD_COUNT
+} LinkObd2ReadinessField;
+
+#define LINK_OBD2_READINESS_FIELD_TEXT_LENGTH 32U
+
+typedef struct {
+    bool value_available;
+    bool numeric_value_available;
+    double numeric_value;
+    char text[LINK_OBD2_READINESS_FIELD_TEXT_LENGTH];
+} LinkObd2ReadinessFieldValue;
+
+/**
+ * Extract exactly one logical value from the four-byte PID 01 payload.
+ *
+ * Unselected logical fields need never be decoded merely because their bytes
+ * arrived in the same standards-defined response.
+ */
+LinkObd2Result link_obd2_decode_readiness_field_payload(
+    const uint8_t *data,
+    size_t data_length,
+    LinkObd2ReadinessField field,
+    LinkObd2ReadinessFieldValue *value);
+
+/**
  * Decode the four data bytes returned by Mode 01 PID 01.
  *
  * This payload-level API is used when a live telemetry sample has already had

@@ -810,6 +810,45 @@ static void test_readiness_payload(void)
               captured, 3U, &readiness) ==
               LINK_OBD2_RESULT_MALFORMED_RESPONSE,
           "reject truncated PID 01 readiness payload");
+
+    {
+        LinkObd2ReadinessFieldValue field;
+        check(link_obd2_decode_readiness_field_payload(
+                  captured, sizeof(captured),
+                  LINK_OBD2_READINESS_FIELD_MIL, &field) ==
+                  LINK_OBD2_RESULT_OK &&
+                  field.value_available &&
+                  field.numeric_value_available &&
+                  field.numeric_value == 0.0 &&
+                  strcmp(field.text, "Off") == 0,
+              "selectively decode PID 01 MIL only");
+        check(link_obd2_decode_readiness_field_payload(
+                  captured, sizeof(captured),
+                  LINK_OBD2_READINESS_FIELD_CONFIRMED_DTC_COUNT, &field) ==
+                  LINK_OBD2_RESULT_OK &&
+                  field.numeric_value_available &&
+                  field.numeric_value == 0.0 &&
+                  strcmp(field.text, "0") == 0,
+              "selectively decode PID 01 confirmed DTC count only");
+        check(link_obd2_decode_readiness_field_payload(
+                  captured, sizeof(captured),
+                  LINK_OBD2_READINESS_FIELD_FUEL_SYSTEM, &field) ==
+                  LINK_OBD2_RESULT_OK &&
+                  strcmp(field.text, "Ready") == 0,
+              "selectively decode supported fuel readiness");
+        check(link_obd2_decode_readiness_field_payload(
+                  captured, sizeof(captured),
+                  LINK_OBD2_READINESS_FIELD_EGR_VVT, &field) ==
+                  LINK_OBD2_RESULT_OK &&
+                  strcmp(field.text, "Ready") == 0,
+              "selectively decode supported EGR/VVT readiness");
+        check(link_obd2_decode_readiness_field_payload(
+                  captured, sizeof(captured),
+                  LINK_OBD2_READINESS_FIELD_MISFIRE, &field) ==
+                  LINK_OBD2_RESULT_OK &&
+                  strcmp(field.text, "Not supported") == 0,
+              "selectively retain unsupported readiness status");
+    }
 }
 
 static void test_negative_response(void)
