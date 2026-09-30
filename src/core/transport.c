@@ -600,15 +600,23 @@ static bool simulator_default_response(
     }
     if (strlen(command) == 4U && command[0] == '0' && command[1] == '1' &&
         simulator_parse_byte(command + 2, &pid)) {
-        return simulator_live_response(simulator, 0x41U, pid, false, 0U,
-                                       response, response_size);
+        if (!simulator_live_response(simulator, 0x41U, pid, false, 0U,
+                                     response, response_size)) {
+            /* A valid vehicle request without a simulated sample is not an
+             * unrecognised adapter command. Keep optional polling alive. */
+            (void)snprintf(response, response_size, "NO DATA");
+        }
+        return true;
     }
     if (strlen(command) == 6U && command[0] == '0' && command[1] == '2' &&
         simulator_parse_byte(command + 2, &pid)) {
         uint8_t frame = 0U;
         if (!simulator_parse_byte(command + 4, &frame)) return false;
-        return simulator_live_response(simulator, 0x42U, pid, true, frame,
-                                       response, response_size);
+        if (!simulator_live_response(simulator, 0x42U, pid, true, frame,
+                                     response, response_size)) {
+            (void)snprintf(response, response_size, "NO DATA");
+        }
+        return true;
     }
 
     if (simulator->config.custom_responder != NULL &&

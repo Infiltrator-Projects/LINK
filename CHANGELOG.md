@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.15.88 - 2026-10-01
+
+- Return NO DATA for valid Mode 01/02 requests without a simulated value. Previously the simulator returned an adapter-command error, so selecting a documented but unadvertised reading such as fuel level stopped the simulated diagnostic session.
+- Regress two minutes of startup and recurring polling with every documented live PID selected, including missing samples, long structured replies and exactly one startup readiness read.
+
 ## 0.15.87 - 2026-09-30
 
 - Decode headered Mode 03/07/0A replies with their CAN DTC count and reassemble ISO-TP fault lists per responder; retain legacy uncounted decoding and the header-aware negative-response fix.
