@@ -91,7 +91,6 @@ typedef struct {
     LinkTelemetrySample history[LINK_TELEMETRY_HISTORY_CAPACITY];
     LinkTelemetrySample latest[256U];
     bool latest_valid[256U];
-    bool favourite[256U];
     LinkTelemetryTranscriptEntry transcript[LINK_TELEMETRY_TRANSCRIPT_CAPACITY];
     size_t transcript_head;
     size_t transcript_count;
@@ -129,8 +128,6 @@ bool link_telemetry_store_latest(const LinkTelemetryStore *store, uint8_t pid, L
 size_t link_telemetry_store_history_count(const LinkTelemetryStore *store);
 uint64_t link_telemetry_store_total_sample_count(const LinkTelemetryStore *store);
 bool link_telemetry_store_history_at(const LinkTelemetryStore *store, size_t chronological_index, LinkTelemetrySample *sample);
-void link_telemetry_store_set_favourite(LinkTelemetryStore *store, uint8_t pid, bool favourite);
-bool link_telemetry_store_is_favourite(const LinkTelemetryStore *store, uint8_t pid);
 bool link_telemetry_store_record_transcript(LinkTelemetryStore *store, uint64_t timestamp_ms, const char *command, uint32_t result, const char *response_text);
 size_t link_telemetry_store_transcript_count(const LinkTelemetryStore *store);
 bool link_telemetry_store_transcript_at(const LinkTelemetryStore *store, size_t chronological_index, LinkTelemetryTranscriptEntry *entry);
@@ -187,16 +184,15 @@ bool link_telemetry_recorder_begin(LinkTelemetryRecorder *recorder, const LinkTe
  * have previously emitted the stream header with link_telemetry_recorder_begin().
  */
 bool link_telemetry_recorder_continue(LinkTelemetryRecorder *recorder, const LinkTelemetrySessionMetadata *metadata, const char *product_slug, LinkTelemetryTextSink sink, void *context);
-bool link_telemetry_recorder_record_sample_named(LinkTelemetryRecorder *recorder, const LinkTelemetrySample *sample, bool favourite, const char *pid_name, const char *unit_name);
+bool link_telemetry_recorder_record_sample_named(LinkTelemetryRecorder *recorder, const LinkTelemetrySample *sample, const char *pid_name, const char *unit_name);
 /**
  * Record one live value with the exact CAN responder that supplied it.
- * Stream schema v2 stores the address and addressing width in dedicated
+ * Stream schema v3 stores the address and addressing width in dedicated
  * columns so simultaneous functional-OBD responders remain distinguishable.
  */
 bool link_telemetry_recorder_record_responder_sample_named(
     LinkTelemetryRecorder *recorder,
     const LinkResponderTelemetrySample *sample,
-    bool favourite,
     const char *pid_name,
     const char *unit_name);
 
@@ -210,7 +206,6 @@ bool link_telemetry_recorder_record_responder_sample_named(
 bool link_telemetry_recorder_record_structured_pid_named(
     LinkTelemetryRecorder *recorder,
     const LinkStructuredTelemetrySample *sample,
-    bool favourite,
     const char *pid_name);
 bool link_telemetry_recorder_record_response_named(LinkTelemetryRecorder *recorder, uint64_t timestamp_ms, const char *command, const char *result_name, const char *response_text);
 bool link_telemetry_recorder_finish(LinkTelemetryRecorder *recorder, uint64_t ended_epoch_ms);

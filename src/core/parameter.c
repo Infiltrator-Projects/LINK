@@ -376,17 +376,6 @@ const LinkParameterDefinition *link_parameter_store_definition_at(const LinkPara
 const LinkParameterDefinition *link_parameter_store_definition(const LinkParameterStore *store, const LinkParameterKey *key) { const size_t index = store_find_key(store, key); return index != SIZE_MAX ? store->slots[index].definition : NULL; }
 const LinkParameterDefinition *link_parameter_store_definition_for_stable_key(const LinkParameterStore *store, const char *stable_key) { const size_t index = store_find_stable_key(store, stable_key); return index != SIZE_MAX ? store->slots[index].definition : NULL; }
 
-LinkParameterStoreResult link_parameter_store_set_favourite(LinkParameterStore *store, const LinkParameterKey *key, bool favourite)
-{
-    const size_t index = store_find_key(store, key);
-    if (store == NULL || !link_parameter_key_is_valid(key)) return LINK_PARAMETER_STORE_INVALID_ARGUMENT;
-    if (index == SIZE_MAX) return LINK_PARAMETER_STORE_NOT_FOUND;
-    store->slots[index].favourite = favourite;
-    return LINK_PARAMETER_STORE_OK;
-}
-
-bool link_parameter_store_is_favourite(const LinkParameterStore *store, const LinkParameterKey *key) { const size_t index = store_find_key(store, key); return index != SIZE_MAX && store->slots[index].favourite; }
-
 LinkParameterStoreResult link_parameter_store_record(LinkParameterStore *store, const LinkParameterSample *sample)
 {
     size_t slot_index, history_index;

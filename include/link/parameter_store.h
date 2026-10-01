@@ -29,7 +29,6 @@ typedef struct {
     const LinkParameterDefinition *definition;
     LinkParameterSample latest;
     bool latest_valid;
-    bool favourite;
 } LinkParameterStoreSlot;
 
 typedef struct {
@@ -49,8 +48,6 @@ size_t link_parameter_store_definition_count(const LinkParameterStore *store);
 const LinkParameterDefinition *link_parameter_store_definition_at(const LinkParameterStore *store, size_t index);
 const LinkParameterDefinition *link_parameter_store_definition(const LinkParameterStore *store, const LinkParameterKey *key);
 const LinkParameterDefinition *link_parameter_store_definition_for_stable_key(const LinkParameterStore *store, const char *stable_key);
-LinkParameterStoreResult link_parameter_store_set_favourite(LinkParameterStore *store, const LinkParameterKey *key, bool favourite);
-bool link_parameter_store_is_favourite(const LinkParameterStore *store, const LinkParameterKey *key);
 LinkParameterStoreResult link_parameter_store_record(LinkParameterStore *store, const LinkParameterSample *sample);
 bool link_parameter_store_latest(const LinkParameterStore *store, const LinkParameterKey *key, LinkParameterSample *sample);
 size_t link_parameter_store_history_count(const LinkParameterStore *store);

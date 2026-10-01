@@ -101,19 +101,6 @@ bool link_telemetry_store_history_at(const LinkTelemetryStore *store,
     return true;
 }
 
-void link_telemetry_store_set_favourite(LinkTelemetryStore *store,
-                                        uint8_t pid,
-                                        bool favourite)
-{
-    if (store != NULL) store->favourite[pid] = favourite;
-}
-
-bool link_telemetry_store_is_favourite(const LinkTelemetryStore *store,
-                                       uint8_t pid)
-{
-    return store != NULL && store->favourite[pid];
-}
-
 bool link_telemetry_store_record_transcript(LinkTelemetryStore *store,
                                             uint64_t timestamp_ms,
                                             const char *command,
@@ -541,7 +528,7 @@ static bool recorder_begin_session(LinkTelemetryRecorder *recorder,
     recorder->failed = false;
     if (write_stream_header) {
         written = snprintf(line, sizeof(line),
-                           "# %s_session_stream_version,2\n", product_slug);
+                           "# %s_session_stream_version,3\n", product_slug);
         if (written < 0 || (size_t)written >= sizeof(line) ||
             !emit(sink, context, line))
             return latch_failure(recorder);
@@ -562,8 +549,7 @@ static bool recorder_begin_session(LinkTelemetryRecorder *recorder,
     if (write_stream_header &&
         !emit(sink, context,
               "record_type,sequence,timestamp_ms,pid,name,value,unit,"
-              "favourite,responder_can_id,responder_extended,"
-              "command,result,response\n"))
+              "responder_can_id,responder_extended,command,result,response\n"))
         return latch_failure(recorder);
     return true;
 }
@@ -594,7 +580,6 @@ static bool recorder_record_sample_named(
     uint64_t sequence,
     uint64_t timestamp_ms,
     const LinkTelemetryMeasurement *measurement,
-    bool favourite,
     bool responder_available,
     uint32_t responder_id,
     bool responder_extended,
@@ -631,17 +616,14 @@ static bool recorder_record_sample_named(
     if (responder_available) {
         written = responder_extended
             ? snprintf(row, sizeof(row),
-                       ",%u,0x%08X,1,\"\",\"\",\"\"\n",
-                       favourite ? 1U : 0U,
+                       ",0x%08X,1,\"\",\"\",\"\"\n",
                        (unsigned int)responder_id)
             : snprintf(row, sizeof(row),
-                       ",%u,0x%03X,0,\"\",\"\",\"\"\n",
-                       favourite ? 1U : 0U,
+                       ",0x%03X,0,\"\",\"\",\"\"\n",
                        (unsigned int)responder_id);
     } else {
         written = snprintf(row, sizeof(row),
-                           ",%u,\"\",\"\",\"\",\"\",\"\"\n",
-                           favourite ? 1U : 0U);
+                           ",\"\",\"\",\"\",\"\",\"\"\n");
     }
     if (written < 0 || (size_t)written >= sizeof(row)) return false;
     return emit(recorder->sink, recorder->context, row)
@@ -651,28 +633,26 @@ static bool recorder_record_sample_named(
 bool link_telemetry_recorder_record_sample_named(
     LinkTelemetryRecorder *recorder,
     const LinkTelemetrySample *sample,
-    bool favourite,
     const char *pid_name,
     const char *unit_name)
 {
     if (sample == NULL) return false;
     return recorder_record_sample_named(
         recorder, sample->sequence, sample->timestamp_ms,
-        &sample->measurement, favourite, false, 0U, false,
+        &sample->measurement, false, 0U, false,
         pid_name, unit_name);
 }
 
 bool link_telemetry_recorder_record_responder_sample_named(
     LinkTelemetryRecorder *recorder,
     const LinkResponderTelemetrySample *sample,
-    bool favourite,
     const char *pid_name,
     const char *unit_name)
 {
     if (sample == NULL) return false;
     return recorder_record_sample_named(
         recorder, sample->sequence, sample->timestamp_ms,
-        &sample->measurement, favourite, true, sample->responder_id,
+        &sample->measurement, true, sample->responder_id,
         sample->extended_id, pid_name, unit_name);
 }
 
@@ -680,7 +660,6 @@ bool link_telemetry_recorder_record_responder_sample_named(
 bool link_telemetry_recorder_record_structured_pid_named(
     LinkTelemetryRecorder *recorder,
     const LinkStructuredTelemetrySample *sample,
-    bool favourite,
     const char *pid_name)
 {
     char prefix[96];
@@ -723,11 +702,7 @@ bool link_telemetry_recorder_record_structured_pid_named(
             !emit_quoted(recorder->sink, recorder->context, pid_name) ||
             !emit(recorder->sink, recorder->context, ",,,"))
             return latch_failure(recorder);
-        written = snprintf(prefix, sizeof(prefix), "%u,",
-                           favourite ? 1U : 0U);
-        if (written < 0 || (size_t)written >= sizeof(prefix) ||
-            !emit(recorder->sink, recorder->context, prefix) ||
-            !emit_quoted(recorder->sink, recorder->context, address) ||
+        if (!emit_quoted(recorder->sink, recorder->context, address) ||
             !emit(recorder->sink, recorder->context,
                   sample->responder_id_available
                       ? (sample->extended_id ? ",1,\"\",\"\","
@@ -764,10 +739,7 @@ bool link_telemetry_recorder_record_structured_pid_named(
             !emit(recorder->sink, recorder->context, ",") ||
             !emit_quoted(recorder->sink, recorder->context, unit))
             return latch_failure(recorder);
-        written = snprintf(prefix, sizeof(prefix), ",%u,",
-                           favourite ? 1U : 0U);
-        if (written < 0 || (size_t)written >= sizeof(prefix) ||
-            !emit(recorder->sink, recorder->context, prefix) ||
+        if (!emit(recorder->sink, recorder->context, ",") ||
             !emit_quoted(recorder->sink, recorder->context, address) ||
             !emit(recorder->sink, recorder->context,
                   sample->responder_id_available
@@ -845,7 +817,7 @@ bool link_telemetry_export_csv_named(
         return false;
     written = snprintf(
         line, sizeof(line),
-        "# %s_csv_version,1\n# session_started_epoch_ms,%llu\n"
+        "# %s_csv_version,2\n# session_started_epoch_ms,%llu\n"
         "# session_ended_epoch_ms,%llu\n",
         product_slug,
         (unsigned long long)metadata->started_epoch_ms,
@@ -860,7 +832,7 @@ bool link_telemetry_export_csv_named(
         !emit_metadata(sink, context, "obd_protocol",
                        metadata->obd_protocol) ||
         !emit(sink, context,
-              "sequence,timestamp_ms,pid,name,value,unit,favourite\n"))
+              "sequence,timestamp_ms,pid,name,value,unit\n"))
         return false;
     for (index = 0U; index < store->history_count; ++index) {
         LinkTelemetrySample sample;
@@ -880,10 +852,7 @@ bool link_telemetry_export_csv_named(
             !emit_quoted(sink, context,
                          unit_name((uint32_t)sample.measurement.unit)))
             return false;
-        written = snprintf(line, sizeof(line), ",%u\n",
-                           store->favourite[sample.measurement.pid] ? 1U : 0U);
-        if (written < 0 || (size_t)written >= sizeof(line) ||
-            !emit(sink, context, line))
+        if (!emit(sink, context, "\n"))
             return false;
     }
     if (!emit(sink, context, "# diagnostic_transcript\n") ||

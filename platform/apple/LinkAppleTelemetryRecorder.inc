@@ -298,8 +298,6 @@ static void LinkAppleTelemetryNativeStreamEvent(
                     &recordedResponder) ||
                  !link_telemetry_recorder_record_responder_sample_named(
                     &_recorder, &recordedResponder,
-                    link_telemetry_store_is_favourite(
-                        &_telemetry, responder->sample.pid),
                     link_obd2_pid_name(responder->sample.pid),
                     link_obd2_unit_name(responder->sample.unit))))
                 return @"Could not append responder-attributed session recording";
@@ -311,7 +309,6 @@ static void LinkAppleTelemetryNativeStreamEvent(
             link_telemetry_store_latest(&_telemetry, event->sample.pid, &recorded) &&
             !link_telemetry_recorder_record_sample_named(
                 &_recorder, &recorded,
-                link_telemetry_store_is_favourite(&_telemetry, event->sample.pid),
                 link_obd2_pid_name(event->sample.pid),
                 link_obd2_unit_name(event->sample.unit)))
             return @"Could not append session recording";
@@ -342,8 +339,6 @@ static void LinkAppleTelemetryNativeStreamEvent(
                     &recordedStructured) ||
                  !link_telemetry_recorder_record_structured_pid_named(
                     &_recorder, &recordedStructured,
-                    link_telemetry_store_is_favourite(
-                        &_telemetry, responder->decoded.definition->pid),
                     responder->decoded.definition->name != NULL
                         ? responder->decoded.definition->name
                         : link_obd2_pid_name(responder->decoded.definition->pid))))
