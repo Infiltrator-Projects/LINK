@@ -201,8 +201,6 @@ NS_ASSUME_NONNULL_BEGIN
     (uint32_t)responderCANIdentifier
                                                        extendedID:(BOOL)extendedID;
 - (BOOL)supportsPID:(uint8_t)pid;
-- (BOOL)favouriteForPID:(uint8_t)pid;
-- (void)setFavourite:(BOOL)favourite forPID:(uint8_t)pid;
 
 /**
  * Runtime polling policy is independent of vehicle capability. A supported PID
@@ -302,8 +300,6 @@ NS_ASSUME_NONNULL_BEGIN
                                             fieldMask:(uint64_t)fieldMask;
 - (NSString *)dtcDisplayTextForCode:(NSString *)code;
 - (BOOL)supportsPID:(uint8_t)pid;
-- (BOOL)favouriteForPID:(uint8_t)pid;
-- (void)setFavourite:(BOOL)favourite forPID:(uint8_t)pid;
 - (BOOL)pollingEnabledForPID:(uint8_t)pid;
 - (void)setPollingEnabled:(BOOL)enabled forPID:(uint8_t)pid;
 - (uint64_t)pollingFieldMaskForPID:(uint8_t)pid;
