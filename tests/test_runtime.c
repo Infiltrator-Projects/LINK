@@ -353,7 +353,7 @@ int main(void)
         &metadata, "ISO 9141-2 · 10.4 kbaud · 5-baud init · auto-selected");
     link_telemetry_session_metadata_finish(&metadata, 2U);
     CHECK(link_telemetry_export_csv_named(&telemetry, &metadata, "link", pid_name, unit_name, result_name, sink, &output));
-    CHECK(strstr(output.data, "# link_csv_version,1\n") != NULL);
+    CHECK(strstr(output.data, "# link_csv_version,2\n") != NULL);
     CHECK(strstr(output.data,
                  "# obd_protocol,\"ISO 9141-2 · 10.4 kbaud · 5-baud init · auto-selected\"\n") != NULL);
     {
