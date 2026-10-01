@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.15.89 - 2026-10-01
+
+- Let product-specific Apple presentation overrides consume standard table/dashboard fallbacks lazily, so a product that replaces them no longer builds and discards LINK's generic parameter lists.
+- Add explicit product ownership of polling policy. Products with controller/VIN-scoped selection can bypass LINK's generic global polling restore without affecting existing LINK faces.
+
 ## 0.15.88 - 2026-10-01
 
 - Return NO DATA for valid Mode 01/02 requests without a simulated value. Previously the simulator returned an adapter-command error, so selecting a documented but unadvertised reading such as fuel level stopped the simulated diagnostic session.

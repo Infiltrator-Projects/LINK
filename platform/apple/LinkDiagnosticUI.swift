@@ -1986,6 +1986,7 @@ struct LinkStandardProductConfiguration {
     let legacyPollingGlobalKey: String?
     let legacyPollingVehicleKey: String?
     let seedDefaultPollingSelection: Bool
+    let productOwnsPollingPolicy: Bool
     let defaultPollingPIDs: [UInt8]
     let defaultDashboardStableKeys: [String]
     let standardPIDStableKey: (UInt8) -> String
@@ -2004,6 +2005,7 @@ struct LinkStandardProductConfiguration {
         legacyPollingGlobalKey: String? = nil,
         legacyPollingVehicleKey: String? = nil,
         seedDefaultPollingSelection: Bool = true,
+        productOwnsPollingPolicy: Bool = false,
         defaultPollingPIDs: [UInt8] = [
             0x0C, 0x0D, 0x05, 0x11, 0x04, 0x0F, 0x10, 0x42
         ],
@@ -2027,6 +2029,7 @@ struct LinkStandardProductConfiguration {
         self.legacyPollingGlobalKey = legacyPollingGlobalKey
         self.legacyPollingVehicleKey = legacyPollingVehicleKey
         self.seedDefaultPollingSelection = seedDefaultPollingSelection
+        self.productOwnsPollingPolicy = productOwnsPollingPolicy
         self.defaultPollingPIDs = defaultPollingPIDs
         self.defaultDashboardStableKeys = defaultDashboardStableKeys
         self.standardPIDStableKey = standardPIDStableKey
@@ -2121,8 +2124,10 @@ class LinkStandardProductViewModel: NSObject, ObservableObject {
         super.init()
 
         selectedVehicleVIN = vehicleProfileStore.selectedVehicleVIN
-        seedDefaultPollingSelection()
-        applyStoredPollingPolicy()
+        if !configuration.productOwnsPollingPolicy {
+            seedDefaultPollingSelection()
+            applyStoredPollingPolicy()
+        }
         refreshStandardState()
         productHooksEnabled = true
     }
@@ -2217,7 +2222,9 @@ class LinkStandardProductViewModel: NSObject, ObservableObject {
     }
 
     func togglePolling(_ parameter: LinkDiagnosticParameter) {
-        guard let pid = UInt8(exactly: parameter.parameterIdentifier) else { return }
+        guard !configuration.productOwnsPollingPolicy,
+              let pid = UInt8(exactly: parameter.parameterIdentifier)
+        else { return }
         let enabled = !productController.pollingEnabled(forPID: pid)
         var enabledKeys = Set(pollingSelectionStore.globalStableKeys)
         if enabled { enabledKeys.insert(parameter.id) }
@@ -2236,9 +2243,8 @@ class LinkStandardProductViewModel: NSObject, ObservableObject {
         if selected.contains(parameter.id) { selected.remove(parameter.id) }
         else { selected.insert(parameter.id) }
         dashboardSelectionStore.setGlobalStableKeys(Array(selected).sorted())
-        refreshDashboardSelection()
         dashboardParameters = productDashboardParameters(
-            standard: dashboardParameters)
+            standard: loadStandardDashboardParameters())
     }
 
     func prepareCSVExport() {
@@ -2318,9 +2324,8 @@ class LinkStandardProductViewModel: NSObject, ObservableObject {
         }
         diagnosticParameters = productDiagnosticParameters(
             standard: loadDiagnosticParameters())
-        refreshDashboardSelection()
         dashboardParameters = productDashboardParameters(
-            standard: dashboardParameters)
+            standard: loadStandardDashboardParameters())
         recordedSampleCount = Int(clamping: productController.recordedSampleCount)
     }
 
@@ -2444,13 +2449,13 @@ class LinkStandardProductViewModel: NSObject, ObservableObject {
 
     /** Product-specific live values may extend or replace the standard table. */
     func productDiagnosticParameters(
-        standard: [LinkDiagnosticParameter]
-    ) -> [LinkDiagnosticParameter] { standard }
+        standard: @autoclosure () -> [LinkDiagnosticParameter]
+    ) -> [LinkDiagnosticParameter] { standard() }
 
     /** Product-specific dashboard values may extend the standard selection. */
     func productDashboardParameters(
-        standard: [LinkDiagnosticParameter]
-    ) -> [LinkDiagnosticParameter] { standard }
+        standard: @autoclosure () -> [LinkDiagnosticParameter]
+    ) -> [LinkDiagnosticParameter] { standard() }
 
     /** Product profiles may report a manufacturer controller inventory. */
     func productModuleCountForVehicleProfile(
@@ -2515,6 +2520,11 @@ class LinkStandardProductViewModel: NSObject, ObservableObject {
                 dashboardMaximum: maximum))
         }
         return result
+    }
+
+    private func loadStandardDashboardParameters() -> [LinkDiagnosticParameter] {
+        refreshDashboardSelection()
+        return dashboardParameters
     }
 
     private func refreshDashboardSelection() {
