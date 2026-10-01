@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.15.90
+
+- Remove the obsolete favourites concept from the shared diagnostic UI, parameter store and telemetry schema. PID selection remains the single enable/disable state.
+
+
 ## 0.15.89 - 2026-10-01
 
 - Let product-specific Apple presentation overrides consume standard table/dashboard fallbacks lazily, so a product that replaces them no longer builds and discards LINK's generic parameter lists.
