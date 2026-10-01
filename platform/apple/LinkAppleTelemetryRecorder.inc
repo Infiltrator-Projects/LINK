@@ -77,10 +77,6 @@ static void LinkAppleTelemetryNativeStreamEvent(
     link_telemetry_recorder_init(&_recorder);
     link_mercedes_me_stream_parser_init(&_nativeStreamParser);
     _sessionCSV = [[NSMutableData alloc] init];
-    link_telemetry_store_set_favourite(&_telemetry, UINT8_C(0x0c), true);
-    link_telemetry_store_set_favourite(&_telemetry, UINT8_C(0x0d), true);
-    link_telemetry_store_set_favourite(&_telemetry, UINT8_C(0x05), true);
-    link_telemetry_store_set_favourite(&_telemetry, UINT8_C(0x0b), true);
     link_telemetry_session_metadata_init(&_sessionMetadata, 0U, NULL, NULL);
     return self;
 }
@@ -498,15 +494,6 @@ static void LinkAppleTelemetryNativeStreamEvent(
     return values;
 }
 
-- (BOOL)favouriteForPID:(uint8_t)pid
-{
-    return link_telemetry_store_is_favourite(&_telemetry, pid) ? YES : NO;
-}
-
-- (void)setFavourite:(BOOL)favourite forPID:(uint8_t)pid
-{
-    link_telemetry_store_set_favourite(&_telemetry, pid, favourite);
-}
 
 - (nullable NSData *)csvDataSnapshot
 {
