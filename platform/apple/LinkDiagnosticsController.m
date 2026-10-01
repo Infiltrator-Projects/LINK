@@ -2089,16 +2089,6 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
     return link_obd2_pid_set_contains(&_flow.supported_pids, pid);
 }
 
-- (BOOL)favouriteForPID:(uint8_t)pid
-{
-    return [_telemetryRecorder favouriteForPID:pid];
-}
-
-- (void)setFavourite:(BOOL)favourite forPID:(uint8_t)pid
-{
-    [_telemetryRecorder setFavourite:favourite forPID:pid];
-    [self notifyDelegate];
-}
 
 - (BOOL)pollingEnabledForPID:(uint8_t)pid
 {
@@ -2337,11 +2327,6 @@ static size_t LinkAppleSupportedPIDCount(const LinkDiagnosticFlow *flow)
     return [_shared dtcDisplayTextForCode:code];
 }
 - (BOOL)supportsPID:(uint8_t)pid { return [_shared supportsPID:pid]; }
-- (BOOL)favouriteForPID:(uint8_t)pid { return [_shared favouriteForPID:pid]; }
-- (void)setFavourite:(BOOL)favourite forPID:(uint8_t)pid
-{
-    [_shared setFavourite:favourite forPID:pid];
-}
 - (BOOL)pollingEnabledForPID:(uint8_t)pid
 {
     return [_shared pollingEnabledForPID:pid];
