@@ -1143,7 +1143,6 @@ struct LinkDiagnosticParameter: Identifiable {
     let structuredValue: String?
     let rawHex: String?
     let vehicleSupported: Bool
-    let favourite: Bool
     let pollingEnabled: Bool
     let history: [Double]
     let sourceLabel: String?
@@ -1164,7 +1163,6 @@ struct LinkDiagnosticParameter: Identifiable {
         structuredValue: String?,
         rawHex: String?,
         vehicleSupported: Bool,
-        favourite: Bool,
         pollingEnabled: Bool,
         history: [Double],
         sourceLabel: String?,
@@ -1184,7 +1182,6 @@ struct LinkDiagnosticParameter: Identifiable {
         self.structuredValue = structuredValue
         self.rawHex = rawHex
         self.vehicleSupported = vehicleSupported
-        self.favourite = favourite
         self.pollingEnabled = pollingEnabled
         self.history = history
         self.sourceLabel = sourceLabel
@@ -1274,7 +1271,6 @@ struct LinkPIDConfigurationItem: Identifiable {
     let shortName: String
     let title: String
     let pollingEnabled: Bool
-    let favourite: Bool
     let advertised: Bool
 }
 
@@ -2207,19 +2203,6 @@ class LinkStandardProductViewModel: NSObject, ObservableObject {
         refreshStandardState()
     }
 
-    func toggleFavourite(_ parameter: LinkDiagnosticParameter) {
-        guard let pid = UInt8(exactly: parameter.parameterIdentifier) else { return }
-        productController.setFavourite(
-            !productController.favourite(forPID: pid), forPID: pid)
-        refreshStandardState()
-    }
-
-    func toggleFavourite(stableKey: String) {
-        guard let parameter = diagnosticParameters.first(where: {
-            $0.id == stableKey
-        }) else { return }
-        toggleFavourite(parameter)
-    }
 
     func togglePolling(_ parameter: LinkDiagnosticParameter) {
         guard !configuration.productOwnsPollingPolicy,
@@ -2510,7 +2493,6 @@ class LinkStandardProductViewModel: NSObject, ObservableObject {
                 structuredValue: structuredValue,
                 rawHex: rawHex,
                 vehicleSupported: supported,
-                favourite: productController.favourite(forPID: pid),
                 pollingEnabled: pollingEnabled,
                 history: history,
                 sourceLabel: "SAE OBD-II",
@@ -3081,11 +3063,6 @@ private struct LinkStandardTableView: View {
                                     .foregroundStyle(theme.secondaryText)
                             }
                             Spacer()
-                            Button { model.toggleFavourite(parameter) } label: {
-                                Image(systemName: parameter.favourite
-                                      ? "star.fill" : "star")
-                            }
-                            .buttonStyle(.plain)
                             .foregroundStyle(theme.accent)
                             Button { model.togglePolling(parameter) } label: {
                                 Image(systemName: parameter.pollingEnabled
