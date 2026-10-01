@@ -44,7 +44,7 @@ A consolidation is complete only when LINK is the source of truth, affected LINK
 
 Manufacturer repositories own identity and genuinely manufacturer-specific content. Mercedes, Jaguar, BMW, Audi and Ford definitions, topology, diagnostic endpoints, proprietary identifiers, manufacturer DTC knowledge, evidence-backed probes and decoders, branding, product metadata and manufacturer-specific workflows remain in their product repositories.
 
-Product applications also own the composition and appearance of their Settings pages. LINK supplies shared capabilities such as language selection and measurement conversion but does not own favourites policy, unavailable-value policy, adapter/About rows inside Settings, or a complete Settings screen. About is a separate shared LINK capability.
+Product applications also own the composition and appearance of their Settings pages. LINK supplies shared capabilities such as language selection and measurement conversion but does not own unavailable-value policy, adapter/About rows inside Settings, or a complete Settings screen. About is a separate shared LINK capability.
 
 Protocols such as OBD-II, OBDonUDS, UDS and manufacturer legacy diagnostics are data sources beneath the shared operator-task interface; they are not competing top-level navigation destinations. Module inventory belongs within the shared task model rather than reintroducing a separate generic Modules workspace.
 

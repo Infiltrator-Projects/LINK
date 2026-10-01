@@ -29,7 +29,7 @@ int main(void)
 
     passed &= check(link_i18n_set_locale("en_US"), "en-US selection failed");
     passed &= check(strcmp(link_i18n_tr("nav.live_data.summary"),
-                           "Search, select and favorite live diagnostic parameters") == 0,
+                           "Search and select live diagnostic parameters") == 0,
                     "en-US override mismatch");
     passed &= check(strcmp(link_i18n_tr("nav.vehicle"), "Vehicle") == 0,
                     "en-US fallback mismatch");

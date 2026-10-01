@@ -377,7 +377,7 @@ int main(void)
     memset(&output, 0, sizeof(output));
     link_telemetry_recorder_init(&recorder);
     CHECK(link_telemetry_recorder_begin(&recorder, &metadata, "link", sink, &output));
-    CHECK(link_telemetry_recorder_record_sample_named(&recorder, &sample, true, "Engine speed", "rpm"));
+    CHECK(link_telemetry_recorder_record_sample_named(&recorder, &sample, "Engine speed", "rpm"));
     {
         LinkResponderTelemetrySample responder_sample = {
             .sequence = 2U,
@@ -387,7 +387,7 @@ int main(void)
             .measurement = measurement
         };
         CHECK(link_telemetry_recorder_record_responder_sample_named(
-            &recorder, &responder_sample, true, "Engine speed", "rpm"));
+            &recorder, &responder_sample, "Engine speed", "rpm"));
     }
 
     {
@@ -409,14 +409,14 @@ int main(void)
             &decoded) == LINK_OBD2_RESULT_OK);
         structured_sample.decoded = decoded;
         CHECK(link_telemetry_recorder_record_structured_pid_named(
-            &recorder, &structured_sample, false, "DPF pressure"));
+            &recorder, &structured_sample, "DPF pressure"));
     }
     CHECK(link_telemetry_recorder_record_response_named(
         &recorder, 30U, "010C", "ok", "41 0C 13 4A"));
     CHECK(link_telemetry_recorder_record_response_named(
         &recorder, 31U, "AT\"I", "ok", "A\nB"));
     CHECK(link_telemetry_recorder_finish(&recorder, 3U));
-    CHECK(strstr(output.data, "# link_session_stream_version,2\n") != NULL);
+    CHECK(strstr(output.data, "# link_session_stream_version,3\n") != NULL);
     CHECK(strstr(output.data,
                  "# obd_protocol,\"ISO 9141-2 · 10.4 kbaud · 5-baud init · auto-selected\"\n") != NULL);
     CHECK(strstr(output.data, ",0x7E9,0,\"\",\"\",\"\"\n") != NULL);
@@ -429,8 +429,8 @@ int main(void)
     CHECK(link_telemetry_recorder_continue(&recorder, &metadata, "link", sink, &output));
     CHECK(link_telemetry_recorder_record_response_named(&recorder, 5U, "ATI", "ok", "ELM327"));
     CHECK(link_telemetry_recorder_finish(&recorder, 6U));
-    CHECK(occurrence_count(output.data, "# link_session_stream_version,2\n") == 1U);
+    CHECK(occurrence_count(output.data, "# link_session_stream_version,3\n") == 1U);
     CHECK(occurrence_count(output.data, "# session_started_epoch_ms,") == 2U);
-    CHECK(occurrence_count(output.data, "record_type,sequence,timestamp_ms,pid,name,value,unit,favourite,responder_can_id,responder_extended,command,result,response\n") == 1U);
+    CHECK(occurrence_count(output.data, "record_type,sequence,timestamp_ms,pid,name,value,unit,responder_can_id,responder_extended,command,result,response\n") == 1U);
     return 0;
 }

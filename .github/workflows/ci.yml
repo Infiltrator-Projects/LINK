@@ -213,9 +213,7 @@ jobs:
           fi
           ! grep -Fq 'LINK_BUILD_REFERENCE_PRODUCT_FACES' CMakeLists.txt
           ! grep -Fq 'LinkDiagnosticSettingsView' platform/apple/LinkDiagnosticUI.swift
-          ! grep -Fq 'preferFavouriteSignals' platform/apple/LinkDiagnosticsController.h
           ! grep -Fq 'showUnavailableParameters' platform/apple/LinkDiagnosticsController.h
-          ! grep -Fq 'settings.prefer_favourites' src/core/i18n.c
           ! grep -Fq 'settings.show_unavailable' src/core/i18n.c
           grep -Fq 'return @[@"metric", @"us-customary"];' platform/apple/LinkDiagnosticsController.m
           grep -Fq 'src/core/units.c' CMakeLists.txt

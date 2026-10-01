@@ -241,8 +241,8 @@ mode enum or independent scaling rules.
 LINK supplies the common language catalogue/selection API and the two
 measurement systems proven in MBLINK: Metric and US customary. Manufacturer
 applications decide how their Settings page is laid out and which
-manufacturer-specific settings appear there. LINK does not own favourites
-policy, unavailable-value policy, adapter rows, or a complete Settings screen.
+manufacturer-specific settings appear there. LINK does not own
+unavailable-value policy, adapter rows, or a complete Settings screen.
 About is deliberately separate from Settings and is LINK-owned.
 
 
