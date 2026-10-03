@@ -9,12 +9,11 @@ on:
 permissions:
   contents: read
 
-# Development Linux checks prefer the organisation's linux-native pool.
-# Release commits stay on hosted Linux so an offline local runner cannot block publication.
+# Main builds and release validation use the organisation runner pools.
 jobs:
   portable-core:
     name: ${{ matrix.os }} / strict C11
-    runs-on: ${{ matrix.os == 'ubuntu-24.04' && (startsWith(github.event.head_commit.message, 'Release ') && 'ubuntu-24.04' || 'bigbedroom') || matrix.os }}
+    runs-on: ${{ fromJSON(matrix.os == 'ubuntu-24.04' && '["self-hosted","Linux","X64","linux-native"]' || matrix.os == 'windows-latest' && '["self-hosted","Windows","ARM64"]' || '["macos-latest"]') }}
     timeout-minutes: 20
     strategy:
       fail-fast: false
@@ -420,7 +419,7 @@ jobs:
 
   sanitizers:
     name: Linux / ASan + UBSan
-    runs-on: ${{ startsWith(github.event.head_commit.message, 'Release ') && 'ubuntu-24.04' || 'bigbedroom' }}
+    runs-on: [self-hosted, Linux, X64, linux-native]
     timeout-minutes: 20
     steps:
       - name: Provide Git on self-hosted Linux
@@ -466,3 +465,4 @@ jobs:
         env:
           ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
           UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+
