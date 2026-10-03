@@ -20,7 +20,30 @@ jobs:
       matrix:
         os: [ubuntu-24.04, macos-latest, windows-latest]
 
+    env:
+      PSExecutionPolicyPreference: RemoteSigned
     steps:
+      - name: Discover Windows build tools and Git Bash
+        if: runner.os == 'Windows' && runner.environment == 'self-hosted'
+        shell: powershell
+        run: |
+          $git = (Get-Command git.exe -ErrorAction Stop).Source
+          $gitRoot = Split-Path (Split-Path $git -Parent) -Parent
+          $dirs = @((Join-Path $gitRoot 'bin'), (Join-Path $gitRoot 'usr\bin'), (Join-Path $env:ProgramFiles 'CMake\bin'))
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          if (Test-Path $vswhere) {
+            $vs = & $vswhere -latest -products '*' -property installationPath
+            if ($vs) { $dirs += Join-Path $vs 'Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin' }
+          }
+          foreach ($dir in $dirs) {
+            if (Test-Path $dir) {
+              $dir | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+              $env:PATH = "$dir;$env:PATH"
+            }
+          }
+          Get-ExecutionPolicy -List
+          cmake --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Provide Git on self-hosted Linux
         if: runner.os == 'Linux' && runner.environment == 'self-hosted'
         shell: bash
@@ -465,4 +488,3 @@ jobs:
         env:
           ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
           UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
-
