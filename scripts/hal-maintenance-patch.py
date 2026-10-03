@@ -25,6 +25,10 @@ if common_version != "1.19.38":
 
 replace_exact(ROOT / "VERSION", OLD_VERSION + "\n", NEW_VERSION + "\n")
 replace_exact(
+    ROOT / "include/link/version.h",
+    f'#define LINK_VERSION_STRING "{OLD_VERSION}"',
+    f'#define LINK_VERSION_STRING "{NEW_VERSION}"')
+replace_exact(
     ROOT / "CMakeLists.txt",
     'set(LINK_COMMON_VERSION "1.19.35")\nset(LINK_COMMON_COMMIT "7cc5de3de0e94ed2cfcff0840bbb5346eb5c9c9f")',
     f'set(LINK_COMMON_VERSION "1.19.38")\nset(LINK_COMMON_COMMIT "{COMMON_COMMIT}")')
