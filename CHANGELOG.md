@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.15.91 - 2026-10-03
+
+- Advance the canonical nested Infiltratr Common dependency from 1.19.35 to 1.19.38, including the latest portable-source, localisation, graphics and CI hardening fixes.
+- Keep the dependency graph single-rooted: LINK remains the sole owner of the Common pin consumed by MBLINK and the other product faces.
+
 ## 0.15.90
 
 - Remove the obsolete favourites concept from the shared diagnostic UI, parameter store and telemetry schema. PID selection remains the single enable/disable state.
