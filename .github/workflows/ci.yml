@@ -9,41 +9,24 @@ on:
 permissions:
   contents: read
 
-# Main builds and release validation use the organisation runner pools.
+# Linux uses the organisation pool; Windows retains native ARM64 coverage on a managed image.
 jobs:
   portable-core:
     name: ${{ matrix.os }} / strict C11
-    runs-on: ${{ fromJSON(matrix.os == 'ubuntu-24.04' && '["self-hosted","Linux","X64","linux-native"]' || matrix.os == 'windows-latest' && '["self-hosted","Windows","ARM64"]' || '["macos-latest"]') }}
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, macos-latest, windows-latest]
+        include:
+          - os: ubuntu-24.04
+            runner: [self-hosted, Linux, X64, linux-native]
+          - os: macos-latest
+            runner: macos-latest
+          - os: windows-11-arm
+            runner: windows-11-arm
 
-    env:
-      PSExecutionPolicyPreference: RemoteSigned
     steps:
-      - name: Discover Windows build tools and Git Bash
-        if: runner.os == 'Windows' && runner.environment == 'self-hosted'
-        shell: powershell
-        run: |
-          $git = (Get-Command git.exe -ErrorAction Stop).Source
-          $gitRoot = Split-Path (Split-Path $git -Parent) -Parent
-          $dirs = @((Join-Path $gitRoot 'bin'), (Join-Path $gitRoot 'usr\bin'), (Join-Path $env:ProgramFiles 'CMake\bin'))
-          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-          if (Test-Path $vswhere) {
-            $vs = & $vswhere -latest -products '*' -property installationPath
-            if ($vs) { $dirs += Join-Path $vs 'Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin' }
-          }
-          foreach ($dir in $dirs) {
-            if (Test-Path $dir) {
-              $dir | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
-              $env:PATH = "$dir;$env:PATH"
-            }
-          }
-          Get-ExecutionPolicy -List
-          cmake --version
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Provide Git on self-hosted Linux
         if: runner.os == 'Linux' && runner.environment == 'self-hosted'
         shell: bash
@@ -258,7 +241,12 @@ jobs:
           fi
 
       - name: Configure
+        if: runner.os != 'Windows'
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Configure native Windows ARM64
+        if: runner.os == 'Windows'
+        run: cmake -S . -B build -A ARM64 -DCMAKE_BUILD_TYPE=Release
 
       - name: Build
         run: cmake --build build --config Release --parallel

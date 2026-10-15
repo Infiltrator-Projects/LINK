@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.15.92 - 2026-10-16
+
+- Run the strict Windows C11 build and complete test suite on the managed Windows 11 ARM64 image after the self-hosted runner refused to start every test executable. Configure ARM64 explicitly and retain the existing Linux, macOS, sanitizer and embedded checks.
+- Consolidate the completed Common 1.19.38 branch history into main and remove the redundant forensic branch only while its audited commit and integration checks still match.
+
 ## 0.15.91 - 2026-10-03
 
 - Advance the canonical nested Infiltratr Common dependency from 1.19.35 to 1.19.38, including the latest portable-source, localisation, graphics and CI hardening fixes.

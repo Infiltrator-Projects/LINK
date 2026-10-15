@@ -16,4 +16,4 @@ jobs:
           fetch-depth: 0
           submodules: recursive
       - name: Verify integration and delete the unchanged audited branch
-        run: bash scripts/prune-audited-branch.sh fix/windows-smoke-teardown fd71f96c8bda883b2e52f98a8d073a2b0f3f24ee
+        run: bash scripts/prune-audited-branch.sh hal/common-1.19.38-forensic 6d42499e40f28257887c6d0768babf9ae20e07ea
