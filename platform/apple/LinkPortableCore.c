@@ -27,6 +27,7 @@
 #include "../../src/core/doip.c"
 #include "../../src/core/diagnostic_flow.c"
 #include "../../src/core/diagnostic_capability.c"
+#include "../../src/core/flash_journal.c"
 #if !LINK_APPLE_PORTABLE_CORE_EXTERNAL_ISOTP
 #include "../../src/core/isotp.c"
 #endif
