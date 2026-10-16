@@ -38,3 +38,7 @@ Code and tests define executable behaviour. Pinned gitlinks define dependency id
 - docs/DISCOVER.md
 - docs/APPLE-PROVIDER-BOUNDARY.md
 - docs/STM32.md
+
+## Distribution ownership
+
+CI qualifies the source/dependency tree and owns the deterministic tracked-source bundle. The publisher promotes those exact bytes. VERSION is the sole release-intent authority; commit subjects and external repository scheduling are not control-plane inputs.

@@ -276,7 +276,7 @@ The archived application evidence now exposes 194 exact
 diagnostic/live-data symbol/literal pairs: the original 120-entry DEX set plus
 74 additional exact native `DataIds::DATAID_*` pairs recovered from the
 supplied DiagLogic library. They are preserved separately in
-[`MERCEDES-ME-DATA-IDS.md`](MERCEDES-ME-DATA-IDS.md) so the catalogue can be
+[`MERCEDES-ME-DATA-IDS.md`](https://github.com/Infiltrator-Projects/MBLINK/blob/main/docs/MERCEDES-ME-DATA-IDS.md) so the catalogue can be
 used as an implementation checklist without bloating the transport notes.
 
 ## Adapter lifecycle and security/session evidence

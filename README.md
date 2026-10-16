@@ -198,7 +198,8 @@ A numbered LINK release publishes:
 | File | Purpose |
 | --- | --- |
 | `LINK-<version>-source.zip` | Exact tested source archive, including the pinned dependency tree. |
-| `SHA256SUMS.txt` | SHA-256 checksum for the source archive. |
+| `SHA256SUMS.txt` | SHA-256 checksums for the source archive and source identity. |
+| `SOURCE_COMMIT` | Exact qualified Git commit. |
 
 LINK is a shared engine rather than an end-user application, so product installers remain in MBLINK, JAGLINK, BMWLINK, AUDILINK and FORDLINK.
 
@@ -206,9 +207,9 @@ LINK is a shared engine rather than an end-user application, so product installe
 
 This repository uses `main` as its working branch. Development changes are made directly on `main`; the normal project workflow does not depend on PR, feature or release branches.
 
-Every external or user-authored push to `main` runs LINK CI. Ordinary commits do not publish. Automation that writes `main` with GitHub Actions credentials must run the equivalent build/tests before its push because GitHub deliberately does not recursively trigger workflows from that token. A commit is release-eligible only when its subject begins with the exact source version as `Release <version>` and the complete LINK CI run succeeds.
+Every external or user-authored push to `main` runs LINK CI. An unpublished VERSION is release intent across corrective commits; commit wording has no control-plane meaning. Automation writing main with GitHub Actions credentials must qualify its own changes because that token does not recursively trigger workflows.
 
-The publisher checks out the exact tested commit, verifies it is still current `main`, builds the source release and checksum, then creates the version tag and GitHub release. Existing version tags and published releases are immutable and are never moved, replaced or edited in place.
+The Linux CI lane archives tracked Git objects and exact pinned dependencies, proves repeatable bytes, and preserves the sealed source bundle. Publication consumes that successful run's artifact, verifies current main and remote bytes, and promotes a complete draft. Public release tags and assets are immutable.
 
 Manually runnable build/test helpers, where present, are diagnostic tools only and are not release-approval mechanisms.
 

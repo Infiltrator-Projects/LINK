@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.15.93
+
+- Publish the exact CI-qualified tracked-source bundle with pinned submodule contents.
+- Remove commit-wording controls, nondeterministic working-tree copies and completed one-shot workflows.
+- Compare draft and public bytes and repair the cross-project Mercedes evidence link.
+
 ## 0.15.92 - 2026-10-16
 
 - Run the strict Windows C11 build and complete test suite on the managed Windows 11 ARM64 image after the self-hosted runner refused to start every test executable. Configure ARM64 explicitly and retain the existing Linux, macOS, sanitizer and embedded checks.

@@ -25,3 +25,7 @@ Regression coverage must ensure that adding a codec, DID, module or transport ca
 ## Release criterion
 
 The exact source/dependency tree intended for release must pass the required CI gates. Release notes and documentation must reflect the evidence actually held for that revision.
+
+## Source distribution and publication
+
+VERSION owns release intent. The Linux lane constructs the source ZIP from tracked Git objects, recursively follows exact submodule gitlinks, excludes untracked state, and compares repeat builds. The full CI gate qualifies portable, native-provider, embedded and sanitizer boundaries. Publication downloads that exact run's sealed artifact and compares remote bytes before and after draft promotion; it performs no compilation. Historical one-shot cancellation and branch-pruning workflows are retired.

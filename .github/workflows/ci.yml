@@ -61,35 +61,20 @@ jobs:
           echo "$root/usr/bin" >> "$GITHUB_PATH"
           echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH" >> "$GITHUB_ENV"
 
-      - name: Enforce main-only automatic release policy
+      - name: Verify release ownership
         shell: bash
         run: |
           set -euo pipefail
           release=.github/workflows/release.yml
-          test -f "$release"
-          test ! -e .github/workflows/auto-release.yml
-          grep -Fq '  workflow_run:' "$release"
-          grep -Fq 'workflows: ["LINK CI"]' "$release"
-          grep -Fq "startsWith(github.event.workflow_run.head_commit.message, 'Release ')" "$release"
-          grep -Fq 'github.event.workflow_run.head_branch == '\''main'\''' "$release"
-          grep -Fq 'published releases are immutable' "$release"
-          grep -Fq 'gh release create "$TAG"' "$release"
-          grep -Fq -- '--target "$head_commit" --draft' "$release"
-          grep -Fq 'gh release upload "$TAG"' "$release"
-          grep -Fq 'gh release edit "$TAG"' "$release"
-          grep -Fq -- '--draft=false' "$release"
-          if grep -Fq 'git push origin "$TAG"' "$release"; then
-            echo "LINK must not expose an immutable tag before every asset is verified." >&2
+          grep -Fq 'workflow_run:' "$release"
+          grep -Fq 'run-id: ${{ github.event.workflow_run.id }}' "$release"
+          grep -Fq 'actions/download-artifact@' "$release"
+          if grep -Eq 'head_commit.message|cmake --build|ctest ' "$release"; then
+            echo "Publication must consume qualified artifacts without commit-prose controls or a second build graph." >&2
             exit 1
           fi
-          if grep -Eq '^  (pull_request|merge_group|schedule):' .github/workflows/ci.yml; then
-            echo "LINK CI must run from main only." >&2
-            exit 1
-          fi
-          if grep -Eq '^  workflow_dispatch:' "$release"; then
-            echo "LINK release publication must not require manual approval." >&2
-            exit 1
-          fi
+          test ! -e .github/workflows/prune-audited-branch.yml
+          test ! -e .github/workflows/cancel-stale-runs.yml
 
       - name: Keep Release tests executable
         shell: bash
@@ -279,6 +264,35 @@ jobs:
           if (-not (Test-Path platform/windows/link-discover.c)) { throw 'shared scanner backend is missing' }
           if (-not (Test-Path platform/windows/link-discover-ui.c)) { throw 'shared scanner UI shell is missing' }
           Write-Host "LINK scanner: $($link.FullName)"
+
+      - name: Seal exact tracked source with pinned dependencies
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(tr -d '\r\n' < VERSION)
+          mkdir -p release
+          touch .archive-should-not-ship
+          trap 'rm -f .archive-should-not-ship' EXIT
+          python3 scripts/archive-source.py "release/LINK-$version-source.zip"
+          python3 scripts/archive-source.py "$RUNNER_TEMP/link-source-again.zip"
+          cmp "release/LINK-$version-source.zip" "$RUNNER_TEMP/link-source-again.zip"
+          python3 - "$version" <<'PY'
+          import sys, zipfile
+          from pathlib import Path
+          with zipfile.ZipFile("release/LINK-" + sys.argv[1] + "-source.zip") as archive:
+              assert not any(".archive-should-not-ship" in name for name in archive.namelist())
+              assert archive.read("LINK-" + sys.argv[1] + "/src/infiltratr-common/VERSION") == Path("src/infiltratr-common/VERSION").read_bytes()
+          PY
+          printf '%s\n' "$GITHUB_SHA" > release/SOURCE_COMMIT
+          (cd release && sha256sum *.zip SOURCE_COMMIT > SHA256SUMS.txt)
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: runner.os == 'Linux'
+        with:
+          name: link-source-${{ github.sha }}
+          path: release/*
+          if-no-files-found: error
+          retention-days: 14
 
   linux-native-adapters:
     name: Linux / native adapter providers
