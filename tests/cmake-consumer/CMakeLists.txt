@@ -6,4 +6,4 @@ find_package(LINK 0.12 CONFIG REQUIRED)
 
 add_executable(link-package-consumer main.c)
 target_compile_features(link-package-consumer PRIVATE c_std_11)
-target_link_libraries(link-package-consumer PRIVATE LINK::Core)
+target_link_libraries(link-package-consumer PRIVATE Link::Core)

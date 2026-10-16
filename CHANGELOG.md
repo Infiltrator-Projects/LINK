@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.15.96 - 2026-10-17
+
+- Use canonical alpha product and package identities without migration aliases.
+
 ## 0.15.93
 
 - Publish the exact CI-qualified tracked-source bundle with pinned submodule contents.
@@ -13,7 +17,7 @@
 
 ## 0.15.91 - 2026-10-03
 
-- Advance the canonical nested Infiltratr Common dependency from 1.19.35 to 1.19.38, including the latest portable-source, localisation, graphics and CI hardening fixes.
+- Advance the canonical nested Libraries dependency from 1.19.35 to 1.19.38, including the latest portable-source, localisation, graphics and CI hardening fixes.
 - Keep the dependency graph single-rooted: LINK remains the sole owner of the Common pin consumed by MBLINK and the other product faces.
 
 ## 0.15.90
@@ -184,7 +188,7 @@
 
 ## 0.15.61 — 2026-09-23
 
-- Advance the exact nested Infiltratr Common dependency from 1.19.23 to 1.19.24 at `748e089ae175329471d4cf375522c44081371bd5`.
+- Advance the exact nested Libraries dependency from 1.19.23 to 1.19.24 at `748e089ae175329471d4cf375522c44081371bd5`.
 - Inherit Common's API-compatible graphics hardening for clipped signed coordinates, alias-safe in-place surface operations and overflow-safe nearest-neighbour scaling without changing LINK's diagnostic or transport contracts.
 - Keep LINK as the sole Common authority for manufacturer products; downstream products continue to pin an exact released LINK revision rather than selecting Common independently.
 
@@ -238,7 +242,7 @@
 
 ## 0.15.54 — 2026-09-22
 
-- Pin LINK to Infiltratr Common 1.19.23 at a9cf2957cffe, preserving the fully qualified 0.15.53 DTC lifecycle and STM32 fixes on the newest shared foundation.
+- Pin LINK to Libraries 1.19.23 at a9cf2957cffe, preserving the fully qualified 0.15.53 DTC lifecycle and STM32 fixes on the newest shared foundation.
 - No LINK protocol semantics are changed by this release; it is the canonical dependency-qualified head for downstream vehicle products.
 
 ## 0.15.53 — 2026-09-22
@@ -266,7 +270,7 @@
 
 ## 0.15.50 — 2026-09-22
 
-- Advance the exact nested Infiltratr Common dependency to 1.19.22 / `302c44eb7436803dee020667453a9a0681da8bbf` so every LINK consumer inherits the current bounded-text and durable-POSIX fixes from one tested dependency chain.
+- Advance the exact nested Libraries dependency to 1.19.22 / `302c44eb7436803dee020667453a9a0681da8bbf` so every LINK consumer inherits the current bounded-text and durable-POSIX fixes from one tested dependency chain.
 - Keep LINK as the sole Common authority for MBLINK, JAGLINK, BMWLINK, AUDILINK and FORDLINK; product repositories continue to pin LINK rather than selecting an independent Common revision.
 
 ## 0.15.49 — 2026-09-22
@@ -331,7 +335,7 @@
 
 ## 0.15.40 — 2026-09-21
 
-- Repair the Apple portable-core amalgamation exposed by the suite-wide About rollout: include the shared selection engine now required by LINK::Core.
+- Repair the Apple portable-core amalgamation exposed by the suite-wide About rollout: include the shared selection engine now required by Link::Core.
 - Keep the Apple bridge validator and actual compiled source topology in exact agreement so product faces can consume the current LINK revision without copying core source lists.
 - Preserve the 0.15.39 suite-standard About contract unchanged.
 
@@ -385,7 +389,7 @@
 
 ## 0.15.33 — 2026-09-21
 
-- Advanced LINK from Infiltratr Common 1.19.10 to 1.19.20 and pinned the exact released Common commit.
+- Advanced LINK from Libraries 1.19.10 to 1.19.20 and pinned the exact released Common commit.
 - Removed LINK-local ASCII case-folding and whitespace helpers now owned by Common, keeping protocol and adapter matching locale-independent.
 - Replaced the Windows Discover J2534 loader's direct LoadLibrary/GetProcAddress plumbing with Common's UTF-8-aware dynamic-library boundary and atomic symbol binding.
 - Reused Common's monotonic-clock adapter and saturating deadline arithmetic in the native Linux OpenPort provider.
@@ -405,7 +409,7 @@
 
 ## 0.15.30 — 2026-09-20
 
-- Advanced the exact nested Infiltratr Common dependency to 1.19.10.
+- Advanced the exact nested Libraries dependency to 1.19.10.
 - Preserved LINK's protocol, transport and presentation contracts while exposing Common 1.19.10's expanded product-neutral Night/Day design palette transitively to LINK-based product faces.
 - Kept automotive semantics in LINK and generic design ownership in Common; no duplicate theme wrapper or second palette source was introduced.
 
@@ -417,7 +421,7 @@
 
 ## 0.15.28 — 2026-09-19
 
-- Advanced the exact Infiltratr Common dependency to 1.19.8, retaining LINK's shared formatting APIs while inheriting Common's consolidated parsing, ASCII, checked-size and POSIX numeric mechanics.
+- Advanced the exact Libraries dependency to 1.19.8, retaining LINK's shared formatting APIs while inheriting Common's consolidated parsing, ASCII, checked-size and POSIX numeric mechanics.
 
 ## 0.15.27 — 2026-09-19
 
@@ -426,7 +430,7 @@
 
 ## 0.15.26 — 2026-09-19
 
-- Upgraded the exact nested Infiltratr Common dependency to 1.19.7.
+- Upgraded the exact nested Libraries dependency to 1.19.7.
 - Reused Common's deterministic fixed-point and CSV-field encoders in shared telemetry output.
 - Added shared preference-aware OBD-II value formatting so product faces no longer duplicate unit/precision policy.
 - Added a bounded decoded-PID summary formatter for product-neutral standard-data presentation.
@@ -434,7 +438,7 @@
 
 ## 0.15.25 — 2026-09-19
 
-- Upgraded the exact nested Infiltratr Common dependency to 1.19.3.
+- Upgraded the exact nested Libraries dependency to 1.19.3.
 - Added a protocol-neutral, vehicle-scoped parameter selection model so product faces can keep explicit choices isolated by vehicle identity.
 - Generalised bounded session traces from OBD-only PID identity to LinkParameterKey while retaining the standard OBD compatibility API.
 - Expanded the graph capacity to the complete 256-entry standard PID space and added safe runtime reconfiguration of the selected graph set.

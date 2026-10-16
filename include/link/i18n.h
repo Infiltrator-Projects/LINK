@@ -5,7 +5,7 @@
  *
  * LINK owns reusable automotive and shared-shell strings. Product repositories
  * retain only manufacturer-specific catalogues and presentation. The catalogue
- * engine itself is supplied by Infiltratr Common.
+ * engine itself is supplied by Libraries.
  */
 #ifndef LINK_I18N_H
 #define LINK_I18N_H

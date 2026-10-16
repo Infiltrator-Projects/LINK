@@ -10,7 +10,7 @@ string(STRIP "${LINK_PROJECT_VERSION}" LINK_PROJECT_VERSION)
 if(NOT LINK_PROJECT_VERSION MATCHES "^[0-9]+\.[0-9]+\.[0-9]+$")
     message(FATAL_ERROR "VERSION must contain a semantic major.minor.patch version.")
 endif()
-project(LINK VERSION "${LINK_PROJECT_VERSION}" LANGUAGES C)
+project(Link VERSION "${LINK_PROJECT_VERSION}" LANGUAGES C)
 
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/include/link/version.h" LINK_PUBLIC_VERSION_HEADER)
 string(REGEX MATCH
@@ -61,8 +61,8 @@ option(LINK_ENABLE_INSTALL
     "Install Link headers, library and CMake package when Link is top-level"
     ${PROJECT_IS_TOP_LEVEL})
 
-set(LINK_COMMON_VERSION "1.19.38")
-set(LINK_COMMON_COMMIT "7070c5812b50821fd7580101cb2289a3184f6b2c")
+set(LINK_COMMON_VERSION "1.19.46")
+set(LINK_COMMON_COMMIT "fc2c72cb038a8e4c1e0bc62145adf533fbfd7923")
 set(LINK_COMMON_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/infiltratr-common")
 
 if(NOT TARGET InfiltratrCommon::Portable)
@@ -148,7 +148,7 @@ add_library(link-core STATIC
     src/discover/evidence.c
     src/discover/research.c
     src/discover/ecu_probe.c)
-add_library(LINK::Core ALIAS link-core)
+add_library(Link::Core ALIAS link-core)
 set_target_properties(link-core PROPERTIES EXPORT_NAME Core)
 target_include_directories(link-core PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -236,7 +236,7 @@ function(link_enable_linux_gtk_shell target)
             "link_enable_linux_gtk_shell requires the full Libraries platform target.")
     endif()
     target_link_libraries(${target} PRIVATE
-        LINK::Core
+        Link::Core
         InfiltratrCommon::Common
         "${LINK_BLUEZ_LIBRARY}"
         PkgConfig::LINK_LIBUSB)
@@ -320,7 +320,7 @@ function(link_add_windows_discover target)
             "link_add_windows_discover requires the full Libraries platform target.")
     endif()
     target_link_libraries(${target} PRIVATE
-        LINK::Core InfiltratrCommon::Common
+        Link::Core InfiltratrCommon::Common
         comdlg32 advapi32 shell32 comctl32)
     target_compile_definitions(${target} PRIVATE
         _CRT_SECURE_NO_WARNINGS
@@ -442,7 +442,7 @@ endif()
 
 function(link_add_test target source test_name)
     add_executable(${target} ${source})
-    target_link_libraries(${target} PRIVATE LINK::Core)
+    target_link_libraries(${target} PRIVATE Link::Core)
     if(MSVC)
         target_compile_options(${target} PRIVATE /W4 /WX /utf-8)
     else()
@@ -471,7 +471,7 @@ if(BUILD_TESTING AND PROJECT_IS_TOP_LEVEL)
     link_add_test(link-test-isotp tests/test_isotp.c link-isotp)
     link_add_test(link-test-uds-bootloader tests/test_uds_bootloader.c link-uds-bootloader)
     add_executable(link-isotp-vector tools/link-isotp-vector.c)
-    target_link_libraries(link-isotp-vector PRIVATE LINK::Core)
+    target_link_libraries(link-isotp-vector PRIVATE Link::Core)
     if(MSVC)
         target_compile_options(link-isotp-vector PRIVATE /W4 /WX /utf-8)
     else()
@@ -483,7 +483,7 @@ if(BUILD_TESTING AND PROJECT_IS_TOP_LEVEL)
         platform/stm32/link-stm32-uds.c)
     target_include_directories(link-test-stm32 PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/platform/stm32")
-    target_link_libraries(link-test-stm32 PRIVATE LINK::Core)
+    target_link_libraries(link-test-stm32 PRIVATE Link::Core)
     if(MSVC)
         target_compile_options(link-test-stm32 PRIVATE /W4 /WX /utf-8)
     else()
@@ -501,7 +501,7 @@ if(BUILD_TESTING AND PROJECT_IS_TOP_LEVEL)
         platform/stm32/link-stm32-uds-server.c)
     target_include_directories(link-test-stm32-uds-server PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/platform/stm32")
-    target_link_libraries(link-test-stm32-uds-server PRIVATE LINK::Core)
+    target_link_libraries(link-test-stm32-uds-server PRIVATE Link::Core)
     if(MSVC)
         target_compile_options(link-test-stm32-uds-server PRIVATE /W4 /WX /utf-8)
     else()
@@ -523,7 +523,7 @@ if(BUILD_TESTING AND PROJECT_IS_TOP_LEVEL)
         "${CMAKE_CURRENT_SOURCE_DIR}/tests/stm32c092_hal_stub"
         "${CMAKE_CURRENT_SOURCE_DIR}/platform/stm32"
         "${CMAKE_CURRENT_SOURCE_DIR}/examples/stm32c092")
-    target_link_libraries(link-test-stm32c092-hal PRIVATE LINK::Core)
+    target_link_libraries(link-test-stm32c092-hal PRIVATE Link::Core)
     if(MSVC)
         target_compile_options(link-test-stm32c092-hal PRIVATE /W4 /WX /utf-8)
     else()
@@ -545,7 +545,7 @@ if(BUILD_TESTING AND PROJECT_IS_TOP_LEVEL)
         "${CMAKE_CURRENT_SOURCE_DIR}/tests/stm32_bxcan_hal_stub"
         "${CMAKE_CURRENT_SOURCE_DIR}/platform/stm32"
         "${CMAKE_CURRENT_SOURCE_DIR}/examples/stm32-bxcan")
-    target_link_libraries(link-test-stm32-bxcan-hal PRIVATE LINK::Core)
+    target_link_libraries(link-test-stm32-bxcan-hal PRIVATE Link::Core)
     if(MSVC)
         target_compile_options(link-test-stm32-bxcan-hal PRIVATE /W4 /WX /utf-8)
     else()
@@ -558,7 +558,7 @@ if(BUILD_TESTING AND PROJECT_IS_TOP_LEVEL)
     add_test(NAME link-stm32-bxcan-hal COMMAND link-test-stm32-bxcan-hal)
 
     add_executable(link-test-flash-journal tests/test_flash_journal.c)
-    target_link_libraries(link-test-flash-journal PRIVATE LINK::Core)
+    target_link_libraries(link-test-flash-journal PRIVATE Link::Core)
     if(MSVC)
         target_compile_options(link-test-flash-journal PRIVATE /W4 /WX /utf-8)
     else()
@@ -571,7 +571,7 @@ if(BUILD_TESTING AND PROJECT_IS_TOP_LEVEL)
         examples/stm32-bxcan/link-stm32f103-uds-ecu.c)
     target_include_directories(link-test-stm32f103-uds-ecu PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/examples/stm32-bxcan")
-    target_link_libraries(link-test-stm32f103-uds-ecu PRIVATE LINK::Core)
+    target_link_libraries(link-test-stm32f103-uds-ecu PRIVATE Link::Core)
     if(MSVC)
         target_compile_options(link-test-stm32f103-uds-ecu PRIVATE /W4 /WX /utf-8)
     else()
@@ -625,16 +625,16 @@ if(BUILD_TESTING AND PROJECT_IS_TOP_LEVEL)
 endif()
 
 if(LINK_ENABLE_INSTALL)
-    install(TARGETS link-core EXPORT LINKTargets ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+    install(TARGETS link-core EXPORT LinkTargets ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
         LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}" RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
     install(DIRECTORY include/link DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
-    install(EXPORT LINKTargets FILE LINKTargets.cmake NAMESPACE LINK:: DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/LINK")
-    configure_package_config_file(cmake/LINKConfig.cmake.in "${CMAKE_CURRENT_BINARY_DIR}/LINKConfig.cmake"
-        INSTALL_DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/LINK")
-    write_basic_package_version_file("${CMAKE_CURRENT_BINARY_DIR}/LINKConfigVersion.cmake"
+    install(EXPORT LinkTargets FILE LinkTargets.cmake NAMESPACE Link:: DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/Link")
+    configure_package_config_file(cmake/LinkConfig.cmake.in "${CMAKE_CURRENT_BINARY_DIR}/LinkConfig.cmake"
+        INSTALL_DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/Link")
+    write_basic_package_version_file("${CMAKE_CURRENT_BINARY_DIR}/LinkConfigVersion.cmake"
         VERSION "${PROJECT_VERSION}" COMPATIBILITY SameMajorVersion)
-    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/LINKConfig.cmake" "${CMAKE_CURRENT_BINARY_DIR}/LINKConfigVersion.cmake"
-        DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/LINK")
+    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/LinkConfig.cmake" "${CMAKE_CURRENT_BINARY_DIR}/LinkConfigVersion.cmake"
+        DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/Link")
 endif()
 
 if(NOT PROJECT_IS_TOP_LEVEL AND EXISTS "${CMAKE_SOURCE_DIR}/app/ios")

@@ -13,7 +13,7 @@
 
 /*
  * Product faces compile the shared telemetry implementation either through
- * LINK::Core or directly into their Apple target.  Normalize the product
+ * Link::Core or directly into their Apple target.  Normalize the product
  * build identity here without teaching LINK any product name. A product may
  * define the neutral LINK_TELEMETRY_PRODUCT_* values in its own build.
  */
