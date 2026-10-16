@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-name: LINK CI
+name: Link CI
 
 on:
   push:
@@ -83,7 +83,7 @@ jobs:
           if grep -REn --include='*.c' --include='*.h' \
               -e '#[[:space:]]*include[[:space:]]*<assert\.h>' \
               -e '(^|[^[:alnum:]_])assert[[:space:]]*\(' tests; then
-            echo "LINK tests must not depend on assert(); Release builds define NDEBUG." >&2
+            echo "Link tests must not depend on assert(); Release builds define NDEBUG." >&2
             exit 1
           fi
 
@@ -144,7 +144,7 @@ jobs:
             tests/test_mercedes_me_whisper.c \
             docs/MERCEDES-ME-DATA-IDS.md; do
             if [[ -e "$path" ]]; then
-              echo "Manufacturer-specific Mercedes me semantics must live in MBLINK, not LINK: $path" >&2
+              echo "Manufacturer-specific Mercedes me semantics must live in MBLink, not Link: $path" >&2
               exit 1
             fi
           done
@@ -175,7 +175,7 @@ jobs:
           grep -Fq '@implementation LinkProductDiagnosticsController' platform/apple/LinkDiagnosticsController.m
           grep -Fq 'bool use_client_side_titlebar;' platform/linux/link-gtk-shell.h
           if grep -Fq 'adapter_combo_width' platform/linux/link-gtk-shell.h; then
-            echo 'Adapter-selector geometry must be LINK-owned, not product-configurable.' >&2
+            echo 'Adapter-selector geometry must be Link-owned, not product-configurable.' >&2
             exit 1
           fi
           grep -Fq 'gtk_widget_set_hexpand(shell->device_combo, TRUE);' platform/linux/link-gtk-shell.c
@@ -194,7 +194,7 @@ jobs:
           grep -Fq '@property(nonatomic, copy, readonly) NSString *linkVersionText;' platform/apple/LinkDiagnosticsController.h
           grep -Fq 'return @LINK_VERSION_STRING;' platform/apple/LinkDiagnosticsController.m
           grep -Fq 'structuredDisplayValueForPID' platform/apple/LinkDiagnosticsController.m
-          if grep -Eqi 'Mercedes|Jaguar|MBLINK|JAGLINK' \
+          if grep -Eqi 'Mercedes|Jaguar|MBLink|JAGLink' \
               platform/linux/link-gtk-i18n.c \
               platform/windows/link-discover-i18n.c \
               src/core/telemetry.c; then
@@ -260,10 +260,10 @@ jobs:
         shell: pwsh
         run: |
           $link = Get-ChildItem -Path build -Recurse -Filter link-discover.exe | Select-Object -First 1
-          if (-not $link) { throw 'link-discover.exe was not produced by LINK' }
+          if (-not $link) { throw 'link-discover.exe was not produced by Link' }
           if (-not (Test-Path platform/windows/link-discover.c)) { throw 'shared scanner backend is missing' }
           if (-not (Test-Path platform/windows/link-discover-ui.c)) { throw 'shared scanner UI shell is missing' }
-          Write-Host "LINK scanner: $($link.FullName)"
+          Write-Host "Link scanner: $($link.FullName)"
 
       - name: Seal exact tracked source with pinned dependencies
         if: runner.os == 'Linux'
@@ -274,15 +274,15 @@ jobs:
           mkdir -p release
           touch .archive-should-not-ship
           trap 'rm -f .archive-should-not-ship' EXIT
-          python3 scripts/archive-source.py "release/LINK-$version-source.zip"
+          python3 scripts/archive-source.py "release/Link-$version-source.zip"
           python3 scripts/archive-source.py "$RUNNER_TEMP/link-source-again.zip"
-          cmp "release/LINK-$version-source.zip" "$RUNNER_TEMP/link-source-again.zip"
+          cmp "release/Link-$version-source.zip" "$RUNNER_TEMP/link-source-again.zip"
           python3 - "$version" <<'PY'
           import sys, zipfile
           from pathlib import Path
-          with zipfile.ZipFile("release/LINK-" + sys.argv[1] + "-source.zip") as archive:
+          with zipfile.ZipFile("release/Link-" + sys.argv[1] + "-source.zip") as archive:
               assert not any(".archive-should-not-ship" in name for name in archive.namelist())
-              assert archive.read("LINK-" + sys.argv[1] + "/src/infiltratr-common/VERSION") == Path("src/infiltratr-common/VERSION").read_bytes()
+              assert archive.read("Link-" + sys.argv[1] + "/src/infiltratr-common/VERSION") == Path("src/infiltratr-common/VERSION").read_bytes()
           PY
           printf '%s\n' "$GITHUB_SHA" > release/SOURCE_COMMIT
           (cd release && sha256sum *.zip SOURCE_COMMIT > SHA256SUMS.txt)

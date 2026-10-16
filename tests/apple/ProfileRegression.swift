@@ -97,6 +97,6 @@ struct ProfileRegression {
         settingsReload.setSelectedMeasurementSystemKey("metric")
         settingsReload.setSelectedLanguageTag("en-AU")
 
-        print("LINK Apple simulation, profile-patch, polling-policy and settings regressions passed")
+        print("Link Apple simulation, profile-patch, polling-policy and settings regressions passed")
     }
 }

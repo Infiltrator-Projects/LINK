@@ -123,6 +123,6 @@ int main(void)
         CHECK(!link_discover_sweep_plan_is_valid(&unsafe));
     }
 
-    puts("LINK discover sweep plan tests passed");
+    puts("Link discover sweep plan tests passed");
     return 0;
 }

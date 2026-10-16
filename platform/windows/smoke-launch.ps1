@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 <#
 .SYNOPSIS
-    Launch-smoke-test a LINK-family Windows Discover executable.
+    Launch-smoke-test a Link-family Windows Discover executable.
 .DESCRIPTION
     A successful compile is not sufficient evidence that a distributable GUI
     can start on a clean Windows runner. This script starts the executable,

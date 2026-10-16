@@ -1,1 +1,1 @@
-Historical migration marker. Shared automotive code has been promoted into LINK; manufacturer-specific Mercedes and Jaguar code remains in its product repository. Do not place new implementation files here.
+Historical migration marker. Shared automotive code has been promoted into Link; manufacturer-specific Mercedes and Jaguar code remains in its product repository. Do not place new implementation files here.

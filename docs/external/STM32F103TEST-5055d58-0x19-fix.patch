@@ -1,5 +1,5 @@
 # Repair for leoembeddeder/STM32F103TEST @ 5055d58f4f6240488271d85cb177f71337e0cdeb
-# Generated from LINK issue #31 forensic review.
+# Generated from Link issue #31 forensic review.
 # Apply from repository root with: git apply --check <patch>; git apply <patch>
 #
 diff --git a/Library/DTC_LookupTable.h b/Library/DTC_LookupTable.h

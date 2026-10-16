@@ -3,7 +3,7 @@
 .SYNOPSIS
     Build a multi-resolution Windows ICO from the product's canonical PNG.
 .DESCRIPTION
-    LINK uses the canonical product PNG as the sole artwork source for Windows
+    Link uses the canonical product PNG as the sole artwork source for Windows
     Discover.  Windows Explorer and the Win32 shell are much more reliable when
     an executable carries the normal set of icon sizes rather than a single
     oversized PNG-compressed ICO entry, so this script derives standard icon

@@ -1,15 +1,15 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 
-# Contributing to LINK
+# Contributing to Link
 
-LINK owns product-neutral automotive diagnostics for the Infiltrator vehicle family. Changes here have a wide blast radius because MBLINK, JAGLINK, BMWLINK, AUDILINK and FORDLINK depend on this source.
+Link owns product-neutral automotive diagnostics for the Infiltrator vehicle family. Changes here have a wide blast radius because MBLink, JAGLink, BMWLink, AUDILink and FORDLink depend on this source.
 
 ## Ownership
 
 - Common owns broadly reusable non-automotive primitives.
-- LINK owns transports, adapter capability, standard OBD knowledge, ISO-TP, UDS/KWP/DoIP codecs, diagnostic sequencing, evidence, safety policy and common diagnostic application behaviour.
+- Link owns transports, adapter capability, standard OBD knowledge, ISO-TP, UDS/KWP/DoIP codecs, diagnostic sequencing, evidence, safety policy and common diagnostic application behaviour.
 - Product repositories own branding and genuinely manufacturer-specific knowledge.
-- Do not move manufacturer-specific assumptions into LINK merely because more than one vehicle happens to use a similar service.
+- Do not move manufacturer-specific assumptions into Link merely because more than one vehicle happens to use a similar service.
 
 ## Language and implementation
 
@@ -32,7 +32,7 @@ Keep strict warnings, sanitizer coverage and installed-package consumer tests he
 
 ## Standards and evidence
 
-Licensed standards that cannot be redistributed are recorded through provenance and verified public baselines rather than guessed current rows. Captures and external tool observations are evidence; LINK's reviewed source remains the product contract.
+Licensed standards that cannot be redistributed are recorded through provenance and verified public baselines rather than guessed current rows. Captures and external tool observations are evidence; Link's reviewed source remains the product contract.
 
 ## Documentation
 

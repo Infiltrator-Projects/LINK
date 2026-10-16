@@ -2,17 +2,17 @@
 
 # STM32F103TEST ReadDTCInformation forensic repair map
 
-This note records the LINK issue #31 review of the reporter's current external
+This note records the Link issue #31 review of the reporter's current external
 project:
 
 - repository: `leoembeddeder/STM32F103TEST`
 - audited commit: `5055d58f4f6240488271d85cb177f71337e0cdeb`
 - primary file: `Library/StoredDataTransmissionFunctionalUnit.c`
 
-LINK cannot push to that repository through the connected GitHub installation
+Link cannot push to that repository through the connected GitHub installation
 (`push: false`). This document therefore fixes the ambiguity in the issue by
 giving an exact migration target and by locking the malformed external response
-families against LINK's tested server implementation. The clean replacement
+families against Link's tested server implementation. The clean replacement
 path for STM32F103 is the complete ECU/server reference in
 `examples/stm32-bxcan/issue-32/`.
 
@@ -29,7 +29,7 @@ report. Its positive response must carry, after `59 17`, the requested
 MemorySelection echo, DTCStatusAvailabilityMask, then zero or more
 DTC(3)+status records.
 
-LINK's equivalent implementation is
+Link's equivalent implementation is
 `LINK_UDS_DTC_REPORT_USER_MEMORY_BY_STATUS_MASK` in
 `link_uds_server_dtc_handler()`.
 
@@ -60,7 +60,7 @@ followed by the extended-data record payload.
 
 At the audited commit both functions return SubfunctionNotSupported. They are
 part of the requested 2013-era surface and therefore cannot be described as
-implemented by that external project. LINK retains them as withdrawn-in-2020
+implemented by that external project. Link retains them as withdrawn-in-2020
 compatibility reports and tests both families.
 
 ### 0x14 reportDTCFaultDetectionCounter
@@ -85,7 +85,7 @@ The external implementation emits:
 
 and then severity / functional-group / DTC / status records.
 
-The fixed response envelope is incomplete. The LINK 2013 compatibility
+The fixed response envelope is incomplete. The Link 2013 compatibility
 contract requires after `59 42`:
 
 `functionalGroupIdentifier, DTCStatusAvailabilityMask,
@@ -103,7 +103,7 @@ meaningfully exercised.
 
 ## Tested replacement path
 
-LINK's `link_uds_server_dtc_handler()` has a single bounded implementation for
+Link's `link_uds_server_dtc_handler()` has a single bounded implementation for
 all 27 requested ReadDTCInformation report types:
 
 `0x01..0x19, 0x42, 0x55`.
@@ -121,21 +121,21 @@ nearly-duplicate functions.
 
 ## External-project completion condition
 
-LINK issue #31 can be closed only after one of these is true:
+Link issue #31 can be closed only after one of these is true:
 
 1. the external owner applies equivalent repairs/replaces the local 0x19 server
-   with LINK and provides a successful physical-board retest; or
+   with Link and provides a successful physical-board retest; or
 2. repository write permission is granted and the correction can be committed
    and qualified there.
 
-Until then LINK can prove the correct implementation and provide the migration,
+Until then Link can prove the correct implementation and provide the migration,
 but it cannot truthfully claim the independently owned repository or board is
 fixed.
 
 
 ## Prepared machine-applicable repair
 
-LINK now ships `STM32F103TEST-5055d58-0x19-fix.patch` beside this note. It is
+Link now ships `STM32F103TEST-5055d58-0x19-fix.patch` beside this note. It is
 generated against the exact audited external head `5055d58f4f6240488271d85cb177f71337e0cdeb` and repairs the
 external 0x19 implementation itself: 0x12/0x13 emissions reports, live 0x14
 fault-detection counters, honest empty 0x15/0x55 permanent-DTC reports when no

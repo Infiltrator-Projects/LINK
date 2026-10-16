@@ -10,7 +10,7 @@
 #include <string.h>
 
 #ifndef LINK_PRODUCT_NAME
-#define LINK_PRODUCT_NAME "LINK"
+#define LINK_PRODUCT_NAME "Link"
 #endif
 #ifndef LINK_PRODUCT_SLUG
 #define LINK_PRODUCT_SLUG "link"
@@ -28,7 +28,7 @@
 #define LINK_PRODUCT_SUBTITLE "Vehicle Diagnostics"
 #endif
 #ifndef LINK_PRODUCT_WEBSITE
-#define LINK_PRODUCT_WEBSITE "https://github.com/Infiltrator-Projects/LINK"
+#define LINK_PRODUCT_WEBSITE "https://github.com/Infiltrator-Projects/Link"
 #endif
 
 #define IDM_FILE_EXPORT 41001

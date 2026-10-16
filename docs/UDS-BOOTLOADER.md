@@ -1,11 +1,11 @@
 # UDS OTA / Bootloader Core
 
-LINK's bootloader core is the fail-closed orchestration layer for a production
+Link's bootloader core is the fail-closed orchestration layer for a production
 UDS programming implementation. It deliberately does **not** contain STM32 flash
 addresses, option-byte manipulation, OEM keys, certificate private keys or HSM
 secrets.
 
-The implementation follows the programming sequence captured in MBLINK issue
+The implementation follows the programming sequence captured in MBLink issue
 #56 and the referenced UDS flash-programming material:
 
 1. DiagnosticSessionControl 0x10/0x02 -> `enter_programming_session`.
@@ -29,13 +29,13 @@ The implementation follows the programming sequence captured in MBLINK issue
 
 ## A/B, anti-rollback and secure boot
 
-The backend selects the inactive slot. LINK never overwrites the running slot by
+The backend selects the inactive slot. Link never overwrites the running slot by
 itself. The monotonic version callback is read before download and committed only
 after the new image has actually booted successfully.
 
 Integrity, authenticity and secure-boot candidate validation are distinct hooks.
 An STM32F767 product can bind those hooks to its chosen hash/signature/HSM
-implementation without LINK knowing or exposing any OEM secret.
+implementation without Link knowing or exposing any OEM secret.
 
 ## Fail-closed defaults
 

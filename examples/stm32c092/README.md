@@ -2,19 +2,19 @@
 
 # STM32C092 FDCAN UDS example
 
-This is the LINK port for the STM32C092 project supplied in MBLINK issue #27. It deliberately ports LINK's own ISO-TP/UDS engine rather than importing the separate protocol stack bundled in the attachment.
+This is the Link port for the STM32C092 project supplied in MBLink issue #27. It deliberately ports Link's own ISO-TP/UDS engine rather than importing the separate protocol stack bundled in the attachment.
 
 The supplied project establishes the target: STM32C092RCTx, 48 MHz system/FDCAN clock, Classical CAN at 500 kbit/s, RX FIFO0 interrupts and `HAL_GetTick()`.
 
-The attachment itself demonstrates an ECU/server role: receive tester requests on `0x7E0/0x7DF` and reply on `0x7E8`. LINK's reference firmware deliberately implements the diagnostic-tester/client role needed to talk to a vehicle: transmit on `0x7E0`, receive the ECU response on `0x7E8`.
+The attachment itself demonstrates an ECU/server role: receive tester requests on `0x7E0/0x7DF` and reply on `0x7E8`. Link's reference firmware deliberately implements the diagnostic-tester/client role needed to talk to a vehicle: transmit on `0x7E0`, receive the ECU response on `0x7E8`.
 
-That direction is not interchangeable. In particular, the KEIL project attached to MBLINK issue #38 still contains the old server-role macros `RX_ID = 0x7E0` and `TX_ID = 0x7E8`, but its `CAN_Init()` call is commented out. Once `link_stm32c092_example_init*()` is used, LINK owns the filter and the default tester configuration accepts **only ECU responses on 0x7E8**. Sending a tester request on `0x7E0` *to the STM32* will therefore be rejected by the FDCAN hardware filter and will not invoke `HAL_FDCAN_RxFifo0Callback()`. That is expected for tester/client firmware, not an RX-IRQ failure.
+That direction is not interchangeable. In particular, the KEIL project attached to MBLink issue #38 still contains the old server-role macros `RX_ID = 0x7E0` and `TX_ID = 0x7E8`, but its `CAN_Init()` call is commented out. Once `link_stm32c092_example_init*()` is used, Link owns the filter and the default tester configuration accepts **only ECU responses on 0x7E8**. Sending a tester request on `0x7E0` *to the STM32* will therefore be rejected by the FDCAN hardware filter and will not invoke `HAL_FDCAN_RxFifo0Callback()`. That is expected for tester/client firmware, not an RX-IRQ failure.
 
 If a PC/CAN tool is used to test this firmware, configure that tool as the ECU peer: observe the STM32 request on `0x7E0` and transmit the corresponding UDS response on `0x7E8`. If the STM32 itself must behave as an ECU/server, use a server firmware/stack; merely swapping the two CAN IDs in this client does not turn a UDS client into a UDS server.
 
 ## Hardware project and licensing
 
-Keep the Cube-generated `Drivers/`, `Inc/`, `Src/`, `.ioc`, startup file and Keil project. Do not import the attachment's `library/src`, `library/crypto` or old `stm32c092/uds_*` protocol implementation. Those files identify themselves with a separate `LicenseRef-STM32-UDS-Research-Education-Commercial-1.0` marker while the attachment does not contain that referenced licence text; LINK already provides the corresponding GPL-3.0-or-later protocol implementation.
+Keep the Cube-generated `Drivers/`, `Inc/`, `Src/`, `.ioc`, startup file and Keil project. Do not import the attachment's `library/src`, `library/crypto` or old `stm32c092/uds_*` protocol implementation. Those files identify themselves with a separate `LicenseRef-STM32-UDS-Research-Education-Commercial-1.0` marker while the attachment does not contain that referenced licence text; Link already provides the corresponding GPL-3.0-or-later protocol implementation.
 
 ## Nominal CAN timing
 
@@ -34,27 +34,27 @@ That is 16 time quanta per bit with an 87.5% sample point. Confirm the generated
 ## Sources to add
 
 ```text
-LINK/src/core/isotp.c
-LINK/src/uds/uds.c
-LINK/src/uds/uds_services.c
-LINK/platform/stm32/link-stm32-can.c
-LINK/platform/stm32/link-stm32-uds.c
-LINK/examples/stm32c092/link-stm32c092-hal.c
-LINK/examples/stm32c092/link-stm32c092-example.c
-LINK/src/infiltratr-common/src/core.c
+Link/src/core/isotp.c
+Link/src/uds/uds.c
+Link/src/uds/uds_services.c
+Link/platform/stm32/link-stm32-can.c
+Link/platform/stm32/link-stm32-uds.c
+Link/examples/stm32c092/link-stm32c092-hal.c
+Link/examples/stm32c092/link-stm32c092-example.c
+Link/src/infiltratr-common/src/core.c
 ```
 
 Include paths:
 
 ```text
-LINK/include
-LINK/platform/stm32
-LINK/examples/stm32c092
-LINK/src/infiltratr-common/include
+Link/include
+Link/platform/stm32
+Link/examples/stm32c092
+Link/src/infiltratr-common/include
 <your Cube project>/Inc
 ```
 
-Normal LINK/MBLINK/JAGLINK product builds do not compile STM32Cube HAL.
+Normal Link/MBLink/JAGLink product builds do not compile STM32Cube HAL.
 
 ## main.c integration
 
@@ -95,7 +95,7 @@ void HAL_FDCAN_TxEventFifoCallback(
 
 RX FIFO0 is drained into an eight-frame bounded queue and every frame keeps the interrupt-time `HAL_GetTick()` value. Main-loop latency therefore does not turn an on-time queued response into a false ISO-TP/UDS timeout.
 
-TX uses `FDCAN_STORE_TX_EVENTS` plus a unique message marker. LINK does not advance ISO-TP separation/flow-control timing or start the UDS P2 timer merely because `HAL_FDCAN_AddMessageToTxFifoQ()` accepted a frame; it waits for the matching Tx Event FIFO record. A lost Tx-event FIFO element becomes an explicit transport failure, and a hardware TX that never completes is bounded by the configured flow-control timeout.
+TX uses `FDCAN_STORE_TX_EVENTS` plus a unique message marker. Link does not advance ISO-TP separation/flow-control timing or start the UDS P2 timer merely because `HAL_FDCAN_AddMessageToTxFifoQ()` accepted a frame; it waits for the matching Tx Event FIFO record. A lost Tx-event FIFO element becomes an explicit transport failure, and a hardware TX that never completes is bounded by the configured flow-control timeout.
 
 ## Explicit tester configuration
 
@@ -118,7 +118,7 @@ With `read_vin_on_init = false`, the state becomes `LINK_STM32C092_EXAMPLE_READY
 
 ## Example operation
 
-At startup the example issues the read-only request `22 F1 90` for VIN. LINK performs ISO-TP reassembly and flow control. On success:
+At startup the example issues the read-only request `22 F1 90` for VIN. Link performs ISO-TP reassembly and flow control. On success:
 
 ```c
 if (link_stm32c092_example_state() == LINK_STM32C092_EXAMPLE_VIN_READY) {
@@ -130,7 +130,7 @@ Negative responses are retained through `link_stm32c092_example_negative_respons
 
 ### ReadDTCInformation hardware testing
 
-After the initial VIN transaction reaches `LINK_STM32C092_EXAMPLE_VIN_READY` (or returns a normal UDS negative response), or immediately from `LINK_STM32C092_EXAMPLE_READY` when VIN-at-startup is disabled, the same example can issue any of LINK's 27 supported `ReadDTCInformation (0x19)` report types. The caller supplies the parameters required by that report type; the example uses `link_uds_build_read_dtc_information_request()`, sends the request through the existing STM32 ISO-TP/UDS client, and validates a positive response with `link_uds_decode_read_dtc_information_response()`.
+After the initial VIN transaction reaches `LINK_STM32C092_EXAMPLE_VIN_READY` (or returns a normal UDS negative response), or immediately from `LINK_STM32C092_EXAMPLE_READY` when VIN-at-startup is disabled, the same example can issue any of Link's 27 supported `ReadDTCInformation (0x19)` report types. The caller supplies the parameters required by that report type; the example uses `link_uds_build_read_dtc_information_request()`, sends the request through the existing STM32 ISO-TP/UDS client, and validates a positive response with `link_uds_decode_read_dtc_information_response()`.
 
 For example, `reportDTCByStatusMask (0x02)`:
 
@@ -160,7 +160,7 @@ if (link_stm32c092_example_state() ==
 }
 ```
 
-The single entry point covers the complete catalogue: `0x01..0x19`, `0x42` and `0x55`. The `0x02` path also explicitly exercises `link_uds_decode_report_dtcs_by_status_mask_response()`, matching the decoder used by LINK's ECU-probe path, and exposes its parsed list through `link_stm32c092_example_dtc_list()`. Populate the request fields according to the catalogue's request shape:
+The single entry point covers the complete catalogue: `0x01..0x19`, `0x42` and `0x55`. The `0x02` path also explicitly exercises `link_uds_decode_report_dtcs_by_status_mask_response()`, matching the decoder used by Link's ECU-probe path, and exposes its parsed list through `link_stm32c092_example_dtc_list()`. Populate the request fields according to the catalogue's request shape:
 
 - status mask: `0x01`, `0x02`, `0x0F`, `0x11`, `0x12`, `0x13`;
 - no extra parameters: `0x03`, `0x0A..0x0E`, `0x14`, `0x15`;
@@ -173,27 +173,27 @@ The single entry point covers the complete catalogue: `0x01..0x19`, `0x42` and `
 - functional-group identifier plus status and severity masks: `0x42`;
 - functional-group identifier: `0x55`.
 
-Use ECU-appropriate DTC, record, memory-selection and functional-group values when a report type requires them. A standards-compliant negative response such as “subfunction not supported” or “request out of range” is a valid hardware observation and does not by itself mean the LINK integration failed. The legacy mirror/emissions report types retained for older ECUs are still available even though several were withdrawn from ISO 14229-1:2020.
+Use ECU-appropriate DTC, record, memory-selection and functional-group values when a report type requires them. A standards-compliant negative response such as “subfunction not supported” or “request out of range” is a valid hardware observation and does not by itself mean the Link integration failed. The legacy mirror/emissions report types retained for older ECUs are still available even though several were withdrawn from ISO 14229-1:2020.
 
 The test entry point intentionally requires a positive response (the suppress-positive-response bit must be clear) so that the returned PDU can be decoded and inspected.
 
-The example remains intentionally read-only. LINK's wider UDS catalogue is not automatically authorised by this firmware.
+The example remains intentionally read-only. Link's wider UDS catalogue is not automatically authorised by this firmware.
 
 ## Timing resolution and CAN FD
 
-The supplied project exposes `HAL_GetTick()` at 1 ms resolution. LINK extends the wrapping 32-bit clock to monotonic 64-bit microseconds and preserves the ISR tick for RX and TX-completion events. Sub-millisecond STmin values are therefore handled conservatively; they are never transmitted early.
+The supplied project exposes `HAL_GetTick()` at 1 ms resolution. Link extends the wrapping 32-bit clock to monotonic 64-bit microseconds and preserves the ISR tick for RX and TX-completion events. Sub-millisecond STmin values are therefore handled conservatively; they are never transmitted early.
 
 The HAL mapper understands canonical CAN-FD DLC sizes through 64 bytes, but the supplied project/example remains Classical CAN with bit-rate switching disabled. Enabling CAN FD requires a matching Cube FDCAN configuration change.
 
 
-## ECU/server role (MBLINK issue #38)
+## ECU/server role (MBLink issue #38)
 
-The original reference above remains a diagnostic tester/client. MBLINK issue
+The original reference above remains a diagnostic tester/client. MBLink issue
 #38 subsequently confirmed a second, distinct requirement: use the STM32C092
 as the UDS ECU/server so an external tester sends requests to `0x7E0` and the
 STM32 answers from `0x7E8`.
 
-LINK now provides that role separately rather than swapping IDs inside the
+Link now provides that role separately rather than swapping IDs inside the
 client:
 
 - shared dispatcher: `include/link/uds_server.h` / `src/uds/uds_server.c`;
@@ -206,7 +206,7 @@ client:
 
 In server mode the hardware filter accepts `0x7E0`. A tester request
 `02 10 01` on `0x7E0` produces `06 50 01 00 32 01 F4` on `0x7E8`.
-The server also binds the complete LINK `0x19 ReadDTCInformation` report
+The server also binds the complete Link `0x19 ReadDTCInformation` report
 catalogue and exposes callback registration for all 27 standard service IDs.
 
 
@@ -219,7 +219,7 @@ the configured 5-second S3 timeout, and implements `0x11 ECUReset` as a
 portable deferred reset request. The reusable server exposes the reset only
 after the positive `0x51` response has completed and 50 ms has elapsed; the
 Cube/KEIL `issue-38-server/Src-main.c` layer then executes
-`NVIC_SystemReset()`, keeping CMSIS hardware control out of portable LINK code.
+`NVIC_SystemReset()`, keeping CMSIS hardware control out of portable Link code.
 
 The STM32 transport regression also exercises the real two-DTC
 `19 02 FF` multi-frame response, including tester FlowControl and the final

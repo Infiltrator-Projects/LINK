@@ -1,6 +1,6 @@
 # Engineering Philosophy
 
-This repository follows the canonical [Infiltrator Engineering Philosophy](https://github.com/Infiltrator-Projects/Infiltrator-Libraries/blob/main/docs/PHILOSOPHY.md).
+This repository follows the canonical [Infiltrator Engineering Philosophy](https://github.com/Infiltrator-Projects/Libraries/blob/main/docs/PHILOSOPHY.md).
 
 The standard is Mercedes-Benz engineering excellence as an execution benchmark, not a branding claim or affiliation: technical depth, quality, reliability, trust, effortless operation, disciplined reduction, elegance and craftsmanship. The strongest justified solution wins regardless of age or fashion; complexity must earn its place; and simplicity must come from complete engineering rather than removed capability.
 

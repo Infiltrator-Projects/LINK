@@ -19,7 +19,7 @@ The relevant native classes in `libgdk.so` are:
 - `JniSessionMasterKeyProvider`
 - `AesCommandProcessor`
 
-The reconstruction below comes from their retained symbols, relocation/import relationships, constant sizes and Thumb call flow. The portable primitives already implemented in LINK remain clean-room interoperability code.
+The reconstruction below comes from their retained symbols, relocation/import relationships, constant sizes and Thumb call flow. The portable primitives already implemented in Link remain clean-room interoperability code.
 
 ## Two distinct login paths
 
@@ -37,7 +37,7 @@ The proved sequence is:
 
 This path does not construct an `AesCommandProcessor` and does not derive the encrypted-session key described below.
 
-LINK already implements and regression-tests the legacy seed builder, seed parser, challenge response and SetKey builder. The fixed adapter-authentication key remains an interoperability implementation detail in the clean-room source rather than documentation material.
+Link already implements and regression-tests the legacy seed builder, seed parser, challenge response and SetKey builder. The fixed adapter-authentication key remains an interoperability implementation detail in the clean-room source rather than documentation material.
 
 ## Secure `ConfigureSecureModeAction`
 
@@ -61,7 +61,7 @@ The secure path proves the previously unresolved direction and ordering of the t
 
 This resolves the earlier A/D ambiguity: the first random supplied to `SessionMasterKey::deriveSessionKey()` is the device/adapter random, and the second is the application random.
 
-The retired Android implementation generates its application random through a `System::getCurrentTimeMillis()` / `srand()` / `rand()` path. LINK intentionally does **not** reproduce that weak generator; callers must supply cryptographically strong random bytes.
+The retired Android implementation generates its application random through a `System::getCurrentTimeMillis()` / `srand()` / `rand()` path. Link intentionally does **not** reproduce that weak generator; callers must supply cryptographically strong random bytes.
 
 ## Where the Session Master Key comes from
 
@@ -95,7 +95,7 @@ Static reverse engineering of these shared objects alone cannot manufacture an a
 
 The native cache is per adapter ID and has explicit read/write/remove handling plus named cache-directory and filename constants. Its key-protection path first asks `System::getEncryptionPassword()` for encryption material and contains a fallback path when that value is absent. The cache also hashes/encodes password-derived material before use.
 
-This is enough to establish that an archived application-data directory may contain valuable interoperability evidence. It is **not** enough to claim that an SMK can be recovered without the corresponding application/cache data and protection context. LINK does not embed or document the native cache fallback secret.
+This is enough to establish that an archived application-data directory may contain valuable interoperability evidence. It is **not** enough to claim that an SMK can be recovered without the corresponding application/cache data and protection context. Link does not embed or document the native cache fallback secret.
 
 If an archived Mercedes me Adapter application-data/cache set becomes available, it should be treated as a separate forensic evidence source and validated against the adapter ID before any recovered SMK is considered usable.
 
@@ -123,7 +123,7 @@ High-value source-corroborated concepts include:
 
 Trip/derived logic also names trip average speed, trip-start time/mileage, fuel-volume statistics, acceleration/braking event counts and scoring concepts.
 
-### What this means for MBLINK
+### What this means for MBLink
 
 These names are a discovery roadmap, not decoded telemetry. They justify looking for the corresponding definitions in the Mercedes configuration corpus and prioritising matching vehicle evidence, especially for fuel flow/range, AdBlue, oil temperature, particle filter, maintenance data, tyre pressures and the accelerator-pedal/throttle distinction.
 
@@ -149,11 +149,11 @@ Public archive indexes independently identify the final package as `com.daimler.
 - a full universal APK containing `armeabi-v7a` and `arm64-v8a`, approximately 216 MB, with published SHA-256 `d3b2005d1f6273885f7b96972bb058c14c797d0bea8c81d764095c0dbbeccbaa`;
 - an arm64 XAPK distribution of approximately 96.8 MB.
 
-These archive fingerprints are acquisition provenance only. LINK does not vendor either package, and no configuration asset is treated as recovered until its bytes have actually been obtained and inspected. The package indexes are useful because they provide an exact artifact target for the remaining Whisper/configuration-corpus work rather than relying on an unspecified APK copy.
+These archive fingerprints are acquisition provenance only. Link does not vendor either package, and no configuration asset is treated as recovered until its bytes have actually been obtained and inspected. The package indexes are useful because they provide an exact artifact target for the remaining Whisper/configuration-corpus work rather than relying on an unspecified APK copy.
 
 ## Current interoperability status
 
-From the native binaries alone, LINK can now describe or independently implement the local portions of the authentication stack with much higher confidence:
+From the native binaries alone, Link can now describe or independently implement the local portions of the authentication stack with much higher confidence:
 
 - legacy GetSeed -> AES challenge response -> SetKey;
 - secure GetSeed carrying a 16-byte application random;

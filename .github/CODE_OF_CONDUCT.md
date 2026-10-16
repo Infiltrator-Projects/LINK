@@ -13,6 +13,6 @@ test results as verified is also unacceptable because automotive diagnostic
 work can affect real vehicles.
 
 This applies to issues, reviews, discussions, project documentation, and other
-spaces operated for LINK. Maintainers may remove inappropriate content or
+spaces operated for Link. Maintainers may remove inappropriate content or
 restrict participation proportionately. Report private conduct concerns to
 `infiltratr@yandex.com`.

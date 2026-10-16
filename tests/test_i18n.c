@@ -50,7 +50,7 @@ int main(void)
     passed &= check(strcmp(link_i18n_tr("nav.vehicle"), "Pojazd") == 0,
                     "Polish vehicle translation mismatch");
     passed &= check(strcmp(link_i18n_tr("connection.link_up"), "POŁĄCZ") == 0,
-                    "Polish LINK UP translation mismatch");
+                    "Polish Link UP translation mismatch");
     passed &= check(strcmp(link_i18n_tr("fuel.average"), "Średnie zużycie paliwa") == 0,
                     "Polish fuel-economy translation mismatch");
     passed &= check(strcmp(link_i18n_supported_locale(7U), "pl-PL") == 0,

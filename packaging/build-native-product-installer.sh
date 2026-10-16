@@ -45,10 +45,10 @@ values = {
 }
 for key, value in values.items():
     if key not in source:
-        raise SystemExit(f'LINK native installer template missing {key}')
+        raise SystemExit(f'Link native installer template missing {key}')
     source = source.replace(key, value)
 if '__LINK_NATIVE_' in source.replace('__LINK_NATIVE_PAYLOAD_BELOW__', ''):
-    raise SystemExit('Unresolved LINK native installer placeholder')
+    raise SystemExit('Unresolved Link native installer placeholder')
 Path(sys.argv[2]).write_text(source, encoding='utf-8')
 PY
 

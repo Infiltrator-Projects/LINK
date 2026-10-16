@@ -2,10 +2,10 @@
 
 # ReadDTCInformation conformance matrix
 
-This document is LINK's implementation map for ISO 14229 ReadDTCInformation
+This document is Link's implementation map for ISO 14229 ReadDTCInformation
 (`0x19`). It is not a substitute for the licensed standard. It keeps the
 product-neutral codec auditable: request bytes and fixed response envelopes are
-validated in LINK, while ECU-defined snapshot and extended-data lengths remain
+validated in Link, while ECU-defined snapshot and extended-data lengths remain
 opaque until a higher layer supplies evidence.
 
 The catalogue retains the requested 2013-era 27-report surface:
@@ -15,7 +15,7 @@ standard generation by the public catalogue.
 
 ## Matrix
 
-| Report | Request after SID/report | Fixed positive-response data after report echo | LINK handling | 2020 |
+| Report | Request after SID/report | Fixed positive-response data after report echo | Link handling | 2020 |
 | --- | --- | --- | --- | --- |
 | `01` | status mask | status availability, DTC format, 16-bit count | typed count metadata | current |
 | `02` | status mask | status availability, repeated DTC(3)+status | typed DTC/status | current |
@@ -47,11 +47,11 @@ standard generation by the public catalogue.
 
 ## Generic-versus-product boundary
 
-This matrix describes generic LINK codec capability. It does not prove that a
+This matrix describes generic Link codec capability. It does not prove that a
 specific ECU implements a report type. Product layers must establish target
 support independently from documentation or reproducible captures.
 
-Codec availability is also not transmission authority. LINK Discover remains
+Codec availability is also not transmission authority. Link Discover remains
 deny-by-default. ReadDTCInformation service `0x19` is deliberately permitted
 as a read-only diagnostic service; ClearDiagnosticInformation service `0x14`
 is blocked as DTC clearing; Authentication service `0x29` is blocked as a

@@ -12,7 +12,7 @@ for cmd in candump isotpsend isotprecv ip; do
         exit 2
     }
 done
-[[ -x "$VECTOR" ]] || { echo "LINK vector tool not executable: $VECTOR" >&2; exit 2; }
+[[ -x "$VECTOR" ]] || { echo "Link vector tool not executable: $VECTOR" >&2; exit 2; }
 ip link show "$IFACE" >/dev/null 2>&1 || {
     echo "$IFACE does not exist; create and bring up a vcan interface first" >&2
     exit 2
@@ -36,10 +36,10 @@ wait "$cap_pid" "$recv_pid" 2>/dev/null || true
 awk '$3 ~ /^123#/ { print $3 }' "$tmp/candump.log" >"$tmp/kernel.frames"
 
 if diff -u "$tmp/link.frames" "$tmp/kernel.frames"; then
-    echo "LINK ISO-TP framing matches Linux SocketCAN ISO-TP for this vector."
+    echo "Link ISO-TP framing matches Linux SocketCAN ISO-TP for this vector."
 else
     echo "ISO-TP differential mismatch." >&2
-    echo "LINK frames: $tmp/link.frames" >&2
+    echo "Link frames: $tmp/link.frames" >&2
     echo "Kernel capture: $tmp/kernel.frames" >&2
     exit 1
 fi

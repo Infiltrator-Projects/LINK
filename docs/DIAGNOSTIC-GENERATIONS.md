@@ -1,13 +1,13 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 
-# Diagnostic generations in LINK
+# Diagnostic generations in Link
 
-LINK supports a family of vehicle diagnostic generations rather than assuming
+Link supports a family of vehicle diagnostic generations rather than assuming
 that every vehicle is full OBD-II.
 
 ## Legacy / OBD-I-era
 
-Pre-OBD-II diagnostics are mainly manufacturer-specific. LINK owns the common
+Pre-OBD-II diagnostics are mainly manufacturer-specific. Link owns the common
 capability model, presentation and evidence rules. The manufacturer product owns
 the evidence-backed legacy protocol knowledge.
 
@@ -20,29 +20,29 @@ positively identified. Age, connector shape and brand are not enough.
 manufacturer-specific legacy diagnostics and the later standardized OBD-II/EOBD
 experience. It is not a universal SAE or ISO standard.
 
-LINK classifies a session as transitional only when both of these are observed:
+Link classifies a session as transitional only when both of these are observed:
 
 1. a valid standards-shaped OBD response; and
 2. a positively identified legacy diagnostic response supplied by the
    manufacturer layer.
 
 The 1999 AU Falcon is a project regression/example target for this category.
-FORDLINK supplies Ford-specific legacy knowledge; LINK supplies the common
+FORDLink supplies Ford-specific legacy knowledge; Link supplies the common
 classification and user interface.
 
 ## Standard OBD-II / EOBD
 
 When a standards-shaped OBD surface answers and no legacy surface has been
-positively identified, LINK presents the standard OBD-II/EOBD tier. This is a
+positively identified, Link presents the standard OBD-II/EOBD tier. This is a
 functional observation rather than a regulatory-conformance claim.
 
-The LINK-owned standard surface includes supported-PID discovery, live Mode 01
+The Link-owned standard surface includes supported-PID discovery, live Mode 01
 data, readiness, Mode 02 freeze-frame context, stored/pending/permanent DTCs,
 Mode 09 vehicle information, responder attribution and the OBDonUDS foundation.
 
 ## Ownership and presentation
 
-The diagnostic-generation model belongs to LINK, but diagnostic generation is
+The diagnostic-generation model belongs to Link, but diagnostic generation is
 not a top-level operator destination. OBD-II, OBDonUDS, UDS and legacy
 manufacturer protocols feed the shared task-oriented screens:
 
@@ -55,4 +55,4 @@ manufacturer protocols feed the shared task-oriented screens:
 - Log receives the chronological evidence trail.
 
 Manufacturer repositories own only manufacturer-specific protocol knowledge and
-capabilities layered into those LINK-owned tasks.
+capabilities layered into those Link-owned tasks.

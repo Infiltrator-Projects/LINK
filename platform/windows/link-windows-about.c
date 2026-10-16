@@ -336,7 +336,7 @@ void link_windows_show_about(HWND parent,
             content_utf8, content, INFILTRATR_ARRAY_LENGTH(content))) {
         (void)MessageBoxA(
             parent, "Unable to prepare About information.",
-            "LINK About", MB_OK | MB_ICONERROR);
+            "Link About", MB_OK | MB_ICONERROR);
         return;
     }
 

@@ -1,6 +1,6 @@
 # J1979/J1979-DA public semantic provenance
 
-LINK targets the current SAE standards revisions but does not redistribute the
+Link targets the current SAE standards revisions but does not redistribute the
 licensed SAE J1979 Digital Annex.
 
 Current targets:
@@ -28,12 +28,12 @@ The public semantic baseline is independently represented from:
 Rules:
 
 1. A current-standard target revision is never used as a claim that its licensed
-   semantic rows are compiled into LINK.
+   semantic rows are compiled into Link.
 2. An identifier may be classified as STANDARD when public change history proves
    assignment, while its semantic definition remains NULL if the licensed row is
    unavailable.
 3. A 2011-era hole that may have been assigned later is UNVERIFIED, not RESERVED.
-4. Unknown semantics remain raw. LINK does not guess names, lengths, units,
+4. Unknown semantics remain raw. Link does not guess names, lengths, units,
    scaling, limits or bit meanings.
 5. Importing a licensed current Digital Annex, if one is supplied under terms
    that permit derived implementation metadata, must use a reproducible

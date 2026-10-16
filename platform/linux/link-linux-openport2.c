@@ -699,13 +699,13 @@ static bool handle_at_command(LinkLinuxOpenPort2State *state,
     if (strcmp(command, "ATZ") == 0 ||
         strcmp(command, "ATWS") == 0) {
         reset_bridge(state);
-        return queue_text(state, "LINK OpenPort 2.0 native USB\r>");
+        return queue_text(state, "Link OpenPort 2.0 native USB\r>");
     }
     if (strcmp(command, "ATI") == 0) {
         char identity[256];
         (void)snprintf(
             identity, sizeof(identity),
-            "Tactrix OpenPort 2.0 / LINK native USB%s%s\r>",
+            "Tactrix OpenPort 2.0 / Link native USB%s%s\r>",
             state->firmware[0] != '\0' ? " / FW " : "",
             state->firmware[0] != '\0' ? state->firmware : "");
         return queue_text(state, identity);
@@ -1052,7 +1052,7 @@ bool link_linux_openport2_probe(
     written = snprintf(
         identity,
         identity_capacity,
-        "Tactrix OpenPort 2.0 · LINK native USB%s%s",
+        "Tactrix OpenPort 2.0 · Link native USB%s%s",
         state->firmware[0] != '\0' ? " · firmware " : "",
         state->firmware[0] != '\0' ? state->firmware : "");
     return written >= 0 && (size_t)written < identity_capacity;

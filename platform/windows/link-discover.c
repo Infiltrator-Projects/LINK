@@ -17,7 +17,7 @@
 #include "infiltratr/endian.h"
 
 #ifndef LINK_PRODUCT_NAME
-#define LINK_PRODUCT_NAME "LINK"
+#define LINK_PRODUCT_NAME "Link"
 #endif
 #ifndef LINK_PRODUCT_SLUG
 #define LINK_PRODUCT_SLUG "link"

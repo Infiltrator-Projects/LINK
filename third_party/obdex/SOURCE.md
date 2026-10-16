@@ -14,6 +14,6 @@ Family counts:
 - `U0`: 1055
 - `U3`: 174
 
-LINK imports only the generic DTC identifier, broad category and independently authored English title.
+Link imports only the generic DTC identifier, broad category and independently authored English title.
 Manufacturer-specific definitions are intentionally excluded and remain the responsibility of product repositories.
 SAE J2012 itself is copyrighted; this snapshot is not represented as a copy of the SAE publication.

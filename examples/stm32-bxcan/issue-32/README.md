@@ -2,9 +2,9 @@
 
 # STM32F103 complete UDS ECU/server reference (issue #32)
 
-This directory is the reference implementation requested in LINK issue #32 for
+This directory is the reference implementation requested in Link issue #32 for
 an STM32F103-class ECU with 512 KiB flash, 64 KiB SRAM and Classical CAN at
-500 kbit/s. It builds on LINK's allocation-free ISO-TP, UDS server, execution
+500 kbit/s. It builds on Link's allocation-free ISO-TP, UDS server, execution
 policy, AES-CMAC/SecurityAccess and STM32 bxCAN transport rather than importing
 another protocol stack.
 
@@ -19,21 +19,21 @@ A Cube/HAL integration for the reporter's 512 KiB F103 layout is provided at:
 
 ## What "complete" means here
 
-The example wires every service in LINK's 27-service ISO 14229 catalogue into
+The example wires every service in Link's 27-service ISO 14229 catalogue into
 a deterministic ECU/server surface. DiagnosticSessionControl, ECUReset,
-SecurityAccess and TesterPresent use LINK's shared built-ins. The remaining
+SecurityAccess and TesterPresent use Link's shared built-ins. The remaining
 services are registered by the F103 ECU core.
 
 | SID | Service | Reference behaviour |
 | --- | --- | --- |
-| 10 | DiagnosticSessionControl | LINK session state machine |
+| 10 | DiagnosticSessionControl | Link session state machine |
 | 11 | ECUReset | deferred reset after positive response |
 | 14 | ClearDiagnosticInformation | exact/prefix/all DTC clearing, persisted |
-| 19 | ReadDTCInformation | all 27 LINK report types over rich DTC records |
+| 19 | ReadDTCInformation | all 27 Link report types over rich DTC records |
 | 22 | ReadDataByIdentifier | VIN, software version, persistent user DID, dynamic DID |
 | 23 | ReadMemoryByAddress | bounded persistent sandbox |
 | 24 | ReadScalingDataByIdentifier | bounded reference scaling record |
-| 27 | SecurityAccess | LINK sequencing + target AES-CMAC verification hook |
+| 27 | SecurityAccess | Link sequencing + target AES-CMAC verification hook |
 | 28 | CommunicationControl | state recorded persistently |
 | 29 | Authentication | deAuthenticate profile; unsupported profiles return 0x12 |
 | 2A | ReadDataByPeriodicIdentifier | deterministic periodic reference data |
@@ -47,7 +47,7 @@ services are registered by the F103 ECU core.
 | 37 | RequestTransferExit | validates completion and commits downloads |
 | 38 | RequestFileTransfer | bounded virtual-file negotiation surface |
 | 3D | WriteMemoryByAddress | bounded persistent sandbox write |
-| 3E | TesterPresent | LINK built-in |
+| 3E | TesterPresent | Link built-in |
 | 83 | AccessTimingParameter | exposes active P2/P2* values |
 | 84 | SecuredDataTransmission | security-gated bounded record transport |
 | 85 | ControlDTCSetting | persistent on/off control |
@@ -96,7 +96,7 @@ session.
 
 The example key in `issue-32/Src-main.c` is the public RFC 4493 test key and is
 **demonstration material only**. Replace it with target-owned key material or a
-hardware-backed verifier. LINK does not contain a Mercedes, Jaguar or other OEM
+hardware-backed verifier. Link does not contain a Mercedes, Jaguar or other OEM
 seed/key algorithm.
 
 ## CAN/Cube configuration
@@ -137,6 +137,6 @@ and proves:
 - unsafe state-changing/programming requests are rejected in Default session;
 - journal writes obey erase-before-program semantics.
 
-The normal LINK STM32 transport tests continue to cover ISO-TP, physical versus
+The normal Link STM32 transport tests continue to cover ISO-TP, physical versus
 functional addressing, deferred frames and bxCAN HAL completion. CI also
 cross-compiles the F103 ECU core for Cortex-M3 with `-ffreestanding`.

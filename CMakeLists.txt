@@ -58,7 +58,7 @@ include(CMakePackageConfigHelpers)
 option(LINK_ENABLE_SANITIZERS "Enable AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
 option(LINK_BUILD_LINUX_PROVIDER_SMOKE "Compile native Linux adapter providers as an ownership smoke target" OFF)
 option(LINK_ENABLE_INSTALL
-    "Install LINK headers, library and CMake package when LINK is top-level"
+    "Install Link headers, library and CMake package when Link is top-level"
     ${PROJECT_IS_TOP_LEVEL})
 
 set(LINK_COMMON_VERSION "1.19.38")
@@ -68,13 +68,13 @@ set(LINK_COMMON_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src/infiltratr-common")
 if(NOT TARGET InfiltratrCommon::Portable)
     if(NOT EXISTS "${LINK_COMMON_DIR}/CMakeLists.txt")
         message(FATAL_ERROR
-            "Infiltratr Common ${LINK_COMMON_VERSION} is required. Initialise src/infiltratr-common or provide InfiltratrCommon::Portable from the parent project.")
+            "Libraries ${LINK_COMMON_VERSION} is required. Initialise src/infiltratr-common or provide InfiltratrCommon::Portable from the parent project.")
     endif()
     file(READ "${LINK_COMMON_DIR}/VERSION" LINK_COMMON_FOUND_VERSION)
     string(STRIP "${LINK_COMMON_FOUND_VERSION}" LINK_COMMON_FOUND_VERSION)
     if(NOT LINK_COMMON_FOUND_VERSION STREQUAL LINK_COMMON_VERSION)
         message(FATAL_ERROR
-            "Infiltratr Common ${LINK_COMMON_VERSION} is required; found ${LINK_COMMON_FOUND_VERSION}.")
+            "Libraries ${LINK_COMMON_VERSION} is required; found ${LINK_COMMON_FOUND_VERSION}.")
     endif()
     find_program(LINK_GIT_EXECUTABLE git)
     if(LINK_GIT_EXECUTABLE)
@@ -87,7 +87,7 @@ if(NOT TARGET InfiltratrCommon::Portable)
         if(LINK_COMMON_COMMIT_RESULT EQUAL 0 AND
            NOT LINK_COMMON_FOUND_COMMIT STREQUAL LINK_COMMON_COMMIT)
             message(FATAL_ERROR
-                "Infiltratr Common must be pinned to ${LINK_COMMON_COMMIT}; found ${LINK_COMMON_FOUND_COMMIT}.")
+                "Libraries must be pinned to ${LINK_COMMON_COMMIT}; found ${LINK_COMMON_FOUND_COMMIT}.")
         endif()
     endif()
     add_subdirectory(src/infiltratr-common)
@@ -233,7 +233,7 @@ function(link_enable_linux_gtk_shell target)
 
     if(NOT TARGET InfiltratrCommon::Common)
         message(FATAL_ERROR
-            "link_enable_linux_gtk_shell requires the full Infiltratr Common platform target.")
+            "link_enable_linux_gtk_shell requires the full Libraries platform target.")
     endif()
     target_link_libraries(${target} PRIVATE
         LINK::Core
@@ -241,8 +241,8 @@ function(link_enable_linux_gtk_shell target)
         "${LINK_BLUEZ_LIBRARY}"
         PkgConfig::LINK_LIBUSB)
 
-    # LINK owns the rule contents, while the consuming application owns its
-    # package namespace.  A consumer-specific filename prevents two LINK-based
+    # Link owns the rule contents, while the consuming application owns its
+    # package namespace.  A consumer-specific filename prevents two Link-based
     # applications from claiming the same dpkg path when installed together.
     install(FILES
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platform/linux/60-link-openport2.rules"
@@ -287,7 +287,7 @@ function(link_add_windows_discover target)
         set(LINK_FACE_PRODUCT_SUBTITLE "Vehicle Diagnostics")
     endif()
     if(NOT LINK_FACE_PRODUCT_WEBSITE)
-        set(LINK_FACE_PRODUCT_WEBSITE "https://github.com/Infiltrator-Projects/LINK")
+        set(LINK_FACE_PRODUCT_WEBSITE "https://github.com/Infiltrator-Projects/Link")
     endif()
     if(NOT LINK_FACE_PRODUCT_DESCRIPTION)
         set(LINK_FACE_PRODUCT_DESCRIPTION "OpenPort 2.0 / SAE J2534 read-only discovery and evidence capture.")
@@ -317,7 +317,7 @@ function(link_add_windows_discover target)
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/platform/windows/link-discover-i18n.c")
     if(NOT TARGET InfiltratrCommon::Common)
         message(FATAL_ERROR
-            "link_add_windows_discover requires the full Infiltratr Common platform target.")
+            "link_add_windows_discover requires the full Libraries platform target.")
     endif()
     target_link_libraries(${target} PRIVATE
         LINK::Core InfiltratrCommon::Common
@@ -400,12 +400,12 @@ endfunction()
 
 if(WIN32 AND PROJECT_IS_TOP_LEVEL)
     link_add_windows_discover(link-discover
-        PRODUCT_NAME "LINK" PRODUCT_SLUG "link" WINDOW_CLASS "LINKDiscoverWindow"
+        PRODUCT_NAME "Link" PRODUCT_SLUG "link" WINDOW_CLASS "LINKDiscoverWindow"
         PRODUCT_VERSION "${PROJECT_VERSION}" PRODUCT_COPYRIGHT "Copyright (C) 2026 The First Infiltrator"
         PRODUCT_SUBTITLE "Shared Vehicle Diagnostics"
         PRODUCT_DESCRIPTION "Shared OpenPort 2.0 / SAE J2534 read-only discovery and evidence capture."
         PRODUCT_AUTHORS "The First Infiltrator"
-        PRODUCT_WEBSITE "https://github.com/Infiltrator-Projects/LINK"
+        PRODUCT_WEBSITE "https://github.com/Infiltrator-Projects/Link"
         PRODUCT_LICENSE_NAME "GPL-3.0-or-later"
         PRODUCT_ICON_PNG "${CMAKE_CURRENT_SOURCE_DIR}/assets/branding/link-obd-icon-base.png")
 endif()

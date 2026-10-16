@@ -2,7 +2,7 @@
 
 ## Purpose
 
-LINK is the shared product-neutral vehicle-diagnostics engine that owns transports, protocol codecs, diagnostic sequencing, evidence handling, safety policy and common application behaviour for the manufacturer product family.
+Link is the shared product-neutral vehicle-diagnostics engine that owns transports, protocol codecs, diagnostic sequencing, evidence handling, safety policy and common application behaviour for the manufacturer product family.
 
 ## System decomposition
 
@@ -17,9 +17,9 @@ LINK is the shared product-neutral vehicle-diagnostics engine that owns transpor
 
 ## Ownership boundaries
 
-Common owns broadly reusable non-automotive primitives. LINK owns product-neutral automotive behaviour. MBLINK, JAGLINK, BMWLINK, AUDILINK and FORDLINK own manufacturer-specific identity and knowledge.
+Common owns broadly reusable non-automotive primitives. Link owns product-neutral automotive behaviour. MBLink, JAGLink, BMWLink, AUDILink and FORDLink own manufacturer-specific identity and knowledge.
 
-Shared code flows downward through explicit dependencies. Product repositories should not copy shared protocol/session/application logic merely to customise manufacturer content. Conversely, manufacturer-specific evidence must not leak into LINK/Common abstractions.
+Shared code flows downward through explicit dependencies. Product repositories should not copy shared protocol/session/application logic merely to customise manufacturer content. Conversely, manufacturer-specific evidence must not leak into Link/Common abstractions.
 
 ## Contract boundaries
 

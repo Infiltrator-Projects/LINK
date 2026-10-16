@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-name: LINK Release
+name: Link Release
 on:
   workflow_run:
-    workflows: ["LINK CI"]
+    workflows: ["Link CI"]
     types: [completed]
 permissions:
   contents: read
@@ -63,7 +63,7 @@ jobs:
           state=$(gh release view "$tag" --json isDraft,targetCommitish --jq '[.isDraft,.targetCommitish] | @tsv' 2>/dev/null || true)
           if [[ -z "$state" ]]; then
             gh release create "$tag" --target "$head_commit" --draft \
-              --title "LINK $version" --notes-file "$notes"
+              --title "Link $version" --notes-file "$notes"
             draft=true
           else
             IFS=$'\t' read -r draft target <<<"$state"

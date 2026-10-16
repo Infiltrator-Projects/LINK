@@ -1,7 +1,7 @@
-# LINK language packs
+# Link language packs
 
-LINK-family applications support discoverable, Amiga-style, data-only language packs.
-A translator can add a language without recompiling LINK or any manufacturer product:
+Link-family applications support discoverable, Amiga-style, data-only language packs.
+A translator can add a language without recompiling Link or any manufacturer product:
 place a UTF-8 `.lang` file in a scanned `Languages` directory and restart the
 application.
 

@@ -571,7 +571,7 @@ static bool simulator_default_response(
         (void)snprintf(response, response_size, "%s", identifier); return true;
     }
     if (strcmp(command, "AT@1") == 0) {
-        (void)snprintf(response, response_size, "LINK ELM327 SIMULATOR"); return true;
+        (void)snprintf(response, response_size, "Link ELM327 SIMULATOR"); return true;
     }
     if (strcmp(command, "ATDP") == 0) {
         (void)snprintf(response, response_size, "AUTO, ISO 15765-4 (CAN 11/500)"); return true;

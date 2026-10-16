@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Validate that an embedding product's native iOS build references every
-# portable LINK::Core implementation source required by the Apple product face.
-# Discover-only UI/evidence sources are not required here; LINK's Apple portable
+# portable Link::Core implementation source required by the Apple product face.
+# Discover-only UI/evidence sources are not required here; Link's Apple portable
 # core may still include shared safety/ECU-probe primitives used by manufacturer
 # extensions.
 #
-# Product faces may reference LINK-owned Apple amalgamation entry points instead
+# Product faces may reference Link-owned Apple amalgamation entry points instead
 # of spelling every implementation source into product-owned wrapper files. The
 # validator expands those entry points before checking coverage. Optional native
 # providers intentionally disabled by the product are excluded from the required
@@ -13,7 +13,7 @@
 
 function(link_validate_product_apple_bridge product_root)
     if(NOT IS_DIRECTORY "${product_root}")
-        message(FATAL_ERROR "LINK Apple bridge validation root does not exist: ${product_root}")
+        message(FATAL_ERROR "Link Apple bridge validation root does not exist: ${product_root}")
     endif()
 
     file(READ "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../CMakeLists.txt" link_cmake_text)
@@ -22,7 +22,7 @@ function(link_validate_product_apple_bridge product_root)
         link_core_block
         "${link_cmake_text}")
     if(NOT link_core_block)
-        message(FATAL_ERROR "Unable to locate LINK::Core source list for Apple bridge validation.")
+        message(FATAL_ERROR "Unable to locate Link::Core source list for Apple bridge validation.")
     endif()
 
     string(REGEX MATCHALL
@@ -35,9 +35,9 @@ function(link_validate_product_apple_bridge product_root)
     file(GLOB_RECURSE product_bridge_files
         "${product_root}/src/*.c"
         "${product_root}/app/ios/*.pbxproj")
-    # Never allow the nested LINK checkout to satisfy its own bridge coverage.
+    # Never allow the nested Link checkout to satisfy its own bridge coverage.
     # Only product-owned wrapper/bridge source and the product Xcode project
-    # count as evidence that the iPhone target actually consumes a LINK source.
+    # count as evidence that the iPhone target actually consumes a Link source.
     list(FILTER product_bridge_files EXCLUDE REGEX "/src/link/")
     list(FILTER product_bridge_files EXCLUDE REGEX "/src/infiltratr-common/")
 
@@ -52,8 +52,8 @@ function(link_validate_product_apple_bridge product_root)
         string(APPEND product_bridge_text "\n${bridge_text}")
     endforeach()
 
-    # Expand LINK-owned Apple amalgamation entry points referenced by the
-    # product. This proves the product selects shared LINK build glue without
+    # Expand Link-owned Apple amalgamation entry points referenced by the
+    # product. This proves the product selects shared Link build glue without
     # forcing copied implementation filenames back into the product repository.
     set(bridge_coverage_text "${product_bridge_text}")
     foreach(apple_bridge IN ITEMS
@@ -91,7 +91,7 @@ function(link_validate_product_apple_bridge product_root)
     if(missing_sources)
         list(JOIN missing_sources ", " missing_text)
         message(FATAL_ERROR
-            "The product iOS bridge is missing LINK::Core sources: ${missing_text}. "
-            "Update the product bridge/Xcode source wiring before consuming this LINK revision.")
+            "The product iOS bridge is missing Link::Core sources: ${missing_text}. "
+            "Update the product bridge/Xcode source wiring before consuming this Link revision.")
     endif()
 endfunction()

@@ -1,55 +1,55 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 
-# LINK Discover
+# Link Discover
 
-LINK Discover is the single shared discovery, ECU/module reading and evidence subsystem used by every LINK-family product.
+Link Discover is the single shared discovery, ECU/module reading and evidence subsystem used by every Link-family product.
 
-There is not a separate Discover implementation for each manufacturer product. There is one reusable implementation in LINK, then MBLINK, JAGLINK, BMWLINK, AUDILINK and FORDLINK apply their own manufacturer face and vehicle knowledge.
+There is not a separate Discover implementation for each manufacturer product. There is one reusable implementation in Link, then MBLink, JAGLink, BMWLink, AUDILink and FORDLink apply their own manufacturer face and vehicle knowledge.
 
 ```text
-LINK Discover engine
-    + Mercedes definitions / MBLINK identity
-    = MBLINK Discover
+Link Discover engine
+    + Mercedes definitions / MBLink identity
+    = MBLink Discover
 
-LINK Discover engine
-    + Jaguar definitions / JAGLINK identity
-    = JAGLINK Discover
+Link Discover engine
+    + Jaguar definitions / JAGLink identity
+    = JAGLink Discover
 
-LINK Discover engine
-    + BMW definitions / BMWLINK identity
-    = BMWLINK Discover
+Link Discover engine
+    + BMW definitions / BMWLink identity
+    = BMWLink Discover
 
-LINK Discover engine
-    + Audi definitions / AUDILINK identity
-    = AUDILINK Discover
+Link Discover engine
+    + Audi definitions / AUDILink identity
+    = AUDILink Discover
 
-LINK Discover engine
-    + Ford definitions / FORDLINK identity
-    = FORDLINK Discover
+Link Discover engine
+    + Ford definitions / FORDLink identity
+    = FORDLink Discover
 ```
 
 Discover is not a proposed extra repository or a future separate `Reader` product. It is already the specialist second application target in each manufacturer repository. The main manufacturer application is the normal diagnostic experience; Discover is the deeper engineering-oriented ECU/module discovery, identification, read-only inventory and evidence/dump application.
 
-The same ownership rule applies to OpenPort 2.0 on both supported desktop paths. Windows Discover uses the installed SAE J2534 FunctionLibrary, while Linux LINK can drive the Tactrix directly through its native libusb provider:
+The same ownership rule applies to OpenPort 2.0 on both supported desktop paths. Windows Discover uses the installed SAE J2534 FunctionLibrary, while Linux Link can drive the Tactrix directly through its native libusb provider:
 
 ```text
 platform/windows/link-discover.c
-    + MBLINK identity / Mercedes definitions
+    + MBLink identity / Mercedes definitions
     = mblink-discover.exe
 
 platform/linux/link-linux-openport2.c
-    + shared LINK diagnostic flow
+    + shared Link diagnostic flow
     + manufacturer definitions from the owning product face
     = the same product diagnostics over native OpenPort USB
 ```
 
-The generic transport, scanner, safety and evidence behaviour belongs to LINK. Manufacturer-specific results and available read-only probes may differ because Mercedes, Jaguar, BMW, Audi and Ford expose different networks, ECUs, modules, identifiers and documented diagnostic data.
+The generic transport, scanner, safety and evidence behaviour belongs to Link. Manufacturer-specific results and available read-only probes may differ because Mercedes, Jaguar, BMW, Audi and Ford expose different networks, ECUs, modules, identifiers and documented diagnostic data.
 
 ## Product role
 
 Discover has two layers of responsibility.
 
-The shared LINK layer provides the mechanics required to locate, interrogate and record control modules safely. The product layer supplies manufacturer knowledge: known network topology, module identities, supported addresses/endpoints, documented identifiers and evidence-backed read-only requests.
+The shared Link layer provides the mechanics required to locate, interrogate and record control modules safely. The product layer supplies manufacturer knowledge: known network topology, module identities, supported addresses/endpoints, documented identifiers and evidence-backed read-only requests.
 
 This lets the same Discover engine operate professionally across very different vehicles without reducing it to a lowest-common-denominator OBD scanner and without forking the implementation for each manufacturer.
 
@@ -64,11 +64,11 @@ passive network observation
     -> structured raw/evidence dump
 ```
 
-Current functionality spans more than the first two steps. LINK supplies passive capture, bounded standard OBD inventory, generic read-only interrogation/evidence machinery and a reusable deep discovery-plan contract. LINK also now owns a portable Vehicle Research session state and typed evidence timeline: passive capture, standards inventory, manufacturer sweep, operator event markers and export summaries remain distinguishable in the raw evidence instead of being flattened into UI log text. The shared Windows Discover face consumes that state directly. MBLINK already supplies a Mercedes FULL SWEEP plan through the deep-discovery contract; JAGLINK deliberately does not add Jaguar-specific active depth until reproducible evidence supports the routes and requests; BMWLINK, AUDILINK and FORDLINK use the same shared machinery while manufacturer-specific depth remains evidence-gated. Further depth expands the same Discover applications rather than creating new product-specific Reader repositories or duplicate scanner programs.
+Current functionality spans more than the first two steps. Link supplies passive capture, bounded standard OBD inventory, generic read-only interrogation/evidence machinery and a reusable deep discovery-plan contract. Link also now owns a portable Vehicle Research session state and typed evidence timeline: passive capture, standards inventory, manufacturer sweep, operator event markers and export summaries remain distinguishable in the raw evidence instead of being flattened into UI log text. The shared Windows Discover face consumes that state directly. MBLink already supplies a Mercedes FULL SWEEP plan through the deep-discovery contract; JAGLink deliberately does not add Jaguar-specific active depth until reproducible evidence supports the routes and requests; BMWLink, AUDILink and FORDLink use the same shared machinery while manufacturer-specific depth remains evidence-gated. Further depth expands the same Discover applications rather than creating new product-specific Reader repositories or duplicate scanner programs.
 
-## What LINK owns
+## What Link owns
 
-LINK owns all Discover behaviour shared by the products:
+Link owns all Discover behaviour shared by the products:
 
 - passive CAN/CAN-FD observation where the selected transport supports it;
 - bounded standard OBD inventory;
@@ -89,7 +89,7 @@ If a capability is useful across multiple manufacturer products, it belongs here
 
 A product face may supply:
 
-- product display name (`MBLINK`, `JAGLINK`, `BMWLINK`, `AUDILINK` or `FORDLINK`);
+- product display name (`MBLink`, `JAGLink`, `BMWLink`, `AUDILink` or `FORDLink`);
 - executable/product slug (`mblink`, `jaglink`, `bmwlink`, `audilink` or `fordlink`);
 - native window/bundle identity;
 - product icon or emblem resource;
@@ -106,38 +106,38 @@ A product face must not fork or copy the J2534 transport, generic scanner state 
 
 ## Windows branded targets
 
-Products create their Windows Discover application by calling LINK's CMake constructor:
+Products create their Windows Discover application by calling Link's CMake constructor:
 
 ```cmake
 link_add_windows_discover(mblink-discover
-    PRODUCT_NAME "MBLINK"
+    PRODUCT_NAME "MBLink"
     PRODUCT_SLUG "mblink"
     WINDOW_CLASS "MBLINKDiscoverWindow")
 
 link_add_windows_discover(jaglink-discover
-    PRODUCT_NAME "JAGLINK"
+    PRODUCT_NAME "JAGLink"
     PRODUCT_SLUG "jaglink"
     WINDOW_CLASS "JAGLINKDiscoverWindow")
 
 link_add_windows_discover(bmwlink-discover
-    PRODUCT_NAME "BMWLINK"
+    PRODUCT_NAME "BMWLink"
     PRODUCT_SLUG "bmwlink"
     WINDOW_CLASS "BMWLINKDiscoverWindow")
 
 link_add_windows_discover(audilink-discover
-    PRODUCT_NAME "AUDILINK"
+    PRODUCT_NAME "AUDILink"
     PRODUCT_SLUG "audilink"
     WINDOW_CLASS "AUDILINKDiscoverWindow")
 
 link_add_windows_discover(fordlink-discover
-    PRODUCT_NAME "FORDLINK"
+    PRODUCT_NAME "FORDLink"
     PRODUCT_SLUG "fordlink"
     WINDOW_CLASS "FORDLINKDiscoverWindow")
 ```
 
-All five calls compile the same LINK Windows Discover implementation and link the same `LINK::Core` target. Manufacturer-specific knowledge remains supplied by the owning product layer.
+All five calls compile the same Link Windows Discover implementation and link the same `Link::Core` target. Manufacturer-specific knowledge remains supplied by the owning product layer.
 
-LINK CI builds the established reference faces on Windows, while BMWLINK, AUDILINK and FORDLINK consume the same constructor in their own repositories. This is an architectural contract: a shared Discover change must not silently depend on one manufacturer face.
+Link CI builds the established reference faces on Windows, while BMWLink, AUDILink and FORDLink consume the same constructor in their own repositories. This is an architectural contract: a shared Discover change must not silently depend on one manufacturer face.
 
 ## Discover compatibility facades
 
@@ -147,7 +147,7 @@ Such headers are product-face compatibility files only. They contain no independ
 
 ## Safety model
 
-Discover is read-oriented by design. Passive capture has no transmit path. Active inventory and identification requests reach a transport transmit call only after LINK's safety classifier admits them as explicitly read-only.
+Discover is read-oriented by design. Passive capture has no transmit path. Active inventory and identification requests reach a transport transmit call only after Link's safety classifier admits them as explicitly read-only.
 
 Unknown services and write/control operations remain deny-by-default. Module reset, security access, routines, DTC clearing, coding, programming and firmware-write operations are not implicitly enabled merely because a codec or transport exists.
 
@@ -157,7 +157,7 @@ Manufacturer-specific read requests must be evidence-backed and bounded before a
 
 "Dump" in Discover means a structured read-only acquisition of available diagnostic information and raw responses, not an unrestricted write/programming path.
 
-All LINK-family products use LINK's evidence writer. Frame/result schema, escaping, timestamps, annotations and export behaviour remain shared. Product/manufacturer identity and manufacturer-specific decoded fields may differ while the raw evidence is preserved.
+All Link-family products use Link's evidence writer. Frame/result schema, escaping, timestamps, annotations and export behaviour remain shared. Product/manufacturer identity and manufacturer-specific decoded fields may differ while the raw evidence is preserved.
 
 A useful Discover export should make it possible to answer:
 
@@ -174,17 +174,17 @@ A useful Discover export should make it possible to answer:
 The professional repository model is therefore:
 
 ```text
-Infiltratr Common
+Libraries
         |
-       LINK
+       Link
         |
-        +-- MBLINK   -> MBLINK Discover
-        +-- JAGLINK  -> JAGLINK Discover
-        +-- BMWLINK  -> BMWLINK Discover
-        +-- AUDILINK -> AUDILINK Discover
-        +-- FORDLINK -> FORDLINK Discover
+        +-- MBLink   -> MBLink Discover
+        +-- JAGLink  -> JAGLink Discover
+        +-- BMWLink  -> BMWLink Discover
+        +-- AUDILink -> AUDILink Discover
+        +-- FORDLink -> FORDLink Discover
 ```
 
-There are no separate manufacturer Reader repositories in the intended architecture. Discover evolves in place as the specialist branded reader/dumper target within each product repository, while reusable mechanics continue to move downward into LINK.
+There are no separate manufacturer Reader repositories in the intended architecture. Discover evolves in place as the specialist branded reader/dumper target within each product repository, while reusable mechanics continue to move downward into Link.
 
-If a future LINK-family product change introduces a second generic Discover implementation, a second Windows scanner source, or a separate repository solely to duplicate this application, treat that as an architectural regression unless there is a demonstrable independent product lifecycle that cannot be represented as a product target.
+If a future Link-family product change introduces a second generic Discover implementation, a second Windows scanner source, or a separate repository solely to duplicate this application, treat that as an architectural regression unless there is a demonstrable independent product lifecycle that cannot be represented as a product target.

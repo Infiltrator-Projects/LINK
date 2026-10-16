@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Generate LINK's complete generic OBD-II DTC catalogue from pinned OBDex data.
+"""Generate Link's complete generic OBD-II DTC catalogue from pinned OBDex data.
 
 The OBDex data is CC0-1.0. This importer deliberately consumes only the
 five-character generic DTC identifier, broad category, and independently
-authored English title. Manufacturer-specific definitions never enter LINK's
+authored English title. Manufacturer-specific definitions never enter Link's
 generic catalogue.
 """
 
@@ -171,7 +171,7 @@ def write_outputs(source_dir: Path, tsv_path: Path, inc_path: Path, source_note:
         source_lines.append(f"- `{prefix}`: {family_counts[prefix]}")
     source_lines.extend([
         "",
-        "LINK imports only the generic DTC identifier, broad category and independently authored English title.",
+        "Link imports only the generic DTC identifier, broad category and independently authored English title.",
         "Manufacturer-specific definitions are intentionally excluded and remain the responsibility of product repositories.",
         "SAE J2012 itself is copyrighted; this snapshot is not represented as a copy of the SAE publication.",
         "",

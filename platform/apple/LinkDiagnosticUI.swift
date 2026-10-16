@@ -842,7 +842,7 @@ struct LinkStandardObdView: View {
                     obdRow("Mode 02", "Bounded freeze-frame context")
                     obdRow("Modes 03 / 07 / 0A", "Stored, pending and permanent DTC inventory")
                     obdRow("Mode 09", "Vehicle information including standard VIN where available")
-                    obdRow("OBDonUDS", "SAE J1979-2 foundation through LINK")
+                    obdRow("OBDonUDS", "SAE J1979-2 foundation through Link")
                 }
             }
             .padding(.horizontal, LinkDiagnosticLayout.screenHorizontalPadding)
@@ -1830,7 +1830,7 @@ final class LinkConnectionPickerViewController: UITableViewController,
         if indexPath.section == methodsSection && indexPath.row == 0 {
             cell.textLabel?.text = "Automatic adapter scan"
             cell.detailTextLabel?.text =
-                "Use LINK's existing automatic adapter discovery"
+                "Use Link's existing automatic adapter discovery"
             cell.imageView?.image =
                 UIImage(systemName: "antenna.radiowaves.left.and.right")
             cell.accessoryType = .disclosureIndicator
@@ -2788,7 +2788,7 @@ struct LinkStandardProductContentView: View {
                         .tracking(1.2)
                         .foregroundStyle(appearance.theme.accent)
                     Text(
-                        "LINK shared engine · \(appearance.manufacturerName)-specific knowledge layered above")
+                        "Link shared engine · \(appearance.manufacturerName)-specific knowledge layered above")
                         .font(.caption)
                         .foregroundStyle(appearance.theme.secondaryText)
                         .lineLimit(1)
@@ -2956,7 +2956,7 @@ private struct LinkStandardVehicleView: View {
                                         .font(.headline)
                                         .foregroundStyle(theme.primaryText)
                                     Text(
-                                        "LINK standard responders now; \(appearance.manufacturerName)-specific module knowledge remains product-owned.")
+                                        "Link standard responders now; \(appearance.manufacturerName)-specific module knowledge remains product-owned.")
                                         .font(.caption)
                                         .foregroundStyle(theme.secondaryText)
                                 }
@@ -3188,7 +3188,7 @@ private struct LinkStandardGraphView: View {
                     }
                 }
                 Text(
-                    "LINK telemetry history is retained without inventing synthetic samples.")
+                    "Link telemetry history is retained without inventing synthetic samples.")
                     .font(.caption)
                     .foregroundStyle(theme.secondaryText)
             }
@@ -3255,7 +3255,7 @@ private struct LinkStandardServicesView: View {
                         .font(.headline)
                         .foregroundStyle(theme.primaryText)
                     Text(
-                        "Manufacturer procedures stay in \(appearance.productName); reusable execution and safety machinery stays in LINK.")
+                        "Manufacturer procedures stay in \(appearance.productName); reusable execution and safety machinery stays in Link.")
                         .font(.caption)
                         .foregroundStyle(theme.secondaryText)
                 }
@@ -3281,7 +3281,7 @@ private struct LinkStandardSettingsView: View {
                             icon: "number.circle")
                         LinkStandardValueRow(
                             label: "Shared engine",
-                            value: "LINK \(model.linkVersionText)",
+                            value: "Link \(model.linkVersionText)",
                             icon: "square.stack.3d.up")
                     }
                 LinkLabeledPanel(title: "Language", systemImage: "globe") {

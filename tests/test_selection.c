@@ -130,6 +130,6 @@ int main(void)
         CHECK(scheduler.count == 3U); /* No bitmap or undefined requests. */
     }
 
-    puts("LINK vehicle-scoped parameter selection passed");
+    puts("Link vehicle-scoped parameter selection passed");
     return 0;
 }

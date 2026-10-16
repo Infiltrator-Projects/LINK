@@ -2,7 +2,7 @@
 
 # Mercedes me Adapter native-library evidence
 
-This note preserves interoperability facts recovered from the native Android libraries supplied from the archived official Mercedes me Adapter 4.7.61 application. It is intended for the current `Infiltrator-Projects/LINK` repository.
+This note preserves interoperability facts recovered from the native Android libraries supplied from the archived official Mercedes me Adapter 4.7.61 application. It is intended for the current `Infiltrator-Projects/Link` repository.
 
 Authentication call-flow analysis continued after this inventory was written. [`MERCEDES-ME-AUTH-FORENSICS.md`](MERCEDES-ME-AUTH-FORENSICS.md) is authoritative for the random-value direction, GetSeed/SetKey ordering and Session Master Key boundary; this note remains authoritative for the binary inventory, framing, builders, limits and DiagLogic/Whisper evidence.
 
@@ -110,15 +110,15 @@ A later inventory recovered the production MSA/Whisper VIN bootstrap. It
 confirms configuration-driven CAN routes and UDS/KWP VIN probes, but it is only
 the connection/VIN cascade: it is not the complete runtime diagnostic data set
 or a substitute for vehicle validation. Product-specific route values remain
-in MBLINK rather than LINK.
+in MBLink rather than Link.
 
 ## Cross-transport consequence
 
 The evidence supports a clean architecture:
 
 1. Mercedes-me-specific Bluetooth/session/security remains in the genuine-adapter provider.
-2. Generic CAN/ISO-TP remains in LINK.
-3. Mercedes ECU/request/result/formula knowledge belongs in MBLINK's Mercedes knowledge layer.
+2. Generic CAN/ISO-TP remains in Link.
+3. Mercedes ECU/request/result/formula knowledge belongs in MBLink's Mercedes knowledge layer.
 4. Once a Mercedes request is proven, the same vehicle-side definition can be executed through Mercedes me, Tactrix/OpenPort, STM32 CAN or an ELM transport where supported.
 
 ## Secure native message format
@@ -166,7 +166,7 @@ and CRC, and reconstructs the plaintext command. The two reserved bytes are
 observed as zero on transmit; no stronger receive-side semantic meaning is
 claimed.
 
-LINK independently implements this bounded envelope in
+Link independently implements this bounded envelope in
 `mercedes_me_native_protocol.c`. It does not use or redistribute the
 proprietary Android binary.
 
@@ -254,14 +254,14 @@ constructs `I0107E007E880AA\r`.
 
 The official initialization path uses baud ordinal **6**, which constructs
 `S6\r`. The native binary does not by that fact alone prove the physical
-bit-rate meaning of ordinal 6, so LINK intentionally does not relabel it using
+bit-rate meaning of ordinal 6, so Link intentionally does not relabel it using
 generic SLCAN convention.
 
 The CAN-throttle extension also exposes `F10` run state, `F11` message
 limit, `F12` filter and `F13` reset, with corresponding `F10-E-` through
 `F13-E-` error prefixes.
 
-These builders are exposed as **pure bounded functions only**. LINK does not
+These builders are exposed as **pure bounded functions only**. Link does not
 automatically transmit them to a real adapter.
 
 ## X-mode identifiers
@@ -288,7 +288,7 @@ XCommander interfaces accept one through 17 characters for adapter VIN.
 
 ## GDK protocol bounds and watchdog policy
 
-Exact native constants now preserved in portable LINK include:
+Exact native constants now preserved in portable Link include:
 
 - synchronous command timeout: **6900 ms**
 - standard CAN-ID range: **0..0x7FF**
@@ -314,7 +314,7 @@ to change adapter state or vehicle state.
 ## DiagLogic acquisition and sanity policy
 
 `libdiaglogic.so` contains exact acquisition defaults that are independent of
-the Bluetooth transport. LINK exposes them as a read-only reference-policy
+the Bluetooth transport. Link exposes them as a read-only reference-policy
 structure so every transport can use the same evidence without duplicating
 magic numbers.
 
@@ -340,7 +340,7 @@ magic numbers.
 | invalid trip-start mileage sentinel | -1.0 |
 
 Where the native symbol name does not prove a physical unit (notably the
-speed/distance thresholds), LINK preserves the numeric value without inventing
+speed/distance thresholds), Link preserves the numeric value without inventing
 one.
 
 The higher-level native pipeline also names
@@ -355,14 +355,14 @@ The higher-level native pipeline also names
 
 The architectural consequence is important: raw ECU samples and
 validated/derived vehicle state are distinct layers and should remain so in
-MBLINK regardless of which LINK transport supplied the raw measurement.
+MBLink regardless of which Link transport supplied the raw measurement.
 
 ## VIN cascade vocabulary
 
 DiagLogic contains separate VIN paths including `vinCascade`,
 `miniVinCascade`, `MSAVinCascadeVin`, `modelSpecificVin`, `vinPart3`,
 `vinPart3_0x071` and `vinPart3_0x204`. The suffixes are retained as native
-evidence labels only; LINK does not assume they are CAN addresses without
+evidence labels only; Link does not assume they are CAN addresses without
 call/configuration evidence.
 
 ## Expanded Whisper configuration schema
@@ -390,7 +390,7 @@ Observed DTC presentation types are:
 - `SAEDTC_UDS_VW`
 - `SAEDTC_OBD`
 
-LINK preserves these exact names in a small portable Whisper vocabulary module.
+Link preserves these exact names in a small portable Whisper vocabulary module.
 This is particularly relevant to multi-ECU OBD responses: the official stack
 has explicit select/merge policies rather than assuming every response is one
 anonymous value.
@@ -403,7 +403,7 @@ plain directory of obvious `.properties` files.
 
 ## Implementation status
 
-LINK now independently implements and regression-tests:
+Link now independently implements and regression-tests:
 
 - session-key derivation from caller-supplied SMK/random values;
 - CRC-16/CCITT-XMODEM;
@@ -418,7 +418,7 @@ LINK now independently implements and regression-tests:
 - Whisper response-selection and DTC-presentation vocabularies.
 
 No proprietary shared object, decompiled function body, embedded fixed
-challenge key or APK configuration bundle is copied into LINK.
+challenge key or APK configuration bundle is copied into Link.
 
 ## Still evidence-gated
 

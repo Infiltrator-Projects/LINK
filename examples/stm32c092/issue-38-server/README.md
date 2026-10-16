@@ -1,91 +1,91 @@
 <!-- SPDX-License-Identifier: GPL-3.0-or-later -->
-# MBLINK issue #38: STM32C092 UDS ECU/server port
+# MBLink issue #38: STM32C092 UDS ECU/server port
 
 This directory is the concrete server-role integration requested by
-`chenyurong22` in MBLINK issue #38. It is intentionally the opposite CAN
-role from LINK's original STM32 diagnostic-tester example.
+`chenyurong22` in MBLink issue #38. It is intentionally the opposite CAN
+role from Link's original STM32 diagnostic-tester example.
 
 ## Ownership boundary
 
-This directory is the **generic LINK half** of that work: STM32 FDCAN,
+This directory is the **generic Link half** of that work: STM32 FDCAN,
 ISO-TP, UDS server dispatch and protocol-level test behaviour. Mercedes-Benz
 vehicle identity, profile/endpoint selection, DID policy and target DTC state
-belong to MBLINK and are implemented in:
+belong to MBLink and are implemented in:
 
-`MBLINK/embedded/stm32c092-mercedes-server/`
+`MBLink/embedded/stm32c092-mercedes-server/`
 
-MBLINK pins a tested LINK gitlink, so the Mercedes application consumes this
+MBLink pins a tested Link gitlink, so the Mercedes application consumes this
 transport rather than copying or forking it. The reporter subsequently
-confirmed the generic server on physical STM32C092 hardware in LINK issue #18.
+confirmed the generic server on physical STM32C092 hardware in Link issue #18.
 
 The STM32C092 is the ECU/server:
 
 ```text
-PC / CAN UDS tester                 STM32C092 LINK ECU/server
+PC / CAN UDS tester                 STM32C092 Link ECU/server
 -------------------                 ---------------------------
 request  0x7E0  -------------------> RX 0x7E0
 response 0x7E8  <------------------- TX 0x7E8
 ```
 
 Therefore a tester transmitting `10 01` to CAN ID `0x7E0` is supposed to
-enter the STM32 RX FIFO0 interrupt. LINK installs an exact `0x7E0` hardware
+enter the STM32 RX FIFO0 interrupt. Link installs an exact `0x7E0` hardware
 filter in this server build. The earlier tester/client example filtered
 `0x7E8`, which is why a `0x7E0` request could never reach its RX callback.
 
 ## What is implemented
 
-The shared LINK core now contains `LinkUdsServer`, an allocation-free server
+The shared Link core now contains `LinkUdsServer`, an allocation-free server
 dispatcher using the same 27-service ISO 14229 catalogue as the client codec
 layer. The server has portable built-in implementations for:
 
 - `0x10 DiagnosticSessionControl`, including P2/P2* timing response fields;
 - `0x3E TesterPresent`, including suppress-positive-response handling;
 - `0x19 ReadDTCInformation` through `link_uds_server_dtc_handler()`, covering
-  every LINK report type `0x01..0x19`, `0x42`, and `0x55`;
+  every Link report type `0x01..0x19`, `0x42`, and `0x55`;
 - `0x22 ReadDataByIdentifier` for DID `F190` in this example, returning a
   17-byte demonstration VIN.
 
-Every service in LINK's 27-service catalogue can be bound to an ECU
+Every service in Link's 27-service catalogue can be bound to an ECU
 application callback with `link_uds_server_set_handler()`. This is important
 for services such as SecurityAccess, RoutineControl, IOControl, memory access,
 and RequestDownload/TransferData: the protocol dispatcher is generic, while
 the actual ECU memory, flash, security, routine and actuator operations must
-be supplied by the target application rather than invented inside LINK.
+be supplied by the target application rather than invented inside Link.
 
 The STM32 transport in `platform/stm32/link-stm32-uds-server.c` performs
 ISO-TP request reassembly, generated Flow Control, response segmentation,
 Flow Control reception for multi-frame responses, real FDCAN TX-completion
 tracking, timeout handling, and a bounded deferred-request FIFO for PCAN bursts
 that race an active multi-frame response. It supports Classical CAN and CAN FD using
-LINK's existing ISO-TP implementation, including extended FF_DL above 4095
+Link's existing ISO-TP implementation, including extended FF_DL above 4095
 bytes when caller buffers are large enough.
 
 ## Files to add to the KEIL target
 
 ```text
-LINK/src/core/isotp.c
-LINK/src/uds/uds.c
-LINK/src/uds/uds_services.c
-LINK/src/uds/uds_server.c
-LINK/src/infiltratr-common/src/core.c
-LINK/platform/stm32/link-stm32-can.c
-LINK/platform/stm32/link-stm32-uds-server.c
-LINK/examples/stm32c092/link-stm32c092-hal.c
-LINK/examples/stm32c092/link-stm32c092-server-example.c
+Link/src/core/isotp.c
+Link/src/uds/uds.c
+Link/src/uds/uds_services.c
+Link/src/uds/uds_server.c
+Link/src/infiltratr-common/src/core.c
+Link/platform/stm32/link-stm32-can.c
+Link/platform/stm32/link-stm32-uds-server.c
+Link/examples/stm32c092/link-stm32c092-hal.c
+Link/examples/stm32c092/link-stm32c092-server-example.c
 ```
 
 Include paths:
 
 ```text
-LINK/include
-LINK/platform/stm32
-LINK/examples/stm32c092
-LINK/src/infiltratr-common/include
+Link/include
+Link/platform/stm32
+Link/examples/stm32c092
+Link/src/infiltratr-common/include
 <STM32 project>/Inc
 ```
 
 Do not compile the old duplicate project-local ISO-TP/UDS server stack at the
-same time as LINK. Keep the Cube-generated peripheral/startup files and use
+same time as Link. Keep the Cube-generated peripheral/startup files and use
 `Src-main.c` in this directory as the application integration reference.
 
 ## FDCAN timing
@@ -109,7 +109,7 @@ Transmit this ISO-TP Single Frame from the PC/CAN tester on CAN ID `0x7E0`:
 02 10 01
 ```
 
-LINK responds from CAN ID `0x7E8` with:
+Link responds from CAN ID `0x7E8` with:
 
 ```text
 06 50 01 00 32 01 F4
@@ -151,13 +151,13 @@ That is 11 UDS bytes, so on Classical CAN it is a multi-frame ISO-TP response.
 The tester must return a Flow Control frame on `0x7E0` after the First Frame,
 for example `30 00 00`.
 
-The same handler dispatches all 27 LINK ReadDTCInformation report types.
+The same handler dispatches all 27 Link ReadDTCInformation report types.
 Replace the demonstration store with the ECU application's real DTC provider
 for production use.
 
 ## Submitted KEIL project findings and validation
 
-The reporter's supplied project was also tested independently of LINK's own
+The reporter's supplied project was also tested independently of Link's own
 example. The final repair made these additional changes in the submitted
 project structure:
 
@@ -207,7 +207,7 @@ The normal `HAL_FDCAN_RxFifo0Callback()` path remains active. The shared STM32
 RX edge rejects nested drain entry, so an interrupt that pre-empts the fallback
 cannot enter the HAL receive callback concurrently or reverse FIFO order. If
 the board receives into FIFO0 but the IRQ is not delivered, the main loop still
-drains and processes the frame. If several PCAN requests race a response, LINK
+drains and processes the frame. If several PCAN requests race a response, Link
 retains them in the same bounded depth as its STM32 RX queue and replays them
 in arrival order after the active response completes; only a true bounded queue
 overflow increments the drop counter.

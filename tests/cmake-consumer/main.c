@@ -12,11 +12,11 @@ int main(void)
     }
     if (!link_isotp_can_data_length_is_valid(true,
                                               LINK_ISOTP_CAN_FD_MAX_DATA_LENGTH)) {
-        fputs("installed LINK package lacks CAN-FD 64-byte ISO-TP support\n",
+        fputs("installed Link package lacks CAN-FD 64-byte ISO-TP support\n",
               stderr);
         return 1;
     }
 
-    puts("LINK installed package consumer passed");
+    puts("Link installed package consumer passed");
     return 0;
 }

@@ -462,7 +462,7 @@ NSUInteger LinkVehicleProfileStandardResponderCount(NSDictionary *profile)
         stored[@"updatedAt"] = @([[NSDate date] timeIntervalSince1970]);
     }
 
-    /* Preserve LINK-owned standard responder capability across product saves. */
+    /* Preserve Link-owned standard responder capability across product saves. */
     NSDictionary *existing = [self profileForVIN:vin];
     NSArray *responders = [existing[@"liveResponders"] isKindOfClass:[NSArray class]]
         ? existing[@"liveResponders"] : nil;

@@ -1,22 +1,22 @@
 # Decisions
 
-This file records durable architectural choices for LINK.
+This file records durable architectural choices for Link.
 
-## ADR-001 — LINK owns product-neutral automotive behaviour
+## ADR-001 — Link owns product-neutral automotive behaviour
 
 **Decision.** Shared transports, protocols, sequencing, safety/evidence and diagnostic application mechanics live here; manufacturer knowledge stays in product repositories.
 
 **Rationale.** One implementation gives all product faces the same protocol and safety semantics.
 
-**Consequence.** LINK must remain manufacturer-neutral even when development is driven by one vehicle.
+**Consequence.** Link must remain manufacturer-neutral even when development is driven by one vehicle.
 
 ## ADR-002 — Common stays below the automotive boundary
 
-**Decision.** Broadly reusable mechanics belong in Common; automotive concepts remain in LINK.
+**Decision.** Broadly reusable mechanics belong in Common; automotive concepts remain in Link.
 
-**Rationale.** Common should not become coupled to vehicle diagnostics simply because LINK needs a utility.
+**Rationale.** Common should not become coupled to vehicle diagnostics simply because Link needs a utility.
 
-**Consequence.** Shared dependency direction is Common → LINK → product.
+**Consequence.** Shared dependency direction is Common → Link → product.
 
 ## ADR-003 — Decode, transport and permission are independent
 
@@ -48,4 +48,4 @@ This file records durable architectural choices for LINK.
 
 **Rationale.** External behaviour can be incomplete, version-specific or wrong.
 
-**Consequence.** Reviewed LINK code and tests define the supported product contract.
+**Consequence.** Reviewed Link code and tests define the supported product contract.

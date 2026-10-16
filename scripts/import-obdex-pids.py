@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Generate LINK's generic OBD PID catalogue from pinned OBDex CC0 data.
+"""Generate Link's generic OBD PID catalogue from pinned OBDex CC0 data.
 
 The importer intentionally keeps standards data separate from transport and
 product code. It validates the exact pinned Mode 01 + Mode 09 snapshot and
-emits immutable C metadata consumed by LINK on every platform.
+emits immutable C metadata consumed by Link on every platform.
 """
 
 from __future__ import annotations
@@ -208,11 +208,11 @@ def generate(mode01: Path, mode09: Path, output: Path, source_note: Path) -> Non
                 "- Mode 09 definitions: **13**",
                 "- Total definitions: **132**",
                 "",
-                "LINK vendors the independently maintained OBDex data snapshot and "
+                "Link vendors the independently maintained OBDex data snapshot and "
                 "generates transport-neutral metadata from it.",
                 "The standards engine preserves bitmap, encoded, DTC, ASCII and other "
                 "structured payloads rather than forcing every PID into one scalar.",
-                "Formula-backed entries are decoded by LINK's portable C11 core; "
+                "Formula-backed entries are decoded by Link's portable C11 core; "
                 "manufacturer-specific data remains outside this catalogue.",
                 "",
                 "SAE J1979 and its Digital Annex are copyrighted publications. "

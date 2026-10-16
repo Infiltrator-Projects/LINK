@@ -1,8 +1,8 @@
-# STM32C092 port for MBLINK issue #27
+# STM32C092 port for MBLink issue #27
 
-This directory is the concrete integration for the STM32Cube/Keil project attached to `Infiltrator-Projects/MBLINK#27`.
+This directory is the concrete integration for the STM32Cube/Keil project attached to `Infiltrator-Projects/MBLink#27`.
 
-The attached project was already an STM32C092 FDCAN application, but its local `library/` and `stm32c092/` code implemented a UDS ECU/server. MBLINK/LINK is the diagnostic tester/client. The literal port therefore replaces the project-local UDS server entry points with LINK's tested STM32C092 diagnostic client edge.
+The attached project was already an STM32C092 FDCAN application, but its local `library/` and `stm32c092/` code implemented a UDS ECU/server. MBLink/Link is the diagnostic tester/client. The literal port therefore replaces the project-local UDS server entry points with Link's tested STM32C092 diagnostic client edge.
 
 ## What to keep from the attached project
 
@@ -36,13 +36,13 @@ Do not compile the attached project's old UDS server files for this tester/clien
 - `stm32c092/uds_app_fdcan.c`
 - `stm32c092/uds_platform_fdcan.c`
 
-Those files are a separate ECU/server implementation and would duplicate/conflict with LINK's ISO-TP/UDS tester stack.
+Those files are a separate ECU/server implementation and would duplicate/conflict with Link's ISO-TP/UDS tester stack.
 
-Use `Src-main.c` from this directory as the application-side replacement for the attached project's `Src/main.c`. It preserves the generated clock/peripheral setup but delegates FDCAN receive, transmit-event completion, timing and UDS processing to LINK.
+Use `Src-main.c` from this directory as the application-side replacement for the attached project's `Src/main.c`. It preserves the generated clock/peripheral setup but delegates FDCAN receive, transmit-event completion, timing and UDS processing to Link.
 
-## LINK sources to add to the Keil target
+## Link sources to add to the Keil target
 
-Add these LINK implementation files to the target:
+Add these Link implementation files to the target:
 
 - `src/core/isotp.c`
 - `src/uds/uds.c`
@@ -69,7 +69,7 @@ The concrete HAL adapter uses the submitter's requested primitives directly:
 
 ## Behaviour of this port
 
-On startup the board configures a physical ISO-TP route `0x7E0 -> 0x7E8`, starts LINK's STM32 client and sends UDS `ReadDataByIdentifier (0x22)` for VIN DID `0xF190`.
+On startup the board configures a physical ISO-TP route `0x7E0 -> 0x7E8`, starts Link's STM32 client and sends UDS `ReadDataByIdentifier (0x22)` for VIN DID `0xF190`.
 
 Call `link_stm32c092_example_process()` continuously from the main loop. When the transaction completes:
 
@@ -78,8 +78,8 @@ Call `link_stm32c092_example_process()` continuously from the main loop. When th
 - a UDS negative response is exposed through `link_stm32c092_example_negative_response_code()`;
 - dropped ISR frames are exposed through `link_stm32c092_example_dropped_frames()`.
 
-This proves the literal port path without copying MBLINK's phone/desktop UI into an MCU. The reusable protocol implementation remains LINK-owned; the attached STM32 project is the concrete hardware target.
+This proves the literal port path without copying MBLink's phone/desktop UI into an MCU. The reusable protocol implementation remains Link-owned; the attached STM32 project is the concrete hardware target.
 
 ## Hardware boundary
 
-LINK's host regression tests cover the C092 HAL mapping, queue overflow, timer wrap, multi-frame UDS, 29-bit/CAN-FD paths and transmit completion/loss handling. The final remaining validation is on the submitter's physical STM32C092 board/transceiver and target ECU.
+Link's host regression tests cover the C092 HAL mapping, queue overflow, timer wrap, multi-frame UDS, 29-bit/CAN-FD paths and transmit completion/loss handling. The final remaining validation is on the submitter's physical STM32C092 board/transceiver and target ECU.

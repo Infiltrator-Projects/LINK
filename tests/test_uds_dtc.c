@@ -718,6 +718,6 @@ int main(void)
     CHECK(text[0] == '\0');
     CHECK(!link_uds_dtc_format_hex(UINT32_C(0x123456), text, 6U));
     CHECK(text[0] == '\0');
-    puts("LINK UDS DTC tests passed");
+    puts("Link UDS DTC tests passed");
     return 0;
 }

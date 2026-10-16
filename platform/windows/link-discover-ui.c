@@ -108,7 +108,7 @@ static BOOL set_window_text_utf8(HWND window, const char *text)
 #define LINK_PRODUCT_SUBTITLE "Vehicle Diagnostics"
 #endif
 #ifndef LINK_PRODUCT_WEBSITE
-#define LINK_PRODUCT_WEBSITE "https://github.com/Infiltrator-Projects/LINK"
+#define LINK_PRODUCT_WEBSITE "https://github.com/Infiltrator-Projects/Link"
 #endif
 #ifndef LINK_PRODUCT_DESCRIPTION
 #define LINK_PRODUCT_DESCRIPTION "OpenPort 2.0 / SAE J2534 read-only discovery and evidence capture."

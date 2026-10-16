@@ -1,8 +1,8 @@
 # Standalone STM32F103 flash-journal test
 
-This target exists for LINK issue #49. It exercises LINK's multi-page wear-levelled flash journal on a real STM32F103 **without CAN, ISO-TP or UDS** so storage behavior can be isolated from the diagnostic stack.
+This target exists for Link issue #49. It exercises Link's multi-page wear-levelled flash journal on a real STM32F103 **without CAN, ISO-TP or UDS** so storage behavior can be isolated from the diagnostic stack.
 
-Use a 512 KiB STM32F103 target with 2 KiB pages. Copy `Src-main.c` into a normal STM32Cube project that provides `main.h`, `gpio.h`, `SystemClock_Config()` and `MX_GPIO_Init()`. Add LINK's `src/core/flash_journal.c` and `include` directory to the build. No LINK transport or UDS sources are required.
+Use a 512 KiB STM32F103 target with 2 KiB pages. Copy `Src-main.c` into a normal STM32Cube project that provides `main.h`, `gpio.h`, `SystemClock_Config()` and `MX_GPIO_Init()`. Add Link's `src/core/flash_journal.c` and `include` directory to the build. No Link transport or UDS sources are required.
 
 Reserve these four pages from the application linker region before flashing:
 

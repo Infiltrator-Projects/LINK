@@ -193,7 +193,7 @@ static void json_hex(GString *out, const uint8_t *data, size_t count)
 }
 
 /*
- * A diagnostic investigation intentionally survives LINK DOWN / LINK UP.
+ * A diagnostic investigation intentionally survives Link DOWN / Link UP.
  * Individual physical connection attempts are separated by explicit trace
  * records instead of erasing earlier evidence.  This is important for cold
  * ELM327/protocol-acquisition faults which may disappear on a second attempt.
@@ -1144,7 +1144,7 @@ static void set_connection_state(LinkGtkShell *shell, bool connected, const char
         shell->status, connected ? "link-status-offline" : "link-status-online");
     gtk_widget_add_css_class(
         shell->status, connected ? "link-status-online" : "link-status-offline");
-    gtk_button_set_label(GTK_BUTTON(shell->link_button), connected ? "LINK DOWN" : "LINK UP");
+    gtk_button_set_label(GTK_BUTTON(shell->link_button), connected ? "Link DOWN" : "Link UP");
     gtk_widget_set_sensitive(shell->device_combo, !connected);
     if (shell->diagnostic_restart_button != NULL)
         gtk_widget_set_sensitive(
@@ -1214,7 +1214,7 @@ static const char *diagnostic_stage_message(const LinkGtkShell *shell)
     case LINK_DIAGNOSTIC_FLOW_READING_LIVE:
         return "Linked · live OBD-II polling active";
     case LINK_DIAGNOSTIC_FLOW_FAILED:
-        return "Linked · diagnostic session failed · LINK DOWN / LINK UP to retry";
+        return "Linked · diagnostic session failed · Link DOWN / Link UP to retry";
     }
     return "Linked · diagnostics active";
 }
@@ -1328,7 +1328,7 @@ static void fail_diagnostics(LinkGtkShell *shell,
                              "Linked · diagnostic attempt failed · retrying automatically");
     } else {
         set_connection_state(shell, true,
-                             "Linked · diagnostic session failed · SAVE FAILED SESSION or LINK DOWN / LINK UP");
+                             "Linked · diagnostic session failed · SAVE FAILED SESSION or Link DOWN / Link UP");
     }
     if (shell->descriptor->diagnostic_changed != NULL) {
         shell->descriptor->diagnostic_changed(&shell->flow,
@@ -1911,7 +1911,7 @@ static gboolean navigation_stress_step(gpointer user_data)
 
     if (shell->navigation_stress_step >= shell->navigation_stress_target) {
         (void)printf(
-            "LINK GTK timed navigation stress verified: %zu sidebar selections while disconnected with main-loop interleaving\n",
+            "Link GTK timed navigation stress verified: %zu sidebar selections while disconnected with main-loop interleaving\n",
             shell->navigation_stress_step);
         (void)fflush(stdout);
         g_application_quit(G_APPLICATION(shell->application));
@@ -1934,7 +1934,7 @@ static gboolean navigation_stress_step(gpointer user_data)
     }
 
     (void)printf(
-        "LINK GTK timed navigation step %zu/%zu -> section %zu\n",
+        "Link GTK timed navigation step %zu/%zu -> section %zu\n",
         shell->navigation_stress_step + 1U,
         shell->navigation_stress_target,
         section);
@@ -1997,7 +1997,7 @@ static GtkWidget *build_connection_bar(LinkGtkShell *shell)
             shell->descriptor->diagnostic_restart_action_label);
         gtk_widget_set_sensitive(shell->diagnostic_restart_button, FALSE);
     }
-    shell->link_button = gtk_button_new_with_label("LINK UP");
+    shell->link_button = gtk_button_new_with_label("Link UP");
 
     gtk_widget_add_css_class(bar, "link-connection-bar");
     gtk_widget_add_css_class(device_row, "link-device-row");

@@ -24,6 +24,6 @@ int main(void)
     CHECK(!link_discover_standard_uds29_target_at(
         LINK_DISCOVER_STANDARD_UDS29_TARGET_COUNT, 500000U, &target));
 
-    puts("LINK standards-defined discovery targets passed");
+    puts("Link standards-defined discovery targets passed");
     return 0;
 }

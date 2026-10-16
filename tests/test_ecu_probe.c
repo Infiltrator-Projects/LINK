@@ -184,6 +184,6 @@ int main(void)
         CHECK(direct.dtcs.records[0].code == UINT32_C(0x123456));
     }
 
-    puts("LINK ECU probe tests passed");
+    puts("Link ECU probe tests passed");
     return 0;
 }

@@ -10,7 +10,7 @@ Security fixes target current `main` and, where appropriate, the latest release.
 
 Do not publish vulnerabilities that could expose vehicles, users, private data, credentials, adapter secrets, build infrastructure or signing material.
 
-Use GitHub private vulnerability reporting when available. Otherwise contact `infiltratr@yandex.com` with the subject `LINK security report`.
+Use GitHub private vulnerability reporting when available. Otherwise contact `infiltratr@yandex.com` with the subject `Link security report`.
 
 Include exact revision, platform/provider/adapter context, impact, reproduction and sanitised evidence.
 

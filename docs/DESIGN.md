@@ -2,7 +2,7 @@
 
 ## First-principles position
 
-LINK treats standards, captures, public documentation and mature diagnostic tools as evidence. Product behaviour is implemented from explicit contracts rather than by copying another tool or assuming undocumented manufacturer behaviour.
+Link treats standards, captures, public documentation and mature diagnostic tools as evidence. Product behaviour is implemented from explicit contracts rather than by copying another tool or assuming undocumented manufacturer behaviour.
 
 ## Goals
 
@@ -13,7 +13,7 @@ LINK treats standards, captures, public documentation and mature diagnostic tool
 
 ## Non-goals
 
-LINK is not a manufacturer database and adding a codec does not grant a product permission to transmit that service. Manufacturer-specific assumptions do not belong in the shared core.
+Link is not a manufacturer database and adding a codec does not grant a product permission to transmit that service. Manufacturer-specific assumptions do not belong in the shared core.
 
 ## Safety model
 
@@ -21,7 +21,7 @@ Read-only and write-capable actions are intentionally distinct. Capability disco
 
 ## Dependency policy
 
-Generic automotive behaviour belongs in LINK; broadly reusable non-automotive mechanics belong in Common; manufacturer-specific behaviour belongs in the product face. Exact dependency revisions are pinned so later upstream changes cannot silently redefine a reviewed product.
+Generic automotive behaviour belongs in Link; broadly reusable non-automotive mechanics belong in Common; manufacturer-specific behaviour belongs in the product face. Exact dependency revisions are pinned so later upstream changes cannot silently redefine a reviewed product.
 
 ## Evidence rule
 

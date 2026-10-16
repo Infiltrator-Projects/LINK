@@ -2,13 +2,13 @@
 
 # UDS service coverage
 
-LINK owns the product-neutral ISO 14229 request/response layer shared by all
-LINK-family products. `include/link/uds.h` retains the typed core client,
+Link owns the product-neutral ISO 14229 request/response layer shared by all
+Link-family products. `include/link/uds.h` retains the typed core client,
 session, TesterPresent and ReadDataByIdentifier APIs. `include/link/uds_dtc.h`
 provides the read-only ReadDTCInformation helper. `include/link/uds_services.h`
 declares the complete standard service catalogue and bounded codec API; the
 implementation is compiled once in `src/uds/uds_services.c` as part of
-`LINK::Core`.
+`Link::Core`.
 
 The codec layer only serializes or validates diagnostic PDUs. It does not send
 them. Complex records whose meaning is ECU- or application-specific remain raw
@@ -16,7 +16,7 @@ caller-owned byte spans rather than being given invented generic semantics.
 
 ## Standard service catalogue
 
-| SID | Service | LINK effect classification |
+| SID | Service | Link effect classification |
 | --- | --- | --- |
 | `0x10` | DiagnosticSessionControl | session control |
 | `0x11` | ECUReset | state-changing |
@@ -72,7 +72,7 @@ No helper allocates memory. Callers own every input/output buffer and raw record
 ## Server execution policy
 
 The portable UDS server can optionally consume a caller-owned
-`LinkUdsServerPolicy` table. Policy remains product-neutral: LINK supplies the
+`LinkUdsServerPolicy` table. Policy remains product-neutral: Link supplies the
 enforcement mechanism while the ECU/application supplies the actual rules.
 
 A service-wide entry can restrict a SID by:
@@ -101,13 +101,13 @@ required by the transport/application contract.
 
 Security state is explicit server state rather than an embedded key algorithm.
 A successful product SecurityAccess handler can call
-`link_uds_server_set_security_level()`; LINK does not invent OEM seed/key
+`link_uds_server_set_security_level()`; Link does not invent OEM seed/key
 logic. By default a real session change, S3 fallback to Default, explicit server
 session reset and ECU reset return the active security level to 0.
 
 ## SecurityAccess hook and AES-CMAC
 
-LINK provides an allocation-free AES-128/AES-CMAC primitive in
+Link provides an allocation-free AES-128/AES-CMAC primitive in
 `link/aes_cmac.h`. Its deterministic tests use the published RFC 4493/NIST
 AES zero-block and 0-, 16-, 40- and 64-byte CMAC vectors. The primitive is
 protocol-neutral: availability does not assert that any vehicle or ECU uses
@@ -115,7 +115,7 @@ CMAC for SecurityAccess.
 
 The UDS server may optionally own the generic `0x27 SecurityAccess` state
 machine through `LinkUdsSecurityAccessConfig`. A target supplies a seed
-callback and a key-verification callback. LINK maps requestSeed/sendKey pairs
+callback and a key-verification callback. Link maps requestSeed/sendKey pairs
 to ordinal security levels 1 through 63, enforces request-seed-before-send-key
 sequencing, updates the active security level only after successful
 verification, and optionally owns invalid-key attempt/delay state.
@@ -127,11 +127,11 @@ seed/key sequence but do not erase an active lockout timer.
 
 A custom `0x27` handler still overrides the built-in facility and can call
 `link_uds_server_set_security_level()` after its own verification. No
-Mercedes, Jaguar or other OEM seed/key algorithm is embedded in LINK.
+Mercedes, Jaguar or other OEM seed/key algorithm is embedded in Link.
 
 ## Authentication (0x29) typed 2020 codec
 
-LINK provides a dedicated allocation-free Authentication codec in
+Link provides a dedicated allocation-free Authentication codec in
 `link/uds_authentication.h` for all nine ISO 14229-1:2020 authentication tasks
 (`0x00` through `0x08`). Typed builders cover de-authentication,
 unidirectional and bidirectional certificate verification, proof of ownership,
@@ -141,7 +141,7 @@ authentication-configuration discovery.
 The positive-response decoder validates the standard length-prefixed
 certificate, challenge, proof, ephemeral-key and session-key envelopes and
 rejects truncation or trailing bytes. Cryptographic material remains borrowed
-opaque spans: LINK does not parse certificates, choose algorithms, own trust
+opaque spans: Link does not parse certificates, choose algorithms, own trust
 anchors, verify private keys or infer an OEM role/profile.
 
 Authentication remains classified SECURITY and blocked by Discover. Codec
@@ -179,17 +179,17 @@ default rule.
 
 An owning product may add a narrower policy only when it has a concrete use
 case, ECU-specific validation and appropriate operator controls. The shared
-LINK codec layer itself does not contain a bypass.
+Link codec layer itself does not contain a bypass.
 
 ## ReadDTCInformation conformance boundary
 
 The complete 27-report implementation matrix is maintained in
 [`UDS-READ-DTC-CONFORMANCE.md`](UDS-READ-DTC-CONFORMANCE.md). The matrix
-separates the fixed ISO-shaped envelope that LINK can validate generically from
+separates the fixed ISO-shaped envelope that Link can validate generically from
 snapshot and extended-data tails whose record sizes depend on ECU/application
 definitions.
 
-LINK exposes typed, allocation-free views for fixed-width DTC/status,
+Link exposes typed, allocation-free views for fixed-width DTC/status,
 snapshot-identification, severity, fault-detection-counter and WWH severity
 record families. Variable snapshot and extended-data payloads remain bounded raw
 spans until a higher layer supplies the DID/data-length knowledge needed to
@@ -232,9 +232,9 @@ is configured.
 `tests/test_discover_safety.c` independently proves that adding those codecs
 does not broaden the Discover transmit allowlist.
 
-The installed-package consumer test also verifies that the exported `LINK::Core`
+The installed-package consumer test also verifies that the exported `Link::Core`
 target supplies this compiled service implementation and the 64-byte CAN-FD
-ISO-TP contract outside the LINK source tree.
+ISO-TP contract outside the Link source tree.
 
 This documentation is an implementation map, not a reproduction of ISO 14229.
 For normative protocol requirements, use the applicable licensed standard.

@@ -177,7 +177,7 @@ int main(void)
         LinkObd2Readiness readiness;
         bool has_more = false;
 
-        config.adapter_identifier = "ELM327 v2.3 LINK TEST";
+        config.adapter_identifier = "ELM327 v2.3 Link TEST";
         config.vin = "WDD2073022F123456";
         config.custom_responder = simulator_custom_response;
         link_elm327_simulator_init(&simulator, &config);
@@ -189,7 +189,7 @@ int main(void)
         REQUIRE(link_elm327_session_begin(&simulated_session, "ATZ", 1000U, 500U) == LINK_ELM327_SESSION_OP_OK);
         simulated_response = link_elm327_session_response(&simulated_session);
         REQUIRE(simulated_response != NULL);
-        REQUIRE(strcmp(simulated_response->text, "ELM327 v2.3 LINK TEST") == 0);
+        REQUIRE(strcmp(simulated_response->text, "ELM327 v2.3 Link TEST") == 0);
         REQUIRE(simulated_response->echo_removed);
 
         REQUIRE(link_elm327_session_begin(&simulated_session, "ATE0", 1100U, 500U) == LINK_ELM327_SESSION_OP_OK);

@@ -71,6 +71,6 @@ int main(void)
     CHECK(link_diagnostic_flow_event_text(
         LINK_DIAGNOSTIC_FLOW_EVENT_LIVE_SAMPLE) == NULL);
 
-    puts("LINK shared session trace passed");
+    puts("Link shared session trace passed");
     return 0;
 }

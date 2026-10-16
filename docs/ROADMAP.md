@@ -10,7 +10,7 @@ This roadmap describes technical direction; the source, tests and evidence docum
 
 ## Near-term priorities
 
-- consolidate product-neutral application behaviour that is still duplicated above LINK
+- consolidate product-neutral application behaviour that is still duplicated above Link
 - expand protocol/adapter coverage only with explicit safety and evidence contracts
 - continue strengthening native providers and embedded reuse
 

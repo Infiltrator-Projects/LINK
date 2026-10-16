@@ -45,7 +45,7 @@ def build(output):
                 if git(child, "rev-parse", "HEAD").decode().strip() != expected:
                     raise ValueError("Submodule checkout does not match gitlink: " + relative)
                 append(child, expected, prefix + relative + "/")
-        append(ROOT, commit, "LINK-" + version + "/")
+        append(ROOT, commit, "Link-" + version + "/")
     return output
 
 if __name__ == "__main__":

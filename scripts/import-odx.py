@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Normalise ODX/PDX diagnostic descriptions into LINK-neutral JSON.
+"""Normalise ODX/PDX diagnostic descriptions into Link-neutral JSON.
 
 This is a development/import tool.  It deliberately imports odxtools at
-runtime so LINK's C library and applications do not acquire a Python or
+runtime so Link's C library and applications do not acquire a Python or
 odxtools runtime dependency.
 """
 from __future__ import annotations
@@ -156,7 +156,7 @@ def normalise_database(db: Any, source: Path, odxtools_version: str) -> dict[str
         })
     return {
         "schema_version": 1,
-        "generator": "LINK scripts/import-odx.py",
+        "generator": "Link scripts/import-odx.py",
         "odxtools_version": odxtools_version,
         "source_file": source.name,
         "policy": {
@@ -169,7 +169,7 @@ def normalise_database(db: Any, source: Path, odxtools_version: str) -> dict[str
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Normalise an ODX/PDX database into LINK-neutral JSON")
+        description="Normalise an ODX/PDX database into Link-neutral JSON")
     parser.add_argument("input", type=Path)
     parser.add_argument("-o", "--output", type=Path)
     args = parser.parse_args()

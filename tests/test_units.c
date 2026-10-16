@@ -141,6 +141,6 @@ int main(void)
         CHECK(strcmp(text, "RAW AA 01 …") == 0);
     }
 
-    puts("LINK dimension-aware measurement conversion passed");
+    puts("Link dimension-aware measurement conversion passed");
     return 0;
 }
